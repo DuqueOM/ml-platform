@@ -123,8 +123,9 @@ usecases/<name>/
 └── evals/sets/*.jsonl
 ```
 
-Then: `AGENT_USECASE=<name> python -m app.main`. See
-[CONTRIBUTING.md](CONTRIBUTING.md) for the full contract.
+Then: `AGENT_USECASE=<name> python -m app.main`. See the full authoring guide
+**[docs/usecases.md](docs/usecases.md)** (contract, consumption modes,
+bring-your-own-models) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
@@ -133,9 +134,10 @@ Then: `AGENT_USECASE=<name> python -m app.main`. See
 | Phase | Gate | Status |
 |-------|------|--------|
 | F0 | Tier-0 router speed ≥ 25 tok/s | ✅ (see `bench/RESULTS.md`) |
-| F1 | Routing intent accuracy ≥ 18/20 | ✅ **19/20** |
+| F1 | Routing intent accuracy ≥ 18/20 | ✅ **20/20** |
 | F1 | All tools read-only (`order_create` dry-run) | ✅ |
 | F1 | Deterministic policy gate enforced | ✅ |
+| F2.0 | ExecutiveController + per-tier circuit breaker | ✅ |
 
 ---
 

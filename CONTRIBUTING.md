@@ -24,14 +24,12 @@ pytest                          # unit tests (no model required)
 
 ## Adding a new use-case
 
-1. Create `usecases/<name>/` with:
-   - `config.yaml` (endpoints, `allowed_intents`, policy rules, prompt templates)
-   - `prompts/router.md`, `grammars/route.gbnf`
-   - `tools.py` exposing `build_registry(config) -> ToolRegistry`
-   - `data/` fixtures (or real API clients in Phase 2), `policies/*.md`
-   - `budgets.yaml`, `evals/sets/*.jsonl`
-2. Add `usecases/<name>/__init__.py` re-exporting `build_registry`.
-3. Run it: `AGENT_USECASE=<name> python -m app.main`.
+See the full authoring guide: **[docs/usecases.md](docs/usecases.md)** (contract,
+consumption modes, bring-your-own-models, no-scaffold-yet note).
+
+In short: a new domain is a new `usecases/<name>/` folder (config + prompts +
+grammar + `tools.py` with `build_registry` + data + policies + budgets + evals).
+**Never fork or edit `core/`.** Run it with `AGENT_USECASE=<name> python -m app.main`.
 
 ## Quality gates (must pass before review)
 
