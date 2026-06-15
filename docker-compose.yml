@@ -1,0 +1,44 @@
+# Local, reproducible dev stack: the FastAPI agent + a llama.cpp Tier-0 server.
+#
+# Models are NEVER baked into images. The host model directory is mounted into
+# the llama.cpp container as a read-only volume. Set MODELS_DIR in a .env file
+# (see .env.example) to your host path, e.g. /home/<user>/ml-models.
+#
+# GPU: uncomment the `deploy` block on the llama service if you have the NVIDIA
+# Container Toolkit installed. CPU works too (slower).
+services:
+  llama-e4b:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    command: >
+      -m /models/${E4B_MODEL:-gemma-4-E4B-it-Q4_K_M.gguf}
+      --host 0.0.0.0 --port 8091 -ngl 99 -c 8192
+    volumes:
+      - ${MODELS_DIR:?set MODELS_DIR in .env to your host model directory}:/models:ro
+    ports:
+      - "8091:8091"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-X", "POST", "http://localhost:8091/v1/chat/completions",
+             "-H", "Content-Type: application/json",
+             "-d", '{"messages":[{"role":"user","content":"ping"}],"max_tokens":1}']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  agent:
+    build: .
+    environment:
+      AGENT_USECASE: ${AGENT_USECASE:-tienda}
+      LLAMA_HOST: llama-e4b   # retargets config's 127.0.0.1 endpoints
+    ports:
+      - "8000:8000"
+    depends_on:
+      llama-e4b:
+        condition: service_healthy

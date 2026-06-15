@@ -1,0 +1,8 @@
+# Development + CI dependencies (superset of runtime).
+-r requirements.txt
+pytest~=8.3
+pytest-cov~=6.0
+black~=24.10
+isort~=5.13
+flake8~=7.1
+mypy~=1.14

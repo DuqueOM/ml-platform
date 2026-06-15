@@ -11,6 +11,7 @@ never a fork of ``core/``.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -112,7 +113,14 @@ def load_usecase(name: str) -> UsecaseConfig:
     )
 
     # Tier endpoint keys come from YAML as ints already, but normalise to be safe.
-    tier_endpoints = {int(k): v for k, v in raw.get("tier_endpoints", {}).items()}
+    # ``LLAMA_HOST`` lets containerised deployments retarget the default
+    # 127.0.0.1 host (e.g. a sibling llama.cpp service) without editing config.
+    llama_host = os.environ.get("LLAMA_HOST")
+    tier_endpoints = {}
+    for key, url in raw.get("tier_endpoints", {}).items():
+        if llama_host:
+            url = url.replace("127.0.0.1", llama_host).replace("localhost", llama_host)
+        tier_endpoints[int(key)] = url
 
     return UsecaseConfig(
         name=raw.get("name", name),

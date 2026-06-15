@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-local"
+version = "0.2.0"
+description = "Reusable, multi-tier local LLM agent platform (router + tools + policy gate)."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "DuqueOM" }]
+keywords = ["llm", "agent", "llama.cpp", "routing", "fastapi", "mlops"]
+dependencies = [
+    "fastapi~=0.115",
+    "uvicorn~=0.34",
+    "httpx~=0.28",
+    "pydantic~=2.10",
+    "rank-bm25~=0.2.2",
+    "pyyaml~=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest~=8.3",
+    "pytest-cov~=6.0",
+    "black~=24.10",
+    "isort~=5.13",
+    "flake8~=7.1",
+    "mypy~=1.14",
+]
+
+[tool.setuptools]
+packages = ["core", "app", "usecases"]
+
+[tool.black]
+line-length = 120
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+line_length = 120
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
