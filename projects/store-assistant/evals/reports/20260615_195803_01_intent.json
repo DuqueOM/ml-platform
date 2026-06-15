@@ -1,0 +1,357 @@
+{
+  "total": 20,
+  "correct_intent": 3,
+  "correct_tier": 5,
+  "correct_finality": 5,
+  "failures": [
+    {
+      "case_index": 1,
+      "input": "tienen coca de 600 fria?",
+      "expected": {
+        "intent": "product_lookup",
+        "tier": 2,
+        "finality": "answer"
+      },
+      "actual": {
+        "intent": "complaint",
+        "tier": 1,
+        "finality": "clarify",
+        "confidence": 0.9
+      },
+      "note": "alias 'coca' + refrigerada"
+    },
+    {
+      "case_index": 2,
+      "input": "hay cocacola de litro",
+      "expected": {
+        "intent": "product_lookup",
+        "tier": 2,
+        "finality": "answer"
+      },
+      "actual": {
+        "intent": "complaint",
+        "tier": 1,
+        "finality": "clarify",
+        "confidence": 0.9
+      },
+      "note": "alias 'cocacola' variante ortograf\u00eda"
+    },
+    {
+      "case_index": 3,
+      "input": "cuanto cuesta el frijol negro",
+      "expected": {
+        "intent": "product_lookup",
+        "tier": 2,
+        "finality": "answer"
+      },
+      "actual": {
+        "intent": "complaint",
+        "tier": 1,
+        "finality": "clarify",
+        "confidence": 0.9
+      },
+      "note": "consulta precio"
+    },
+    {
+      "case_index": 4,
+      "input": "tienes leche",
+      "expected": {
+        "intent": "product_lookup",
+        "tier": 2,
+        "finality": "clarify"
+      },
+      "actual": {
+        "intent": "complaint",
+        "tier": 1,
+        "finality": "clarify",
+        "confidence": 0.9
+      },
+      "note": "ambiguo: falta especificar tama\u00f1o/tipo"
+    },
+    {
+      "case_index": 5,
+      "input": "me das una coca",
+      "expected": {
+        "intent": "product_lookup",
+        "tier": 2,
+        "finality": "clarify"
+      },
+      "actual": {
+        "intent": "complaint",
+        "tier": 1,
+        "finality": "clarify",
+        "confidence": 0.9
+      },
+      "note": "ambiguo: falta tama\u00f1o (600ml o 2L)"
+    },
+    {
+      "case_index": 6,
+      "input": "quiero hacer un pedido de 2 cocas de 600 y un pan",
+      "expected": {
+        "intent": "order_create",
+        "tier": 3,
+        "finality": "answer"
+      },
+      "actual": {
+        "intent": "complaint",
+        "tier": 1,
+        "finality": "clarify",
+        "confidence": 0.9
+      },
+      "note": "orden expl\u00edcita con cantidades"
+    },
+    {
+      "case_index": 7,
+      "input": "necesito ordenar arroz y frijol",
+      "expected": {
+        "intent": "order_create",
+        "tier": 3,
+        "finality": "clarify"
+      },
+      "actual": {
+        "intent": "complaint",
+        "tier": 1,
+        "finality": "clarify",
+        "confidence": 0.9
+      },
+      "note": "orden sin cantidades"
+    },
+    {
+      "case_index": 8,
+      "input": "mandame a mi casa 3 leches",
+      "expected": {
+        "intent": "order_create",
+        "tier": 3,
+        "finality": "answer"
+      },
+      "actual": {
+        "intent": "complaint",
+        "tier": 1,
+        "finality": "clarify",
+        "confidence": 0.9
+      },
+      "note": "orden a domicilio"
+    },
+    {
+      "case_index": 9,
+      "input": "mi pedido ORDER-001 donde va",
+      "expected": {
+        "intent": "order_status",
+        "tier": 2,
+        "finality": "answer"
+      },
+      "actual": {
+        "intent": "complaint",
+        "tier": 1,
+        "finality": "clarify",
+        "confidence": 0.9
+      },
+      "note": "seguimiento de pedido"
+    },
+    {
+      "case_index": 10,
+      "input": "hola",
+      "expected": {
+        "intent": "smalltalk",
+        "tier": 1,
+        "finality": "answer"
+      },
+      "actual": {
+        "intent": "complaint",
+        "tier": 1,
+        "finality": "clarify",
+        "confidence": 0.9
+      },
+      "note": "saludo simple"
+    },
+    {
+      "case_index": 11,
+      "input": "como estas",
+      "expected": {
+        "intent": "smalltalk",
+        "tier": 1,
+        "finality": "answer"
+      },
+      "actual": {
+        "intent": "complaint",
+        "tier": 1,
+        "finality": "clarify",
+        "confidence": 0.9
+      },
+      "note": "cortes\u00eda"
+    },
+    {
+      "case_index": 12,
+      "input": "gracias",
+      "expected": {
+        "intent": "smalltalk",
+        "tier": 1,
+        "finality": "answer"
+      },
+      "actual": {
+        "intent": "complaint",
+        "tier": 1,
+        "finality": "clarify",
+        "confidence": 0.9
+      },
+      "note": "agradecimiento"
+    },
+    {
+      "case_index": 13,
+      "input": "puedo devolver un producto que compre ayer",
+      "expected": {
+        "intent": "policy_question",
+        "tier": 2,
+        "finality": "answer"
+      },
+      "actual": {
+        "intent": "complaint",
+        "tier": 1,
+        "finality": "clarify",
+        "confidence": 0.9
+      },
+      "note": "pol\u00edtica de devoluciones"
+    },
+    {
+      "case_index": 14,
+      "input": "cual es el horario de entrega",
+      "expected": {
+        "intent": "policy_question",
+        "tier": 2,
+        "finality": "answer"
+      },
+      "actual": {
+        "intent": "complaint",
+        "tier": 1,
+        "finality": "clarify",
+        "confidence": 0.9
+      },
+      "note": "pol\u00edtica de entregas"
+    },
+    {
+      "case_index": 15,
+      "input": "tienen envio gratis",
+      "expected": {
+        "intent": "policy_question",
+        "tier": 2,
+        "finality": "answer"
+      },
+      "actual": {
+        "intent": "complaint",
+        "tier": 1,
+        "finality": "clarify",
+        "confidence": 0.9
+      },
+      "note": "pol\u00edtica de costos"
+    },
+    {
+      "case_index": 16,
+      "input": "el repartidor no me trajo completo",
+      "expected": {
+        "intent": "complaint",
+        "tier": 3,
+        "finality": "escalate"
+      },
+      "actual": {
+        "intent": "complaint",
+        "tier": 1,
+        "finality": "clarify",
+        "confidence": 0.9
+      },
+      "note": "queja sensible"
+    },
+    {
+      "case_index": 17,
+      "input": "la coca estaba vencida",
+      "expected": {
+        "intent": "complaint",
+        "tier": 3,
+        "finality": "escalate"
+      },
+      "actual": {
+        "intent": "complaint",
+        "tier": 1,
+        "finality": "clarify",
+        "confidence": 0.9
+      },
+      "note": "queja producto defectuoso"
+    },
+    {
+      "case_index": 18,
+      "input": "muy mal servicio",
+      "expected": {
+        "intent": "complaint",
+        "tier": 3,
+        "finality": "escalate"
+      },
+      "actual": {
+        "intent": "complaint",
+        "tier": 1,
+        "finality": "clarify",
+        "confidence": 0.9
+      },
+      "note": "queja general"
+    },
+    {
+      "case_index": 19,
+      "input": "asdfghjkl",
+      "expected": {
+        "intent": "unknown",
+        "tier": 1,
+        "finality": "clarify"
+      },
+      "actual": {
+        "intent": "complaint",
+        "tier": 1,
+        "finality": "clarify",
+        "confidence": 0.9
+      },
+      "note": "mensaje sin sentido"
+    },
+    {
+      "case_index": 20,
+      "input": "productos",
+      "expected": {
+        "intent": "unknown",
+        "tier": 1,
+        "finality": "clarify"
+      },
+      "actual": {
+        "intent": "complaint",
+        "tier": 1,
+        "finality": "clarify",
+        "confidence": 0.9
+      },
+      "note": "muy ambiguo sin contexto"
+    }
+  ],
+  "latencies_ms": [
+    2384,
+    2352,
+    2297,
+    2318,
+    2283,
+    2324,
+    2277,
+    2305,
+    2338,
+    2100,
+    1985,
+    2018,
+    1975,
+    1963,
+    1991,
+    1936,
+    1975,
+    1968,
+    1971,
+    1949
+  ],
+  "timestamp": "2026-06-15T19:57:20.443436",
+  "set_name": "01_intent",
+  "accuracy_intent": 0.15,
+  "accuracy_tier": 0.25,
+  "accuracy_finality": 0.25,
+  "avg_latency_ms": 2135.45,
+  "p95_latency_ms": 2384
+}

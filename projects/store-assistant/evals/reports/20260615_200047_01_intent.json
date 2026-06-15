@@ -1,0 +1,53 @@
+{
+  "total": 20,
+  "correct_intent": 19,
+  "correct_tier": 19,
+  "correct_finality": 19,
+  "failures": [
+    {
+      "case_index": 5,
+      "input": "me das una coca",
+      "expected": {
+        "intent": "product_lookup",
+        "tier": 1,
+        "finality": "answer"
+      },
+      "actual": {
+        "intent": "order_create",
+        "tier": 2,
+        "finality": "clarify",
+        "confidence": 0.9
+      },
+      "note": "consulta de producto"
+    }
+  ],
+  "latencies_ms": [
+    1469,
+    1064,
+    1086,
+    1029,
+    1086,
+    1057,
+    1055,
+    1048,
+    1012,
+    1006,
+    1023,
+    977,
+    984,
+    990,
+    923,
+    998,
+    1005,
+    949,
+    931,
+    924
+  ],
+  "timestamp": "2026-06-15T20:00:26.926365",
+  "set_name": "01_intent",
+  "accuracy_intent": 0.95,
+  "accuracy_tier": 0.95,
+  "accuracy_finality": 0.95,
+  "avg_latency_ms": 1030.8,
+  "p95_latency_ms": 1469
+}

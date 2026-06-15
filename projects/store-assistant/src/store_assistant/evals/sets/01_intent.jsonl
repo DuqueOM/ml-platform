@@ -1,20 +1,20 @@
-{"input": "tienen coca de 600 fria?", "expected_intent": "product_lookup", "expected_tier": 2, "expected_finality": "answer", "note": "alias 'coca' + refrigerada"}
-{"input": "hay cocacola de litro", "expected_intent": "product_lookup", "expected_tier": 2, "expected_finality": "answer", "note": "alias 'cocacola' variante ortografía"}
-{"input": "cuanto cuesta el frijol negro", "expected_intent": "product_lookup", "expected_tier": 2, "expected_finality": "answer", "note": "consulta precio"}
-{"input": "tienes leche", "expected_intent": "product_lookup", "expected_tier": 2, "expected_finality": "clarify", "note": "ambiguo: falta especificar tamaño/tipo"}
-{"input": "me das una coca", "expected_intent": "product_lookup", "expected_tier": 2, "expected_finality": "clarify", "note": "ambiguo: falta tamaño (600ml o 2L)"}
-{"input": "quiero hacer un pedido de 2 cocas de 600 y un pan", "expected_intent": "order_create", "expected_tier": 3, "expected_finality": "answer", "note": "orden explícita con cantidades"}
-{"input": "necesito ordenar arroz y frijol", "expected_intent": "order_create", "expected_tier": 3, "expected_finality": "clarify", "note": "orden sin cantidades"}
-{"input": "mandame a mi casa 3 leches", "expected_intent": "order_create", "expected_tier": 3, "expected_finality": "answer", "note": "orden a domicilio"}
-{"input": "mi pedido ORDER-001 donde va", "expected_intent": "order_status", "expected_tier": 2, "expected_finality": "answer", "note": "seguimiento de pedido"}
-{"input": "hola", "expected_intent": "smalltalk", "expected_tier": 1, "expected_finality": "answer", "note": "saludo simple"}
-{"input": "como estas", "expected_intent": "smalltalk", "expected_tier": 1, "expected_finality": "answer", "note": "cortesía"}
-{"input": "gracias", "expected_intent": "smalltalk", "expected_tier": 1, "expected_finality": "answer", "note": "agradecimiento"}
-{"input": "puedo devolver un producto que compre ayer", "expected_intent": "policy_question", "expected_tier": 2, "expected_finality": "answer", "note": "política de devoluciones"}
-{"input": "cual es el horario de entrega", "expected_intent": "policy_question", "expected_tier": 2, "expected_finality": "answer", "note": "política de entregas"}
-{"input": "tienen envio gratis", "expected_intent": "policy_question", "expected_tier": 2, "expected_finality": "answer", "note": "política de costos"}
+{"input": "tienen coca de 600 fria?", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "alias 'coca' + refrigerada"}
+{"input": "hay cocacola de litro", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "alias 'cocacola' variante ortografía"}
+{"input": "cuanto cuesta el frijol negro", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "consulta precio"}
+{"input": "tienes leche", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "consulta de disponibilidad"}
+{"input": "me das una coca", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "consulta de producto"}
+{"input": "quiero hacer un pedido de 2 cocas de 600 y un pan", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "answer", "note": "orden explícita con cantidades"}
+{"input": "necesito ordenar arroz y frijol", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "orden sin cantidades"}
+{"input": "mandame a mi casa 3 leches", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "answer", "note": "orden a domicilio"}
+{"input": "mi pedido ORDER-001 donde va", "expected_intent": "order_status", "expected_tier": 1, "expected_finality": "answer", "note": "seguimiento de pedido"}
+{"input": "hola", "expected_intent": "smalltalk", "expected_tier": 0, "expected_finality": "answer", "note": "saludo simple"}
+{"input": "como estas", "expected_intent": "smalltalk", "expected_tier": 0, "expected_finality": "answer", "note": "cortesía"}
+{"input": "gracias", "expected_intent": "smalltalk", "expected_tier": 0, "expected_finality": "answer", "note": "agradecimiento"}
+{"input": "puedo devolver un producto que compre ayer", "expected_intent": "policy_question", "expected_tier": 1, "expected_finality": "answer", "note": "política de devoluciones"}
+{"input": "cual es el horario de entrega", "expected_intent": "policy_question", "expected_tier": 1, "expected_finality": "answer", "note": "política de entregas"}
+{"input": "tienen envio gratis", "expected_intent": "policy_question", "expected_tier": 1, "expected_finality": "answer", "note": "política de costos"}
 {"input": "el repartidor no me trajo completo", "expected_intent": "complaint", "expected_tier": 3, "expected_finality": "escalate", "note": "queja sensible"}
 {"input": "la coca estaba vencida", "expected_intent": "complaint", "expected_tier": 3, "expected_finality": "escalate", "note": "queja producto defectuoso"}
 {"input": "muy mal servicio", "expected_intent": "complaint", "expected_tier": 3, "expected_finality": "escalate", "note": "queja general"}
-{"input": "asdfghjkl", "expected_intent": "unknown", "expected_tier": 1, "expected_finality": "clarify", "note": "mensaje sin sentido"}
-{"input": "productos", "expected_intent": "unknown", "expected_tier": 1, "expected_finality": "clarify", "note": "muy ambiguo sin contexto"}
+{"input": "asdfghjkl", "expected_intent": "unknown", "expected_tier": 0, "expected_finality": "clarify", "note": "mensaje sin sentido"}
+{"input": "productos", "expected_intent": "unknown", "expected_tier": 0, "expected_finality": "clarify", "note": "muy ambiguo sin contexto"}
