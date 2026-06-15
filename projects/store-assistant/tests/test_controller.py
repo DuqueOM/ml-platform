@@ -1,0 +1,99 @@
+"""Integration tests for the ExecutiveController (offline, fake tiers).
+
+The router and tier clients are replaced with fakes so the full
+admit/execute/release flow runs without any model server.
+"""
+
+import pytest
+
+from core import load_agent
+from core.circuit import State
+from core.schemas import Route
+
+
+def _reply(content: str) -> dict:
+    return {
+        "choices": [{"message": {"content": content}}],
+        "usage": {"completion_tokens": 5},
+    }
+
+
+class FakeTiers:
+    """Returns queued contents in order; records calls. Optionally always fails."""
+
+    def __init__(self, contents=None, fail=False):
+        self.contents = list(contents or [])
+        self.fail = fail
+        self.calls: list[int] = []
+
+    def call(self, tier, messages, **kwargs):
+        self.calls.append(tier)
+        if self.fail:
+            raise RuntimeError("tier server down")
+        content = self.contents.pop(0) if self.contents else "ok"
+        return _reply(content)
+
+
+def _fixed_route(intent="smalltalk", tier=0, confidence=0.98, risk="low"):
+    return Route(
+        intent=intent,
+        tier=tier,
+        confidence=confidence,
+        risk=risk,
+        ambiguity="low",
+        tool_needed=False,
+        finality="answer",
+        expected_followup=True,
+    )
+
+
+@pytest.fixture
+def agent():
+    a = load_agent("tienda")
+    a.router.route = lambda msg: _fixed_route()  # type: ignore[assignment]
+    return a
+
+
+def test_happy_path(agent):
+    # plan -> "NONE" (no tools), generate -> greeting.
+    agent.tiers = FakeTiers(contents=["NONE", "Hola, con gusto te ayudo."])
+    result = agent.handle("hola")
+
+    assert result["response"] == "Hola, con gusto te ayudo."
+    assert result["verdict"]["approved"] is True
+    assert result["degraded"] is False
+    assert result["route"]["intent"] == "smalltalk"
+
+
+def test_tier_failure_degrades_to_safe_template(agent):
+    agent.tiers = FakeTiers(fail=True)
+    result = agent.handle("hola")
+
+    assert result["degraded"] is True
+    # The safe fallback prompt is used instead of a model answer.
+    assert result["response"] == agent._prompt("safe_fallback")
+
+
+def test_open_circuit_skips_tier_calls(agent):
+    # Pre-trip every tier (default threshold = 3 failures each).
+    breaker = agent.controller.breaker
+    for tier in (0, 1, 2, 3):
+        for _ in range(3):
+            breaker.record_failure(tier)
+    assert breaker.state_of(0) is State.OPEN
+
+    fake = FakeTiers(fail=True)
+    agent.tiers = fake
+    result = agent.handle("hola")
+
+    assert result["degraded"] is True
+    # No tier call should have been attempted — the breaker short-circuited.
+    assert fake.calls == []
+
+
+def test_breaker_records_failure_on_single_request(agent):
+    breaker = agent.controller.breaker
+    agent.tiers = FakeTiers(fail=True)
+    agent.handle("hola")
+    # The first (plan) call failed once and was recorded for that tier.
+    assert breaker._get(0).failures >= 1
