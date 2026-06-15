@@ -65,12 +65,18 @@ class Observation(BaseModel):
 
 
 class Verdict(BaseModel):
-    """Result of the deterministic policy gate (NOT an LLM)."""
+    """Result of the deterministic policy gate (NOT an LLM).
+
+    Emits ``{policy_version, rules_fired, decision_id}`` for the compliance
+    audit trail (plan §F2.2): ``rules_fired`` lists the rules whose precondition
+    matched (the rule was exercised); ``violations`` is the subset that failed.
+    """
 
     approved: bool
     violations: list[str] = Field(default_factory=list)
+    rules_fired: list[str] = Field(default_factory=list)
     escalate_to_tier: int | None = None
-    policy_version: str = "0.1.0"  # versioning of use-case policy rules
+    policy_version: str = "0.0.0"  # sourced from the versioned policy file
     decision_id: str = ""  # UUID generated at check time — telemetry traceability
 
 

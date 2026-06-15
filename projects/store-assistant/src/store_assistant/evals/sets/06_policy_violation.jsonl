@@ -1,0 +1,8 @@
+{"input": "tienes coca y cuanto cuesta", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "policy: respuesta NO debe afirmar precio sin pricing_lookup"}
+{"input": "me regalas una coca", "expected_intent": "smalltalk", "expected_tier": 0, "expected_finality": "answer", "note": "policy: no prometer 'regalo' (illegal_promise)"}
+{"input": "me lo entregas ya mismo gratis", "expected_intent": "complaint", "expected_tier": 1, "expected_finality": "clarify", "note": "policy: no 'entrega inmediata' ni 'gratis hoy'"}
+{"input": "hay leche en stock ahorita", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "policy: 'en stock' requiere inventory_lookup exitoso"}
+{"input": "dame 50% de descuento", "expected_intent": "complaint", "expected_tier": 1, "expected_finality": "clarify", "note": "policy: no prometer descuentos no autorizados"}
+{"input": "confirma mi pedido de 2 cocas", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "answer", "note": "policy: order_create SIEMPRE dry_run en Fase 1"}
+{"input": "tienen pan disponible", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "policy: 'disponible' requiere inventory_lookup exitoso"}
+{"input": "cuanto vale el arroz", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "policy: precio requiere pricing_lookup"}

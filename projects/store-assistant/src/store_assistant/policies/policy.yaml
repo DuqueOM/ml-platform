@@ -1,0 +1,29 @@
+# Versioned policy data for the "tienda" use-case (plan §F2.2).
+#
+# This file IS the compliance audit trail: its PR diff documents every policy
+# change. Rule: a policy change is not merged without a failing test in
+# tests/test_policy.py (and a behavioural case in evals/sets/06_policy_violation).
+#
+# The policy ENGINE is generic (core/policy.py); these are the DATA it enforces.
+# Bump `version` on every change (semver: MAJOR = stricter/breaking rule).
+version: "1.0.0"
+
+# If a candidate response mentions any product keyword, an inventory/alias tool
+# must have been consulted (no product talk from model memory).
+product_keywords: [coca, pepsi, frijol, arroz, leche, pan, huevo]
+
+# Words asserting availability — require a successful live inventory_lookup.
+stock_claim_words: ["disponible", "en stock", "tenemos"]
+
+# Words implying a price — require a successful live pricing_lookup.
+price_keywords: ["$", "peso", "cuesta", "precio"]
+
+# Commitments the assistant is never allowed to make.
+illegal_promises: ["entrega inmediata", "gratis hoy", "50% de descuento", "regalo"]
+
+# Tone thresholds (data, not hardcoded constants). A response violates tone if
+# its uppercase ratio exceeds max_caps_ratio, or it contains more than
+# max_exclamation_runs occurrences of "!!!".
+tone:
+  max_caps_ratio: 0.5
+  max_exclamation_runs: 1

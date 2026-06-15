@@ -36,13 +36,10 @@ retrieval:
 fixtures_dir: "data"       # JSON fixtures backing the Phase-1 tools
 budgets_file: "budgets.yaml"
 
-# Deterministic policy-gate rules (data, not code). Keyword lists are matched
-# case-insensitively against the candidate response.
-policy:
-  product_keywords: [coca, pepsi, frijol, arroz, leche, pan, huevo]
-  stock_claim_words: ["disponible", "en stock", "tenemos"]
-  price_keywords: ["$", "peso", "cuesta", "precio"]
-  illegal_promises: ["entrega inmediata", "gratis hoy", "50% de descuento", "regalo"]
+# Deterministic policy-gate rules (data, not code) live in a VERSIONED file so
+# its PR diff is the compliance audit trail (plan §F2.2). Override the path with
+# `policy_file:` if needed; default is policies/policy.yaml.
+policy_file: "policies/policy.yaml"
 
 # Agent prompt templates. Placeholders are filled by the loop with f-style
 # .format(): {message} {intent} {risk} {ambiguity} {tools} {max_tool_calls}

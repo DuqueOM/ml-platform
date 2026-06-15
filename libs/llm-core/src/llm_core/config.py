@@ -25,15 +25,19 @@ USECASES_ROOT = REPO_ROOT / "usecases"
 
 @dataclass(frozen=True)
 class PolicyRules:
-    """Deterministic policy-gate inputs, sourced from use-case config.
+    """Deterministic policy-gate inputs, sourced from a versioned policy file.
 
-    The policy *engine* is generic (``core/policy.py``); the *rules* are data.
+    The policy *engine* is generic (``core/policy.py``); the *rules* are data
+    (plan §F2.2). ``version`` is emitted on every verdict for the audit trail.
     """
 
+    version: str = "0.0.0"
     product_keywords: list[str] = field(default_factory=list)
     stock_claim_words: list[str] = field(default_factory=list)
     price_keywords: list[str] = field(default_factory=list)
     illegal_promises: list[str] = field(default_factory=list)
+    max_caps_ratio: float = 0.5
+    max_exclamation_runs: int = 1
 
 
 @dataclass(frozen=True)
@@ -105,12 +109,19 @@ def load_usecase(name: str) -> UsecaseConfig:
     retrieval_dir = root / raw.get("retrieval", {}).get("docs_dir", "policies")
     fixtures_dir = root / raw.get("fixtures_dir", "data")
 
-    policy_raw = raw.get("policy", {})
+    # Policy rules live in a versioned file (plan §F2.2); fall back to an inline
+    # ``policy:`` block for use-cases that have not migrated yet.
+    policy_file = root / raw.get("policy_file", "policies/policy.yaml")
+    policy_raw = yaml.safe_load(policy_file.read_text()) if policy_file.is_file() else raw.get("policy", {})
+    tone = policy_raw.get("tone", {})
     policy_rules = PolicyRules(
+        version=policy_raw.get("version", "0.0.0"),
         product_keywords=policy_raw.get("product_keywords", []),
         stock_claim_words=policy_raw.get("stock_claim_words", []),
         price_keywords=policy_raw.get("price_keywords", []),
         illegal_promises=policy_raw.get("illegal_promises", []),
+        max_caps_ratio=tone.get("max_caps_ratio", 0.5),
+        max_exclamation_runs=tone.get("max_exclamation_runs", 1),
     )
 
     # Tier endpoint keys come from YAML as ints already, but normalise to be safe.
