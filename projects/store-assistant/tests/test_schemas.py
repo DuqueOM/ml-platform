@@ -1,11 +1,7 @@
-"""Tests para schemas Pydantic."""
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from app.schemas import Route, RequestBudget, ToolCall, Observation, Verdict
+"""Tests for the Pydantic contracts (core.schemas)."""
 import pytest
+
+from core.schemas import Observation, RequestBudget, Route, ToolCall, Verdict
 
 def test_route_valid():
     """Test Route con datos válidos."""
@@ -24,17 +20,17 @@ def test_route_valid():
     assert route.tier == 2
     assert 0.0 <= route.confidence <= 1.0
 
-def test_route_invalid_intent():
-    """Test Route rechaza intent inválido."""
+def test_route_invalid_finality():
+    """Route rejects an out-of-set finality (intent is now a free str)."""
     with pytest.raises(Exception):  # ValidationError
         Route(
-            intent="invalid_intent",
+            intent="product_lookup",
             tier=0,
             confidence=0.5,
             risk="low",
             ambiguity="low",
             tool_needed=False,
-            finality="answer",
+            finality="not_a_finality",
             expected_followup=False
         )
 

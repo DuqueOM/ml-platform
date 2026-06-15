@@ -1,0 +1,116 @@
+{
+  "total": 20,
+  "correct_intent": 0,
+  "correct_tier": 0,
+  "correct_finality": 0,
+  "failures": [
+    {
+      "case_index": 1,
+      "input": "tienen coca de 600 fria?",
+      "error": "Server error '503 Service Unavailable' for url 'http://127.0.0.1:8091/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503"
+    },
+    {
+      "case_index": 2,
+      "input": "hay cocacola de litro",
+      "error": "Server error '503 Service Unavailable' for url 'http://127.0.0.1:8091/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503"
+    },
+    {
+      "case_index": 3,
+      "input": "cuanto cuesta el frijol negro",
+      "error": "Server error '503 Service Unavailable' for url 'http://127.0.0.1:8091/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503"
+    },
+    {
+      "case_index": 4,
+      "input": "tienes leche",
+      "error": "Server error '503 Service Unavailable' for url 'http://127.0.0.1:8091/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503"
+    },
+    {
+      "case_index": 5,
+      "input": "me das una coca",
+      "error": "Server error '503 Service Unavailable' for url 'http://127.0.0.1:8091/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503"
+    },
+    {
+      "case_index": 6,
+      "input": "quiero hacer un pedido de 2 cocas de 600 y un pan",
+      "error": "Server error '503 Service Unavailable' for url 'http://127.0.0.1:8091/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503"
+    },
+    {
+      "case_index": 7,
+      "input": "necesito ordenar arroz y frijol",
+      "error": "Server error '503 Service Unavailable' for url 'http://127.0.0.1:8091/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503"
+    },
+    {
+      "case_index": 8,
+      "input": "mandame a mi casa 3 leches",
+      "error": "Server error '503 Service Unavailable' for url 'http://127.0.0.1:8091/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503"
+    },
+    {
+      "case_index": 9,
+      "input": "mi pedido ORDER-001 donde va",
+      "error": "Server error '503 Service Unavailable' for url 'http://127.0.0.1:8091/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503"
+    },
+    {
+      "case_index": 10,
+      "input": "hola",
+      "error": "Server error '503 Service Unavailable' for url 'http://127.0.0.1:8091/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503"
+    },
+    {
+      "case_index": 11,
+      "input": "como estas",
+      "error": "Server error '503 Service Unavailable' for url 'http://127.0.0.1:8091/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503"
+    },
+    {
+      "case_index": 12,
+      "input": "gracias",
+      "error": "Server error '503 Service Unavailable' for url 'http://127.0.0.1:8091/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503"
+    },
+    {
+      "case_index": 13,
+      "input": "puedo devolver un producto que compre ayer",
+      "error": "Server error '503 Service Unavailable' for url 'http://127.0.0.1:8091/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503"
+    },
+    {
+      "case_index": 14,
+      "input": "cual es el horario de entrega",
+      "error": "Server error '503 Service Unavailable' for url 'http://127.0.0.1:8091/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503"
+    },
+    {
+      "case_index": 15,
+      "input": "tienen envio gratis",
+      "error": "Server error '503 Service Unavailable' for url 'http://127.0.0.1:8091/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503"
+    },
+    {
+      "case_index": 16,
+      "input": "el repartidor no me trajo completo",
+      "error": "Server error '503 Service Unavailable' for url 'http://127.0.0.1:8091/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503"
+    },
+    {
+      "case_index": 17,
+      "input": "la coca estaba vencida",
+      "error": "Server error '503 Service Unavailable' for url 'http://127.0.0.1:8091/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503"
+    },
+    {
+      "case_index": 18,
+      "input": "muy mal servicio",
+      "error": "Server error '503 Service Unavailable' for url 'http://127.0.0.1:8091/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503"
+    },
+    {
+      "case_index": 19,
+      "input": "asdfghjkl",
+      "error": "Server error '503 Service Unavailable' for url 'http://127.0.0.1:8091/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503"
+    },
+    {
+      "case_index": 20,
+      "input": "productos",
+      "error": "Server error '503 Service Unavailable' for url 'http://127.0.0.1:8091/v1/chat/completions'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/503"
+    }
+  ],
+  "latencies_ms": [],
+  "timestamp": "2026-06-15T18:15:46.751001",
+  "set_name": "01_intent",
+  "accuracy_intent": 0.0,
+  "accuracy_tier": 0.0,
+  "accuracy_finality": 0.0,
+  "avg_latency_ms": 0,
+  "p95_latency_ms": 0
+}

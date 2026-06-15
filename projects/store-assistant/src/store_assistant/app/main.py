@@ -1,20 +1,27 @@
-"""
-Webhook FastAPI — punto de entrada del asistente.
+"""FastAPI surface — the agent platform entry point.
 
-Fase 1:
-  - POST /dev/message: endpoint de desarrollo (sin WhatsApp)
-  - POST /webhook/whatsapp: webhook real WhatsApp Business (Fase 2)
+The use-case is selected by the ``AGENT_USECASE`` environment variable
+(default ``tienda``) and loaded once at startup.
 
-Fase 2:
-  - Cola SQLite para garantizar orden por conversación
-  - Estado durable con sagas para flujos multi-día
-  - Validación de firma WhatsApp
+Phase 1:
+  - POST /dev/message: development endpoint (no WhatsApp)
+  - POST /webhook/whatsapp: real WhatsApp Business webhook (Phase 2)
+
+Phase 2:
+  - SQLite queue to guarantee per-conversation ordering
+  - Durable state with sagas for multi-day flows
+  - WhatsApp signature validation
 """
-from fastapi import FastAPI, HTTPException, BackgroundTasks
-from pydantic import BaseModel
 import logging
+import os
 
-from .loop import AgentLoop
+from fastapi import BackgroundTasks, FastAPI, HTTPException
+from pydantic import BaseModel
+
+from core import load_agent
+
+USECASE = os.environ.get("AGENT_USECASE", "tienda")
+AGENT = load_agent(USECASE)
 
 # Configurar logging
 logging.basicConfig(
@@ -24,18 +31,20 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Asistente de Tienda WhatsApp",
-    description="Agente local con routing E4B + ejecutor tier 2/3",
-    version="0.1.0"
+    title="Local LLM Agent Platform",
+    description=f"Reusable multi-tier agent core. Active use-case: {USECASE}",
+    version="0.2.0",
 )
 
+
 class DevMessageRequest(BaseModel):
-    """Request para endpoint de desarrollo."""
+    """Development endpoint request."""
     text: str
     customer_phone: str = "+52155500000000"
 
+
 class DevMessageResponse(BaseModel):
-    """Response del endpoint de desarrollo."""
+    """Development endpoint response."""
     response: str
     route: dict
     verdict: dict | None
@@ -48,12 +57,13 @@ async def root():
     """Health check."""
     return {
         "service": "agent-local",
-        "version": "0.1.0",
+        "usecase": USECASE,
+        "version": "0.2.0",
         "status": "ok",
         "endpoints": [
-            "/dev/message (POST) — testing sin WhatsApp",
-            "/health (GET) — health check"
-        ]
+            "/dev/message (POST) — testing without WhatsApp",
+            "/health (GET) — health check",
+        ],
     }
 
 @app.get("/health")
@@ -82,14 +92,9 @@ async def dev_message(request: DevMessageRequest):
     """
     try:
         logger.info(f"[DEV] Request: {request.text}")
-        
-        # Ejecutar loop
-        loop = AgentLoop(
-            message=request.text,
-            customer_phone=request.customer_phone
-        )
-        result = loop.run()
-        
+
+        result = AGENT.handle(request.text, request.customer_phone)
+
         logger.info(f"[DEV] Response: {result['response']}")
         logger.info(f"[DEV] Latency: {result['latency_ms']['total']}ms")
         
@@ -108,8 +113,8 @@ async def whatsapp_webhook(background_tasks: BackgroundTasks):
     """
     return {
         "status": "not_implemented",
-        "message": "WhatsApp webhook será implementado en Fase 2",
-        "use_instead": "/dev/message endpoint para testing"
+        "message": "WhatsApp webhook will be implemented in Phase 2",
+        "use_instead": "/dev/message endpoint for testing",
     }
 
 if __name__ == "__main__":

@@ -1,0 +1,102 @@
+# Use-case: "tienda" — WhatsApp store assistant (example use-case).
+#
+# NOTE ON LANGUAGE: platform documentation is English, but this use-case serves
+# Spanish-speaking customers, so the router/agent prompts below are Spanish on
+# purpose. They are use-case *content/config*, not engineering documentation.
+
+name: tienda
+language: es
+
+# Closed set of intents the router may emit (enforced by the grammar AND
+# validated at runtime against this list).
+allowed_intents:
+  - product_lookup
+  - order_create
+  - order_status
+  - smalltalk
+  - complaint
+  - policy_question
+  - maintenance_task
+  - unknown
+
+# llama.cpp (OpenAI-compatible) endpoints per tier. Override via deployment.
+tier_endpoints:
+  0: "http://127.0.0.1:8091/v1/chat/completions"   # router/guardrail
+  1: "http://127.0.0.1:8092/v1/chat/completions"   # mid reasoning
+  2: "http://127.0.0.1:8093/v1/chat/completions"   # main assistant
+  3: "http://127.0.0.1:8094/v1/chat/completions"   # judge/verifier
+
+router:
+  prompt_file: "prompts/router.md"
+  grammar_file: "grammars/route.gbnf"
+
+retrieval:
+  docs_dir: "policies"     # *.md indexed by BM25
+
+fixtures_dir: "data"       # JSON fixtures backing the Phase-1 tools
+budgets_file: "budgets.yaml"
+
+# Deterministic policy-gate rules (data, not code). Keyword lists are matched
+# case-insensitively against the candidate response.
+policy:
+  product_keywords: [coca, pepsi, frijol, arroz, leche, pan, huevo]
+  stock_claim_words: ["disponible", "en stock", "tenemos"]
+  price_keywords: ["$", "peso", "cuesta", "precio"]
+  illegal_promises: ["entrega inmediata", "gratis hoy", "50% de descuento", "regalo"]
+
+# Agent prompt templates. Placeholders are filled by the loop with f-style
+# .format(): {message} {intent} {risk} {ambiguity} {tools} {max_tool_calls}
+# {observations} {response}.
+prompts:
+  plan_system: "Eres un asistente de tienda. Planea qué herramientas necesitas para responder."
+  plan_user: |
+    El cliente dice: "{message}"
+
+    Intent clasificado: {intent}
+    Risk: {risk}
+    Ambiguity: {ambiguity}
+
+    Herramientas disponibles:
+    {tools}
+
+    Lista las herramientas que necesitas (máx {max_tool_calls}), una por línea:
+    tool_name(arg1="...")
+
+    Si no necesitas herramientas, responde: NONE
+
+  generate_system: "Eres un asistente de tienda por WhatsApp. Responde de forma amable y profesional."
+  generate_user: |
+    Cliente: "{message}"
+    Intent: {intent}
+
+    Información de herramientas:
+    {observations}
+
+    Genera una respuesta clara, corta y comercial para WhatsApp. NO inventes
+    stock ni precios que no estén en las observaciones.
+
+  reflect_system: "Reflexiona sobre los resultados de herramientas."
+  reflect_user: |
+    Mensaje original: "{message}"
+
+    Observaciones de herramientas:
+    {observations}
+
+    ¿Falta información crítica? ¿Alguna herramienta contradijo la suposición?
+    Responde en 1-2 oraciones.
+
+  critic_system: "Eres un verificador. Valida respuestas contra datos reales."
+  critic_user: |
+    Respuesta propuesta: "{response}"
+
+    Observaciones reales:
+    {observations}
+
+    Verifica:
+    1. ¿Consistente con los datos de herramientas?
+    2. ¿Promete algo no confirmado en stock/precio?
+    3. ¿Claro para el cliente?
+
+    Responde SOLO: APPROVED o REJECTED
+
+  safe_fallback: "Disculpa, no puedo procesar tu solicitud en este momento. ¿Podrías reformular tu pregunta o contactar directamente con la tienda?"

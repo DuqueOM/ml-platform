@@ -1,24 +1,33 @@
 #!/usr/bin/env python3
-"""
-Runner de evaluaciones — mide accuracy de routing y adherencia a gates.
+"""Routing evaluation runner — measures routing accuracy and gate adherence.
 
 Usage:
-    python evals/run.py sets/01_intent.jsonl
+    python evals/run.py 01_intent.jsonl [--usecase tienda]
+
+The set path is resolved relative to ``usecases/<usecase>/evals/sets/``.
 
 Output:
-    - Imprime accuracy y casos fallidos a stdout
-    - Guarda reporte JSON en evals/reports/<timestamp>_<set_name>.json
+    - Prints accuracy and failing cases to stdout
+    - Saves a JSON report to evals/reports/<timestamp>_<set_name>.json
 """
-import sys
 import json
+import sys
 import time
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
-# Añadir app/ al path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Make the repo root importable (core/, usecases/).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.router import route
+from core import load_usecase  # noqa: E402
+from core.router import Router  # noqa: E402
+
+_ROUTER: Router | None = None
+
+
+def route(text: str):
+    """Route a message using the module-level router (built in __main__)."""
+    return _ROUTER.route(text)
 
 def run_intent_eval(jsonl_path: Path) -> dict:
     """Ejecuta evaluación de routing.
@@ -156,16 +165,29 @@ if __name__ == "__main__":
         print("Example: python evals/run.py sets/01_intent.jsonl")
         sys.exit(1)
     
-    jsonl_path = Path(sys.argv[1])
-    if not jsonl_path.exists():
-        # Probar ruta relativa desde evals/
-        jsonl_path = Path(__file__).parent / sys.argv[1]
-        if not jsonl_path.exists():
-            print(f"Error: {sys.argv[1]} not found")
-            sys.exit(1)
-    
-    print(f"Running eval: {jsonl_path.name}\n")
-    
+    # Optional --usecase flag (default: tienda).
+    usecase = "tienda"
+    args = sys.argv[1:]
+    if "--usecase" in args:
+        idx = args.index("--usecase")
+        usecase = args[idx + 1]
+        args = args[:idx] + args[idx + 2:]
+
+    set_arg = args[0]
+    repo_root = Path(__file__).resolve().parent.parent
+    candidates = [
+        Path(set_arg),
+        repo_root / "usecases" / usecase / "evals" / "sets" / set_arg,
+        repo_root / "usecases" / usecase / "evals" / set_arg,
+    ]
+    jsonl_path = next((p for p in candidates if p.exists()), None)
+    if jsonl_path is None:
+        print(f"Error: {set_arg} not found (use-case: {usecase})")
+        sys.exit(1)
+
+    _ROUTER = Router(load_usecase(usecase))
+    print(f"Running eval: {jsonl_path.name} (use-case: {usecase})\n")
+
     results = run_intent_eval(jsonl_path)
     print_summary(results)
     
