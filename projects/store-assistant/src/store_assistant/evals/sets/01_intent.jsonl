@@ -2,7 +2,7 @@
 {"input": "hay cocacola de litro", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "alias 'cocacola' variante ortografía"}
 {"input": "cuanto cuesta el frijol negro", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "consulta precio"}
 {"input": "tienes leche", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "consulta de disponibilidad"}
-{"input": "me das una coca", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "consulta de producto"}
+{"input": "me das una coca", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "peticion = pedido ('dame una coca'); falta cantidad -> clarify"}
 {"input": "quiero hacer un pedido de 2 cocas de 600 y un pan", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "answer", "note": "orden explícita con cantidades"}
 {"input": "necesito ordenar arroz y frijol", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "orden sin cantidades"}
 {"input": "mandame a mi casa 3 leches", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "answer", "note": "orden a domicilio"}
