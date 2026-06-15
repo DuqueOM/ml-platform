@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+/tmp/
+
+# Eval reports (versionados selectivamente)
+# evals/reports/*.json se commitea, pero logs intermedios no
+*.tmp.json
+
+# Local development
+.env
+.env.local
+
+# llama.cpp logs (temporales)
+llama_*.log
