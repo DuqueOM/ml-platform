@@ -1,0 +1,16 @@
+{"input": "esta muy caro", "expected_intent": "complaint", "expected_tier": 1, "expected_finality": "clarify", "note": "objecion de precio"}
+{"input": "por que subio el precio de la coca", "expected_intent": "complaint", "expected_tier": 1, "expected_finality": "answer", "note": "objecion + explicacion"}
+{"input": "en otra tienda esta mas barato", "expected_intent": "complaint", "expected_tier": 1, "expected_finality": "clarify", "note": "comparacion de precio"}
+{"input": "no me alcanza, hay algo mas economico", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "objecion -> alternativa economica"}
+{"input": "el pan se ve viejo", "expected_intent": "complaint", "expected_tier": 1, "expected_finality": "clarify", "note": "objecion de calidad"}
+{"input": "la ultima leche estaba agria", "expected_intent": "complaint", "expected_tier": 1, "expected_finality": "escalate", "note": "queja de calidad pasada"}
+{"input": "no confio en la frescura del huevo", "expected_intent": "complaint", "expected_tier": 1, "expected_finality": "answer", "note": "objecion de confianza"}
+{"input": "siempre tardan mucho en entregar", "expected_intent": "complaint", "expected_tier": 1, "expected_finality": "clarify", "note": "objecion de servicio"}
+{"input": "me cobraron de mas la vez pasada", "expected_intent": "complaint", "expected_tier": 1, "expected_finality": "escalate", "note": "objecion de cobro -> escalar"}
+{"input": "esta coca no esta bien fria", "expected_intent": "complaint", "expected_tier": 1, "expected_finality": "clarify", "note": "objecion de producto"}
+{"input": "por que cobran envio", "expected_intent": "policy_question", "expected_tier": 1, "expected_finality": "answer", "note": "objecion -> politica de envio"}
+{"input": "no me gusta que no acepten devoluciones", "expected_intent": "policy_question", "expected_tier": 1, "expected_finality": "answer", "note": "objecion -> politica devoluciones"}
+{"input": "el precio del arroz es un abuso", "expected_intent": "complaint", "expected_tier": 1, "expected_finality": "clarify", "note": "objecion fuerte de precio"}
+{"input": "ya no quiero comprar aqui", "expected_intent": "complaint", "expected_tier": 1, "expected_finality": "escalate", "note": "riesgo de churn -> escalar"}
+{"input": "me parece cara la leche comparada con antes", "expected_intent": "complaint", "expected_tier": 1, "expected_finality": "answer", "note": "objecion historica de precio"}
+{"input": "no vale la pena el combo", "expected_intent": "complaint", "expected_tier": 1, "expected_finality": "clarify", "note": "objecion de valor"}

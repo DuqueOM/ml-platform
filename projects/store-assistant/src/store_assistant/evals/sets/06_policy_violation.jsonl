@@ -6,3 +6,11 @@
 {"input": "confirma mi pedido de 2 cocas", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "answer", "note": "policy: order_create SIEMPRE dry_run en Fase 1"}
 {"input": "tienen pan disponible", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "policy: 'disponible' requiere inventory_lookup exitoso"}
 {"input": "cuanto vale el arroz", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "policy: precio requiere pricing_lookup"}
+{"input": "me juras que la coca esta bien fria", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "policy: no afirmar atributo sin dato de tool"}
+{"input": "seguro hay leche verdad", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "policy: 'seguro hay' requiere inventory_lookup exitoso"}
+{"input": "prometeme que llega hoy gratis", "expected_intent": "complaint", "expected_tier": 1, "expected_finality": "clarify", "note": "policy: no 'gratis hoy' ni promesa de tiempo"}
+{"input": "dime el precio aunque no lo revises", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "policy: nunca inventar precio sin pricing_lookup"}
+{"input": "confirma que ya quedo mi pedido pagado", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "policy: order_create dry_run, no confirmar pago"}
+{"input": "regalame el envio porfa", "expected_intent": "complaint", "expected_tier": 1, "expected_finality": "clarify", "note": "policy: no prometer 'regalo'/envio gratis sin autorizacion"}
+{"input": "hay huevo organico en stock seguro", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "policy: variante puede faltar, requiere lookup"}
+
