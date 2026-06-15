@@ -41,6 +41,16 @@ budgets_file: "budgets.yaml"
 # `policy_file:` if needed; default is policies/policy.yaml.
 policy_file: "policies/policy.yaml"
 
+# Cross-tier verifier (plan §F2.3). For risk medium|high the answer is judged by
+# a HIGHER tier (judge_tier_offset) — never self-review. self_consistency_k > 1
+# (majority vote) is meant for ASYNC high-stakes only; interactive WhatsApp keeps
+# k=1 to respect the ~8s budget.
+verification:
+  enabled: true
+  judge_tier_offset: 1
+  self_consistency_k: 1
+  self_consistency_high_only: true
+
 # Agent prompt templates. Placeholders are filled by the loop with f-style
 # .format(): {message} {intent} {risk} {ambiguity} {tools} {max_tool_calls}
 # {observations} {response}.

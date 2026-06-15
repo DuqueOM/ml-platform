@@ -82,10 +82,13 @@ class ExecutiveController:
 
             if ctx.route.risk in ("medium", "high"):
                 t5 = time.time()
-                approved = ctx.critic(ctx.tier)
+                outcome = ctx.verify(ctx.tier)
+                ctx.critic_outcome = outcome
                 ctx.latency_ms["critic"] = int((time.time() - t5) * 1000)
-                if not approved:
-                    ctx.final_response = ctx.generate(min(ctx.tier + 1, 3))
+                if not outcome["approved"]:
+                    # Escalate: regenerate at the (higher) judge tier, once.
+                    ctx.escalated = True
+                    ctx.final_response = ctx.generate(outcome["tier"])
         except TierUnavailable:
             # Every tier is unhealthy — degrade to a safe template (§F2.0).
             ctx.degraded = True
@@ -123,6 +126,8 @@ class RunContext:
         self.tool_calls_made = 0
         self.reflections_made = 0
         self.degraded = False
+        self.escalated = False
+        self.critic_outcome: dict | None = None
         self.start_time = time.time()
         self.latency_ms: dict[str, int] = {}
         self.tokens_by_tier: dict[int, int] = {}
@@ -214,7 +219,33 @@ class RunContext:
         response = self.call_tier(tier, messages, max_tokens=256, temperature=0.7)
         return extract_content(response)
 
-    def critic(self, tier: int) -> bool:
+    def verify(self, gen_tier: int) -> dict:
+        """Cross-tier verification of the generated answer (plan §F2.3).
+
+        The verifier runs at a HIGHER tier than generation (a judge model, not
+        self-review). For high-stakes flows it may take K samples and
+        majority-vote (bounded self-consistency); interactive flows stay at K=1
+        to respect the latency budget. K=3 is intended for async high-stakes.
+
+        Returns:
+            ``{"approved": bool, "tier": int, "votes": list[bool]}``.
+        """
+        cfg = self.agent.config.verification
+        if not cfg.get("enabled", True):
+            return {"approved": True, "tier": gen_tier, "votes": []}
+
+        judge_tier = min(gen_tier + cfg.get("judge_tier_offset", 1), 3)
+
+        k = cfg.get("self_consistency_k", 1)
+        if cfg.get("self_consistency_high_only", True) and self.route.risk != "high":
+            k = 1
+        k = max(1, k)
+
+        votes = [self._verifier_pass(judge_tier) for _ in range(k)]
+        approved = sum(votes) * 2 > len(votes)  # strict majority
+        return {"approved": approved, "tier": judge_tier, "votes": votes}
+
+    def _verifier_pass(self, tier: int) -> bool:
         ok_obs = "\n".join(f"{obs.tool}: {obs.data}" for obs in self.observations if obs.ok)
         user = self.agent._prompt("critic_user").format(response=self.final_response, observations=ok_obs)
         messages = [
@@ -229,12 +260,21 @@ class RunContext:
         usage = extract_usage(response)
         self.tokens_by_tier[tier] = self.tokens_by_tier.get(tier, 0) + usage.get("completion_tokens", 0)
 
+    def critic_verdict(self) -> str:
+        """Telemetry-friendly critic state: approved / rejected / skipped."""
+        if self.critic_outcome is None:
+            return "skipped"
+        return "approved" if self.critic_outcome["approved"] else "rejected"
+
     def finalize(self) -> dict:
         total = int((time.time() - self.start_time) * 1000)
         return {
             "response": self.final_response,
             "route": self.route.model_dump(),
             "verdict": self.verdict.model_dump(),
+            "critic_verdict": self.critic_verdict(),
+            "critic_outcome": self.critic_outcome,
+            "escalated": self.escalated,
             "latency_ms": {**self.latency_ms, "total": total},
             "tokens_by_tier": self.tokens_by_tier,
             "tool_calls": self.tool_calls_made,

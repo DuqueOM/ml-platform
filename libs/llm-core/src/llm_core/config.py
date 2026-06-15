@@ -57,6 +57,9 @@ class UsecaseConfig:
         prompts: Agent prompt templates (plan/generate/reflect/critic).
         retrieval_dir: Directory of ``*.md`` docs indexed by BM25.
         fixtures_dir: Directory of JSON fixtures used by the use-case tools.
+        verification: Cross-tier verifier settings (plan §F2.3): ``enabled``,
+            ``judge_tier_offset``, ``self_consistency_k``,
+            ``self_consistency_high_only``.
     """
 
     name: str
@@ -71,6 +74,7 @@ class UsecaseConfig:
     prompts: dict[str, str]
     retrieval_dir: Path
     fixtures_dir: Path
+    verification: dict = field(default_factory=dict)
 
 
 def load_usecase(name: str) -> UsecaseConfig:
@@ -147,4 +151,5 @@ def load_usecase(name: str) -> UsecaseConfig:
         prompts=raw.get("prompts", {}),
         retrieval_dir=retrieval_dir,
         fixtures_dir=fixtures_dir,
+        verification=raw.get("verification", {}),
     )
