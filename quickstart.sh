@@ -41,16 +41,22 @@ sleep 2
 E4B_PID=$!
 echo "   PID: $E4B_PID"
 
-# Esperar que esté listo
-echo "   Waiting for server to be ready..."
+# Esperar readiness REAL: /health devuelve 200 mientras los slots aún cargan,
+# por eso probamos el endpoint de completions (devuelve 503 "Loading model"
+# hasta que el modelo está realmente listo para inferir).
+echo "   Waiting for server to be ready (probing /v1/chat/completions)..."
 for i in {1..30}; do
-    if curl -s http://127.0.0.1:8091/health >/dev/null 2>&1; then
-        echo "   ✅ Server ready"
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+        http://127.0.0.1:8091/v1/chat/completions \
+        -H 'Content-Type: application/json' \
+        -d '{"messages":[{"role":"user","content":"ping"}],"max_tokens":1}' 2>/dev/null || echo "000")
+    if [[ "$HTTP_CODE" == "200" ]]; then
+        echo "   ✅ Server ready (inference endpoint live)"
         break
     fi
     sleep 2
     if [[ $i -eq 30 ]]; then
-        echo "   ❌ Server failed to start in 60s"
+        echo "   ❌ Server failed to become ready in 60s (last HTTP: $HTTP_CODE)"
         echo "   Check log: tail /tmp/llama_E4B_quickstart.log"
         kill $E4B_PID 2>/dev/null || true
         exit 1
