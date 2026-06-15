@@ -103,3 +103,4 @@ class TelemetryEntry(BaseModel):
     budget_exhausted: bool
     outcome: Literal["answered", "clarified", "escalated", "failed"]
     provenance: dict  # {"source": str, "reviewer": str | None, "quarantine": bool}
+    shadow: dict | None = None  # 10% routing shadow sample (plan §F3.6)

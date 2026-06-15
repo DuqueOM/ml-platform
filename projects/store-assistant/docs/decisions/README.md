@@ -8,6 +8,7 @@ Non-trivial decisions are recorded here with their context and trade-offs.
 | [ADR-002](ADR-002-calibrated-infrastructure.md) | Calibrated infrastructure: Docker now, K8s/Terraform deferred | Accepted |
 | [ADR-003](ADR-003-policy-as-versioned-data.md) | Policy rules as versioned data with decision_id + required tests | Accepted |
 | [ADR-004](ADR-004-cross-tier-verification.md) | Cross-tier verification with bounded self-consistency | Accepted |
+| [ADR-005](ADR-005-decision-telemetry.md) | Decision telemetry as a contract (JSONL, PII-redacted, OTel-aligned) | Accepted |
 
 ## Format
 

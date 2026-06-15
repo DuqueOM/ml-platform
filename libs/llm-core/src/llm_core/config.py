@@ -60,6 +60,8 @@ class UsecaseConfig:
         verification: Cross-tier verifier settings (plan §F2.3): ``enabled``,
             ``judge_tier_offset``, ``self_consistency_k``,
             ``self_consistency_high_only``.
+        telemetry: Decision-telemetry settings (plan §F3): ``enabled``, ``path``,
+            ``source``, ``shadow_sample_rate``.
     """
 
     name: str
@@ -75,6 +77,7 @@ class UsecaseConfig:
     retrieval_dir: Path
     fixtures_dir: Path
     verification: dict = field(default_factory=dict)
+    telemetry: dict = field(default_factory=dict)
 
 
 def load_usecase(name: str) -> UsecaseConfig:
@@ -152,4 +155,5 @@ def load_usecase(name: str) -> UsecaseConfig:
         retrieval_dir=retrieval_dir,
         fixtures_dir=fixtures_dir,
         verification=raw.get("verification", {}),
+        telemetry=raw.get("telemetry", {}),
     )

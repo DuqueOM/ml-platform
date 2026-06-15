@@ -37,3 +37,7 @@ Thumbs.db
 
 # llama.cpp logs (temporales)
 llama_*.log
+
+# Decision telemetry (runtime, plan §F3) — raw retained 30 days, never committed
+ops/
+

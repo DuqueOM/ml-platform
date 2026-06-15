@@ -51,6 +51,15 @@ verification:
   self_consistency_k: 1
   self_consistency_high_only: true
 
+# Decision telemetry (plan §F3). One redacted JSONL line per request. PII is
+# redacted at write time. shadow_sample_rate logs what a higher tier WOULD route
+# on a fraction of requests (the comparison call is gated; needs a model).
+telemetry:
+  enabled: true
+  path: "ops/telemetry.jsonl"
+  source: "local"
+  shadow_sample_rate: 0.1
+
 # Agent prompt templates. Placeholders are filled by the loop with f-style
 # .format(): {message} {intent} {risk} {ambiguity} {tools} {max_tool_calls}
 # {observations} {response}.

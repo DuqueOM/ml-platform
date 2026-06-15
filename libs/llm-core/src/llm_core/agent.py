@@ -11,11 +11,15 @@ contains no domain text.
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 from .config import UsecaseConfig
 from .controller import ExecutiveController
 from .retrieval import BM25Index, make_semantic_retrieval
 from .router import Router
 from .schemas import RequestBudget
+from .telemetry import TelemetrySink
 from .tiers import TierClient
 from .tools import ToolRegistry
 
@@ -48,6 +52,15 @@ class Agent:
         # Register the generic BM25 retrieval tool over the use-case docs.
         index = BM25Index(config.retrieval_dir)
         self.registry.register("semantic_retrieval", make_semantic_retrieval(index))
+
+        # Decision telemetry sink (plan §F3). ``AGENT_TELEMETRY_PATH`` overrides
+        # the config path (used by tests for isolation).
+        tel = config.telemetry
+        path = os.environ.get("AGENT_TELEMETRY_PATH", tel.get("path"))
+        self.telemetry = TelemetrySink(
+            path=Path(path) if path else None,
+            enabled=tel.get("enabled", True),
+        )
 
         # One controller per agent so circuit-breaker state persists across
         # requests (single-worker serving invariant).

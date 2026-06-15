@@ -14,12 +14,15 @@ gracefully when a tier is unhealthy.
 
 from __future__ import annotations
 
+import random
 import time
-from typing import TYPE_CHECKING
+import uuid
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Literal
 
 from .circuit import CircuitBreaker
 from .policy import check_policy
-from .schemas import Observation, RequestBudget, Route, ToolCall, Verdict
+from .schemas import Observation, RequestBudget, Route, TelemetryEntry, ToolCall, Verdict
 from .tiers import extract_content, extract_usage
 
 if TYPE_CHECKING:  # avoid a runtime import cycle (agent imports this module)
@@ -59,6 +62,14 @@ class ExecutiveController:
         if ctx.route.confidence < 0.70 and tier < 3:
             tier += 1
         ctx.tier = tier
+        ctx.tier_final = tier
+
+        # Shadow mode (plan §F3.6): sample a fraction of requests to record what
+        # a higher tier *would* route. The comparison call is gated (needs a
+        # model); here we record the sampling decision + the intended shadow tier.
+        rate = self.agent.config.telemetry.get("shadow_sample_rate", 0.0)
+        if rate >= 1.0 or (rate > 0.0 and random.random() < rate):
+            ctx.shadow = {"sampled": True, "would_route_tier": min(tier + 1, 3)}
 
     # --- phase 2: execute --------------------------------------------------
     def execute(self, ctx: "RunContext") -> None:
@@ -88,6 +99,7 @@ class ExecutiveController:
                 if not outcome["approved"]:
                     # Escalate: regenerate at the (higher) judge tier, once.
                     ctx.escalated = True
+                    ctx.tier_final = outcome["tier"]
                     ctx.final_response = ctx.generate(outcome["tier"])
         except TierUnavailable:
             # Every tier is unhealthy — degrade to a safe template (§F2.0).
@@ -99,7 +111,10 @@ class ExecutiveController:
         ctx.verdict = check_policy(ctx.route, ctx.final_response, ctx.observations, self.agent.config.policy_rules)
         if not ctx.verdict.approved:
             ctx.final_response = self.agent._prompt("safe_fallback")
-        return ctx.finalize()
+        result = ctx.finalize()
+        # Telemetry is a contract (plan §F3): emit one redacted JSONL entry.
+        self.agent.telemetry.emit(ctx.telemetry_entry())
+        return result
 
 
 class RunContext:
@@ -121,12 +136,15 @@ class RunContext:
         self.message = message
         self.customer_id = customer_id
         self.breaker = breaker
+        self.trace_id = str(uuid.uuid4())
 
         self.observations: list[Observation] = []
         self.tool_calls_made = 0
         self.reflections_made = 0
         self.degraded = False
         self.escalated = False
+        self.tier_final = 0
+        self.shadow: dict | None = None
         self.critic_outcome: dict | None = None
         self.start_time = time.time()
         self.latency_ms: dict[str, int] = {}
@@ -260,24 +278,64 @@ class RunContext:
         usage = extract_usage(response)
         self.tokens_by_tier[tier] = self.tokens_by_tier.get(tier, 0) + usage.get("completion_tokens", 0)
 
-    def critic_verdict(self) -> str:
+    def critic_verdict(self) -> Literal["approved", "rejected", "skipped"]:
         """Telemetry-friendly critic state: approved / rejected / skipped."""
         if self.critic_outcome is None:
             return "skipped"
         return "approved" if self.critic_outcome["approved"] else "rejected"
 
+    def _outcome(self) -> Literal["answered", "clarified", "escalated", "failed"]:
+        """Map the request to a terminal outcome for telemetry."""
+        if self.degraded or not self.verdict.approved:
+            return "failed"
+        if self.route.finality == "clarify":
+            return "clarified"
+        if self.route.finality == "escalate":
+            return "escalated"
+        return "answered"
+
+    def telemetry_entry(self) -> TelemetryEntry:
+        """Build the per-request telemetry contract (plan §F3)."""
+        total = int((time.time() - self.start_time) * 1000)
+        return TelemetryEntry(
+            ts=datetime.now(timezone.utc).isoformat(),
+            trace_id=self.trace_id,
+            route=self.route,
+            tier_final=self.tier_final,
+            confidence=self.route.confidence,
+            escalated=self.escalated,
+            escalation_reason="critic_rejected" if self.escalated else None,
+            tools=[obs.tool for obs in self.observations],
+            tool_failures=[obs.tool for obs in self.observations if not obs.ok],
+            policy_verdict=self.verdict,
+            critic_verdict=self.critic_verdict(),
+            latency_ms={**self.latency_ms, "total": total},
+            cost={"tokens_by_tier": {str(k): v for k, v in self.tokens_by_tier.items()}},
+            budget_exhausted=self.tool_calls_made >= self.budget.max_tool_calls,
+            outcome=self._outcome(),
+            provenance={
+                "source": self.agent.config.telemetry.get("source", "local"),
+                "reviewer": None,
+                "quarantine": True,
+            },
+            shadow=self.shadow,
+        )
+
     def finalize(self) -> dict:
         total = int((time.time() - self.start_time) * 1000)
         return {
             "response": self.final_response,
+            "trace_id": self.trace_id,
             "route": self.route.model_dump(),
             "verdict": self.verdict.model_dump(),
             "critic_verdict": self.critic_verdict(),
             "critic_outcome": self.critic_outcome,
             "escalated": self.escalated,
+            "tier_final": self.tier_final,
             "latency_ms": {**self.latency_ms, "total": total},
             "tokens_by_tier": self.tokens_by_tier,
             "tool_calls": self.tool_calls_made,
             "degraded": self.degraded,
+            "shadow": self.shadow,
             "observations": [obs.model_dump() for obs in self.observations],
         }
