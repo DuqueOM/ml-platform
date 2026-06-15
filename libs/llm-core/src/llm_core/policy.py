@@ -7,6 +7,7 @@ The *engine* here is generic; the *rules* (product keywords, illegal promises,
 …) are data supplied by the use-case via :class:`core.config.PolicyRules`.
 Phase 2 will version these rules with a ``decision_id`` for the audit trail.
 """
+
 from __future__ import annotations
 
 from .config import PolicyRules

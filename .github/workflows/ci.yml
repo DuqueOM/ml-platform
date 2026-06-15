@@ -1,0 +1,46 @@
+name: CI
+
+# Unit tests + lint only. The local LLM tiers are intentionally NOT run in CI:
+# GitHub runners have no GPU/model access, and self-hosted runners on a personal
+# machine over a public repo are a known attack vector (ADR-002 / CONTRIBUTING).
+# Model-quality evidence is produced locally (evals/reports, bench/RESULTS.md).
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Lint (black, isort)
+        run: |
+          black --check --line-length 120 core app usecases tests
+          isort --check-only --profile black core app usecases tests
+
+      - name: Lint (flake8)
+        run: flake8 core app usecases tests --max-line-length 120 --extend-ignore E203,W503
+
+      - name: Type check (mypy)
+        run: mypy core app
+
+      - name: Unit tests
+        run: pytest -q

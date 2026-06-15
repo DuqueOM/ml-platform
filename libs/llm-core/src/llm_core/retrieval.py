@@ -5,9 +5,11 @@ objection templates) and exposes them as a ``semantic_retrieval`` tool.
 
 NEVER stock/price here — that goes through tools backed by live APIs.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Callable
 
 from rank_bm25 import BM25Okapi
 

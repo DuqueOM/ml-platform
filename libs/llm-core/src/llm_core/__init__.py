@@ -5,6 +5,7 @@ Phase 1 stack: FastAPI + Pydantic + httpx + BM25, multi-tier llama.cpp routing.
 A use-case is loaded by name; the core wires the router, tier clients, tool
 registry, retrieval index and policy gate from the use-case configuration.
 """
+
 from __future__ import annotations
 
 import importlib
@@ -33,8 +34,6 @@ def load_agent(name: str) -> Agent:
     config = load_usecase(name)
     module = importlib.import_module(f"usecases.{name}")
     if not hasattr(module, "build_registry"):
-        raise AttributeError(
-            f"usecases.{name} must expose build_registry(config) -> ToolRegistry"
-        )
+        raise AttributeError(f"usecases.{name} must expose build_registry(config) -> ToolRegistry")
     registry = module.build_registry(config)
     return Agent(config, registry)

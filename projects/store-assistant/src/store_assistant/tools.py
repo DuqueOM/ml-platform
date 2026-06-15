@@ -6,6 +6,7 @@ Phase 2: real store APIs gated by the policy layer.
 INVARIANT: ``order_create`` is ALWAYS dry-run in Phase 1. The real flag is
 enabled by the policy layer in Phase 2, never by the model.
 """
+
 from __future__ import annotations
 
 import json
@@ -83,8 +84,12 @@ def build_registry(config: UsecaseConfig) -> ToolRegistry:
         return Observation(
             tool="order_create",
             ok=True,
-            data={"order_id": order_id, "dry_run": dry_run, "items": items,
-                  "status": "pending" if dry_run else "created"},
+            data={
+                "order_id": order_id,
+                "dry_run": dry_run,
+                "items": items,
+                "status": "pending" if dry_run else "created",
+            },
             error=None,
         )
 

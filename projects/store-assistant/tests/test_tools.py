@@ -1,4 +1,5 @@
 """Tests for the 'tienda' use-case tool registry (built from config)."""
+
 import pytest
 
 from core import load_agent, load_usecase
@@ -52,8 +53,7 @@ def test_order_create_dry_run(registry):
     obs = registry.run(
         ToolCall(
             tool="order_create",
-            args={"items": [{"product_id": "SKU-COCA-600", "quantity": 2}],
-                  "customer_phone": "+52155512345678"},
+            args={"items": [{"product_id": "SKU-COCA-600", "quantity": 2}], "customer_phone": "+52155512345678"},
         )
     )
     assert obs.ok is True
@@ -62,9 +62,7 @@ def test_order_create_dry_run(registry):
 
 
 def test_order_create_empty(registry):
-    obs = registry.run(
-        ToolCall(tool="order_create", args={"items": [], "customer_phone": "+52155512345678"})
-    )
+    obs = registry.run(ToolCall(tool="order_create", args={"items": [], "customer_phone": "+52155512345678"}))
     assert obs.ok is False
     assert obs.error == "empty_order"
 
@@ -79,8 +77,12 @@ def test_agent_registers_all_tools():
     """The Agent wires use-case tools + the generic semantic_retrieval tool."""
     agent = load_agent("tienda")
     expected = [
-        "alias_lookup", "inventory_lookup", "pricing_lookup",
-        "order_create", "order_status", "semantic_retrieval",
+        "alias_lookup",
+        "inventory_lookup",
+        "pricing_lookup",
+        "order_create",
+        "order_status",
+        "semantic_retrieval",
     ]
     for name in expected:
         assert name in agent.registry, f"Tool {name} not registered"

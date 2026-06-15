@@ -9,6 +9,7 @@ Objective escalation (executed in ``loop.py``, never in the prompt):
 The router is business-agnostic: the system prompt and grammar are supplied by
 the use-case config.
 """
+
 from __future__ import annotations
 
 import httpx
@@ -65,7 +66,5 @@ class Router:
 
         allowed = self._config.allowed_intents
         if allowed and route.intent not in allowed:
-            raise ValueError(
-                f"Router emitted intent {route.intent!r} not in allowed_intents {allowed}"
-            )
+            raise ValueError(f"Router emitted intent {route.intent!r} not in allowed_intents {allowed}")
         return route

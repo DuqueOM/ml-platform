@@ -12,6 +12,7 @@ Phase 2:
   - Durable state with sagas for multi-day flows
   - WhatsApp signature validation
 """
+
 import logging
 import os
 
@@ -24,10 +25,7 @@ USECASE = os.environ.get("AGENT_USECASE", "tienda")
 AGENT = load_agent(USECASE)
 
 # Configurar logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
@@ -39,18 +37,21 @@ app = FastAPI(
 
 class DevMessageRequest(BaseModel):
     """Development endpoint request."""
+
     text: str
     customer_phone: str = "+52155500000000"
 
 
 class DevMessageResponse(BaseModel):
     """Development endpoint response."""
+
     response: str
     route: dict
     verdict: dict | None
     latency_ms: dict
     tokens_by_tier: dict
     observations: list[dict]
+
 
 @app.get("/")
 async def root():
@@ -66,23 +67,25 @@ async def root():
         ],
     }
 
+
 @app.get("/health")
 async def health():
     """Health check endpoint."""
     return {"status": "healthy"}
 
+
 @app.post("/dev/message", response_model=DevMessageResponse)
 async def dev_message(request: DevMessageRequest):
     """Endpoint de desarrollo para testing sin WhatsApp.
-    
+
     Ejecuta el loop completo y retorna resultado inmediato.
-    
+
     Args:
         request: Mensaje del cliente
-    
+
     Returns:
         Respuesta del agente con métricas completas
-    
+
     Example:
         ```bash
         curl -X POST http://localhost:8000/dev/message \
@@ -97,17 +100,18 @@ async def dev_message(request: DevMessageRequest):
 
         logger.info(f"[DEV] Response: {result['response']}")
         logger.info(f"[DEV] Latency: {result['latency_ms']['total']}ms")
-        
+
         return DevMessageResponse(**result)
-    
+
     except Exception as e:
         logger.error(f"[DEV] Error processing message: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @app.post("/webhook/whatsapp")
 async def whatsapp_webhook(background_tasks: BackgroundTasks):
     """Webhook de WhatsApp Business (Fase 2).
-    
+
     Fase 1: Stub que retorna 501 Not Implemented.
     Fase 2: Validación de firma, encolado, procesamiento async.
     """
@@ -117,17 +121,12 @@ async def whatsapp_webhook(background_tasks: BackgroundTasks):
         "use_instead": "/dev/message endpoint for testing",
     }
 
+
 if __name__ == "__main__":
     import uvicorn
-    
+
     logger.info("Starting agent-local server...")
     logger.info("Ensure Tier 0 (E4B) server is running on port 8091")
     logger.info("Development endpoint: POST http://localhost:8000/dev/message")
-    
-    uvicorn.run(
-        "app.main:app",
-        host="127.0.0.1",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
+
+    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True, log_level="info")

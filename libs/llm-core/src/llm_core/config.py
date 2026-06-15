@@ -9,6 +9,7 @@ This is the seam that turns the Phase 1 store assistant into a reusable
 platform: a new domain is a new ``usecases/<name>/`` folder plus its tools,
 never a fork of ``core/``.
 """
+
 from __future__ import annotations
 
 import os

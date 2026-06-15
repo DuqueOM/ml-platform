@@ -12,6 +12,7 @@ Adaptive depth (v3):
 All prompts and policy rules come from the use-case config, so this module
 contains no domain text.
 """
+
 from __future__ import annotations
 
 import time
@@ -72,16 +73,18 @@ class Agent:
 class _Run:
     """Mutable per-request state for a single :class:`Agent` invocation."""
 
+    # Set during execute() before first use; declared non-optional for typing.
+    route: Route
+    budget: RequestBudget
+    final_response: str
+    verdict: Verdict
+
     def __init__(self, agent: Agent, message: str, customer_id: str):
         self.agent = agent
         self.message = message
         self.customer_id = customer_id
 
-        self.route: Route | None = None
-        self.budget: RequestBudget | None = None
         self.observations: list[Observation] = []
-        self.final_response: str | None = None
-        self.verdict: Verdict | None = None
 
         self.tool_calls_made = 0
         self.reflections_made = 0
@@ -97,7 +100,7 @@ class _Run:
 
         self.budget = self.agent.budget_for(self.route.intent)
 
-        tier = self.route.tier
+        tier: int = self.route.tier
         if self.route.confidence < 0.70 and tier < 3:
             tier += 1
 
@@ -125,9 +128,7 @@ class _Run:
             if not approved:
                 self.final_response = self._generate(min(tier + 1, 3))
 
-        self.verdict = check_policy(
-            self.route, self.final_response, self.observations, self.agent.config.policy_rules
-        )
+        self.verdict = check_policy(self.route, self.final_response, self.observations, self.agent.config.policy_rules)
         if not self.verdict.approved:
             self.final_response = self.agent._prompt("safe_fallback")
 
@@ -184,12 +185,9 @@ class _Run:
         if self.reflections_made >= self.budget.max_reflections:
             return
         obs_summary = "\n".join(
-            f"- {obs.tool}: {'OK' if obs.ok else f'FAILED ({obs.error})'} -> {obs.data}"
-            for obs in self.observations
+            f"- {obs.tool}: {'OK' if obs.ok else f'FAILED ({obs.error})'} -> {obs.data}" for obs in self.observations
         )
-        user = self.agent._prompt("reflect_user").format(
-            message=self.message, observations=obs_summary
-        )
+        user = self.agent._prompt("reflect_user").format(message=self.message, observations=obs_summary)
         messages = [
             {"role": "system", "content": self.agent._prompt("reflect_system")},
             {"role": "user", "content": user},
@@ -200,8 +198,7 @@ class _Run:
 
     def _generate(self, tier: int) -> str:
         obs_context = "\n".join(
-            f"{obs.tool}: {obs.data if obs.ok else f'ERROR: {obs.error}'}"
-            for obs in self.observations
+            f"{obs.tool}: {obs.data if obs.ok else f'ERROR: {obs.error}'}" for obs in self.observations
         )
         user = self.agent._prompt("generate_user").format(
             message=self.message, intent=self.route.intent, observations=obs_context
@@ -215,12 +212,8 @@ class _Run:
         return extract_content(response)
 
     def _critic(self, tier: int) -> bool:
-        ok_obs = "\n".join(
-            f"{obs.tool}: {obs.data}" for obs in self.observations if obs.ok
-        )
-        user = self.agent._prompt("critic_user").format(
-            response=self.final_response, observations=ok_obs
-        )
+        ok_obs = "\n".join(f"{obs.tool}: {obs.data}" for obs in self.observations if obs.ok)
+        user = self.agent._prompt("critic_user").format(response=self.final_response, observations=ok_obs)
         messages = [
             {"role": "system", "content": self.agent._prompt("critic_system")},
             {"role": "user", "content": user},
@@ -232,9 +225,7 @@ class _Run:
     # --- helpers -----------------------------------------------------------
     def _track(self, tier: int, response: dict) -> None:
         usage = extract_usage(response)
-        self.tokens_by_tier[tier] = self.tokens_by_tier.get(tier, 0) + usage.get(
-            "completion_tokens", 0
-        )
+        self.tokens_by_tier[tier] = self.tokens_by_tier.get(tier, 0) + usage.get("completion_tokens", 0)
 
     def _finalize(self) -> dict:
         total = int((time.time() - self.start_time) * 1000)

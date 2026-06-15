@@ -4,6 +4,7 @@ The registry mechanism is generic platform code. Concrete tools (inventory,
 pricing, orders, …) live in the use-case package and register themselves
 against a :class:`ToolRegistry` instance.
 """
+
 from __future__ import annotations
 
 from typing import Callable

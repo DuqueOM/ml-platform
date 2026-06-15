@@ -4,6 +4,7 @@ Every structure is a runtime-validated contract that also documents the
 architecture. These are business-agnostic: domain-specific intents are a
 plain ``str`` here and constrained by the use-case grammar + allowed_intents.
 """
+
 from __future__ import annotations
 
 from typing import Literal
@@ -42,7 +43,9 @@ class RequestBudget(BaseModel):
     max_reflections: int = 1  # v3: reflection is conditional and bounded
     latency_budget_ms: int = 8000  # channel SLA (WhatsApp ~= 8s)
     can_escalate_t3: bool = False  # the largest tier requires explicit permission
-    cloud_daily_cap: int = Field(default=100, description="Daily cloud request cap (global controller, not per-request)")
+    cloud_daily_cap: int = Field(
+        default=100, description="Daily cloud request cap (global controller, not per-request)"
+    )
 
 
 class ToolCall(BaseModel):

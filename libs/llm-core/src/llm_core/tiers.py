@@ -8,6 +8,7 @@ topology. A typical multi-tier layout:
     Tier 2: main customer-facing model     (e.g. port 8093)
     Tier 3: judge/verifier model           (e.g. port 8094)
 """
+
 from __future__ import annotations
 
 import httpx
