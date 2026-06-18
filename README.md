@@ -8,6 +8,23 @@ fork of the core (see [ADR-001](docs/decisions/ADR-001-reusable-platform-not-tem
 
 The shipped example use-case, **`tienda`**, is a WhatsApp store assistant.
 
+> ### 🧬 Part of a lineage — this is chapter three, not a standalone repo
+>
+> This repository is the **LLM plane** of a deliberately connected ecosystem,
+> and the third step of a single evolution:
+>
+> 1. **[ML-MLOps Portfolio](https://github.com/DuqueOM/ML-MLOps-Portfolio)** — three production ML services; the lessons were paid for here.
+> 2. **[ML-MLOps Production Template](https://github.com/DuqueOM/ML-MLOps-Production-Template)** — those lessons encoded as a reusable, governed scaffold for *tabular* ML on Kubernetes.
+> 3. **`agent-local` (this repo)** — the same governance philosophy (AUTO/CONSULT/STOP, eval-gated autonomy, policy-as-data, no fine-tuning yet) **generalized to a new domain**: local LLM agents.
+>
+> The two repos are **siblings with an explicit, bidirectional contract**, not
+> copies: `agent-local` reuses the template's Terraform/Kustomize when it needs
+> cloud, and runs the template's ADR-028 day-2 maintenance lanes on its local
+> tiers. The shared plan
+> [`ACTION_PLAN_LLM_AGENT.md`](https://github.com/DuqueOM/ML-MLOps-Production-Template/blob/main/docs/audit/ACTION_PLAN_LLM_AGENT.md)
+> governs **both** planes. See the template's *"Local model plane"* section and
+> this repo's [ADR-001](docs/decisions/ADR-001-reusable-platform-not-template.md).
+
 > **Status**: Phase 1 (read-only, fixtures). Routing quality gate **PASSED
 > (19/20)** on the Tier-0 router. Code is structured for the full multi-tier
 > stack.
