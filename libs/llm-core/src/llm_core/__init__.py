@@ -14,7 +14,7 @@ from .agent import Agent
 from .config import UsecaseConfig, load_usecase
 from .tools import ToolRegistry
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = ["Agent", "UsecaseConfig", "ToolRegistry", "load_usecase", "load_agent"]
 

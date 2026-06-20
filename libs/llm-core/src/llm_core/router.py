@@ -16,6 +16,7 @@ import httpx
 
 from .config import UsecaseConfig
 from .schemas import Route
+from .tiers import RetryPolicy, with_retry
 
 
 class Router:
@@ -30,6 +31,7 @@ class Router:
         self._url = config.tier_endpoints[0]
         self._system = config.router_prompt
         self._grammar = config.router_grammar
+        self._retry = RetryPolicy.from_config(config.tier_retry)
 
     def route(self, message: str, timeout: int = 30) -> Route:
         """Classify a customer message.
@@ -46,20 +48,25 @@ class Router:
             pydantic.ValidationError: If the JSON output violates the schema.
             ValueError: If the emitted intent is not in ``allowed_intents``.
         """
-        response = httpx.post(
-            self._url,
-            json={
-                "messages": [
-                    {"role": "system", "content": self._system},
-                    {"role": "user", "content": message},
-                ],
-                "temperature": 0,
-                "max_tokens": 160,
-                "grammar": self._grammar,
-            },
-            timeout=timeout,
-        )
-        response.raise_for_status()
+
+        def _attempt() -> httpx.Response:
+            response = httpx.post(
+                self._url,
+                json={
+                    "messages": [
+                        {"role": "system", "content": self._system},
+                        {"role": "user", "content": message},
+                    ],
+                    "temperature": 0,
+                    "max_tokens": 160,
+                    "grammar": self._grammar,
+                },
+                timeout=timeout,
+            )
+            response.raise_for_status()
+            return response
+
+        response = with_retry(_attempt, self._retry)
 
         content = response.json()["choices"][0]["message"]["content"]
         route = Route.model_validate_json(content)

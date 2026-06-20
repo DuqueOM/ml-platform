@@ -62,6 +62,13 @@ class UsecaseConfig:
             ``self_consistency_high_only``.
         telemetry: Decision-telemetry settings (plan §F3): ``enabled``, ``path``,
             ``source``, ``shadow_sample_rate``.
+        tier_retry: Transient-failure retry settings for tier/router HTTP calls
+            (``max_retries``, ``base_delay``, ``max_delay``, ``jitter``).
+        phase: Lifecycle phase (1 = read-only fixtures). Drives the fail-closed
+            tool phase gate via :attr:`read_only_mode`.
+        observation_max_chars: Per-observation cap when injecting tool results
+            into a prompt (bounds small-model context).
+        retrieval_max_chars: Per-document cap for BM25 retrieval results.
     """
 
     name: str
@@ -78,6 +85,20 @@ class UsecaseConfig:
     fixtures_dir: Path
     verification: dict = field(default_factory=dict)
     telemetry: dict = field(default_factory=dict)
+    tier_retry: dict = field(default_factory=dict)
+    phase: int = 1
+    observation_max_chars: int = 4000
+    retrieval_max_chars: int = 2000
+
+    @property
+    def read_only_mode(self) -> bool:
+        """True while the use-case is read-only (Phase 1). Fail-closed default.
+
+        The tool registry refuses to execute a non-read-only, non-dry-run tool
+        while this holds (see ADR-006). Phase 2 (real mutating backends) sets
+        ``phase: 2`` in ``config.yaml`` to lift the gate per tool contract.
+        """
+        return self.phase < 2
 
 
 def load_usecase(name: str) -> UsecaseConfig:
@@ -156,4 +177,8 @@ def load_usecase(name: str) -> UsecaseConfig:
         fixtures_dir=fixtures_dir,
         verification=raw.get("verification", {}),
         telemetry=raw.get("telemetry", {}),
+        tier_retry=raw.get("tiers", {}).get("retry", {}),
+        phase=int(raw.get("phase", 1)),
+        observation_max_chars=int(raw.get("limits", {}).get("observation_chars", 4000)),
+        retrieval_max_chars=int(raw.get("limits", {}).get("retrieval_chars", 2000)),
     )

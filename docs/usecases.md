@@ -44,6 +44,51 @@ Required symbols / shapes:
 - `grammars/route.gbnf` MUST emit JSON that validates against `core.schemas.Route`,
   and its `intent` set MUST match `allowed_intents`.
 
+## Tool capability contract (fail-closed)
+
+Every tool declares what it is allowed to do ([ADR-006](decisions/ADR-006-tool-capability-contract.md)).
+Capabilities are **fail-closed**: a tool is assumed to mutate state unless it
+says otherwise, and the registry refuses to run a mutating tool while the
+use-case is read-only (`phase < 2`).
+
+```python
+registry = ToolRegistry(read_only_mode=config.read_only_mode)
+
+@registry.tool("inventory_lookup", read_only=True)       # never mutates
+def inventory_lookup(product_id: str) -> Observation: ...
+
+@registry.tool("order_create", dry_run_only=True, args_model=OrderArgs)
+def order_create(items: list[dict], customer_phone: str) -> Observation: ...
+```
+
+- `read_only=True` — the tool never mutates external state (lookups, search).
+- `dry_run_only=True` — the tool always simulates; allowed in Phase 1.
+- `destructive=True` — irreversible operation (delete/send); for Phase 2 UX.
+- `args_model=<PydanticModel>` — validates `ToolCall.args` before execution;
+  invalid input returns a structured `invalid_args` observation, not an exception.
+- A tool with no flags is treated as **mutating** and is refused in Phase 1 with
+  `tool_not_permitted_phase1` — declare `read_only=True` to allow it.
+
+Lift the gate for a use-case by setting `phase: 2` in `config.yaml` once your
+mutating backends and their evals exist — never by editing `core/`.
+
+## Optional config knobs
+
+```yaml
+phase: 1                      # 1 = read-only (default); 2 lifts the tool gate
+tiers:
+  retry:                      # transient-failure retry for tier/router calls
+    max_retries: 2
+    base_delay: 0.25
+    max_delay: 4.0
+    jitter: 0.25
+limits:
+  observation_chars: 4000     # cap on tool output injected into a prompt
+  retrieval_chars: 2000       # cap per BM25 document returned
+```
+
+All have safe defaults; omit the blocks entirely to accept them.
+
 ## Bring your own models
 
 The engine talks to LLM servers over an OpenAI-compatible API at the URLs in

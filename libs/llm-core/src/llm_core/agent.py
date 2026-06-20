@@ -20,7 +20,7 @@ from .retrieval import BM25Index, make_semantic_retrieval
 from .router import Router
 from .schemas import RequestBudget
 from .telemetry import TelemetrySink
-from .tiers import TierClient
+from .tiers import RetryPolicy, TierClient
 from .tools import ToolRegistry
 
 # Generic fallbacks if a use-case omits a prompt key.
@@ -47,11 +47,16 @@ class Agent:
         self.config = config
         self.registry = registry
         self.router = Router(config)
-        self.tiers = TierClient(config.tier_endpoints)
+        self.tiers = TierClient(config.tier_endpoints, retry=RetryPolicy.from_config(config.tier_retry))
 
-        # Register the generic BM25 retrieval tool over the use-case docs.
+        # Register the generic BM25 retrieval tool over the use-case docs. It is
+        # read-only by contract (no state mutation) and size-bounded (I-4).
         index = BM25Index(config.retrieval_dir)
-        self.registry.register("semantic_retrieval", make_semantic_retrieval(index))
+        self.registry.register(
+            "semantic_retrieval",
+            make_semantic_retrieval(index, max_chars=config.retrieval_max_chars),
+            read_only=True,
+        )
 
         # Decision telemetry sink (plan §F3). ``AGENT_TELEMETRY_PATH`` overrides
         # the config path (used by tests for isolation).

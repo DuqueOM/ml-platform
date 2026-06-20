@@ -36,12 +36,16 @@ class BM25Index:
         if self.corpus:
             self.bm25 = BM25Okapi(self.corpus)
 
-    def search(self, query: str, k: int = 3) -> list[dict]:
+    def search(self, query: str, k: int = 3, max_chars: int | None = None) -> list[dict]:
         """Return the top-k most relevant documents.
 
         Args:
             query: User query.
             k: Number of results.
+            max_chars: Optional per-document cap on returned ``content`` length.
+                Oversized content is truncated with a marker so a couple of
+                large policy docs cannot crowd out the instruction on a small
+                local model (I-4).
 
         Returns:
             List of ``{"file", "content", "score"}`` dicts (score > 0 only).
@@ -56,28 +60,34 @@ class BM25Index:
         results = []
         for idx in top_k_idx:
             if scores[idx] > 0:
+                content = self.docs[idx]["content"]
+                if max_chars is not None and len(content) > max_chars:
+                    content = content[:max_chars] + " …[truncated]"
                 results.append(
                     {
                         "file": self.docs[idx]["file"],
-                        "content": self.docs[idx]["content"],
+                        "content": content,
                         "score": float(scores[idx]),
                     }
                 )
         return results
 
 
-def make_semantic_retrieval(index: BM25Index) -> "Callable[..., Observation]":  # noqa: F821
+def make_semantic_retrieval(
+    index: BM25Index, max_chars: int | None = None
+) -> "Callable[..., Observation]":  # noqa: F821
     """Build a ``semantic_retrieval`` tool bound to a specific index.
 
     Args:
         index: A constructed :class:`BM25Index`.
+        max_chars: Optional per-document cap on returned content (I-4).
 
     Returns:
         A callable suitable for registration in a :class:`ToolRegistry`.
     """
 
     def semantic_retrieval(query: str, k: int = 3) -> Observation:
-        results = index.search(query, k=k)
+        results = index.search(query, k=k, max_chars=max_chars)
         return Observation(
             tool="semantic_retrieval",
             ok=bool(results),

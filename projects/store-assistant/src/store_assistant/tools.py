@@ -12,9 +12,18 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from pydantic import BaseModel
+
 from core.config import UsecaseConfig
 from core.schemas import Observation
 from core.tools import ToolRegistry
+
+
+class _OrderCreateArgs(BaseModel):
+    """Input contract for ``order_create`` (validated before execution, I-5)."""
+
+    items: list[dict]
+    customer_phone: str
 
 
 def build_registry(config: UsecaseConfig) -> ToolRegistry:
@@ -27,13 +36,15 @@ def build_registry(config: UsecaseConfig) -> ToolRegistry:
         A :class:`ToolRegistry` with the store tools registered.
     """
     fixtures: Path = config.fixtures_dir
-    registry = ToolRegistry()
+    # Fail-closed: the registry refuses non-read-only tools while the use-case is
+    # in a read-only phase (ADR-006). Phase is sourced from config (`phase:`).
+    registry = ToolRegistry(read_only_mode=config.read_only_mode)
 
     def _load(name: str) -> dict:
         path = fixtures / name
         return json.loads(path.read_text()) if path.exists() else {}
 
-    @registry.tool("inventory_lookup")
+    @registry.tool("inventory_lookup", read_only=True)
     def inventory_lookup(product_id: str) -> Observation:
         """Look up inventory by product_id (SKU)."""
         db = _load("inventory_fixture.json")
@@ -47,7 +58,7 @@ def build_registry(config: UsecaseConfig) -> ToolRegistry:
             error=None if item else "not_found",
         )
 
-    @registry.tool("alias_lookup")
+    @registry.tool("alias_lookup", read_only=True)
     def alias_lookup(text: str) -> Observation:
         """Resolve colloquial product names to SKUs (e.g. "coca" -> SKUs)."""
         aliases = _load("aliases.json")
@@ -57,7 +68,7 @@ def build_registry(config: UsecaseConfig) -> ToolRegistry:
         hits = [pid for pid, names in aliases.items() if any(a in text_lower for a in names)]
         return Observation(tool="alias_lookup", ok=bool(hits), data={"candidates": hits}, error=None)
 
-    @registry.tool("pricing_lookup")
+    @registry.tool("pricing_lookup", read_only=True)
     def pricing_lookup(product_id: str) -> Observation:
         """Look up price by product_id."""
         prices = _load("prices_fixture.json")
@@ -71,7 +82,7 @@ def build_registry(config: UsecaseConfig) -> ToolRegistry:
             error=None if price else "not_found",
         )
 
-    @registry.tool("order_create")
+    @registry.tool("order_create", dry_run_only=True, args_model=_OrderCreateArgs)
     def order_create(items: list[dict], customer_phone: str, **kwargs) -> Observation:
         """Create an order. INVARIANT (Phase 1): always dry-run."""
         dry_run = True
@@ -93,7 +104,7 @@ def build_registry(config: UsecaseConfig) -> ToolRegistry:
             error=None,
         )
 
-    @registry.tool("order_status")
+    @registry.tool("order_status", read_only=True)
     def order_status(order_id: str) -> Observation:
         """Look up the status of an order."""
         orders = _load("orders_fixture.json")

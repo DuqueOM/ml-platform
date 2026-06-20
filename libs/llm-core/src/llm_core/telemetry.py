@@ -32,6 +32,13 @@ _PATTERNS = [
 ]
 
 
+# Machine-generated identifiers that are never PII. They contain digit runs
+# (UUIDs, ISO timestamps, semver) that the phone pattern would otherwise mangle,
+# which would destroy the very traceability the telemetry contract promises
+# (ADR-005). They are excluded from redaction by key.
+_SAFE_KEYS = frozenset({"trace_id", "decision_id", "policy_version", "ts"})
+
+
 def redact(text: str) -> str:
     """Redact known PII patterns (emails, phone-like digit runs) from a string."""
     for pattern in _PATTERNS:
@@ -40,11 +47,15 @@ def redact(text: str) -> str:
 
 
 def redact_obj(obj):
-    """Recursively redact PII from strings inside dicts/lists/scalars."""
+    """Recursively redact PII from strings inside dicts/lists/scalars.
+
+    String values under a key in :data:`_SAFE_KEYS` are passed through verbatim
+    so machine-generated identifiers (trace_id, timestamps) are never corrupted.
+    """
     if isinstance(obj, str):
         return redact(obj)
     if isinstance(obj, dict):
-        return {k: redact_obj(v) for k, v in obj.items()}
+        return {k: (v if k in _SAFE_KEYS else redact_obj(v)) for k, v in obj.items()}
     if isinstance(obj, list):
         return [redact_obj(v) for v in obj]
     return obj

@@ -22,7 +22,17 @@ This project follows cloud-native, defense-in-depth practices:
 - **Deterministic policy gate.** No model response reaches a customer without
   passing `core/policy.py` — a non-LLM gate that blocks unverified stock/price
   claims, illegal promises, and forces `order_create` to dry-run in Phase 1.
-- **Read-only by default.** Phase 1 tools never mutate external state.
+- **Fail-closed tool capability contract.** Tools declare their capabilities
+  (`read_only` / `destructive` / `dry_run_only`) and the registry **refuses** to
+  run a mutating tool while the use-case is read-only (Phase 1) — the model
+  cannot mutate state by merely naming a tool. This is enforced at the tool
+  layer, *before* output exists, as a first line of defence independent of the
+  policy gate (see [ADR-006](docs/decisions/ADR-006-tool-capability-contract.md)).
+- **PII redaction at write time.** Decision telemetry scrubs emails and
+  phone-like digit runs before any line touches disk; machine identifiers
+  (`trace_id`, timestamps) are preserved for traceability (ADR-005).
+- **Read-only by default.** Phase 1 tools never mutate external state; the
+  capability gate above makes this structural, not merely conventional.
 - **Local-first.** The router runs locally; any cloud overflow is explicit and
   budgeted (`usecases/<name>/budgets.yaml`).
 

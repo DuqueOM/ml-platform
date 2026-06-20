@@ -7,6 +7,10 @@
 name: tienda
 language: es
 
+# Lifecycle phase. 1 = read-only (fixtures); the tool registry refuses mutating
+# tools (ADR-006). Set to 2 only once real mutating backends + their evals exist.
+phase: 1
+
 # Closed set of intents the router may emit (enforced by the grammar AND
 # validated at runtime against this list).
 allowed_intents:
@@ -25,6 +29,22 @@ tier_endpoints:
   1: "http://127.0.0.1:8092/v1/chat/completions"   # mid reasoning
   2: "http://127.0.0.1:8093/v1/chat/completions"   # main assistant
   3: "http://127.0.0.1:8094/v1/chat/completions"   # judge/verifier
+
+# Transient-failure retry for tier/router HTTP calls (I-1). A llama-server blip
+# (timeout, connection reset, 429/5xx) is retried with backoff+jitter so it does
+# not trip the circuit breaker; terminal 4xx are never retried. Budget kept well
+# under the ~8s SLA. Omit to accept these defaults.
+tiers:
+  retry:
+    max_retries: 2
+    base_delay: 0.25
+    max_delay: 4.0
+    jitter: 0.25
+
+# Size caps that protect the small-model context budget (I-4).
+limits:
+  observation_chars: 4000   # per tool result injected into a prompt
+  retrieval_chars: 2000     # per BM25 document returned by semantic_retrieval
 
 router:
   prompt_file: "prompts/router.md"

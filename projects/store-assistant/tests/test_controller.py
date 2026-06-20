@@ -8,7 +8,8 @@ import pytest
 
 from core import load_agent
 from core.circuit import State
-from core.schemas import Route
+from core.controller import RunContext, _coerce, _split_args
+from core.schemas import RequestBudget, Route
 
 
 def _reply(content: str) -> dict:
@@ -97,3 +98,40 @@ def test_breaker_records_failure_on_single_request(agent):
     agent.handle("hola")
     # The first (plan) call failed once and was recorded for that tier.
     assert breaker._get(0).failures >= 1
+
+
+# --- latency budget enforcement (I-3, plan §F1.6) -------------------------
+def test_latency_budget_degrades_to_safe_template(agent, monkeypatch):
+    # A zero latency budget means the deadline is reached before generation;
+    # the controller must degrade safely instead of overshooting the SLA.
+    monkeypatch.setattr(agent, "budget_for", lambda intent: RequestBudget(latency_budget_ms=0))
+    agent.tiers = FakeTiers(contents=["NONE", "this answer must never be generated"])
+    result = agent.handle("hola")
+
+    assert result["deadline_exceeded"] is True
+    assert result["degraded"] is True
+    assert result["response"] == agent._prompt("safe_fallback")
+
+
+# --- multi-arg tool-call parsing (I-5) ------------------------------------
+def test_extract_tool_calls_parses_multiple_args(agent):
+    ctx = RunContext(agent, "msg", "", agent.controller.breaker)
+    ctx.budget = agent.budget_for("order_create")
+    content = 'order_create(items=[{"product_id": "SKU-COCA-600", "quantity": 2}], customer_phone="+5215551234")'
+    calls = ctx.extract_tool_calls(_reply(content))
+
+    assert len(calls) == 1
+    assert calls[0].tool == "order_create"
+    assert calls[0].args["customer_phone"] == "+5215551234"
+    assert calls[0].args["items"] == [{"product_id": "SKU-COCA-600", "quantity": 2}]
+
+
+def test_split_args_respects_nesting():
+    assert _split_args('a=1, b="x,y", c=[1, 2]') == ["a=1", ' b="x,y"', " c=[1, 2]"]
+
+
+def test_coerce_types():
+    assert _coerce("2") == 2
+    assert _coerce("true") is True
+    assert _coerce('"+52155"') == "+52155"
+    assert _coerce('[{"k": 1}]') == [{"k": 1}]

@@ -14,6 +14,7 @@ gracefully when a tier is unhealthy.
 
 from __future__ import annotations
 
+import ast
 import random
 import time
 import uuid
@@ -27,6 +28,68 @@ from .tiers import extract_content, extract_usage
 
 if TYPE_CHECKING:  # avoid a runtime import cycle (agent imports this module)
     from .agent import Agent
+
+
+def _split_args(args_str: str) -> list[str]:
+    """Split a tool-call arg string on top-level commas.
+
+    Respects quotes and bracket/brace/paren nesting so a value like
+    ``items=[{"product_id": "x", "quantity": 2}]`` is not split mid-structure
+    (I-5). Conservative by design — the planner emits constrained output.
+    """
+    parts: list[str] = []
+    depth = 0
+    quote = ""
+    buf: list[str] = []
+    for ch in args_str:
+        if quote:
+            buf.append(ch)
+            if ch == quote:
+                quote = ""
+        elif ch in "\"'":
+            quote = ch
+            buf.append(ch)
+        elif ch in "([{":
+            depth += 1
+            buf.append(ch)
+        elif ch in ")]}":
+            depth = max(0, depth - 1)
+            buf.append(ch)
+        elif ch == "," and depth == 0:
+            parts.append("".join(buf))
+            buf = []
+        else:
+            buf.append(ch)
+    if buf:
+        parts.append("".join(buf))
+    return [p for p in parts if p.strip()]
+
+
+def _coerce(value: str) -> object:
+    """Coerce a raw arg token to a Python value (list/dict/int/float/bool/str).
+
+    Structured literals are parsed with :func:`ast.literal_eval` (safe — no code
+    execution); scalars fall back to int/float/bool, otherwise a stripped string.
+    """
+    v = value.strip()
+    # An explicitly quoted token is a string verbatim — never numerically
+    # coerced (a phone like "+5215551234" must not become a float).
+    if len(v) >= 2 and v[0] in "\"'" and v[-1] == v[0]:
+        return v[1:-1]
+    if v[:1] in "[{(":
+        try:
+            return ast.literal_eval(v)
+        except (ValueError, SyntaxError):
+            pass
+    low = v.lower()
+    if low in ("true", "false"):
+        return low == "true"
+    if v.lstrip("-").isdigit():
+        return int(v)
+    try:
+        return float(v)
+    except ValueError:
+        return v
 
 
 class TierUnavailable(RuntimeError):
@@ -57,6 +120,10 @@ class ExecutiveController:
         ctx.latency_ms["route"] = int((time.time() - t0) * 1000)
 
         ctx.budget = self.agent.budget_for(ctx.route.intent)
+        # Latency budget (plan §F1.6): everything after admit must fit in the
+        # channel SLA. Optional stations are skipped past the deadline and a
+        # safe partial answer is returned rather than overshooting.
+        ctx.deadline = ctx.start_time + ctx.budget.latency_budget_ms / 1000.0
 
         tier: int = ctx.route.tier
         if ctx.route.confidence < 0.70 and tier < 3:
@@ -82,25 +149,35 @@ class ExecutiveController:
             ctx.execute_tools(ctx.extract_tool_calls(plan))
             ctx.latency_ms["tools"] = int((time.time() - t2) * 1000)
 
-            if ctx.should_reflect():
+            if ctx.should_reflect() and not ctx.past_deadline():
                 t3 = time.time()
                 ctx.reflect(ctx.tier)
                 ctx.latency_ms["reflect"] = int((time.time() - t3) * 1000)
+
+            # Generation is required; if the budget is already spent, degrade to
+            # a safe template instead of blowing the channel SLA (plan §F1.6).
+            if ctx.past_deadline():
+                ctx.degraded = True
+                ctx.deadline_exceeded = True
+                ctx.final_response = self.agent._prompt("safe_fallback")
+                return
 
             t4 = time.time()
             ctx.final_response = ctx.generate(ctx.tier)
             ctx.latency_ms["generate"] = int((time.time() - t4) * 1000)
 
-            if ctx.route.risk in ("medium", "high"):
+            if ctx.route.risk in ("medium", "high") and not ctx.past_deadline():
                 t5 = time.time()
                 outcome = ctx.verify(ctx.tier)
                 ctx.critic_outcome = outcome
                 ctx.latency_ms["critic"] = int((time.time() - t5) * 1000)
                 if not outcome["approved"]:
-                    # Escalate: regenerate at the (higher) judge tier, once.
+                    # Escalate: regenerate at the (higher) judge tier, once —
+                    # but only if there is still budget left for it.
                     ctx.escalated = True
                     ctx.tier_final = outcome["tier"]
-                    ctx.final_response = ctx.generate(outcome["tier"])
+                    if not ctx.past_deadline():
+                        ctx.final_response = ctx.generate(outcome["tier"])
         except TierUnavailable:
             # Every tier is unhealthy — degrade to a safe template (§F2.0).
             ctx.degraded = True
@@ -142,16 +219,28 @@ class RunContext:
         self.tool_calls_made = 0
         self.reflections_made = 0
         self.degraded = False
+        self.deadline_exceeded = False
         self.escalated = False
         self.tier_final = 0
         self.shadow: dict | None = None
         self.critic_outcome: dict | None = None
         self.start_time = time.time()
+        self.deadline = float("inf")  # set in admit() once the budget is known
         self.latency_ms: dict[str, int] = {}
         self.tokens_by_tier: dict[int, int] = {}
 
+    # --- latency budget (plan §F1.6) ---------------------------------------
+    def past_deadline(self) -> bool:
+        """True once the per-request latency budget has elapsed."""
+        return time.time() >= self.deadline
+
     # --- tier access (circuit-breaker guarded) -----------------------------
     def call_tier(self, tier: int, messages: list[dict], **kwargs) -> dict:
+        # Bound a single call by the time left in the budget, so one slow tier
+        # cannot itself overshoot the channel SLA (plan §F1.6).
+        if "timeout" not in kwargs and self.deadline != float("inf"):
+            remaining = self.deadline - time.time()
+            kwargs["timeout"] = max(1, int(remaining) + 1)
         effective = self.breaker.effective_tier(tier)
         if effective is None:
             raise TierUnavailable(f"all tiers <= {tier} are open")
@@ -190,12 +279,13 @@ class RunContext:
             line = line.strip()
             if "(" in line and ")" in line:
                 tool_name = line.split("(")[0].strip()
-                args_str = line.split("(")[1].split(")")[0]
+                args_str = line[line.index("(") + 1 : line.rindex(")")]
                 if tool_name in self.agent.registry:
                     args: dict = {}
-                    if "=" in args_str:
-                        key, val = args_str.split("=", 1)
-                        args[key.strip()] = val.strip().strip("\"'")
+                    for part in _split_args(args_str):
+                        if "=" in part:
+                            key, val = part.split("=", 1)
+                            args[key.strip()] = _coerce(val)
                     calls.append(ToolCall(tool=tool_name, args=args))
         return calls[: self.budget.max_tool_calls]
 
@@ -213,7 +303,8 @@ class RunContext:
         if self.reflections_made >= self.budget.max_reflections:
             return
         obs_summary = "\n".join(
-            f"- {obs.tool}: {'OK' if obs.ok else f'FAILED ({obs.error})'} -> {obs.data}" for obs in self.observations
+            self._cap(f"- {obs.tool}: {'OK' if obs.ok else f'FAILED ({obs.error})'} -> {obs.data}")
+            for obs in self.observations
         )
         user = self.agent._prompt("reflect_user").format(message=self.message, observations=obs_summary)
         messages = [
@@ -223,9 +314,16 @@ class RunContext:
         self.call_tier(tier, messages, max_tokens=128, temperature=0.3)
         self.reflections_made += 1
 
+    def _cap(self, text: str) -> str:
+        """Truncate a single observation line to the configured cap (I-4)."""
+        cap = self.agent.config.observation_max_chars
+        if cap and len(text) > cap:
+            return text[:cap] + " …[truncated]"
+        return text
+
     def generate(self, tier: int) -> str:
         obs_context = "\n".join(
-            f"{obs.tool}: {obs.data if obs.ok else f'ERROR: {obs.error}'}" for obs in self.observations
+            self._cap(f"{obs.tool}: {obs.data if obs.ok else f'ERROR: {obs.error}'}") for obs in self.observations
         )
         user = self.agent._prompt("generate_user").format(
             message=self.message, intent=self.route.intent, observations=obs_context
@@ -264,7 +362,7 @@ class RunContext:
         return {"approved": approved, "tier": judge_tier, "votes": votes}
 
     def _verifier_pass(self, tier: int) -> bool:
-        ok_obs = "\n".join(f"{obs.tool}: {obs.data}" for obs in self.observations if obs.ok)
+        ok_obs = "\n".join(self._cap(f"{obs.tool}: {obs.data}") for obs in self.observations if obs.ok)
         user = self.agent._prompt("critic_user").format(response=self.final_response, observations=ok_obs)
         messages = [
             {"role": "system", "content": self.agent._prompt("critic_system")},
@@ -311,7 +409,7 @@ class RunContext:
             critic_verdict=self.critic_verdict(),
             latency_ms={**self.latency_ms, "total": total},
             cost={"tokens_by_tier": {str(k): v for k, v in self.tokens_by_tier.items()}},
-            budget_exhausted=self.tool_calls_made >= self.budget.max_tool_calls,
+            budget_exhausted=self.tool_calls_made >= self.budget.max_tool_calls or self.deadline_exceeded,
             outcome=self._outcome(),
             provenance={
                 "source": self.agent.config.telemetry.get("source", "local"),
@@ -336,6 +434,7 @@ class RunContext:
             "tokens_by_tier": self.tokens_by_tier,
             "tool_calls": self.tool_calls_made,
             "degraded": self.degraded,
+            "deadline_exceeded": self.deadline_exceeded,
             "shadow": self.shadow,
             "observations": [obs.model_dump() for obs in self.observations],
         }

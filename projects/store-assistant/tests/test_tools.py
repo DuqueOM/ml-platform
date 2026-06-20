@@ -1,10 +1,16 @@
 """Tests for the 'tienda' use-case tool registry (built from config)."""
 
 import pytest
+from pydantic import BaseModel
 
 from core import load_agent, load_usecase
-from core.schemas import ToolCall
+from core.schemas import Observation, ToolCall
+from core.tools import ToolRegistry
 from usecases.tienda import build_registry
+
+
+def _ok(**data) -> Observation:
+    return Observation(tool="t", ok=True, data=data)
 
 
 @pytest.fixture(scope="module")
@@ -71,6 +77,60 @@ def test_unknown_tool(registry):
     obs = registry.run(ToolCall(tool="nonexistent_tool", args={}))
     assert obs.ok is False
     assert obs.error == "unknown_tool"
+
+
+# --- capability contract (ADR-006, I-2) -----------------------------------
+def test_phase1_blocks_non_readonly_tool():
+    """A mutating tool cannot run in read-only mode just because it is named."""
+    reg = ToolRegistry(read_only_mode=True)
+    reg.register("mutate", lambda **k: _ok(), read_only=False)
+    obs = reg.run(ToolCall(tool="mutate", args={}))
+    assert obs.ok is False
+    assert obs.error == "tool_not_permitted_phase1"
+
+
+def test_phase1_allows_readonly_and_dry_run():
+    reg = ToolRegistry(read_only_mode=True)
+    reg.register("ro", lambda **k: _ok(), read_only=True)
+    reg.register("dry", lambda **k: _ok(), dry_run_only=True)
+    assert reg.run(ToolCall(tool="ro", args={})).ok is True
+    assert reg.run(ToolCall(tool="dry", args={})).ok is True
+
+
+def test_phase2_allows_mutating_tool():
+    reg = ToolRegistry(read_only_mode=False)
+    reg.register("mutate", lambda **k: _ok(), read_only=False)
+    assert reg.run(ToolCall(tool="mutate", args={})).ok is True
+
+
+def test_tienda_capabilities_declared(registry):
+    assert registry.spec("order_create").dry_run_only is True
+    assert registry.spec("order_create").read_only is False
+    for name in ("inventory_lookup", "alias_lookup", "pricing_lookup", "order_status"):
+        assert registry.spec(name).read_only is True
+
+
+# --- input validation (I-5) ------------------------------------------------
+def test_args_model_rejects_bad_input():
+    class Args(BaseModel):
+        product_id: str
+
+    reg = ToolRegistry(read_only_mode=True)
+    reg.register("look", lambda product_id: _ok(product_id=product_id), read_only=True, args_model=Args)
+    obs = reg.run(ToolCall(tool="look", args={}))  # missing required product_id
+    assert obs.ok is False
+    assert obs.error.startswith("invalid_args")
+
+
+def test_args_model_accepts_valid_input():
+    class Args(BaseModel):
+        product_id: str
+
+    reg = ToolRegistry(read_only_mode=True)
+    reg.register("look", lambda product_id: _ok(product_id=product_id), read_only=True, args_model=Args)
+    obs = reg.run(ToolCall(tool="look", args={"product_id": "SKU-1"}))
+    assert obs.ok is True
+    assert obs.data["product_id"] == "SKU-1"
 
 
 def test_agent_registers_all_tools():

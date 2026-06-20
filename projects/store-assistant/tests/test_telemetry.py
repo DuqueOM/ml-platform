@@ -55,6 +55,26 @@ def test_redact_obj_recurses():
     assert out["b"][2]["c"] == "ok"
 
 
+def test_redact_preserves_machine_ids():
+    """Machine IDs (UUIDs, timestamps, semver) must survive redaction intact.
+
+    Their digit runs would otherwise be mangled by the phone pattern, which
+    would destroy traceability (regression guard — ADR-005).
+    """
+    obj = {
+        "trace_id": "00000000-1111-2222-3333-444455556666",
+        "ts": "2026-06-20T16:00:00+00:00",
+        "policy_verdict": {"decision_id": "12345678-90ab-cdef", "policy_version": "1.2.3"},
+        "note": "llamame al 5512345678",
+    }
+    out = redact_obj(obj)
+    assert out["trace_id"] == obj["trace_id"]
+    assert out["ts"] == obj["ts"]
+    assert out["policy_verdict"]["decision_id"] == "12345678-90ab-cdef"
+    assert out["policy_verdict"]["policy_version"] == "1.2.3"
+    assert out["note"] == "llamame al [REDACTED]"  # real PII still redacted
+
+
 # --- sink -----------------------------------------------------------------
 def test_sink_disabled_when_no_path():
     sink = TelemetrySink(path=None)

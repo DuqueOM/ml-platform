@@ -155,13 +155,16 @@ bring-your-own-models) and [CONTRIBUTING.md](CONTRIBUTING.md).
 | F1 | All tools read-only (`order_create` dry-run) | ✅ |
 | F1 | Deterministic policy gate enforced | ✅ |
 | F2.0 | ExecutiveController + per-tier circuit breaker | ✅ |
+| F2.0 | Tier-client retry/backoff (transient blips ≠ tier failure) | ✅ |
+| F1.6 | Latency-budget enforced (safe degrade past deadline) | ✅ |
 
 ---
 
 ## Non-negotiable principles
 
 1. No fine-tuning at this stage — routing + prompts + retrieval.
-2. The model never mutates critical state without the policy gate.
+2. The model never mutates critical state without the policy gate — enforced
+   structurally by the fail-closed tool capability contract ([ADR-006](docs/decisions/ADR-006-tool-capability-contract.md)).
 3. Every lane needs an eval harness before increasing autonomy.
 4. The simplest loop that works.
 5. Inventory/price/stock are never held in model memory — always live tools.
@@ -183,6 +186,11 @@ bring-your-own-models) and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 - [ADR-001](docs/decisions/ADR-001-reusable-platform-not-template.md) — reusable platform, not a copy template
 - [ADR-002](docs/decisions/ADR-002-calibrated-infrastructure.md) — calibrated infrastructure
+- [ADR-003](docs/decisions/ADR-003-policy-as-versioned-data.md) — policy rules as versioned data
+- [ADR-004](docs/decisions/ADR-004-cross-tier-verification.md) — cross-tier verification
+- [ADR-005](docs/decisions/ADR-005-decision-telemetry.md) — decision telemetry as a contract
+- [ADR-006](docs/decisions/ADR-006-tool-capability-contract.md) — fail-closed tool capability contract
+- [CHANGELOG.md](CHANGELOG.md) — version history
 - [CONTRIBUTING.md](CONTRIBUTING.md) — dev setup, adding use-cases, quality gates
 - [SECURITY.md](SECURITY.md) — security model and reporting
 - `bench/RESULTS.md` — benchmark + routing gate evidence
