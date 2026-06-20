@@ -28,6 +28,7 @@ dev = [
     "isort~=5.13",
     "flake8~=7.1",
     "mypy~=1.14",
+    "types-PyYAML~=6.0",
 ]
 
 [tool.setuptools]
