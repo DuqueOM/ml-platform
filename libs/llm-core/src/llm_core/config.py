@@ -36,6 +36,8 @@ class PolicyRules:
     stock_claim_words: list[str] = field(default_factory=list)
     price_keywords: list[str] = field(default_factory=list)
     illegal_promises: list[str] = field(default_factory=list)
+    promo_keywords: list[str] = field(default_factory=list)
+    unavailable_words: list[str] = field(default_factory=list)
     max_caps_ratio: float = 0.5
     max_exclamation_runs: int = 1
 
@@ -153,6 +155,8 @@ def load_usecase(name: str) -> UsecaseConfig:
         stock_claim_words=policy_raw.get("stock_claim_words", []),
         price_keywords=policy_raw.get("price_keywords", []),
         illegal_promises=policy_raw.get("illegal_promises", []),
+        promo_keywords=policy_raw.get("promo_keywords", []),
+        unavailable_words=policy_raw.get("unavailable_words", []),
         max_caps_ratio=tone.get("max_caps_ratio", 0.5),
         max_exclamation_runs=tone.get("max_exclamation_runs", 1),
     )

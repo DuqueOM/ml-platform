@@ -6,7 +6,11 @@
 #
 # The policy ENGINE is generic (core/policy.py); these are the DATA it enforces.
 # Bump `version` on every change (semver: MAJOR = stricter/breaking rule).
-version: "1.0.0"
+#
+# v1.1.0 — added two deterministic consistency rules: claim-needs-evidence for
+# promotions (`promo_keywords`) and self-contradiction detection
+# (`unavailable_words`). Both are data here; the engine stays generic.
+version: "1.1.0"
 
 # If a candidate response mentions any product keyword, an inventory/alias tool
 # must have been consulted (no product talk from model memory).
@@ -20,6 +24,16 @@ price_keywords: ["$", "peso", "cuesta", "precio"]
 
 # Commitments the assistant is never allowed to make.
 illegal_promises: ["entrega inmediata", "gratis hoy", "50% de descuento", "regalo"]
+
+# claim-needs-evidence (v1.1.0): asserting a discount/offer/promotion requires a
+# successful live pricing_lookup. A promo the model invents (vs. illegal_promises,
+# which are banned outright) is blocked unless a tool confirms it.
+promo_keywords: ["descuento", "promocion", "promoción", "oferta", "rebaja", "2x1"]
+
+# self-contradiction (v1.1.0): a response must not assert availability AND
+# unavailability of the same thing. These are the negative-availability terms;
+# if any co-occurs with a stock_claim_word, the verdict is a contradiction.
+unavailable_words: ["agotado", "sin stock", "no tenemos", "no hay", "no disponible"]
 
 # Tone thresholds (data, not hardcoded constants). A response violates tone if
 # its uppercase ratio exceeds max_caps_ratio, or it contains more than

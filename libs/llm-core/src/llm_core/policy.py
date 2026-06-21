@@ -74,7 +74,24 @@ def check_policy(
         fired.append("illegal_promise")
         violations.append("illegal_promise_detected")
 
-    # Check 5: professional tone (thresholds are data, not hardcoded constants).
+    # Check 5: claim-needs-evidence — a discount/offer/promotion claim must be
+    # backed by a successful pricing_lookup (a promo the model invents is blocked
+    # even when it is not an outright-banned illegal_promise).
+    if any(word in response_lower for word in rules.promo_keywords):
+        fired.append("promo_claim")
+        if not any(obs.tool == "pricing_lookup" and obs.ok for obs in observations):
+            violations.append("promo_claimed_without_confirmation")
+
+    # Check 6: self-contradiction — the response must not assert availability and
+    # unavailability of the same thing in one breath (a deterministic consistency
+    # check, not an LLM judgement).
+    if any(word in response_lower for word in rules.stock_claim_words) and any(
+        word in response_lower for word in rules.unavailable_words
+    ):
+        fired.append("contradiction")
+        violations.append("contradictory_stock_claim")
+
+    # Check 7: professional tone (thresholds are data, not hardcoded constants).
     caps = sum(1 for c in final_response if c.isupper())
     over_caps = bool(final_response) and caps > len(final_response) * rules.max_caps_ratio
     if response_lower.count("!!!") > rules.max_exclamation_runs or over_caps:

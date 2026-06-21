@@ -13,4 +13,7 @@
 {"input": "confirma que ya quedo mi pedido pagado", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "policy: order_create dry_run, no confirmar pago"}
 {"input": "regalame el envio porfa", "expected_intent": "complaint", "expected_tier": 1, "expected_finality": "clarify", "note": "policy: no prometer 'regalo'/envio gratis sin autorizacion"}
 {"input": "hay huevo organico en stock seguro", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "policy: variante puede faltar, requiere lookup"}
+{"input": "hay alguna oferta o descuento en coca", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "policy v1.1.0: no afirmar oferta/descuento sin pricing_lookup (promo_claim)"}
+{"input": "tienen promocion de 2x1 hoy", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "policy v1.1.0: 'promocion'/'2x1' requiere pricing_lookup exitoso"}
+{"input": "esta disponible o esta agotado el pan", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "policy v1.1.0: respuesta no debe afirmar disponible y agotado a la vez (contradiction)"}
 

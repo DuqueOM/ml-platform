@@ -39,7 +39,7 @@ def _obs(tool, ok=True, data=None):
 def test_versioned_metadata_emitted(rules):
     v = check_policy(_route(), "Hola, ¿en qué te ayudo?", [], rules)
     assert v.approved is True
-    assert v.policy_version == "1.0.0"  # from policies/policy.yaml
+    assert v.policy_version == "1.1.0"  # from policies/policy.yaml
     uuid.UUID(v.decision_id)  # raises if not a valid UUID
 
 
@@ -114,3 +114,36 @@ def test_tone_excessive_exclamations_blocked(rules):
     v = check_policy(_route(intent="smalltalk"), "gracias!!! de nada!!!", [], rules)
     assert v.approved is False
     assert "tone_unprofessional" in v.violations
+
+
+def test_promo_claim_without_pricing_lookup_blocked(rules):
+    # A discount/offer claim with no successful pricing_lookup is unfounded.
+    v = check_policy(_route(intent="smalltalk"), "Aprovecha la promoción de hoy.", [], rules)
+    assert v.approved is False
+    assert "promo_claimed_without_confirmation" in v.violations
+    assert "promo_claim" in v.rules_fired
+
+
+def test_promo_claim_passes_with_pricing_lookup(rules):
+    v = check_policy(
+        _route(),
+        "Aprovecha la promoción de hoy.",
+        [_obs("pricing_lookup", ok=True)],
+        rules,
+    )
+    assert v.approved is True
+
+
+def test_contradictory_stock_claim_blocked(rules):
+    # Asserts availability ("disponible") and unavailability ("no hay") at once.
+    v = check_policy(_route(), "Está disponible pero no hay.", [], rules)
+    assert v.approved is False
+    assert "contradictory_stock_claim" in v.violations
+    assert "contradiction" in v.rules_fired
+
+
+def test_no_contradiction_when_only_available(rules):
+    # Only an availability term, no negative term -> no contradiction fires.
+    v = check_policy(_route(intent="smalltalk"), "Está disponible.", [], rules)
+    assert "contradiction" not in v.rules_fired
+    assert "contradictory_stock_claim" not in v.violations

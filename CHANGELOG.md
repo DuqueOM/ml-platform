@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 While the platform is pre-1.0, minor versions may include contract changes that
 are backwards-compatible by default (new behaviour is opt-in or fail-closed).
 
+## [0.5.0] - 2026-06-21
+
+Two deterministic policy-gate consistency rules implemented as policy-as-data
+(ADR-003), NOT as LLM judgement. Calibration-respecting (ADR-002): no new
+services, no model dependency in CI.
+
+### Added
+- **`promo_claim` rule** (policy `v1.1.0`): asserting a discount/offer/promotion
+  (`promo_keywords`) requires a successful live `pricing_lookup`. Distinct from
+  `illegal_promises` (banned outright) — blocks a *legitimate* promo the model
+  invents without tool evidence (claim-needs-evidence).
+- **`contradiction` rule** (policy `v1.1.0`): a response may not assert
+  availability (`stock_claim_words`) and unavailability (`unavailable_words`) of
+  the same thing at once (deterministic self-contradiction check).
+- `promo_keywords` / `unavailable_words` fields on `PolicyRules` + loader.
+- 4 policy regression tests and 3 behavioural cases in
+  `evals/sets/06_policy_violation.jsonl` (policy-change-requires-test). Suite:
+  108 → 112.
+
+### Changed
+- `usecases/tienda/policies/policy.yaml` bumped `1.0.0 → 1.1.0` (the PR diff is
+  the compliance record).
+
 ## [0.4.0] - 2026-06-21
 
 Structured tool-calling contract — the natural evolution of I-5 from defensive
