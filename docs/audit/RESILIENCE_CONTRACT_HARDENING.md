@@ -1,9 +1,10 @@
-# Action Plan — Engineering Improvements Distilled from Claude Code
+# Action Plan — Resilience & Contract Hardening
 
-> **Source of ideas**: `Claude-code-main` (the leaked Claude Code CLI — a
-> production-grade agentic coding agent, ~512k LOC TypeScript). We mine its
-> **engineering patterns**, not its code (different language, different domain).
-> **Target**: this repo (`agent-local`).
+> **Scope**: a self-audit of `agent-local`'s resilience and contract layers
+> *around* the reasoning loop (tier I/O, tool registry, latency budget,
+> observation sizing, input validation). The loop itself (deterministic policy
+> gate, GBNF routing, objective escalation, circuit breaker, PII-redacted
+> telemetry) is already sound; the gaps were in the edges.
 > **Sibling constraint**: `ML-MLOps-Production-Template` (the maintenance plane
 > and the repo that *calls* this one). Anything the template already owns is
 > **explicitly excluded** below to avoid redundant or unproductive work.
@@ -23,37 +24,38 @@
 
 ## 0. Executive summary
 
-Claude Code is, at its core, the same shape as `agent-local`: a typed tool
-registry, an LLM call layer with retries/fallbacks, a permission/policy gate,
-lifecycle hooks, and decision telemetry. `agent-local` already has the *hard*
-parts right (deterministic policy gate, GBNF routing, objective escalation,
-circuit breaker, PII-redacted telemetry). The gaps Claude Code exposes are in
-the **resilience and contract layers around the loop**, not in the loop itself.
+`agent-local` already has the *hard* parts right (deterministic policy gate,
+GBNF routing, objective escalation, circuit breaker, PII-redacted telemetry).
+The gaps this audit found are in the **resilience and contract layers around
+the loop**, not in the loop itself: a single-shot tier client, an untyped tool
+registry, an unenforced latency budget, unbounded observations, and fragile
+argument parsing.
 
 Five improvements survive the "is it redundant / is it over-engineering?"
 filter. Ranked by value/effort:
 
-| # | Improvement | Claude Code source | Effort | ADR? | Status |
-|---|-------------|--------------------|--------|------|--------|
-| I-1 | **Tier-client retry/backoff** (jitter + Retry-After + retryable classification) | `services/api/withRetry.ts` | S | no | ✅ done |
-| I-2 | **Tool capability contract** (`read_only`/`destructive` + fail-closed registry gate) | `Tool.ts` `buildTool` defaults | M | ADR-006 | ✅ done |
-| I-3 | **Latency-budget enforcement** (deadline + safe partial answer) | `AbortController`/`abortError` | S | no | ✅ done |
-| I-4 | **Tool-result size bounding** (cap injected observation payloads) | `Tool.maxResultSizeChars` | S | no | ✅ done |
-| I-5 | **Per-tool input validation** (Pydantic schema before execution) | `Tool.validateInput` (zod) | M | no | ✅ done |
+| # | Improvement | Effort | ADR? | Status |
+|---|-------------|--------|------|--------|
+| I-1 | **Tier-client retry/backoff** (jitter + Retry-After + retryable classification) | S | no | ✅ done |
+| I-2 | **Tool capability contract** (`read_only`/`destructive` + fail-closed registry gate) | M | ADR-006 | ✅ done |
+| I-3 | **Latency-budget enforcement** (deadline + safe partial answer) | S | no | ✅ done |
+| I-4 | **Tool-result size bounding** (cap injected observation payloads) | S | no | ✅ done |
+| I-5 | **Per-tool input validation** (Pydantic schema before execution) | M | no | ✅ done |
 
-Two patterns are **deferred with a written trigger** (Claude Code has them, but
-adopting now would be over-engineering at this scale): lifecycle **hooks**
-(I-6) and a typed **error taxonomy** (I-7).
+Two patterns are **deferred with a written trigger** (useful, but adopting now
+would be over-engineering at this scale): lifecycle **hooks** (I-6) and a typed
+**error taxonomy** (I-7).
 
 ---
 
-## 1. What we deliberately do NOT take from Claude Code
+## 1. Out of scope (deliberately not built)
 
-Calibration first (ADR-002). These are real Claude Code features, rejected here
-because they are either the template's job or premature:
+Calibration first (ADR-002). These are real capabilities of mature agent
+runtimes, rejected here because they are either the template's job or premature:
 
-- **Rich terminal UI / React-Ink renderer, vim mode, REPL, themes.** Irrelevant:
-  `agent-local` is a headless FastAPI service, not an interactive CLI.
+- **Rich terminal UI / interactive renderer, vim mode, REPL, themes.**
+  Irrelevant: `agent-local` is a headless FastAPI service, not an interactive
+  CLI.
 - **OAuth / multi-provider SDK auth (Bedrock/Vertex/Azure), model fallback by
   provider.** `agent-local` talks to local llama.cpp over an OpenAI-compatible
   HTTP API; cloud is an explicit, budgeted overflow (ADR-002), not a primary
@@ -79,7 +81,7 @@ with this repo. These belong there; `agent-local` *reuses* them when needed:
 - **CI/CD heavy templates, OPA/Rego policies, gitleaks, pre-commit, security
   baselines** — our CI is intentionally *tests + lint only* (CONTRIBUTING,
   ADR-002: no self-hosted GPU runners on a public repo).
-- **The IDE-assistant agentic system** (`.claude/`, `.cursor/`,
+- **The IDE-assistant agentic system** (`.cursor/`,
   `agentic/rules|skills|workflows`) — the template owns the *authoring*
   governance for IDE agents. `agent-local` is the *runtime*, not a scaffold.
 - **MLflow, DVC, fairness gates (DIR), drift drills** — classical-ML concerns,
@@ -87,8 +89,8 @@ with this repo. These belong there; `agent-local` *reuses* them when needed:
 
 ### Already governed by the shared plan (do NOT re-propose as "new")
 
-These are real next steps but they come from the shared `ACTION_PLAN_LLM_AGENT.md`,
-not from Claude Code — listed so this plan stays honest and non-duplicative:
+These are real next steps but they come from the shared `ACTION_PLAN_LLM_AGENT.md`
+— listed so this plan stays honest and non-duplicative:
 
 - SQLite durable queue + `sagas` table, WhatsApp signature validation (F1.6 /
   Phase 2).
@@ -110,12 +112,12 @@ In `core/controller.py::RunContext.call_tier`, the *first* exception calls
 `breaker.record_failure(effective)` — so three unrelated transient blips trip
 the circuit breaker and degrade the whole tier, even though the server was fine.
 
-**Claude Code pattern** (`services/api/withRetry.ts`): exponential backoff with
-jitter (`BASE_DELAY_MS * 2^(attempt-1) + random*0.25*base`), honor the
-`Retry-After` header verbatim when present, classify which errors are retryable
-(timeouts, 408/409, 5xx, connection resets) vs terminal (4xx auth/validation),
-and cap retries. This is the single highest value/effort win: it makes the
-circuit breaker fire on *real* tier death, not on noise.
+**Approach.** Exponential backoff with jitter
+(`BASE_DELAY_MS * 2^(attempt-1) + random*0.25*base`), honor the `Retry-After`
+header verbatim when present, classify which errors are retryable (timeouts,
+408/409, 5xx, connection resets) vs terminal (4xx auth/validation), and cap
+retries. This is the single highest value/effort win: it makes the circuit
+breaker fire on *real* tier death, not on noise.
 
 **Proposed change (core, in-process — no new dependency):**
 
@@ -156,11 +158,9 @@ invariant (SECURITY.md) and the `order_create` dry-run rule are enforced only
 Nothing structurally prevents a future use-case from registering a *mutating*
 tool that runs in Phase 1. The model naming a tool is enough to execute it.
 
-**Claude Code pattern** (`Tool.ts` `buildTool` / `TOOL_DEFAULTS`): every tool
-declares `isReadOnly`, `isConcurrencySafe`, `isDestructive`, and a
-`checkPermissions` hook — with **fail-closed defaults** (`isReadOnly → false`
-= "assume it writes", `isConcurrencySafe → false`). The runtime refuses or
-prompts before a non-read-only tool runs.
+**Approach.** A typed tool wrapper where every tool declares `read_only`,
+`destructive`, `dry_run_only` with **fail-closed defaults** (`read_only → false`
+= "assume it writes"). The runtime refuses a non-read-only tool before it runs.
 
 **Proposed change (core):**
 
@@ -180,7 +180,7 @@ prompts before a non-read-only tool runs.
   `order_create` → `read_only=False, dry_run_only=True`).
 
 **Why an ADR.** This changes the tool contract (`build_registry`), which the
-use-case authoring guide (`docs/usecases.md`) documents. Capture it as
+use-case authoring guide (`docs/usecases.md`) documents. Captured as
 **ADR-006: tool capability contract (fail-closed, phase-gated)**, cross-linking
 the shared plan's "two-person rule for new mutations" (ARCH_REVIEW §7.3).
 
@@ -199,9 +199,9 @@ default 8000 — the WhatsApp SLA) but **is read nowhere**. The shared plan
 (§F1.6) explicitly requires: *"si `latency_budget_ms` se agota → respuesta
 parcial segura + flag"*. Today a slow tier chain can blow the SLA silently.
 
-**Claude Code pattern**: every operation threads an `AbortController`/
-`AbortSignal`; long waits are chunked and abort cleanly (`sleep(..., signal)`),
-and the user-facing path degrades instead of hanging.
+**Approach.** Thread a per-request deadline through the controller; long waits
+degrade cleanly instead of hanging, and the user-facing path returns a safe
+partial answer rather than overshooting the SLA.
 
 **Proposed change (core, `controller.py`):**
 
@@ -237,9 +237,9 @@ have no size cap. On small local models (E4B/26B) with bounded context, a couple
 of large policy docs can crowd out the actual instruction — a silent quality
 and cost regression.
 
-**Claude Code pattern** (`Tool.maxResultSizeChars`): each tool declares a max
-result size; oversized results are truncated/persisted and the model gets a
-bounded preview, never the raw blob.
+**Approach.** Each tool/result carries a max size; oversized results are
+truncated with an explicit marker and the model gets a bounded preview, never
+the raw blob.
 
 **Proposed change (core):**
 
@@ -261,10 +261,10 @@ quotes by hand, and silently drops anything else. A multi-arg tool
 (`order_create(items=…, customer_phone=…)`) cannot be expressed; malformed args
 reach the tool and fail deep inside with a bare exception.
 
-**Claude Code pattern** (`Tool.validateInput` + zod `inputSchema`): each tool
-owns a typed input schema; inputs are validated up-front and a structured
-`ValidationResult` (with a message the model can act on) is returned before the
-tool ever runs.
+**Approach.** Each tool owns a typed input schema; inputs are validated up-front
+and a structured result (with a message the model can act on) is returned before
+the tool ever runs. (This later evolved into the schema-constrained tool-calling
+envelope — see ADR-007.)
 
 **Proposed change (core):**
 
@@ -285,24 +285,26 @@ validates correctly. Aligns with "Pydantic contracts at every boundary"
 
 ## 3. Deferred with a written trigger
 
-Honest calibration: Claude Code has these; adopting now is premature.
+Honest calibration: these patterns exist in mature agent runtimes; adopting now
+is premature.
 
 ### I-6 — Lifecycle hooks (Pre/Post tool, Pre/Post policy)
-**Claude Code** (`schemas/hooks.ts`): declarative `PreToolUse`/`PostToolUse`
-hooks with matcher patterns, command/prompt/agent/http hook types. **Defer.**
-The 7-station controller already *is* the seam; a hook framework for one
-use-case is the plugin-system trap we reject in §1. **Trigger**: a second real
-use-case needs to inject behaviour (audit callout, external approval) without
-editing `core/` → introduce a minimal `(ctx) -> ctx` middleware hook list on the
+A declarative `PreToolUse`/`PostToolUse` hook framework with matcher patterns
+and command/prompt/agent/http hook types. **Defer.** The 7-station controller
+already *is* the seam; a hook framework for one use-case is the plugin-system
+trap we reject in §1. **Trigger**: a second real use-case needs to inject
+behaviour (audit callout, external approval) without editing `core/` →
+introduce a minimal `(ctx) -> ctx` middleware hook list on the
 `ExecutiveController` (it already describes its interior as "pure middlewares").
 The template's IDE-hook governance is unrelated and must not be cloned.
 
 ### I-7 — Typed error taxonomy
-**Claude Code**: `CannotRetryError`, `FallbackTriggeredError`, rich classifiers.
-**Defer.** Today `TierUnavailable` + structured `Observation` errors cover the
-real paths. **Trigger**: once I-1 lands and retry/fallback decisions multiply,
-extract a small `core/errors.py` so retryability is a property of the exception,
-not an `isinstance` ladder. Low effort when the time comes; noise now.
+A rich hierarchy of typed errors (`CannotRetryError`, `FallbackTriggeredError`,
+classifiers). **Defer.** Today `TierUnavailable` + structured `Observation`
+errors cover the real paths. **Trigger**: once I-1 lands and retry/fallback
+decisions multiply, extract a small `core/errors.py` so retryability is a
+property of the exception, not an `isinstance` ladder. Low effort when the time
+comes; noise now.
 
 ---
 
@@ -333,7 +335,7 @@ implementable in the current Phase-1, CI-without-models posture (ADR-002).
 | I-4 result bounding | ADR-002 (calibration) | small-model context budget |
 | I-5 input validation | ARCH_REVIEW §1 (Pydantic at every boundary) | loop robustness |
 
-**Net effect**: Claude Code's hard-won resilience and contract discipline,
-distilled to the five patterns that fit a local-first, single-host, read-only
-Phase-1 agent — without duplicating one line of the sibling template's
-maintenance, infra, or governance planes.
+**Net effect**: resilience and contract discipline distilled to the five
+patterns that fit a local-first, single-host, read-only Phase-1 agent — without
+duplicating one line of the sibling template's maintenance, infra, or governance
+planes.

@@ -15,9 +15,9 @@ deterministic policy gate (`core/policy.py`) inspected the *output* afterwards.
 
 Nothing structurally prevented a future use-case from registering a *mutating*
 tool that runs in Phase 1. `ToolRegistry` was a bare `name -> callable` dict:
-the model naming a tool was sufficient to execute it. The leaked Claude Code
-source (`Tool.ts` `buildTool`) shows the mature pattern — every tool declares
-`isReadOnly` / `isDestructive` with **fail-closed defaults** and a permission
+the model naming a tool was sufficient to execute it. The mature pattern for
+this is well established — every tool declares its capabilities
+(`read_only` / `destructive`) with **fail-closed defaults** and a permission
 check runs before execution.
 
 ## Decision
@@ -64,9 +64,9 @@ check runs before execution.
 
 - **Keep relying on the policy gate only**: rejected — it inspects output after
   the fact; a mutating tool would already have run.
-- **A full permission/hook framework (Claude Code `checkPermissions` + hooks)**:
+- **A full permission/hook framework (`check_permissions` + lifecycle hooks)**:
   rejected as premature at one use-case (over-engineering, see the
-  `CLAUDE_CODE_IMPROVEMENT_PLAN` deferral I-6). The capability flags capture the
+  `RESILIENCE_CONTRACT_HARDENING` deferral I-6). The capability flags capture the
   90% that matters now.
 
 ## Revisit triggers

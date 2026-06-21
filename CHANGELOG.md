@@ -58,10 +58,10 @@ router's grammar-constrained JSON. See **ADR-007**.
 
 ## [0.3.0] - 2026-06-20
 
-Resilience and contract hardening distilled from a study of the Claude Code
-agent architecture (see `docs/audit/CLAUDE_CODE_IMPROVEMENT_PLAN.md`). Every
-change is in-process and respects the calibrated-infrastructure stance
-(ADR-002): no new services, no GPU/model dependency in CI.
+Resilience and contract hardening of the layers around the reasoning loop (see
+`docs/audit/RESILIENCE_CONTRACT_HARDENING.md`). Every change is in-process and
+respects the calibrated-infrastructure stance (ADR-002): no new services, no
+GPU/model dependency in CI.
 
 ### Added
 - **Tier-client retry with backoff + jitter + `Retry-After`** (`core/tiers.py`,
