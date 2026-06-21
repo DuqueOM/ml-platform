@@ -67,5 +67,14 @@ per-tier in-memory circuit breaker, versioned policy-as-data with `decision_id`
 telemetry as a contract (ADR-005). Reusable-platform refactor: business-agnostic
 `core/` + `usecases/<name>/` (ADR-001); calibrated infrastructure (ADR-002).
 
+## [0.1.0] - 2026-06-10
+
+Phase 1 skeleton: read-only WhatsApp store assistant. Tier-0 GBNF-constrained
+router validated at 20/20 intent accuracy, fixture-backed read-only tools
+(`order_create` forced to dry-run), and the deterministic policy gate. Tagged
+retroactively to record project lineage (the version line began in
+`core/__init__.py`; git tags were introduced at 0.3.0).
+
 [0.3.0]: https://github.com/DuqueOM/agent-local/releases/tag/v0.3.0
 [0.2.0]: https://github.com/DuqueOM/agent-local/releases/tag/v0.2.0
+[0.1.0]: https://github.com/DuqueOM/agent-local/releases/tag/v0.1.0
