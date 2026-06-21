@@ -10,6 +10,7 @@ Non-trivial decisions are recorded here with their context and trade-offs.
 | [ADR-004](ADR-004-cross-tier-verification.md) | Cross-tier verification with bounded self-consistency | Accepted |
 | [ADR-005](ADR-005-decision-telemetry.md) | Decision telemetry as a contract (JSONL, PII-redacted, OTel-aligned) | Accepted |
 | [ADR-006](ADR-006-tool-capability-contract.md) | Tool capability contract (fail-closed, phase-gated) | Accepted |
+| [ADR-007](ADR-007-structured-tool-calling.md) | Structured tool-calling contract (schema-constrained JSON) | Accepted |
 
 ## Format
 

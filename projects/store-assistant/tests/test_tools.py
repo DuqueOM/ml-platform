@@ -110,6 +110,24 @@ def test_tienda_capabilities_declared(registry):
         assert registry.spec(name).read_only is True
 
 
+# --- structured tool-call contract (ADR-007) ------------------------------
+def test_planner_json_schema_reflects_registered_tools():
+    reg = ToolRegistry(read_only_mode=True)
+    reg.register("a", lambda **k: _ok(), read_only=True)
+    reg.register("b", lambda **k: _ok(), read_only=True)
+    schema = reg.planner_json_schema()
+
+    item = schema["properties"]["tool_calls"]["items"]
+    assert item["properties"]["tool"]["enum"] == ["a", "b"]  # closed set, sorted
+    assert item["required"] == ["tool", "args"]
+    assert schema["required"] == ["tool_calls"]
+
+
+def test_tienda_planner_schema_enumerates_all_tools(registry):
+    enum = registry.planner_json_schema()["properties"]["tool_calls"]["items"]["properties"]["tool"]["enum"]
+    assert set(enum) == set(registry.names())
+
+
 # --- input validation (I-5) ------------------------------------------------
 def test_args_model_rejects_bad_input():
     class Args(BaseModel):

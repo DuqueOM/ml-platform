@@ -15,6 +15,7 @@ gracefully when a tier is unhealthy.
 from __future__ import annotations
 
 import ast
+import json
 import random
 import time
 import uuid
@@ -267,10 +268,60 @@ class RunContext:
             {"role": "system", "content": self.agent._prompt("plan_system")},
             {"role": "user", "content": user},
         ]
-        return self.call_tier(tier, messages, max_tokens=256, temperature=0)
+        kwargs: dict = {"max_tokens": 256, "temperature": 0}
+        # Constrain the planner to the structured tool-call envelope (ADR-007),
+        # mirroring how the router is constrained by its GBNF grammar.
+        if self.agent.config.structured_tool_calls:
+            kwargs["json_schema"] = self.agent.registry.planner_json_schema()
+        return self.call_tier(tier, messages, **kwargs)
 
     def extract_tool_calls(self, plan_response: dict) -> list[ToolCall]:
+        """Parse the planner output into validated :class:`ToolCall` objects.
+
+        Tries the structured JSON envelope first (ADR-007); falls back to the
+        legacy ``tool(arg="…")`` text format so the change cannot regress a
+        server without ``json_schema`` support. Unknown tools are dropped here;
+        per-tool argument validation happens later in ``ToolRegistry.run``.
+        """
         content = extract_content(plan_response)
+        calls = self._parse_structured_calls(content)
+        if calls is None:
+            calls = self._parse_legacy_calls(content)
+        return calls[: self.budget.max_tool_calls]
+
+    def _parse_structured_calls(self, content: str) -> list[ToolCall] | None:
+        """Parse the ADR-007 JSON envelope, or ``None`` if it is not that shape.
+
+        Returning ``None`` (as opposed to ``[]``) signals the caller to fall
+        back to the legacy text parser; an empty list is a valid "no tools".
+        """
+        text = content.strip()
+        if text.startswith("```"):  # tolerate fenced code blocks
+            text = text.strip("`")
+            if text[:4].lower() == "json":
+                text = text[4:]
+            text = text.strip()
+        try:
+            data = json.loads(text)
+        except (json.JSONDecodeError, ValueError):
+            return None
+
+        items = data.get("tool_calls") if isinstance(data, dict) else data
+        if not isinstance(items, list):
+            return None
+
+        calls: list[ToolCall] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("tool")
+            args = item.get("args", {})
+            if isinstance(name, str) and name in self.agent.registry and isinstance(args, dict):
+                calls.append(ToolCall(tool=name, args=args))
+        return calls
+
+    def _parse_legacy_calls(self, content: str) -> list[ToolCall]:
+        """Fallback parser for the legacy ``tool(arg="…")`` text format."""
         if "NONE" in content.upper():
             return []
 
@@ -287,7 +338,7 @@ class RunContext:
                             key, val = part.split("=", 1)
                             args[key.strip()] = _coerce(val)
                     calls.append(ToolCall(tool=tool_name, args=args))
-        return calls[: self.budget.max_tool_calls]
+        return calls
 
     def execute_tools(self, calls: list[ToolCall]) -> None:
         for call in calls:

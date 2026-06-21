@@ -135,3 +135,99 @@ def test_coerce_types():
     assert _coerce("true") is True
     assert _coerce('"+52155"') == "+52155"
     assert _coerce('[{"k": 1}]') == [{"k": 1}]
+
+
+# --- structured tool-calling contract (ADR-007) ---------------------------
+def _ctx(agent):
+    ctx = RunContext(agent, "msg", "", agent.controller.breaker)
+    ctx.budget = agent.budget_for("product_lookup")
+    ctx.route = _fixed_route()
+    return ctx
+
+
+def test_extract_structured_single(agent):
+    ctx = _ctx(agent)
+    content = '{"tool_calls": [{"tool": "inventory_lookup", "args": {"product_id": "SKU-1"}}]}'
+    calls = ctx.extract_tool_calls(_reply(content))
+    assert len(calls) == 1
+    assert calls[0].tool == "inventory_lookup"
+    assert calls[0].args == {"product_id": "SKU-1"}
+
+
+def test_extract_structured_multiple(agent):
+    ctx = _ctx(agent)
+    content = (
+        '{"tool_calls": ['
+        '{"tool": "alias_lookup", "args": {"text": "coca"}},'
+        '{"tool": "inventory_lookup", "args": {"product_id": "SKU-1"}}]}'
+    )
+    calls = ctx.extract_tool_calls(_reply(content))
+    assert [c.tool for c in calls] == ["alias_lookup", "inventory_lookup"]
+
+
+def test_extract_structured_empty(agent):
+    ctx = _ctx(agent)
+    assert ctx.extract_tool_calls(_reply('{"tool_calls": []}')) == []
+
+
+def test_extract_structured_drops_unknown_tool(agent):
+    ctx = _ctx(agent)
+    content = '{"tool_calls": [{"tool": "rm_rf", "args": {}}, {"tool": "pricing_lookup", "args": {"product_id": "X"}}]}'
+    calls = ctx.extract_tool_calls(_reply(content))
+    assert [c.tool for c in calls] == ["pricing_lookup"]
+
+
+def test_extract_structured_tolerates_code_fence(agent):
+    ctx = _ctx(agent)
+    content = '```json\n{"tool_calls": [{"tool": "order_status", "args": {"order_id": "O-1"}}]}\n```'
+    calls = ctx.extract_tool_calls(_reply(content))
+    assert [c.tool for c in calls] == ["order_status"]
+
+
+def test_extract_falls_back_to_legacy_text(agent):
+    # Non-JSON planner output must still parse via the legacy format (back-compat).
+    ctx = _ctx(agent)
+    calls = ctx.extract_tool_calls(_reply('inventory_lookup(product_id="SKU-1")'))
+    assert len(calls) == 1
+    assert calls[0].tool == "inventory_lookup"
+    assert calls[0].args == {"product_id": "SKU-1"}
+
+
+def test_plan_passes_json_schema_when_enabled(agent):
+    class RecordingTiers:
+        def __init__(self):
+            self.last_kwargs: dict | None = None
+
+        def call(self, tier, messages, **kwargs):
+            self.last_kwargs = kwargs
+            return _reply('{"tool_calls": []}')
+
+    rec = RecordingTiers()
+    agent.tiers = rec
+    ctx = _ctx(agent)
+    ctx.plan(0)
+
+    assert rec.last_kwargs is not None
+    schema = rec.last_kwargs.get("json_schema")
+    assert schema is not None
+    enum = schema["properties"]["tool_calls"]["items"]["properties"]["tool"]["enum"]
+    assert "inventory_lookup" in enum
+
+
+def test_plan_omits_json_schema_when_disabled(agent):
+    class RecordingTiers:
+        def __init__(self):
+            self.last_kwargs: dict | None = None
+
+        def call(self, tier, messages, **kwargs):
+            self.last_kwargs = kwargs
+            return _reply("NONE")
+
+    object.__setattr__(agent.config, "structured_tool_calls", False)
+    rec = RecordingTiers()
+    agent.tiers = rec
+    ctx = _ctx(agent)
+    ctx.plan(0)
+
+    assert rec.last_kwargs is not None
+    assert "json_schema" not in rec.last_kwargs

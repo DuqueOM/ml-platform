@@ -72,6 +72,32 @@ def order_create(items: list[dict], customer_phone: str) -> Observation: ...
 Lift the gate for a use-case by setting `phase: 2` in `config.yaml` once your
 mutating backends and their evals exist — never by editing `core/`.
 
+## Structured tool-calling (schema-constrained)
+
+The planner emits a **schema-constrained JSON envelope** ([ADR-007](decisions/ADR-007-structured-tool-calling.md)),
+the same grammar-first discipline the router uses for `Route`:
+
+```json
+{"tool_calls": [{"tool": "inventory_lookup", "args": {"product_id": "SKU-1"}}]}
+```
+
+`tool` is restricted to the registered tool names (a closed set, like
+`allowed_intents`). The schema is derived automatically from your registry by
+`ToolRegistry.planner_json_schema()` — no authoring needed. The planner tier
+call passes it as a top-level `json_schema`, exactly as the router passes
+`grammar`. Per-tool `args` are then validated by each tool's `args_model`
+(defence in depth, ADR-006).
+
+Your `plan` prompt should instruct JSON output and show the envelope (see the
+`tienda` `plan_user`). The legacy `tool(arg="…")` text format still parses as a
+fallback, so older prompts keep working.
+
+Disable the constraint only for a model server without `json_schema` support:
+
+```yaml
+structured_tool_calls: false   # default true; fallback text parser still works
+```
+
 ## Optional config knobs
 
 ```yaml

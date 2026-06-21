@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 While the platform is pre-1.0, minor versions may include contract changes that
 are backwards-compatible by default (new behaviour is opt-in or fail-closed).
 
+## [0.4.0] - 2026-06-21
+
+Structured tool-calling contract — the natural evolution of I-5 from defensive
+text parsing to a schema-constrained contract, consistent with the Tier-0
+router's grammar-constrained JSON. See **ADR-007**.
+
+### Added
+- **Schema-constrained planner output** (`ToolRegistry.planner_json_schema()`):
+  the planner is now constrained to emit
+  `{"tool_calls": [{"tool": "<name>", "args": { … }}]}` where `tool` is a closed
+  set of the registered tool names — derived from the registry, the single
+  source of truth shared by the server-side constraint and the parser. The
+  planner tier call passes a top-level `json_schema`, mirroring how the router
+  passes `grammar`.
+- **`structured_tool_calls`** config flag (default `True`) to disable the
+  constraint for a model server lacking `json_schema` support.
+- **`ADR-007`** — structured tool-calling contract.
+- 10 new tests (structured parse: single/multiple/empty/unknown-tool/fenced,
+  legacy fallback, `json_schema` wiring, schema builder). Suite: 98 → 108.
+
+### Changed
+- **`extract_tool_calls` parses the JSON envelope first**, falling back to the
+  legacy `tool(arg="…")` text parser only when the output is not valid JSON of
+  the expected shape (strictly additive — no existing deployment regresses).
+- `tienda` `plan` prompts now instruct JSON output.
+
 ## [0.3.0] - 2026-06-20
 
 Resilience and contract hardening distilled from a study of the Claude Code
@@ -75,6 +101,7 @@ router validated at 20/20 intent accuracy, fixture-backed read-only tools
 retroactively to record project lineage (the version line began in
 `core/__init__.py`; git tags were introduced at 0.3.0).
 
+[0.4.0]: https://github.com/DuqueOM/agent-local/releases/tag/v0.4.0
 [0.3.0]: https://github.com/DuqueOM/agent-local/releases/tag/v0.3.0
 [0.2.0]: https://github.com/DuqueOM/agent-local/releases/tag/v0.2.0
 [0.1.0]: https://github.com/DuqueOM/agent-local/releases/tag/v0.1.0

@@ -110,6 +110,36 @@ class ToolRegistry:
         """Return the :class:`ToolSpec` for a tool name, or ``None``."""
         return self._registry.get(name)
 
+    def planner_json_schema(self) -> dict:
+        """JSON schema for the planner's structured tool-call output (ADR-007).
+
+        Constrains the planner to emit ``{"tool_calls": [{"tool", "args"}, …]}``
+        where ``tool`` is restricted to the registered names — a closed set, the
+        same discipline the router applies to ``allowed_intents``. Per-tool
+        argument typing is enforced afterwards by each tool's ``args_model``
+        (defence in depth, ADR-006). This object is the single source of truth
+        shared by the server-side constraint and the parser's validation.
+        """
+        return {
+            "type": "object",
+            "properties": {
+                "tool_calls": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "tool": {"type": "string", "enum": self.names()},
+                            "args": {"type": "object"},
+                        },
+                        "required": ["tool", "args"],
+                        "additionalProperties": False,
+                    },
+                }
+            },
+            "required": ["tool_calls"],
+            "additionalProperties": False,
+        }
+
     def run(self, call: ToolCall) -> Observation:
         """Single execution point for tools — the fail-closed enforcement seam.
 

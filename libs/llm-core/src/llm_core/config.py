@@ -69,6 +69,10 @@ class UsecaseConfig:
         observation_max_chars: Per-observation cap when injecting tool results
             into a prompt (bounds small-model context).
         retrieval_max_chars: Per-document cap for BM25 retrieval results.
+        structured_tool_calls: When True (default), the planner is constrained to
+            emit the schema-validated JSON tool-call envelope (ADR-007). Set to
+            False only for a model server lacking ``json_schema`` support; the
+            text-format fallback parser still works either way.
     """
 
     name: str
@@ -89,6 +93,7 @@ class UsecaseConfig:
     phase: int = 1
     observation_max_chars: int = 4000
     retrieval_max_chars: int = 2000
+    structured_tool_calls: bool = True
 
     @property
     def read_only_mode(self) -> bool:
@@ -181,4 +186,5 @@ def load_usecase(name: str) -> UsecaseConfig:
         phase=int(raw.get("phase", 1)),
         observation_max_chars=int(raw.get("limits", {}).get("observation_chars", 4000)),
         retrieval_max_chars=int(raw.get("limits", {}).get("retrieval_chars", 2000)),
+        structured_tool_calls=bool(raw.get("structured_tool_calls", True)),
     )

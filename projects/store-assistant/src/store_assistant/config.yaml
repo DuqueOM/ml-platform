@@ -84,7 +84,7 @@ telemetry:
 # .format(): {message} {intent} {risk} {ambiguity} {tools} {max_tool_calls}
 # {observations} {response}.
 prompts:
-  plan_system: "Eres un asistente de tienda. Planea qué herramientas necesitas para responder."
+  plan_system: "Eres un planificador de una tienda. Decides qué herramientas usar y devuelves SOLO JSON válido, sin texto adicional."
   plan_user: |
     El cliente dice: "{message}"
 
@@ -95,10 +95,10 @@ prompts:
     Herramientas disponibles:
     {tools}
 
-    Lista las herramientas que necesitas (máx {max_tool_calls}), una por línea:
-    tool_name(arg1="...")
+    Devuelve SOLO un objeto JSON con las herramientas a usar (máx {max_tool_calls}):
+    {{"tool_calls": [{{"tool": "inventory_lookup", "args": {{"product_id": "SKU-COCA-600"}}}}]}}
 
-    Si no necesitas herramientas, responde: NONE
+    Si no necesitas herramientas: {{"tool_calls": []}}
 
   generate_system: "Eres un asistente de tienda por WhatsApp. Responde de forma amable y profesional."
   generate_user: |
