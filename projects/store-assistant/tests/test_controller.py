@@ -231,3 +231,52 @@ def test_plan_omits_json_schema_when_disabled(agent):
 
     assert rec.last_kwargs is not None
     assert "json_schema" not in rec.last_kwargs
+
+
+# --- reflection notes channel (ADR-009, AUDIT R8-03) -----------------------
+class _TranscriptTiers:
+    """Queued contents like FakeTiers, but records every (tier, user_content)."""
+
+    def __init__(self, contents):
+        self.contents = list(contents)
+        self.transcript: list[str] = []
+
+    def call(self, tier, messages, **kwargs):
+        self.transcript.append(messages[-1]["content"])
+        return _reply(self.contents.pop(0) if self.contents else "ok")
+
+
+def test_reflection_note_reaches_generator_context(agent, monkeypatch):
+    """The reflect station's output must feed generation, not be discarded."""
+    agent.router.route = lambda msg: _fixed_route(risk="medium")  # type: ignore[assignment]
+    # The smalltalk budget sets max_reflections=0 (cheap intent); the test
+    # needs a budget that lets the station fire.
+    monkeypatch.setattr(agent, "budget_for", lambda intent: RequestBudget(max_reflections=1))
+    note = "verify stock freshness before answering"
+    tiers = _TranscriptTiers(["NONE", note, "Respuesta final", "APPROVED"])
+    agent.tiers = tiers
+
+    result = agent.handle("hay coca fria?")
+
+    assert result["response"] == "Respuesta final"
+    generator_prompts = [c for c in tiers.transcript if "reflection_note:" in c]
+    assert generator_prompts, "reflection note never reached any downstream prompt (R8-03 regression)"
+    assert any(note in c for c in generator_prompts)
+
+
+def test_reflection_is_not_verifier_evidence(agent, monkeypatch):
+    """Model reasoning must never masquerade as tool evidence for the critic."""
+    agent.router.route = lambda msg: _fixed_route(risk="medium")  # type: ignore[assignment]
+    monkeypatch.setattr(agent, "budget_for", lambda intent: RequestBudget(max_reflections=1))
+    note = "unique-reflection-marker-xyz"
+    tiers = _TranscriptTiers(["NONE", note, "Respuesta final", "APPROVED"])
+    agent.tiers = tiers
+
+    agent.handle("hay coca fria?")
+
+    critic_prompts = [c for c in tiers.transcript if "Respuesta final" in c]
+    assert critic_prompts, "critic never ran for a medium-risk route"
+    assert all(note not in c for c in critic_prompts), (
+        "the reflection note leaked into the verifier's evidence — reflection "
+        "is reasoning, not observation (ADR-009)"
+    )

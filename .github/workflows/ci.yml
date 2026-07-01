@@ -33,15 +33,37 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Lint (black, isort)
+        # Full repo surface (AUDIT R8-06): the previous scope skipped
+        # conftest.py and evals/ — and both had drifted from black by the
+        # time the R8 audit ran. The eval harness produces gate evidence;
+        # it lints like everything else.
         run: |
-          black --check --line-length 120 core app usecases tests
-          isort --check-only --profile black core app usecases tests
+          black --check --line-length 120 core app usecases tests conftest.py evals scripts
+          isort --check-only --profile black core app usecases tests conftest.py evals scripts
 
       - name: Lint (flake8)
-        run: flake8 core app usecases tests --max-line-length 120 --extend-ignore E203,W503
+        run: flake8 core app usecases tests conftest.py evals scripts --max-line-length 120 --extend-ignore E203,W503
 
       - name: Type check (mypy)
         run: mypy core app
 
+      - name: Coherence gate (AUDIT R8-04)
+        # Version SSoT (core.__version__) vs CHANGELOG heading, dynamic
+        # pyproject, no hardcoded semver in app/, complete ADR index.
+        run: python scripts/check_coherence.py
+
       - name: Unit tests
         run: pytest -q
+
+  gitleaks:
+    # Secret scanning (AUDIT R8-12) — mirrors the sibling template's
+    # pre-commit gitleaks gate at CI level. fetch-depth: 0 so the scan
+    # covers the full history of the push/PR range, not just the tip.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

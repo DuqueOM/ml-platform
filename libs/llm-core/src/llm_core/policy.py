@@ -103,6 +103,10 @@ def check_policy(
         approved=approved,
         violations=violations,
         rules_fired=fired,
+        # Reserved, not yet consumed (AUDIT R8-10): the controller currently
+        # answers a rejection with the safe-fallback template. Wiring this to
+        # a one-shot tier-3 regeneration is a Phase-2 decision — until then
+        # the field documents intent and keeps the telemetry contract stable.
         escalate_to_tier=None if approved else 3,
         policy_version=rules.version,
         decision_id=str(uuid.uuid4()),

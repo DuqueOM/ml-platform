@@ -192,6 +192,7 @@ bring-your-own-models) and [CONTRIBUTING.md](CONTRIBUTING.md).
 - [ADR-006](docs/decisions/ADR-006-tool-capability-contract.md) — fail-closed tool capability contract
 - [ADR-007](docs/decisions/ADR-007-structured-tool-calling.md) — structured tool-calling contract
 - [ADR-008](docs/decisions/ADR-008-retrieval-caller-isolation.md) — retrieval/tier surface is caller-isolated, not server-isolated
+- [ADR-009](docs/decisions/ADR-009-reflection-notes-channel.md) — reflection output is a notes channel, never an observation
 - [CHANGELOG.md](CHANGELOG.md) — version history
 - [CONTRIBUTING.md](CONTRIBUTING.md) — dev setup, adding use-cases, quality gates
 - [SECURITY.md](SECURITY.md) — security model and reporting

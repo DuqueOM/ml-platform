@@ -219,6 +219,7 @@ class RunContext:
         self.observations: list[Observation] = []
         self.tool_calls_made = 0
         self.reflections_made = 0
+        self.reflection_notes: list[str] = []
         self.degraded = False
         self.deadline_exceeded = False
         self.escalated = False
@@ -351,6 +352,14 @@ class RunContext:
         return any(not obs.ok for obs in self.observations)
 
     def reflect(self, tier: int) -> None:
+        """Run the reflection station and KEEP its output (ADR-009).
+
+        The note is stored on a channel separate from ``observations`` on
+        purpose: observations are tool ground truth and feed the verifier as
+        evidence; a reflection is model reasoning and must never be able to
+        "approve itself" by masquerading as evidence. Only :meth:`generate`
+        consumes the notes.
+        """
         if self.reflections_made >= self.budget.max_reflections:
             return
         obs_summary = "\n".join(
@@ -362,7 +371,10 @@ class RunContext:
             {"role": "system", "content": self.agent._prompt("reflect_system")},
             {"role": "user", "content": user},
         ]
-        self.call_tier(tier, messages, max_tokens=128, temperature=0.3)
+        response = self.call_tier(tier, messages, max_tokens=128, temperature=0.3)
+        note = extract_content(response).strip()
+        if note:
+            self.reflection_notes.append(self._cap(note))
         self.reflections_made += 1
 
     def _cap(self, text: str) -> str:
@@ -376,6 +388,11 @@ class RunContext:
         obs_context = "\n".join(
             self._cap(f"{obs.tool}: {obs.data if obs.ok else f'ERROR: {obs.error}'}") for obs in self.observations
         )
+        # Reflection notes ride along as extra generator context (ADR-009) —
+        # clearly labelled so they read as reasoning, never as a tool result.
+        if self.reflection_notes:
+            notes = "\n".join(f"reflection_note: {note}" for note in self.reflection_notes)
+            obs_context = f"{obs_context}\n{notes}" if obs_context else notes
         user = self.agent._prompt("generate_user").format(
             message=self.message, intent=self.route.intent, observations=obs_context
         )

@@ -9,15 +9,86 @@ are backwards-compatible by default (new behaviour is opt-in or fail-closed).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-07-01
+
+The AUDIT R8 remediation release (template_MLOps
+`docs/audit/AUDIT_R8_STAFF_LEAD.md`): every code finding from the first
+dual-repo staff/lead audit is fixed here, and the enforcement gap the audit
+identified as the repo's central weakness — philosophy adopted without its
+gates — is closed with three new gates (serving contract tests, coherence
+check, secret scanning).
+
+### Fixed
+- **R8-01 (HIGH) — agent loop no longer blocks the event loop**
+  (`app/main.py`): `/dev/message` was an `async def` running the full
+  synchronous multi-LLM loop ON the event loop, so every concurrent request
+  (including `/health`) stalled while one was in flight — the same defect
+  class the sibling template bans as D-24. Now a plain `def` (FastAPI
+  threadpool), pinned by an AST-based contract test so it cannot be
+  reintroduced silently.
+- **R8-02 — internal exception text no longer leaks to clients**
+  (`app/main.py`): the 500 handler returned `str(e)`; it now returns a
+  generic message with a correlation `error_id` and logs the full traceback
+  server-side. Regression-tested.
+- **R8-03 — reflection output is used, not discarded**
+  (`core/controller.py`, **ADR-009**): `reflect()` spent tokens and dropped
+  the tier's response. Notes now flow to `generate()` via a dedicated
+  `reflection_notes` channel — deliberately NOT as observations, so model
+  reasoning can never masquerade as tool evidence for the policy gate or the
+  cross-tier verifier (invariant enforced by test).
+- **R8-09 — WhatsApp stub answers 501** (`app/main.py`): the Phase-1 stub
+  returned HTTP 200 with a `not_implemented` body, which a real WhatsApp
+  client would read as successful delivery. Now `501 Not Implemented`.
+- **R8-04 — quadruple version drift resolved**: `pyproject.toml` (0.2.0),
+  `app/main.py` (0.2.0 ×2) and `core/__init__.py` (0.4.0) disagreed with the
+  CHANGELOG (0.5.0). Single source of truth is now `core.__version__`;
+  pyproject reads it via `[tool.setuptools.dynamic]`, the FastAPI surface
+  imports it, and the new coherence gate fails CI on any future divergence.
+- **R8-07 — eval gate is a ratio, not an absolute** (`evals/run.py`): the
+  F0.3 gate was hardcoded `>= 18` correct regardless of set size (a 40-case
+  set would "pass" at 45 % accuracy); now `accuracy_intent >= 0.90`, and the
+  runner exits non-zero on gate failure so it can gate scripts. Also:
+  timezone-aware timestamps (`datetime.utcnow()` was deprecated and naive),
+  nearest-rank p95 with an index clamp, and full black/English-docstring
+  compliance.
+
 ### Added
+- **ADR-009 — Reflection output is a notes channel, never an observation**
+  (`docs/decisions/ADR-009-reflection-notes-channel.md`): why the synthetic-
+  observation alternative was rejected (it would let the model manufacture
+  its own evidence for the verifier).
+- **Serving contract tests** (`tests/test_app_serving_contract.py`): AST
+  check that no `async def` endpoint calls the agent loop, error-leak
+  regression, 501 stub contract, and version-SSoT mirror check. Suite:
+  112 → 119.
+- **Coherence gate** (`scripts/check_coherence.py` + CI step, AUDIT R8-04):
+  the calibrated 4-check port of template_MLOps rule 16 — version vs
+  CHANGELOG heading, dynamic pyproject, no hardcoded semver in `app/`,
+  complete ADR index. Deliberately not the full 6-check template system
+  (over-engineering at this scale).
+- **Secret scanning** (AUDIT R8-12): gitleaks job in CI (full-history scan)
+  and a `.pre-commit-config.yaml` mirroring the template's hook set (black,
+  isort, flake8, gitleaks, hygiene hooks; mypy stays CI-only — it needs the
+  full dependency env the CI matrix already provides).
 - **ADR-008 — Retrieval and tier surface is caller-isolated, not
   server-isolated** (`docs/decisions/ADR-008-retrieval-caller-isolation.md`):
   clarifies that the tier endpoints are stateless per request and safe to
   share across external callers (e.g. template_MLOps's operational-memory and
   new pedagogical-RAG scripts, template_MLOps ADR-037); corpus/index
   isolation remains the caller's responsibility, never the tier's. Docs-only —
-  no code changes — written ahead of the second external-caller class that
-  makes the question concrete.
+  written ahead of the second external-caller class that makes the question
+  concrete.
+
+### Changed
+- **CI lint covers the whole repo surface** (AUDIT R8-06): `conftest.py`,
+  `evals/` and the new `scripts/` are now linted (black/isort/flake8) — the
+  old scope had let both un-scoped files drift from black unnoticed.
+- `Verdict.escalate_to_tier` documented as reserved-not-consumed
+  (`core/policy.py`, AUDIT R8-10): the controller answers a rejection with
+  the safe-fallback template; wiring a one-shot tier-3 regeneration is an
+  explicit Phase-2 decision.
+- `app/main.py` dev-server auto-reload is opt-in via `AGENT_DEV_RELOAD=1`
+  (was unconditionally on).
 
 ## [0.5.0] - 2026-06-21
 

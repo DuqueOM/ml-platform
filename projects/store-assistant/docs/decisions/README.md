@@ -12,6 +12,7 @@ Non-trivial decisions are recorded here with their context and trade-offs.
 | [ADR-006](ADR-006-tool-capability-contract.md) | Tool capability contract (fail-closed, phase-gated) | Accepted |
 | [ADR-007](ADR-007-structured-tool-calling.md) | Structured tool-calling contract (schema-constrained JSON) | Accepted |
 | [ADR-008](ADR-008-retrieval-caller-isolation.md) | Retrieval/tier surface is caller-isolated, not server-isolated | Accepted |
+| [ADR-009](ADR-009-reflection-notes-channel.md) | Reflection output is a notes channel, never an observation | Accepted |
 
 ## Format
 

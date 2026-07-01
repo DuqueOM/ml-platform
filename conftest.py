@@ -1,4 +1,5 @@
 """Pytest bootstrap: ensure the repo root is importable as the package root."""
+
 import sys
 from pathlib import Path
 

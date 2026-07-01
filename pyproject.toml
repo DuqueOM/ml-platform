@@ -4,7 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-local"
-version = "0.2.0"
+# Single source of truth: core/__init__.py::__version__ (AUDIT R8-04).
+dynamic = ["version"]
 description = "Reusable, multi-tier local LLM agent platform (router + tools + policy gate)."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -33,6 +34,9 @@ dev = [
 
 [tool.setuptools]
 packages = ["core", "app", "usecases"]
+
+[tool.setuptools.dynamic]
+version = { attr = "core.__version__" }
 
 [tool.black]
 line-length = 120
