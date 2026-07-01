@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 While the platform is pre-1.0, minor versions may include contract changes that
 are backwards-compatible by default (new behaviour is opt-in or fail-closed).
 
+## [Unreleased]
+
+### Added
+- **ADR-008 — Retrieval and tier surface is caller-isolated, not
+  server-isolated** (`docs/decisions/ADR-008-retrieval-caller-isolation.md`):
+  clarifies that the tier endpoints are stateless per request and safe to
+  share across external callers (e.g. template_MLOps's operational-memory and
+  new pedagogical-RAG scripts, template_MLOps ADR-037); corpus/index
+  isolation remains the caller's responsibility, never the tier's. Docs-only —
+  no code changes — written ahead of the second external-caller class that
+  makes the question concrete.
+
 ## [0.5.0] - 2026-06-21
 
 Two deterministic policy-gate consistency rules implemented as policy-as-data
