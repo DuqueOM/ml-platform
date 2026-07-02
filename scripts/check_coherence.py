@@ -20,8 +20,17 @@ six git tags existed with zero GitHub Releases — AUDIT R9-06):
       unavailable, so a contributor's local, unauthenticated run never
       false-fails — the real backstop is the CI job, which always has
       ``GITHUB_TOKEN``.
+  C6. Documentation language + private-reference guard (AUDIT R10,
+      2026-07-02): every file under docs/ and every root-level *.md must
+      be English-only and must never name a known private/personal repo.
+      Excludes usecases/**, which legitimately serves Spanish-speaking
+      WhatsApp customers — that is product content, not documentation
+      about this repo. Ported from template_MLOps's check_doc_coherence.py
+      C7 (same repo where the AUDIT R10 finding originated); see that
+      script's module docstring for why this is a word list rather than a
+      raw accented-character scan.
 
-Deliberately NOT the full template system (6 checks + cascade map): at
+Deliberately NOT the full template system (7 checks + cascade map): at
 ~2k LOC that would be over-engineering; these checks cover every
 coherence defect this repo has actually exhibited.
 
@@ -40,6 +49,29 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 _SEMVER_LITERAL = re.compile(r'"\d+\.\d+\.\d+"')
+
+# Case-insensitive, whole-word Spanish markers — see template_MLOps's
+# scripts/check_doc_coherence.py for the full rationale (word list, not a
+# character scan, to avoid flagging legitimate accented proper nouns; the
+# accent is REQUIRED on every entry, never optional, because e.g.
+# "decisión" minus its accent spells exactly the English word "decision").
+_SPANISH_MARKERS = re.compile(
+    r"\b(aunque|también|además|cuáles?|cuándo|dónde|"
+    r"sin embargo|por lo tanto|así como|deberían?|realiza|actualiza|"
+    r"hallazgo|auditoría|alcance|fecha|integración|ingeniería|"
+    r"según|entrevista|corrección(?:es)?|revisión|preguntas?|"
+    r"respuesta|veredicto|decisión(?:es)?|información|"
+    r"configuración|documentación|implementación|validación|"
+    r"verificación|generación|resumen|conclusión|introducción|"
+    r"adopción|credibilidad|infraestructura|estratégicos?|"
+    r"desbalance|sobre-ingeniería)\b",
+    re.IGNORECASE,
+)
+
+# Private/personal repos that must never be named in this public repo's
+# documentation (AUDIT R10, 2026-07-02). Extend if another private
+# companion repo is ever referenced.
+_FORBIDDEN_REPO_REFS = ("REDACTED-PRIVATE-REPO",)
 
 
 def _fail(msgs: list[str], text: str) -> None:
@@ -153,6 +185,64 @@ def check_tags_have_releases(errors: list[str]) -> None:
         )
 
 
+def _doc_scan_files() -> list[Path]:
+    """``docs/**/*.md`` plus root-level ``*.md``, tracked-only, minus ``usecases/``.
+
+    ``usecases/**`` (prompts, policies) is excluded because it legitimately
+    serves Spanish-speaking WhatsApp customers — that is product content,
+    not documentation about this repo, and translating it would break the
+    product. Uses ``git ls-files`` (not a filesystem walk) so it can never
+    scan an untracked/gitignored local file.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(ROOT), "ls-files", "*.md"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        tracked = {ROOT / line for line in out.splitlines() if line}
+    except (OSError, subprocess.CalledProcessError):
+        tracked = set((ROOT / "docs").rglob("*.md")) | set(ROOT.glob("*.md"))
+
+    def _in_scope(p: Path) -> bool:
+        try:
+            rel = p.relative_to(ROOT)
+        except ValueError:
+            return False
+        if rel.parts[0] == "usecases":
+            return False
+        return rel.parts[0] == "docs" or len(rel.parts) == 1
+
+    return sorted(p for p in tracked if p.is_file() and _in_scope(p))
+
+
+def check_doc_language_and_privacy(errors: list[str]) -> None:
+    """C6 — docs/ and root docs must be English-only, and name no private repo."""
+    for path in _doc_scan_files():
+        text = path.read_text(encoding="utf-8")
+        rel = path.relative_to(ROOT).as_posix()
+
+        spanish_hits = sorted({m.group(1).lower() for m in _SPANISH_MARKERS.finditer(text)})
+        if spanish_hits:
+            shown = ", ".join(spanish_hits[:5])
+            more = f" (+{len(spanish_hits) - 5} more)" if len(spanish_hits) > 5 else ""
+            _fail(
+                errors,
+                f"{rel} contains Spanish word(s): {shown}{more}. "
+                "This repo's documentation is English-only (AUDIT R10).",
+            )
+
+        lowered = text.lower()
+        for forbidden in _FORBIDDEN_REPO_REFS:
+            if forbidden in lowered:
+                _fail(
+                    errors,
+                    f"{rel} references '{forbidden}', a private/personal repo that must "
+                    "never be named in this public repo's documentation (AUDIT R10).",
+                )
+
+
 def main() -> int:
     errors: list[str] = []
     check_version_matches_changelog(errors)
@@ -160,13 +250,15 @@ def main() -> int:
     check_app_has_no_hardcoded_version(errors)
     check_adr_index_complete(errors)
     check_tags_have_releases(errors)
+    check_doc_language_and_privacy(errors)
 
     if errors:
         print("\n".join(errors))
         print(f"[coherence] {len(errors)} violation(s).")
         return 1
     print(
-        "[coherence] OK — all checks pass (version SSoT, pyproject dynamic, app clean, ADR index, tag/release parity)."
+        "[coherence] OK — all checks pass (version SSoT, pyproject dynamic, app clean, "
+        "ADR index, tag/release parity, doc language + privacy)."
     )
     return 0
 

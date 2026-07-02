@@ -20,7 +20,8 @@ scripts already call a tier endpoint (E4B, port 8091) directly over HTTP from
 template_MLOps's own operational evidence (`ops/audit.jsonl`, incidents, drift
 reports — `ACTION_PLAN_LLM_AGENT.md` §L-2, `scripts/memory_query.py`).
 template_MLOps is now adding a **second** external caller of the same shape: a
-pedagogical/onboarding RAG over template_MLOps + REDACTED-PRIVATE-REPO teaching content
+pedagogical/onboarding RAG over template_MLOps's own teaching content plus,
+optionally, an adopter's long-form documentation corpus
 (`ACTION_PLAN_LLM_AGENT.md` §L-2b; template_MLOps ADR-037).
 
 Both external callers are legitimate and low-risk (read-only summarization),

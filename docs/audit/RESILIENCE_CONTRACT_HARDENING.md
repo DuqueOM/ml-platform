@@ -196,8 +196,8 @@ the shared plan's "two-person rule for new mutations" (ARCH_REVIEW §7.3).
 
 **Gap.** `RequestBudget.latency_budget_ms` exists (`core/schemas.py:44`,
 default 8000 — the WhatsApp SLA) but **is read nowhere**. The shared plan
-(§F1.6) explicitly requires: *"si `latency_budget_ms` se agota → respuesta
-parcial segura + flag"*. Today a slow tier chain can blow the SLA silently.
+(§F1.6) explicitly requires: *"if `latency_budget_ms` runs out → safe partial
+answer + flag"*. Today a slow tier chain can blow the SLA silently.
 
 **Approach.** Thread a per-request deadline through the controller; long waits
 degrade cleanly instead of hanging, and the user-facing path returns a safe

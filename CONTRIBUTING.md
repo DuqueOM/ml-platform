@@ -39,7 +39,8 @@ grammar + `tools.py` with `build_registry` + data + policies + budgets + evals).
   these drift unnoticed).
 - `flake8 .` and `mypy core app` clean.
 - `python scripts/check_coherence.py` clean (version SSoT, ADR index,
-  tag/release parity).
+  tag/release parity, doc language + privacy — this repo's documentation
+  is English-only and must never name a private/personal companion repo).
 - Routing eval gate for your use-case: `python evals/run.py <set>.jsonl --usecase <name>`
   must score **≥ 90 %** intent accuracy (a ratio, not an absolute count —
   AUDIT R8-07; the runner exits non-zero on failure).

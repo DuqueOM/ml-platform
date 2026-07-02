@@ -9,6 +9,25 @@ are backwards-compatible by default (new behaviour is opt-in or fail-closed).
 
 ## [Unreleased]
 
+### Fixed
+- **AUDIT R10 — private-repo reference removed from `docs/decisions/ADR-008-*.md`**:
+  a private, personal companion repo was named there as a design example
+  for the sibling template's pedagogical-RAG plan. Re-generalized to
+  describe the pattern (an adopter's own long-form onboarding corpus)
+  without naming a specific private repo — see the sibling template's
+  ADR-040 for the full incident and the matching fix there.
+- **`bench/RESULTS.md` translated from Spanish to English** (the top half
+  of the file; the bottom "Phase 1" section was already English) — this
+  repo's documentation is English-only outside of `usecases/**` product
+  content, which legitimately serves Spanish-speaking WhatsApp customers.
+
+### Added
+- **`scripts/check_coherence.py` C6 (doc language + private-reference
+  guard)**: ported from the sibling template's `check_doc_coherence.py`
+  C7/ADR-040 — the gate that should have caught the R10 finding above.
+  Scans every git-tracked `docs/**/*.md` and root `*.md` file, explicitly
+  excluding `usecases/**`.
+
 ## [0.7.0] - 2026-07-02
 
 The AUDIT R9 enterprise-benchmark release (template_MLOps
