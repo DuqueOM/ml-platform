@@ -69,9 +69,12 @@ _SPANISH_MARKERS = re.compile(
 )
 
 # Private/personal repos that must never be named in this public repo's
-# documentation (AUDIT R10, 2026-07-02). Extend if another private
-# companion repo is ever referenced.
-_FORBIDDEN_REPO_REFS = ("REDACTED-PRIVATE-REPO",)
+# documentation (AUDIT R10, 2026-07-02 — see the sibling template's
+# ADR-040 for the incident this closes). Extend if another private
+# companion repo is ever referenced. Safe to keep as a literal here: this
+# file is Python, not Markdown, so it is never itself in C6's own scan
+# scope (see _doc_scan_files below).
+_FORBIDDEN_REPO_REFS = ("guia_mlops",)
 
 
 def _fail(msgs: list[str], text: str) -> None:
