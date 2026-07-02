@@ -3,8 +3,9 @@
 template_MLOps rule 16 to this repo's scale.
 
 Facts that live in more than one place drift unless a gate compares them.
-This script asserts the four coherence facts this repo has already gotten
-wrong once (versions frozen at 0.2.0 while the CHANGELOG shipped 0.5.0):
+This script asserts the coherence facts this repo has already gotten wrong
+at least twice (versions frozen at 0.2.0 while the CHANGELOG shipped 0.5.0;
+six git tags existed with zero GitHub Releases — AUDIT R9-06):
 
   C1. core/__init__.py::__version__ matches the latest released CHANGELOG
       heading (``## [X.Y.Z] - date``).
@@ -13,9 +14,15 @@ wrong once (versions frozen at 0.2.0 while the CHANGELOG shipped 0.5.0):
   C3. app/ contains no hardcoded semver string literal — the FastAPI
       surface must import ``core.__version__``.
   C4. Every ADR file in docs/decisions/ is indexed in its README.md.
+  C5. Every git tag matching ``v*`` has a corresponding GitHub Release
+      (not just a tag). Best-effort: requires the ``gh`` CLI AND
+      authentication; skips silently (not a failure) when either is
+      unavailable, so a contributor's local, unauthenticated run never
+      false-fails — the real backstop is the CI job, which always has
+      ``GITHUB_TOKEN``.
 
 Deliberately NOT the full template system (6 checks + cascade map): at
-~2k LOC that would be over-engineering; these four checks cover every
+~2k LOC that would be over-engineering; these checks cover every
 coherence defect this repo has actually exhibited.
 
 Exit code 0 = coherent; 1 = drift (each violation printed with evidence).
@@ -23,7 +30,10 @@ Exit code 0 = coherent; 1 = drift (each violation printed with evidence).
 
 from __future__ import annotations
 
+import json
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -92,18 +102,72 @@ def check_adr_index_complete(errors: list[str]) -> None:
             _fail(errors, f"docs/decisions/README.md does not index {adr.name}")
 
 
+def check_tags_have_releases(errors: list[str]) -> None:
+    """C5: every ``v*`` tag has a GitHub Release, not just a tag (R9-06).
+
+    Best-effort by design: no ``gh`` on PATH, or no authenticated session,
+    means this check cannot run and is skipped WITHOUT failing — the
+    authoritative enforcement is the CI job, which always has
+    ``GITHUB_TOKEN`` available. A skip here must never block a local,
+    offline `python scripts/check_coherence.py` run.
+    """
+    gh = shutil.which("gh")
+    if gh is None:
+        print("[coherence] C5 skipped — `gh` CLI not found (CI enforces this check).")
+        return
+
+    try:
+        auth = subprocess.run([gh, "auth", "status"], capture_output=True, timeout=10)
+        if auth.returncode != 0:
+            print("[coherence] C5 skipped — `gh` not authenticated (CI enforces this check).")
+            return
+
+        tags_proc = subprocess.run(["git", "tag", "--list", "v*"], capture_output=True, text=True, cwd=ROOT, timeout=10)
+        tags = sorted(t for t in tags_proc.stdout.splitlines() if t.strip())
+        if not tags:
+            return
+
+        releases_proc = subprocess.run(
+            [gh, "release", "list", "--json", "tagName", "--limit", "200"],
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+            timeout=15,
+        )
+        if releases_proc.returncode != 0:
+            print("[coherence] C5 skipped — `gh release list` failed (no repo access?).")
+            return
+        released = {r["tagName"] for r in json.loads(releases_proc.stdout)}
+    except (subprocess.TimeoutExpired, OSError, json.JSONDecodeError) as exc:
+        print(f"[coherence] C5 skipped — could not query GitHub ({exc}).")
+        return
+
+    missing = [t for t in tags if t not in released]
+    if missing:
+        _fail(
+            errors,
+            f"tag(s) without a GitHub Release: {missing}. Every `v*` tag MUST have a "
+            "published Release (not just a tag) — run `gh release create <tag> "
+            "--notes-file releases/<tag>.md`, or let .github/workflows/release-on-tag.yml "
+            "publish it on the next push to that tag.",
+        )
+
+
 def main() -> int:
     errors: list[str] = []
     check_version_matches_changelog(errors)
     check_pyproject_is_dynamic(errors)
     check_app_has_no_hardcoded_version(errors)
     check_adr_index_complete(errors)
+    check_tags_have_releases(errors)
 
     if errors:
         print("\n".join(errors))
         print(f"[coherence] {len(errors)} violation(s).")
         return 1
-    print("[coherence] OK — all 4 checks pass (version SSoT, pyproject dynamic, app clean, ADR index).")
+    print(
+        "[coherence] OK — all checks pass (version SSoT, pyproject dynamic, app clean, ADR index, tag/release parity)."
+    )
     return 0
 
 

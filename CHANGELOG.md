@@ -9,6 +9,63 @@ are backwards-compatible by default (new behaviour is opt-in or fail-closed).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-02
+
+The AUDIT R9 enterprise-benchmark release (template_MLOps
+`docs/audit/ACTION_PLAN_R9_ENTERPRISE_BENCHMARK.md`, Wave B): closes every
+finding the benchmark raised against this repo specifically — six tags
+with zero GitHub Releases, an undocumented MCP/A2A stance, no OWASP-mapped
+threat model, no adversarial eval coverage, and unpinned CI actions.
+
+### Fixed
+- **R9-06 (real bug, not just a gap) — 6 tags had zero GitHub Releases**:
+  `v0.1.0` through `v0.6.0` existed only as git tags; nobody using GitHub's
+  Releases UI could see this project's real history. Backfilled all 6
+  retroactively from `CHANGELOG.md`, added
+  `.github/workflows/release-on-tag.yml` (ported from the sibling
+  template's own release-on-tag fix) so this cannot silently recur, and
+  extended `scripts/check_coherence.py` with **C5**: every `v*` tag must
+  have a published Release, enforced in CI (where `GITHUB_TOKEN` is always
+  present) and self-skipping — never false-failing — on an unauthenticated
+  local run.
+
+### Added
+- **`docs/SECURITY_MODEL.md`** (R9-07): a control-by-control map of this
+  platform's architecture against the OWASP Top 10 for LLM Applications
+  (2025). Two categories are honestly marked as gaps (LLM07 System Prompt
+  Leakage has no mitigation; LLM02's model-output-PII path is unscanned),
+  two as not-yet-applicable (LLM04 — no training pipeline; LLM08 — no
+  vector store, BM25-only), and six as mitigated with file-level evidence.
+- **`ADR-010` — MCP / A2A interoperability: Rejected (with revisit
+  triggers)** (R9's Anexo A): as MCP server, exposing the tool registry
+  creates a second, ungoverned execution path around
+  router/budget/policy/telemetry; as MCP client, the spec's own "treat
+  annotations as untrusted" stance conflicts with ADR-006's fail-closed
+  capability contract. Documents exactly what would change the answer.
+- **`usecases/tienda/evals/sets/11_injection.jsonl`** + **`tests/test_injection_containment.py`** (R9-08): fifteen adversarial router-classification
+  cases (instruction override, jailbreak, prompt/tool-name extraction,
+  fabricated context, promo/order injection, authority impersonation,
+  structure-breakout attempts, repetition flood, and two documented
+  keyword-evasion gaps in `policy.yaml` — synonyms and leetspeak) plus six
+  full-loop tests proving that even a successfully-manipulated model still
+  gets caught by the deterministic policy gate and the fail-closed tool
+  registry — not unit tests of the gate in isolation, but `agent.handle()`
+  end to end. Suite: 119 → 127 (6 containment tests + 2 auto-parametrized
+  eval-set well-formedness checks for the new set).
+- **Coverage reporting in CI** (`pytest --cov`, R9 Anexo B): reported, not
+  gated — see `CONTRIBUTING.md` "Coverage policy" for why a hard threshold
+  is premature at this repo's current scale, and the explicit triggers
+  that would change that.
+
+### Changed
+- **All GitHub Actions in `.github/workflows/*.yml` pinned by commit SHA**
+  (mirrors the sibling template's AUDIT R9-02 fix): `actions/checkout`,
+  `actions/setup-python`, `gitleaks/gitleaks-action`.
+- **`CONTRIBUTING.md` quality gates** now list the coherence gate and the
+  coverage policy explicitly, and fix a stale reference to the old
+  absolute eval gate (`≥ 18/20`) that AUDIT R8-07 had already replaced
+  with a ratio (`≥ 90 %`).
+
 ## [0.6.0] - 2026-07-01
 
 The AUDIT R8 remediation release (template_MLOps

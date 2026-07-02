@@ -13,6 +13,7 @@ Non-trivial decisions are recorded here with their context and trade-offs.
 | [ADR-007](ADR-007-structured-tool-calling.md) | Structured tool-calling contract (schema-constrained JSON) | Accepted |
 | [ADR-008](ADR-008-retrieval-caller-isolation.md) | Retrieval/tier surface is caller-isolated, not server-isolated | Accepted |
 | [ADR-009](ADR-009-reflection-notes-channel.md) | Reflection output is a notes channel, never an observation | Accepted |
+| [ADR-010](ADR-010-mcp-a2a-interop-rejected.md) | MCP / A2A interoperability: Rejected (with revisit triggers) | Rejected |
 
 ## Format
 

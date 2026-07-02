@@ -18,10 +18,10 @@ jobs:
       matrix:
         python-version: ["3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -47,13 +47,21 @@ jobs:
       - name: Type check (mypy)
         run: mypy core app
 
-      - name: Coherence gate (AUDIT R8-04)
+      - name: Coherence gate (AUDIT R8-04 / R9-06)
         # Version SSoT (core.__version__) vs CHANGELOG heading, dynamic
-        # pyproject, no hardcoded semver in app/, complete ADR index.
+        # pyproject, no hardcoded semver in app/, complete ADR index, and
+        # (C5) every git tag has a published GitHub Release — this job
+        # always has GITHUB_TOKEN, so C5 is fully enforced here even though
+        # it self-skips gracefully on an unauthenticated local run.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/check_coherence.py
 
-      - name: Unit tests
-        run: pytest -q
+      - name: Unit tests + coverage report (AUDIT R9 Anexo B)
+        # Reported, not gated: no --cov-fail-under. See CONTRIBUTING.md
+        # "Coverage policy" for why a hard threshold is premature at this
+        # repo's scale (single maintainer, behavior-first test culture).
+        run: pytest -q --cov=core --cov=app --cov=usecases --cov-report=term-missing
 
   gitleaks:
     # Secret scanning (AUDIT R8-12) — mirrors the sibling template's
@@ -61,9 +69,9 @@ jobs:
     # covers the full history of the push/PR range, not just the tip.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

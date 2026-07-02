@@ -11,6 +11,9 @@ ENV/
 *.egg-info/
 dist/
 build/
+.coverage
+.coverage.*
+htmlcov/
 
 # IDEs
 .vscode/

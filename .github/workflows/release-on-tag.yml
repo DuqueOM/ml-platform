@@ -1,0 +1,106 @@
+---
+# Auto-publish a GitHub Release whenever a new `v*` tag is pushed.
+#
+# AUDIT R9-06: 6 tags (v0.1.0..v0.6.0) existed with zero GitHub Releases —
+# real, correct history invisible to anyone using GitHub's Releases UI. The
+# retroactive backfill is a one-time fix; this workflow (ported from the
+# sibling template's release-on-tag.yml, which hit and fixed the same class
+# of bug — see its own file header) is the structural fix so it cannot
+# happen again for any future tag.
+#
+# Mode (per AGENTS.md / this repo's equivalent protocol): AUTO. Releases are
+# additive and reversible (a Release can be deleted without affecting tags).
+
+name: Release on Tag
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # required for `gh release create` / `gh release edit`
+
+jobs:
+  publish-release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0 # full history + tags — required for the --latest comparison below
+
+      - name: Build release title + body
+        id: release
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          version="${TAG#v}"
+          note_file="releases/${TAG}.md"
+
+          if [ -f "$note_file" ]; then
+            echo "Using release note: ${note_file}"
+            title="$(grep -m1 '^# ' "$note_file" | sed -E 's/^# +//')"
+            cp "$note_file" /tmp/release-body.md
+          elif grep -qE "^## \[v?${version}\] " CHANGELOG.md; then
+            echo "No ${note_file}; extracting CHANGELOG.md section for ${TAG}."
+            title="${TAG}"
+            awk -v v="${version}" '
+              $0 ~ ("^## \\[v?" v "\\] ") {capture=1; next}
+              capture && /^## \[/ {capture=0}
+              capture {print}
+            ' CHANGELOG.md > /tmp/release-body.md
+          else
+            echo "No ${note_file} and no matching CHANGELOG.md section; using generic body."
+            title="${TAG}"
+            cat > /tmp/release-body.md <<'EOF'
+          Auto-published from tag. See `CHANGELOG.md` for the full change list.
+          EOF
+          fi
+
+          echo "title=${title}" >> "$GITHUB_OUTPUT"
+
+      - name: Determine latest flag
+        id: flags
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          # This repo has no frozen historical-snapshot line (unlike the
+          # sibling template's v1.x tags) — every tag competes for "latest"
+          # by simple version-sort.
+          highest="$(git tag --list 'v*' | sort -V | tail -1)"
+          if [ "${TAG}" = "${highest}" ]; then
+            echo "latest=--latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "latest=--latest=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          TITLE: ${{ steps.release.outputs.title }}
+          LATEST: ${{ steps.flags.outputs.latest }}
+        run: |
+          set -eu
+          # Idempotent: a re-run, or a release someone already touched by
+          # hand, updates in place instead of failing on "already exists".
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release ${TAG} exists — updating."
+            gh release edit "${TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${TITLE}" \
+              --notes-file /tmp/release-body.md \
+              --prerelease=false \
+              ${LATEST}
+          else
+            echo "Release ${TAG} does not exist — creating."
+            gh release create "${TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${TITLE}" \
+              --notes-file /tmp/release-body.md \
+              --verify-tag \
+              ${LATEST}
+          fi

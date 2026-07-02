@@ -193,9 +193,11 @@ bring-your-own-models) and [CONTRIBUTING.md](CONTRIBUTING.md).
 - [ADR-007](docs/decisions/ADR-007-structured-tool-calling.md) — structured tool-calling contract
 - [ADR-008](docs/decisions/ADR-008-retrieval-caller-isolation.md) — retrieval/tier surface is caller-isolated, not server-isolated
 - [ADR-009](docs/decisions/ADR-009-reflection-notes-channel.md) — reflection output is a notes channel, never an observation
+- [ADR-010](docs/decisions/ADR-010-mcp-a2a-interop-rejected.md) — MCP / A2A interoperability: Rejected (with revisit triggers)
+- [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) — OWASP Top 10 for LLM Applications control-by-control map
 - [CHANGELOG.md](CHANGELOG.md) — version history
 - [CONTRIBUTING.md](CONTRIBUTING.md) — dev setup, adding use-cases, quality gates
-- [SECURITY.md](SECURITY.md) — security model and reporting
+- [SECURITY.md](SECURITY.md) — vulnerability reporting process (see `docs/SECURITY_MODEL.md` for the OWASP threat-model mapping)
 - `bench/RESULTS.md` — benchmark + routing gate evidence
 
 ---
