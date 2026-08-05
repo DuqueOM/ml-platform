@@ -13,14 +13,36 @@ never a fork of ``core/``.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
 
+from .tiers import LOCAL, REMOTE, TierEndpoint
+
 # Repository root (…/agent-local). ``core`` lives one level below it.
 REPO_ROOT = Path(__file__).resolve().parent.parent
 USECASES_ROOT = REPO_ROOT / "usecases"
+
+# ``${VAR}`` / ``${VAR:-default}`` substitution for endpoint URLs and model ids,
+# so one committed config serves every topology profile (ADR-011) and no
+# deployment-specific value has to be edited into version control.
+_ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
+
+
+def expand_env(value: str) -> str:
+    """Expand ``${VAR}`` and ``${VAR:-default}`` references in a config string.
+
+    An unset variable with no default expands to the empty string, which the
+    endpoint validators then reject with a precise message.
+    """
+
+    def _sub(match: re.Match[str]) -> str:
+        name, default = match.group(1), match.group(2)
+        return os.environ.get(name) or (default if default is not None else "")
+
+    return _ENV_REF.sub(_sub, value)
 
 
 @dataclass(frozen=True)
@@ -51,7 +73,7 @@ class UsecaseConfig:
         root: Absolute path to ``usecases/<name>/``.
         language: ISO language code of the customer-facing surface.
         allowed_intents: Closed set of intents the router may emit.
-        tier_endpoints: Map of tier number to llama.cpp completions URL.
+        tier_endpoints: Map of tier number to :class:`TierEndpoint` (ADR-011).
         router_prompt: System prompt for the Tier-0 router.
         router_grammar: GBNF grammar constraining the router JSON.
         budgets: Per-intent request budgets (raw dict, typed by RequestBudget).
@@ -75,13 +97,15 @@ class UsecaseConfig:
             emit the schema-validated JSON tool-call envelope (ADR-007). Set to
             False only for a model server lacking ``json_schema`` support; the
             text-format fallback parser still works either way.
+        max_local_tiers: Resident-memory invariant (ADR-011) — how many tiers
+            may be ``kind: local`` at once. Enforced at load time.
     """
 
     name: str
     root: Path
     language: str
     allowed_intents: list[str]
-    tier_endpoints: dict[int, str]
+    tier_endpoints: dict[int, TierEndpoint]
     router_prompt: str
     router_grammar: str
     budgets: dict
@@ -96,6 +120,7 @@ class UsecaseConfig:
     observation_max_chars: int = 4000
     retrieval_max_chars: int = 2000
     structured_tool_calls: bool = True
+    max_local_tiers: int = 1
 
     @property
     def read_only_mode(self) -> bool:
@@ -106,6 +131,43 @@ class UsecaseConfig:
         ``phase: 2`` in ``config.yaml`` to lift the gate per tool contract.
         """
         return self.phase < 2
+
+    @property
+    def local_tiers(self) -> list[int]:
+        """Tiers that consume local resident memory, ascending."""
+        return sorted(tier for tier, ep in self.tier_endpoints.items() if ep.is_local)
+
+    @property
+    def topology_profile(self) -> str:
+        """Name the ADR-011 profile this configuration represents.
+
+        Returns:
+            ``"local-only"`` (no remote tiers), ``"all-remote"`` (no local
+            tiers) or ``"hybrid"`` (both).
+        """
+        has_local = bool(self.local_tiers)
+        has_remote = any(not ep.is_local for ep in self.tier_endpoints.values())
+        if has_local and not has_remote:
+            return "local-only"
+        if has_remote and not has_local:
+            return "all-remote"
+        return "hybrid"
+
+    def preflight(self) -> None:
+        """Fail fast if the process cannot actually serve this configuration.
+
+        Checks what :func:`load_usecase` deliberately cannot: whether every
+        credential a remote tier names is present in *this* environment.
+        Config loading stays pure so tests and offline tooling can read a
+        hybrid config without holding provider keys; serving entrypoints call
+        this at startup so a missing key surfaces as a boot failure instead of
+        a per-request degradation to the safe fallback.
+
+        Raises:
+            MissingCredential: If a remote tier's ``api_key_env`` is unset.
+        """
+        for tier in sorted(self.tier_endpoints):
+            self.tier_endpoints[tier].auth_headers()
 
 
 def load_usecase(name: str) -> UsecaseConfig:
@@ -164,12 +226,54 @@ def load_usecase(name: str) -> UsecaseConfig:
     # Tier endpoint keys come from YAML as ints already, but normalise to be safe.
     # ``LLAMA_HOST`` lets containerised deployments retarget the default
     # 127.0.0.1 host (e.g. a sibling llama.cpp service) without editing config.
+    # Only LOCAL endpoints are rewritten — a remote provider URL must never be
+    # silently repointed at a container host.
     llama_host = os.environ.get("LLAMA_HOST")
-    tier_endpoints = {}
-    for key, url in raw.get("tier_endpoints", {}).items():
-        if llama_host:
-            url = url.replace("127.0.0.1", llama_host).replace("localhost", llama_host)
-        tier_endpoints[int(key)] = url
+    tier_endpoints: dict[int, TierEndpoint] = {}
+    for key, spec in raw.get("tier_endpoints", {}).items():
+        if isinstance(spec, dict):
+            spec = {k: (expand_env(v) if isinstance(v, str) else v) for k, v in spec.items()}
+            declared_url = str(spec.get("url", "")).strip()
+        elif isinstance(spec, str):
+            spec = expand_env(spec)
+            declared_url = spec.strip()
+        else:
+            raise ValueError(f"tier {key} endpoint must be a URL string or a mapping, got {type(spec).__name__}")
+
+        # A tier whose URL expands to nothing is *not configured* in this
+        # environment — drop it rather than fail. This is what lets one
+        # committed config serve every ADR-011 profile: with no provider
+        # variables exported the higher tiers vanish and `TierClient.resolve`
+        # collapses the topology onto Tier 0 (local-only).
+        if not declared_url:
+            continue
+
+        endpoint = TierEndpoint.from_raw(spec)
+        if llama_host and endpoint.is_local:
+            rehosted = endpoint.url.replace("127.0.0.1", llama_host).replace("localhost", llama_host)
+            endpoint = TierEndpoint(url=rehosted, kind=endpoint.kind, model=endpoint.model)
+        tier_endpoints[int(key)] = endpoint
+
+    # Tier 0 is the routing floor: every escalation resolves down to it and the
+    # router binds to it directly, so its absence is never a valid topology.
+    if 0 not in tier_endpoints:
+        raise ValueError(
+            f"use-case {name!r} has no Tier 0 endpoint after environment expansion. "
+            "Tier 0 is required — it is the router and the degradation floor (ADR-011)."
+        )
+
+    # Resident-memory invariant (ADR-011). A workstation cannot hold several
+    # GGUF models at once, so exceeding the cap is a configuration error, not a
+    # runtime surprise discovered when the OOM killer fires.
+    max_local_tiers = int(raw.get("limits", {}).get("max_local_tiers", 1))
+    local_tiers = sorted(tier for tier, ep in tier_endpoints.items() if ep.is_local)
+    if len(local_tiers) > max_local_tiers:
+        raise ValueError(
+            f"use-case {name!r} declares {len(local_tiers)} local tiers {local_tiers} "
+            f"but limits.max_local_tiers is {max_local_tiers} (ADR-011). "
+            f"Switch the surplus tiers from kind: {LOCAL} to kind: {REMOTE}, "
+            f"or raise limits.max_local_tiers deliberately."
+        )
 
     return UsecaseConfig(
         name=raw.get("name", name),
@@ -191,4 +295,5 @@ def load_usecase(name: str) -> UsecaseConfig:
         observation_max_chars=int(raw.get("limits", {}).get("observation_chars", 4000)),
         retrieval_max_chars=int(raw.get("limits", {}).get("retrieval_chars", 2000)),
         structured_tool_calls=bool(raw.get("structured_tool_calls", True)),
+        max_local_tiers=max_local_tiers,
     )

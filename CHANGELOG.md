@@ -9,6 +9,54 @@ are backwards-compatible by default (new behaviour is opt-in or fail-closed).
 
 ## [Unreleased]
 
+### Added
+- **ADR-011 — hybrid tier topology; resident memory is the binding
+  constraint.** The four-local-`llama-server` topology assumed since Phase 1
+  was never runnable on the development workstation: 16 GB host, 9.7 GB
+  visible to WSL2, 4.0 GB free at measurement, against ~4–5 GB per Q4_K_M
+  model. Tier 0 (called every request, latency-critical, GBNF-dependent)
+  stays local; Tiers 1–3 (conditional, large, infrequent) become remote.
+  One committed config now serves three environment-selected profiles —
+  `local-only`, `hybrid`, `all-remote` — so the same use-case runs on a
+  workstation, in CI and in a full topology without a YAML edit.
+- **`TierEndpoint`** (`core/tiers.py`): tiers are described (`url`, `kind`,
+  `model`, `api_key_env`) rather than addressed by bare URL. Credentials are
+  referenced by *variable name*, never by value, so a config stays committable.
+  A plain URL string still parses as a local endpoint — pre-ADR-011 configs
+  load unchanged.
+- **`TierClient.resolve()`**: an escalation resolves to the highest configured
+  tier at or below the requested one. This is what lets unset tiers simply
+  disappear instead of raising, and is applied in `RunContext.call_tier`
+  *before* the circuit breaker so breaker state and token accounting name the
+  tier that actually served the call.
+- **`limits.max_local_tiers`** (default 1): enforced at config load with the
+  offending tier list. The alternative discovery mechanism for a resident-memory
+  overcommit is the OOM killer, at request time.
+- **`UsecaseConfig.preflight()`**, called by `app/main.py` at import: resolves
+  every declared credential at startup. Without it a missing API key was
+  absorbed by the controller's degradation path — the service would pass its
+  health check while answering every request with the safe fallback.
+- **`adapt_constraints()`** and `Router._constraint()`: GBNF and llama.cpp's
+  bare `json_schema` are translated to `response_format` for remote endpoints,
+  and `grammar` is stripped. Documented consequence: `all-remote` routing is
+  syntactically but not schema constrained, so it is not the quality-gated path.
+- **`${VAR}` / `${VAR:-default}` expansion** for endpoint URLs and model ids
+  (`core.config.expand_env`), plus `tests/test_tier_topology.py` — 21 tests
+  covering profile derivation, the residency invariant, endpoint parsing,
+  credential handling and startup preflight.
+- **`conftest.TierResolutionStub`**: the four tier-client doubles in the suite
+  now inherit one shared contract stub, so they cannot drift away from the
+  client interface a file at a time.
+
+### Changed
+- `docker-compose.yml` declares explicit `mem_limit` values and passes the
+  remote-tier variables through, making the one-model budget visible.
+- `LLAMA_HOST` container rewriting now applies to **local endpoints only** — a
+  remote provider URL is never silently repointed at a container host.
+- README documents the three profiles and their trade-offs; principle #6
+  ("local-first; cloud only as explicit, budgeted overflow") now points at the
+  mechanism that makes "budgeted" literal.
+
 ### Fixed
 - **AUDIT R10 — private-repo reference removed from `docs/decisions/ADR-008-*.md`**:
   a private, personal companion repo was named there as a design example

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import pytest
 
+from conftest import TierResolutionStub
 from core import load_agent
 from core.schemas import Route
 
@@ -27,7 +28,7 @@ def _reply(content: str) -> dict:
     return {"choices": [{"message": {"content": content}}], "usage": {"completion_tokens": 5}}
 
 
-class _ScriptedTiers:
+class _ScriptedTiers(TierResolutionStub):
     """Returns queued contents in order, regardless of tier requested."""
 
     def __init__(self, contents):

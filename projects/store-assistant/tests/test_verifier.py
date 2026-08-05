@@ -6,6 +6,7 @@ tests are robust to loop ordering (plan/reflect/generate/critic).
 
 import pytest
 
+from conftest import TierResolutionStub
 from core import load_agent
 from core.schemas import Route
 
@@ -14,7 +15,7 @@ def _reply(content: str) -> dict:
     return {"choices": [{"message": {"content": content}}], "usage": {"completion_tokens": 3}}
 
 
-class FakeTiers:
+class FakeTiers(TierResolutionStub):
     def __init__(self, *, generate="respuesta", critic="APPROVED", critic_votes=None, regenerate=None):
         self.generate = generate
         self.critic = critic

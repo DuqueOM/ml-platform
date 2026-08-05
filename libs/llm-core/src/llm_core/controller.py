@@ -243,9 +243,14 @@ class RunContext:
         if "timeout" not in kwargs and self.deadline != float("inf"):
             remaining = self.deadline - time.time()
             kwargs["timeout"] = max(1, int(remaining) + 1)
-        effective = self.breaker.effective_tier(tier)
+        # Collapse the requested tier onto the topology that is actually
+        # configured BEFORE consulting the breaker (ADR-011): in a local-only
+        # profile every tier resolves to 0, and breaker state plus token
+        # accounting must name the tier that really served the call.
+        configured, _ = self.agent.tiers.resolve(tier)
+        effective = self.breaker.effective_tier(configured)
         if effective is None:
-            raise TierUnavailable(f"all tiers <= {tier} are open")
+            raise TierUnavailable(f"all tiers <= {configured} are open")
         try:
             response = self.agent.tiers.call(effective, messages, **kwargs)
         except Exception:

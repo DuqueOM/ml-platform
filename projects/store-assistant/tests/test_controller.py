@@ -6,6 +6,7 @@ admit/execute/release flow runs without any model server.
 
 import pytest
 
+from conftest import TierResolutionStub
 from core import load_agent
 from core.circuit import State
 from core.controller import RunContext, _coerce, _split_args
@@ -19,7 +20,7 @@ def _reply(content: str) -> dict:
     }
 
 
-class FakeTiers:
+class FakeTiers(TierResolutionStub):
     """Returns queued contents in order; records calls. Optionally always fails."""
 
     def __init__(self, contents=None, fail=False):
@@ -194,7 +195,7 @@ def test_extract_falls_back_to_legacy_text(agent):
 
 
 def test_plan_passes_json_schema_when_enabled(agent):
-    class RecordingTiers:
+    class RecordingTiers(TierResolutionStub):
         def __init__(self):
             self.last_kwargs: dict | None = None
 
@@ -215,7 +216,7 @@ def test_plan_passes_json_schema_when_enabled(agent):
 
 
 def test_plan_omits_json_schema_when_disabled(agent):
-    class RecordingTiers:
+    class RecordingTiers(TierResolutionStub):
         def __init__(self):
             self.last_kwargs: dict | None = None
 
@@ -234,7 +235,7 @@ def test_plan_omits_json_schema_when_disabled(agent):
 
 
 # --- reflection notes channel (ADR-009, AUDIT R8-03) -----------------------
-class _TranscriptTiers:
+class _TranscriptTiers(TierResolutionStub):
     """Queued contents like FakeTiers, but records every (tier, user_content)."""
 
     def __init__(self, contents):

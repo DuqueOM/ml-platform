@@ -36,6 +36,20 @@ AGENT = load_agent(USECASE)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+# Startup credential preflight (ADR-011). Config loading stays pure so offline
+# tooling and tests can read a hybrid topology without holding provider keys;
+# a serving process must not. Without this, a missing key would surface as a
+# per-request MissingCredential that the controller absorbs into the safe
+# fallback — the service would look healthy while answering nothing.
+AGENT.config.preflight()
+logger.info(
+    "use-case=%s tier topology=%s tiers=%s local=%s",
+    USECASE,
+    AGENT.config.topology_profile,
+    sorted(AGENT.config.tier_endpoints),
+    AGENT.config.local_tiers,
+)
+
 app = FastAPI(
     title="Local LLM Agent Platform",
     description=f"Reusable multi-tier agent core. Active use-case: {USECASE}",

@@ -88,13 +88,35 @@ permission.
 
 ### Prerequisites
 - Python 3.11+
-- A llama.cpp `llama-server` build and a GGUF router model (Tier 0).
+- For the default profile: a llama.cpp `llama-server` build and a GGUF router
+  model (Tier 0). Roughly 2 GB of RAM — one model, not four.
 
 ### Install
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"     # or: pip install -r requirements-dev.txt
 ```
+
+### Pick a tier topology (ADR-011)
+
+Resident memory — not token cost — is the binding constraint on a workstation,
+so Tier 0 (small, hot, grammar-constrained) stays local while the large,
+rarely-called tiers go remote. One committed config serves all three profiles;
+the environment picks which is active.
+
+| Profile | How to select it | Resident RAM |
+|---------|------------------|--------------|
+| `local-only` | export nothing — higher tiers are dropped and every escalation resolves down to Tier 0 | ~2 GB |
+| `hybrid` | export `AGENT_TIER{1,2,3}_URL` / `_MODEL` / `_API_KEY` | ~2 GB |
+| `all-remote` | additionally set `AGENT_TIER0_URL` + `AGENT_TIER0_KIND=remote` | ~0 GB |
+
+Credentials are named, never inlined: the config references a *variable name*,
+so it can be committed. See `.env.example` for every variable.
+
+> `all-remote` loses GBNF grammar constraints on routing (a llama.cpp
+> capability) and falls back to `response_format: json_object`. It is meant for
+> CI, not for the quality-gated path — the routing accuracy gate is only
+> meaningful under `local-only` or `hybrid`.
 
 ### Run the Tier-0 router
 ```bash
@@ -157,6 +179,8 @@ bring-your-own-models) and [CONTRIBUTING.md](CONTRIBUTING.md).
 | F2.0 | ExecutiveController + per-tier circuit breaker | ✅ |
 | F2.0 | Tier-client retry/backoff (transient blips ≠ tier failure) | ✅ |
 | F1.6 | Latency-budget enforced (safe degrade past deadline) | ✅ |
+| F2.0 | Resident-memory invariant enforced at config load (ADR-011) | ✅ |
+| F2.0 | Suite runs with no model and no credentials (`local-only`) | ✅ **156 passed** |
 
 ---
 
@@ -168,7 +192,10 @@ bring-your-own-models) and [CONTRIBUTING.md](CONTRIBUTING.md).
 3. Every lane needs an eval harness before increasing autonomy.
 4. The simplest loop that works.
 5. Inventory/price/stock are never held in model memory — always live tools.
-6. Local-first; cloud only as explicit, budgeted overflow.
+6. Local-first; cloud only as explicit, budgeted overflow. "Budgeted" is
+   literal — remote tiers are opt-in per tier, capped by `budgets.yaml`, and
+   the number of models allowed to occupy RAM is an enforced config invariant
+   ([ADR-011](docs/decisions/ADR-011-hybrid-tier-topology.md)).
 
 ---
 
@@ -194,7 +221,9 @@ bring-your-own-models) and [CONTRIBUTING.md](CONTRIBUTING.md).
 - [ADR-008](docs/decisions/ADR-008-retrieval-caller-isolation.md) — retrieval/tier surface is caller-isolated, not server-isolated
 - [ADR-009](docs/decisions/ADR-009-reflection-notes-channel.md) — reflection output is a notes channel, never an observation
 - [ADR-010](docs/decisions/ADR-010-mcp-a2a-interop-rejected.md) — MCP / A2A interoperability: Rejected (with revisit triggers)
+- [ADR-011](docs/decisions/ADR-011-hybrid-tier-topology.md) — hybrid tier topology: resident memory is the binding constraint
 - [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) — OWASP Top 10 for LLM Applications control-by-control map
+- [docs/workstation-memory-budget.md](docs/workstation-memory-budget.md) — running the platform on a memory-constrained machine (ADR-011 in practice)
 - [CHANGELOG.md](CHANGELOG.md) — version history
 - [CONTRIBUTING.md](CONTRIBUTING.md) — dev setup, adding use-cases, quality gates
 - [SECURITY.md](SECURITY.md) — vulnerability reporting process (see `docs/SECURITY_MODEL.md` for the OWASP threat-model mapping)

@@ -6,6 +6,13 @@
 #
 # GPU: uncomment the `deploy` block on the llama service if you have the NVIDIA
 # Container Toolkit installed. CPU works too (slower).
+#
+# MEMORY (ADR-011): this stack runs exactly ONE model container by design.
+# Tiers 1-3 are remote when their AGENT_TIER*_URL variables are exported, and
+# are dropped entirely when they are not — so there is never a second
+# llama.cpp service here. The explicit `mem_limit` values below make the
+# budget visible and turn an overcommit into a container failure with a clear
+# cause, rather than the host OOM killer picking a victim.
 services:
   llama-e4b:
     image: ghcr.io/ggml-org/llama.cpp:server
@@ -14,6 +21,9 @@ services:
       --host 0.0.0.0 --port 8091 -ngl 99 -c 8192
     volumes:
       - ${MODELS_DIR:?set MODELS_DIR in .env to your host model directory}:/models:ro
+    # Sized for a Q4_K_M router model plus its 8192-token KV cache. Raise
+    # deliberately if you swap in a larger Tier-0 model.
+    mem_limit: ${LLAMA_MEM_LIMIT:-4g}
     ports:
       - "8091:8091"
     healthcheck:
@@ -36,7 +46,19 @@ services:
     build: .
     environment:
       AGENT_USECASE: ${AGENT_USECASE:-tienda}
-      LLAMA_HOST: llama-e4b   # retargets config's 127.0.0.1 endpoints
+      LLAMA_HOST: llama-e4b   # retargets config's LOCAL 127.0.0.1 endpoints only
+      # Remote tiers (ADR-011 hybrid profile). Unset -> the higher tiers are
+      # dropped at config load and everything resolves to the local Tier 0.
+      AGENT_TIER1_URL: ${AGENT_TIER1_URL:-}
+      AGENT_TIER1_MODEL: ${AGENT_TIER1_MODEL:-}
+      AGENT_TIER1_API_KEY: ${AGENT_TIER1_API_KEY:-}
+      AGENT_TIER2_URL: ${AGENT_TIER2_URL:-}
+      AGENT_TIER2_MODEL: ${AGENT_TIER2_MODEL:-}
+      AGENT_TIER2_API_KEY: ${AGENT_TIER2_API_KEY:-}
+      AGENT_TIER3_URL: ${AGENT_TIER3_URL:-}
+      AGENT_TIER3_MODEL: ${AGENT_TIER3_MODEL:-}
+      AGENT_TIER3_API_KEY: ${AGENT_TIER3_API_KEY:-}
+    mem_limit: ${AGENT_MEM_LIMIT:-1g}
     ports:
       - "8000:8000"
     depends_on:

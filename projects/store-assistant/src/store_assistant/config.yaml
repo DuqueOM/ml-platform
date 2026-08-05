@@ -24,11 +24,40 @@ allowed_intents:
   - unknown
 
 # llama.cpp (OpenAI-compatible) endpoints per tier. Override via deployment.
+# Tier topology (ADR-011). ONE committed config serves all three profiles; the
+# environment decides which one is active:
+#
+#   local-only  export nothing -> tiers 1..3 expand to an empty URL and are
+#               dropped; every escalation resolves down to Tier 0. ~2 GB RAM.
+#   hybrid      export AGENT_TIER{1,2,3}_URL/_MODEL/_API_KEY -> Tier 0 stays
+#               local for routing, reasoning goes remote. ~2 GB RAM. DEFAULT
+#               for any environment that holds provider credentials.
+#   all-remote  additionally point AGENT_TIER0_URL at a remote endpoint and set
+#               AGENT_TIER0_KIND=remote. ~0 GB RAM (CI). Note that GBNF routing
+#               constraints are unavailable there — see ADR-011 Consequences.
+#
+# Credentials are named, never inlined: `api_key_env` is a VARIABLE NAME.
 tier_endpoints:
-  0: "http://127.0.0.1:8091/v1/chat/completions"   # router/guardrail
-  1: "http://127.0.0.1:8092/v1/chat/completions"   # mid reasoning
-  2: "http://127.0.0.1:8093/v1/chat/completions"   # main assistant
-  3: "http://127.0.0.1:8094/v1/chat/completions"   # judge/verifier
+  0:                                                       # router/guardrail
+    url: "${AGENT_TIER0_URL:-http://127.0.0.1:8091/v1/chat/completions}"
+    kind: "${AGENT_TIER0_KIND:-local}"
+    model: "${AGENT_TIER0_MODEL:-}"
+    api_key_env: "${AGENT_TIER0_API_KEY_ENV:-}"
+  1:                                                       # mid reasoning
+    url: "${AGENT_TIER1_URL:-}"
+    kind: remote
+    model: "${AGENT_TIER1_MODEL:-}"
+    api_key_env: "AGENT_TIER1_API_KEY"
+  2:                                                       # main assistant
+    url: "${AGENT_TIER2_URL:-}"
+    kind: remote
+    model: "${AGENT_TIER2_MODEL:-}"
+    api_key_env: "AGENT_TIER2_API_KEY"
+  3:                                                       # judge/verifier
+    url: "${AGENT_TIER3_URL:-}"
+    kind: remote
+    model: "${AGENT_TIER3_MODEL:-}"
+    api_key_env: "AGENT_TIER3_API_KEY"
 
 # Transient-failure retry for tier/router HTTP calls (I-1). A llama-server blip
 # (timeout, connection reset, 429/5xx) is retried with backoff+jitter so it does
@@ -41,10 +70,16 @@ tiers:
     max_delay: 4.0
     jitter: 0.25
 
-# Size caps that protect the small-model context budget (I-4).
+# Size caps that protect the small-model context budget (I-4), plus the
+# resident-memory invariant (ADR-011).
 limits:
   observation_chars: 4000   # per tool result injected into a prompt
   retrieval_chars: 2000     # per BM25 document returned by semantic_retrieval
+  max_local_tiers: 1        # how many tiers may hold a model in RAM at once.
+                            # Raising this is a deliberate act: each additional
+                            # local tier costs its full quantised model size,
+                            # and config load fails rather than let the OOM
+                            # killer discover the overcommit at request time.
 
 router:
   prompt_file: "prompts/router.md"

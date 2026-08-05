@@ -1,24 +1,142 @@
-"""Tier clients — a thin abstraction over llama.cpp (OpenAI-compatible) servers.
+"""Tier clients — a thin abstraction over OpenAI-compatible chat endpoints.
 
 Endpoints are injected from the use-case config so the core never hardcodes a
-topology. A typical multi-tier layout:
+topology. Each tier is described by a :class:`TierEndpoint` that says *where*
+the tier runs (``local`` llama.cpp vs ``remote`` provider), which model to ask
+for, and which environment variable carries its credential — never the
+credential itself.
 
-    Tier 0: small router/guardrail model   (e.g. port 8091)
-    Tier 1: mid reasoning model            (e.g. port 8092)
-    Tier 2: main customer-facing model     (e.g. port 8093)
-    Tier 3: judge/verifier model           (e.g. port 8094)
+Per ADR-011 a deployment picks one of three topology profiles:
+
+    local-only  Tier 0 only; every higher tier resolves down to it.
+    hybrid      Tier 0 local (routing), Tiers 1+ remote.   <- default
+    all-remote  No local tier; for CI and credential-only environments.
+
+Resident memory is the binding constraint on a developer workstation, so the
+number of ``local`` tiers is capped by ``limits.max_local_tiers`` (default 1)
+and enforced at config load. See ADR-011.
 """
 
 from __future__ import annotations
 
+import os
 import random
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Callable, TypeVar
 
 import httpx
 
 T = TypeVar("T")
+
+LOCAL = "local"
+REMOTE = "remote"
+
+
+class MissingCredential(RuntimeError):
+    """A remote tier declares ``api_key_env`` but that variable is unset.
+
+    Raised rather than silently calling an unauthenticated endpoint. Prefer
+    catching this at startup via :meth:`UsecaseConfig.preflight` so a
+    misconfigured deployment fails before it serves a single request.
+    """
+
+
+@dataclass(frozen=True)
+class TierEndpoint:
+    """Where one tier runs and how to reach it (ADR-011).
+
+    A tier is either a ``local`` llama.cpp server — which costs resident RAM
+    but supports GBNF grammars — or a ``remote`` OpenAI-compatible provider,
+    which costs tokens but no memory.
+
+    Credentials are referenced by *variable name*, never by value: a use-case
+    config is committed to git, so it may name ``ANTHROPIC_API_KEY`` but must
+    never contain one.
+
+    Attributes:
+        url: Full chat-completions URL.
+        kind: ``"local"`` or ``"remote"``.
+        model: Model identifier sent in the payload. Optional for local
+            servers (llama.cpp serves whatever it was started with); required
+            by remote providers.
+        api_key_env: Name of the environment variable holding the bearer
+            token. ``None`` for unauthenticated (local) endpoints.
+    """
+
+    url: str
+    kind: str = LOCAL
+    model: str | None = None
+    api_key_env: str | None = None
+
+    @property
+    def is_local(self) -> bool:
+        """True when this tier consumes local resident memory."""
+        return self.kind == LOCAL
+
+    @property
+    def supports_grammar(self) -> bool:
+        """True when the endpoint accepts a llama.cpp ``grammar`` field.
+
+        GBNF is a llama.cpp capability, not part of the OpenAI API. Remote
+        tiers get the weaker ``response_format: json_object`` constraint
+        instead; validation still fails closed downstream (Pydantic +
+        ``allowed_intents``). See ADR-011 "Consequences".
+        """
+        return self.is_local
+
+    @classmethod
+    def from_raw(cls, raw: "str | dict | TierEndpoint") -> "TierEndpoint":
+        """Build an endpoint from config — a bare URL string or a mapping.
+
+        A plain string is treated as a local endpoint so pre-ADR-011 configs
+        keep working unchanged. An already-built :class:`TierEndpoint` passes
+        through, so callers may hand :class:`TierClient` either the raw config
+        block or a config already normalised by :func:`load_usecase`.
+
+        Raises:
+            ValueError: If ``kind`` is not ``local``/``remote``, or a remote
+                endpoint omits ``model``.
+        """
+        if isinstance(raw, TierEndpoint):
+            return raw
+        if isinstance(raw, str):
+            return cls(url=raw, kind=LOCAL)
+
+        kind = str(raw.get("kind", LOCAL)).lower()
+        if kind not in (LOCAL, REMOTE):
+            raise ValueError(f"tier kind must be {LOCAL!r} or {REMOTE!r}, got {kind!r}")
+
+        url = raw.get("url")
+        if not url:
+            raise ValueError("tier endpoint requires a 'url'")
+
+        model = raw.get("model") or None
+        if kind == REMOTE and not model:
+            raise ValueError(f"remote tier {url!r} requires a 'model' (providers reject an unset model)")
+
+        return cls(url=url, kind=kind, model=model, api_key_env=raw.get("api_key_env") or None)
+
+    def auth_headers(self) -> dict[str, str]:
+        """Build request headers, resolving the credential from the environment.
+
+        Raises:
+            MissingCredential: If ``api_key_env`` is set but the variable is
+                absent or empty.
+        """
+        if not self.api_key_env:
+            return {}
+        token = os.environ.get(self.api_key_env, "").strip()
+        if not token:
+            raise MissingCredential(
+                f"tier endpoint {self.url!r} needs environment variable {self.api_key_env!r}, which is unset"
+            )
+        return {"Authorization": f"Bearer {token}"}
+
+    def payload_extras(self) -> dict:
+        """Payload fields the endpoint requires (currently just ``model``)."""
+        return {"model": self.model} if self.model else {}
 
 
 @dataclass(frozen=True)
@@ -125,16 +243,78 @@ def with_retry(
     raise last
 
 
-class TierClient:
-    """Calls local (or remote) LLM servers by tier number.
+def adapt_constraints(payload: dict, endpoint: TierEndpoint) -> dict:
+    """Translate output-constraint fields to the dialect the endpoint speaks.
+
+    ``grammar`` (GBNF) and a bare ``json_schema`` field are llama.cpp
+    extensions. A remote OpenAI-compatible provider expects the constraint
+    under ``response_format`` instead, so it is rewritten here rather than in
+    every caller.
+
+    A provider that rejects ``response_format: json_schema`` should set
+    ``structured_tool_calls: false`` in the use-case config (ADR-007), which
+    stops the planner from requesting a schema at all.
 
     Args:
-        endpoints: Map of tier number to a chat-completions URL.
+        payload: The request body built by the caller (not mutated).
+        endpoint: The tier this request is bound for.
+
+    Returns:
+        A new payload valid for ``endpoint``.
+    """
+    if endpoint.is_local:
+        return payload
+
+    adapted = dict(payload)
+    adapted.pop("grammar", None)  # GBNF is llama.cpp-only
+    schema = adapted.pop("json_schema", None)
+    if schema is not None:
+        adapted["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {"name": "agent_output", "strict": True, "schema": schema},
+        }
+    return adapted
+
+
+class TierClient:
+    """Calls local or remote LLM endpoints by tier number.
+
+    Args:
+        endpoints: Map of tier number to a :class:`TierEndpoint` (a bare URL
+            string is accepted and treated as local).
+        retry: Transient-failure policy; defaults to :class:`RetryPolicy`.
     """
 
-    def __init__(self, endpoints: dict[int, str], retry: RetryPolicy | None = None):
-        self._endpoints = endpoints
+    def __init__(self, endpoints: Mapping[int, TierEndpoint | str], retry: RetryPolicy | None = None):
+        self._endpoints = {tier: TierEndpoint.from_raw(raw) for tier, raw in endpoints.items()}
         self._retry = retry or RetryPolicy()
+
+    @property
+    def endpoints(self) -> dict[int, TierEndpoint]:
+        """The resolved endpoint map, keyed by tier."""
+        return dict(self._endpoints)
+
+    def resolve(self, tier: int) -> tuple[int, TierEndpoint]:
+        """Resolve a requested tier to the highest configured tier at or below it.
+
+        This is what makes the ``local-only`` profile work: a config declaring
+        only tier 0 serves every escalation from tier 0 instead of raising, so
+        the same use-case runs on a workstation and in a full topology
+        without editing the loop (ADR-011).
+
+        Args:
+            tier: The tier the loop asked for.
+
+        Returns:
+            ``(effective_tier, endpoint)``.
+
+        Raises:
+            KeyError: If no tier at or below ``tier`` is configured.
+        """
+        for candidate in range(tier, -1, -1):
+            if candidate in self._endpoints:
+                return candidate, self._endpoints[candidate]
+        raise KeyError(f"no tier configured at or below {tier}; declared tiers: {sorted(self._endpoints)}")
 
     def call(
         self,
@@ -145,33 +325,40 @@ class TierClient:
         timeout: int = 60,
         **kwargs,
     ) -> dict:
-        """Call a specific tier.
+        """Call a specific tier, degrading to the nearest configured one below it.
 
         Args:
-            tier: Tier number (must exist in ``endpoints``).
+            tier: Requested tier number.
             messages: OpenAI-format message list.
             max_tokens: Maximum output tokens.
             temperature: 0.0 = deterministic, >0 = creative.
             timeout: HTTP timeout in seconds.
-            **kwargs: Extra payload fields (e.g. ``grammar``).
+            **kwargs: Extra payload fields (e.g. ``grammar``, ``json_schema``),
+                translated per endpoint dialect by :func:`adapt_constraints`.
 
         Returns:
             The full JSON response from the server.
 
         Raises:
             httpx.HTTPError: If the server does not respond successfully.
-            KeyError: If the tier is not configured.
+            MissingCredential: If the tier needs a credential that is unset.
+            KeyError: If no tier at or below ``tier`` is configured.
         """
-        url = self._endpoints[tier]
-        payload = {
-            "messages": messages,
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            **kwargs,
-        }
+        _, endpoint = self.resolve(tier)
+        headers = endpoint.auth_headers()
+        payload = adapt_constraints(
+            {
+                "messages": messages,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                **endpoint.payload_extras(),
+                **kwargs,
+            },
+            endpoint,
+        )
 
         def _attempt() -> dict:
-            response = httpx.post(url, json=payload, timeout=timeout)
+            response = httpx.post(endpoint.url, json=payload, headers=headers, timeout=timeout)
             response.raise_for_status()
             return response.json()
 
