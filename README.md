@@ -1,3 +1,30 @@
+> # 📦 Archived — this work continues in [ml-platform](https://github.com/DuqueOM/ml-platform)
+>
+> This repository is **complete and relocated**, not abandoned. Its core, its
+> use-case, its eval harness and its twelve ADRs are migrated **with their git
+> history** into the `ml-platform` monorepo, where the agent core becomes
+> `libs/llm-core` and the store assistant becomes `projects/store-assistant`.
+>
+> **Why.** This repository carried an explicit cross-repository contract with
+> the sibling template — two CI configurations, two changelogs, two ADR sets,
+> two coherence systems, and a shared plan living in one repository while
+> governing another. Adding a third participant would have made that
+> coordination cost superlinear. Consolidation removes the coordination rather
+> than optimising it. The reasoning is recorded in full in
+> [ml-platform ADR-002](https://github.com/DuqueOM/ml-platform/blob/main/docs/decisions/ADR-002-absorbing-agent-local.md).
+>
+> The final commits here are worth reading on their own: ADR-011 and ADR-012
+> re-derived the tier topology from measured hardware, and ADR-012 carries a
+> same-day **Correction** section documenting two wrong claims — a budget taken
+> from a single reading of a fluctuating quantity, and a model rejected on a
+> benchmark that had been run under the assumption it was cited to justify.
+> Both are preserved rather than edited away. That episode is the founding
+> evidence for `ml-platform`'s verification rules.
+>
+> Everything below describes this repository as it stood at archival.
+
+---
+
 # agent-local — Reusable Local LLM Agent Platform
 
 A business-agnostic, multi-tier **local LLM agent** core that teams can adopt
