@@ -20,7 +20,7 @@ jobs:
   markdownlint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: DavidAnson/markdownlint-cli2-action@v24.1.0
         with:
           # Generated surfaces mirror canonical bodies; linting them reports

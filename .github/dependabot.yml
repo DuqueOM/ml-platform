@@ -25,6 +25,16 @@ updates:
       time: "06:00"
       timezone: Etc/UTC
     open-pull-requests-limit: 5
+    # Dependabot's default for pip WIDENS a constraint: `~=1.13` becomes
+    # `>=1.13,<3.0`, which silently admits a whole major version. That is the
+    # opposite of what compatible-release pinning is for, and the first three
+    # PRs it opened here all did it — mypy would have been allowed to jump to
+    # 2.x with nobody deciding.
+    #
+    # `increase` raises the floor and PRESERVES the constraint's shape, so a
+    # major bump arrives as a deliberate edit rather than as a range that
+    # already permits it.
+    versioning-strategy: increase
     commit-message:
       prefix: "chore(deps)"
       prefix-development: "chore(deps-dev)"
