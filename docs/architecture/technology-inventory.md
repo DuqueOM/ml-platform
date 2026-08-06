@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**28 of 94 committed technologies implemented (29%)** — plus 17 studied and 10 rejected, which are decisions rather than gaps.
+**28 of 103 committed technologies implemented (27%)** — plus 17 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 |:-:|---|
@@ -158,13 +158,12 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `triton` | demonstrated |  |
 | ⬜ | `onnx` | demonstrated |  |
 
-### ML lifecycle — 0 built, 4 pending
+### ML lifecycle — 0 built, 3 pending
 
 | | Technology | Tier | Note |
 |:-:|---|---|---|
 | ⬜ | `mlflow` | core |  |
 | ⬜ | `dvc` | core |  |
-| ⬜ | `evidently` | core |  |
 | ⬜ | `ray-tune` | demonstrated |  |
 | 🚫 | `katib` | rejected | Ray Tune chosen; Katib requires operating Kubeflow. |
 
@@ -189,6 +188,21 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `prompt-registry` | core |  |
 | ⬜ | `semantic-cache` | core |  |
 | ⬜ | `guardrails` | core |  |
+
+### Drift detection — 0 built, 10 pending
+
+| | Technology | Tier | Note |
+|:-:|---|---|---|
+| ⬜ | `drift-contract` | core | DriftSignal / DriftVerdict / ReferenceWindow. A signal carries the METHOD and the dated reference window that produced it. |
+| ⬜ | `drift-tabular-psi` | core | PSI with quantile bins. The inherited playbook, used where it actually fits. |
+| ⬜ | `drift-tabular-sliced-performance` | core | Concept drift against ground truth. Scheduled by LABEL LATENCY — months for credit risk. |
+| ⬜ | `drift-embedding-space` | core | PSI over raw pixels is noise; the signal lives in embedding space. |
+| ⬜ | `drift-retrieval-quality` | core | Recall on a frozen eval set as the corpus grows. |
+| ⬜ | `drift-provider-fingerprint` | core | The failure most easily missed: a provider silently changing the model behind a version alias. Evals degrade with ZERO code, data or deploy change. |
+| ⬜ | `drift-cost-per-request` | core | A silent provider change often shows in tokens before it shows in quality. |
+| ⬜ | `drift-agent-trajectory` | core | Tool-use mix, escalation rate, policy-gate rejection rate. Consumes the absorbed platform's existing decision telemetry. |
+| ⬜ | `drift-response-required` | core | Every signal declares the ACTION each verdict triggers. A signal with no defined response is an alert nobody acts on. |
+| ⬜ | `evidently` | core | Scoped to the tabular kind by ADR-007; it was never designed for trajectory or retrieval drift. |
 
 ### Edge protection — 0 built, 8 pending
 

@@ -125,6 +125,11 @@ public data catalogues of both target clouds, and carries no licensing friction.
 - OpenTelemetry traces spanning request → feature lookup → inference, exported
   to the LGTM stack.
 - Model card; quality gates as data.
+- **Drift, tabular** ([ADR-007](../decisions/ADR-007-drift-detection-per-project-kind.md)):
+  the shared `DriftSignal` contract in `libs/ml-core`, plus PSI with quantile
+  bins for this project. Ground truth arrives in hours here, so concept drift
+  is measurable almost live — which is *not* true of the later projects, and is
+  why the contract is shared while the detectors are not.
 
 **Acceptance**
 
@@ -279,7 +284,9 @@ plus Folktables/ACS (real distribution shift with sensitive attributes).
 - Temporal leakage test that fails on a naive feature build.
 - Uplift/causal analysis demonstrating why predictive feature importance does
   not answer an intervention question.
-- Sliced performance monitoring; PSI drift with quantile bins.
+- **Drift, concept** — sliced performance against ground truth. Scheduled by
+  LABEL LATENCY, not by convenience: a default matures in months, so a weekly
+  check reports noise for a quarter and then a step change.
 
 **Acceptance**
 

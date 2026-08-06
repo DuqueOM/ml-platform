@@ -122,7 +122,6 @@ categories:
     items:
       - {id: mlflow, tier: core, detect: ["pattern:mlflow|libs/ml-core/pyproject.toml"]}
       - {id: dvc, tier: core, detect: [".dvc", "dvc.yaml"]}
-      - {id: evidently, tier: core, detect: ["pattern:evidently|libs/ml-core/pyproject.toml"]}
       - {id: ray-tune, tier: demonstrated, detect: ["pattern:ray|projects"]}
       - {id: katib, tier: rejected, note: "Ray Tune chosen; Katib requires operating Kubeflow."}
   - name: Deep learning
@@ -141,6 +140,22 @@ categories:
       - {id: prompt-registry, tier: core, detect: ["pattern:prompt_registry|libs/llm-core"]}
       - {id: semantic-cache, tier: core, detect: ["pattern:semantic_cache|libs/llm-core"]}
       - {id: guardrails, tier: core, detect: ["pattern:guardrail|libs/llm-core"]}
+  - name: Drift detection
+    # ADR-007. The inherited machinery was built for ONE project kind — a
+    # tabular service — and the plan carried a single tabular line as if it
+    # were the whole answer. Four kinds, four detectors, one shared contract.
+    items:
+      - {id: drift-contract, tier: core, detect: ["libs/ml-core/src/ml_core/drift"], note: "DriftSignal / DriftVerdict / ReferenceWindow. A signal carries the METHOD and the dated reference window that produced it."}
+      - {id: drift-tabular-psi, tier: core, detect: ["pattern:psi|projects/demand-forecast"], note: "PSI with quantile bins. The inherited playbook, used where it actually fits."}
+      - {id: drift-tabular-sliced-performance, tier: core, detect: ["pattern:sliced|projects/credit-risk"], note: "Concept drift against ground truth. Scheduled by LABEL LATENCY — months for credit risk."}
+      - {id: drift-embedding-space, tier: core, detect: ["pattern:embedding_drift|projects/doc-intelligence"], note: "PSI over raw pixels is noise; the signal lives in embedding space."}
+      - {id: drift-retrieval-quality, tier: core, detect: ["pattern:retrieval_drift|projects/rag-assistant"], note: "Recall on a frozen eval set as the corpus grows."}
+      - {id: drift-provider-fingerprint, tier: core, detect: ["pattern:provider_fingerprint|projects/rag-assistant"], note: "The failure most easily missed: a provider silently changing the model behind a version alias. Evals degrade with ZERO code, data or deploy change."}
+      - {id: drift-cost-per-request, tier: core, detect: ["pattern:cost_drift|projects/rag-assistant"], note: "A silent provider change often shows in tokens before it shows in quality."}
+      - {id: drift-agent-trajectory, tier: core, detect: ["pattern:trajectory_drift|projects/store-assistant"], note: "Tool-use mix, escalation rate, policy-gate rejection rate. Consumes the absorbed platform's existing decision telemetry."}
+      - {id: drift-response-required, tier: core, detect: ["pattern:on_drift|projects"], note: "Every signal declares the ACTION each verdict triggers. A signal with no defined response is an alert nobody acts on."}
+      - {id: evidently, tier: core, detect: ["pattern:evidently|projects/demand-forecast"], note: "Scoped to the tabular kind by ADR-007; it was never designed for trajectory or retrieval drift."}
+
   - name: Edge protection
     # ADR-006. The inherited rule, skill and workflow presupposed a decision
     # this repository had not made — and nothing here tracked whether any edge

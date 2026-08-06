@@ -17,6 +17,7 @@ blast radius, matching the library decomposition rule in
 | [ADR-004](ADR-004-tooling-triage.md) | Tooling triage: Core, Demonstrated, Studied | Accepted |
 | [ADR-005](ADR-005-agentic-governance.md) | Agentic governance: verification, coherence, testing and QA as executable procedure | Accepted |
 | [ADR-006](ADR-006-edge-protection.md) | Cloudflare as the single edge control plane, with a gated origin lock | Accepted |
+| [ADR-007](ADR-007-drift-detection-per-project-kind.md) | Drift is one contract and four detectors, not one implementation | Accepted |
 
 ## Format
 
