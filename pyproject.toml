@@ -5,7 +5,9 @@ description = "Multi-project ML platform monorepo: shared substrate across tabul
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
-dependencies = []
+dependencies = [
+    "pyyaml>=6.0.3",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -61,6 +63,11 @@ fail_under = 90
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.6.1",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["scripts"]
