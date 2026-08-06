@@ -3,7 +3,14 @@ name = "ml-core"
 version = "0.1.0"
 description = "See libs/ml-core/src/ml_core/__init__.py"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    # Compatible-release pinning (~=): numpy 2.x has broken joblib-persisted
+    # models in practice, and a bare >= would let that in silently.
+    "numpy~=2.1",
+    "polars~=1.17",
+    "duckdb~=1.1",
+    "scikit-learn~=1.6",
+]
 
 [build-system]
 requires = ["hatchling"]

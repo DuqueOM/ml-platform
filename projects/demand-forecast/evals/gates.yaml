@@ -1,0 +1,49 @@
+# Quality gates for Demand Forecast — data, not code.
+#
+# Every threshold carries the REASON it holds that value. A threshold
+# inherited from an example is an undocumented decision, and the first time it
+# blocks something legitimate it gets lowered by whoever is blocked, with no
+# record that a decision was reversed.
+#
+# Lowering any threshold here is STOP (AGENTS.md): it needs a recorded reason
+# and a named decision-maker.
+version: 1
+project: demand_forecast
+owner: platform-team
+
+gates:
+  - id: primary_metric
+    # TODO: choose from the cost of error, not from convention. If false
+    # positives and false negatives cost differently, an F1 threshold is
+    # already the wrong instrument.
+    metric: TODO
+    threshold: TODO
+    rationale: TODO — why this number, in business units
+    blocking: true
+
+  - id: no_temporal_leakage
+    # A leakage test that passes on a naive feature build proves nothing;
+    # it must FAIL on one.
+    metric: leakage_test
+    threshold: must_fail_on_naive_build
+    rationale: >
+      Future information reaching a training row inflates validation and
+      collapses in production. The test is the evidence, not the intent.
+    blocking: true
+
+  - id: fairness_disparate_impact
+    metric: disparate_impact_ratio
+    threshold: 0.80
+    rationale: >
+      The four-fifths rule — a recognised external reference rather than a
+      number chosen here.
+    blocking: true
+
+  - id: calibration
+    metric: expected_calibration_error
+    threshold: TODO
+    rationale: >
+      An uncalibrated probability cannot support a cost-based decision
+      threshold, which makes the primary gate meaningless.
+    blocking: true
+

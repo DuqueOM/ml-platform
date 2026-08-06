@@ -59,6 +59,12 @@ disallow_untyped_defs = true
 # as `libs.*` matches nothing and mypy reports it only as a note — a setting
 # that appears active while doing nothing.
 [[tool.mypy.overrides]]
+# Optional deep-learning frameworks: seeded when present, reported as
+# unavailable when not. Neither is a declared dependency.
+module = ["torch.*", "tensorflow.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = ["ml_core.*", "data_contracts.*", "llm_core.*", "serving_core.*"]
 strict = true
 

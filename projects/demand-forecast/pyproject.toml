@@ -1,0 +1,20 @@
+[project]
+name = "demand-forecast"
+version = "0.1.0"
+description = "Demand Forecast"
+requires-python = ">=3.11"
+# Dependencies point DOWN into libs/ only. A project never depends on another
+# project — shared code moves down, never sideways (ADR-001 rule 2), and
+# tests/test_dependency_direction.py enforces it.
+dependencies = [
+    "ml-core",
+    "data-contracts",
+    "serving-core",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/demand_forecast"]

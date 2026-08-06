@@ -1,0 +1,15 @@
+# Written by copier. Do NOT edit by hand.
+#
+# This file is what makes `copier update` possible: it records the generator
+# version and the answers given, so a later run can replay them and merge
+# generator improvements without discarding local changes. A project without
+# it is permanently stuck on the generator version it was born with — a fork
+# with extra steps.
+_commit: 650044f
+_src_path: .
+dataset_key: nyc-tlc
+owner: platform-team
+project_kebab: demand-forecast
+project_kind: tabular
+project_name: Demand Forecast
+project_slug: demand_forecast

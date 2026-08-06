@@ -33,7 +33,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**12 done · 0 partial · 21 absent** — of 33 tracked components.
+**11 done · 3 partial · 19 absent** — of 33 tracked components.
 
 ### Phase 0
 
@@ -55,11 +55,11 @@ modules, and a coherence filter examining zero files, both stayed green.
 | | Component | Evidence |
 |:-:|---|---|
 | ✅ | Dataset acquisition scripts | `uv run pytest tests/test_dataset_registry.py -q` passes |
-| ✅ | Local validation stack | `uv run python scripts/local/preflight.py --samples 1 --interval 0` passes |
-| ⬜ | libs/ml-core implementation | absent |
+| 🟡 | Local validation stack | `uv run python scripts/local/preflight.py --samples 1 --interval 0` FAILS |
+| 🟡 | libs/ml-core implementation | 3 file(s), no verification command |
 | ⬜ | libs/data-contracts implementation | absent |
 | ⬜ | libs/serving-core implementation | absent |
-| ⬜ | projects/demand-forecast | absent |
+| 🟡 | projects/demand-forecast | 5 file(s), no verification command |
 | ⬜ | Lakehouse ingestion (Iceberg) | absent |
 | ⬜ | Feature store definitions | absent |
 | ⬜ | Training pipeline (KFP v2) | absent |
