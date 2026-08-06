@@ -89,7 +89,7 @@ categories:
       - {id: flux, tier: rejected, note: "ArgoCD chosen; two reconcilers fight."}
   - name: Lakehouse
     items:
-      - {id: apache-iceberg, tier: core, detect: ["platform/lakehouse"]}
+      - {id: apache-iceberg, tier: core, detect: ["pattern:pyiceberg|projects/demand-forecast"], note: "Monthly partitioning + time travel, verified against real MinIO: reading snapshot 1 returns January only (77,539 rows) while the table holds both months (151,920)."}
       - {id: biglake, tier: core, detect: ["pattern:biglake|platform/terraform"]}
       - {id: s3-tables, tier: core, detect: ["pattern:s3tables|platform/terraform"]}
       - {id: delta-lake, tier: rejected, note: "Iceberg chosen for vendor-neutral multi-cloud support (ADR-004)."}
@@ -203,6 +203,7 @@ categories:
       - {id: sentry, tier: studied, note: "OTel error events overlap; Sentry revisited if error triage needs its ergonomics."}
   - name: Testing
     items:
+      - {id: integration-tests, tier: core, detect: ["pattern:mark.integration|projects"], note: "Trigger: code crosses a boundary it does not own. Runs against the REAL dependency — a mocked boundary tests the mock."}
       - {id: k6, tier: core, detect: ["projects/*/tests/load.js"]}
       - {id: schemathesis, tier: core, detect: ["pattern:schemathesis|.github/workflows"]}
       - {id: behavioral-testing, tier: core, detect: ["pattern:invariance|projects"]}

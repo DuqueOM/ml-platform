@@ -14,7 +14,7 @@ dev = [
     "pytest~=8.3",
     "pytest-cov~=6.0",
     "mypy~=1.13",
-    "ruff~=0.8",
+    "ruff~=0.16",
 ]
 
 # uv workspace. Internal dependencies resolve from source, so a breaking change
@@ -74,8 +74,11 @@ testpaths = ["tests", "libs", "projects"]
 norecursedirs = ["templates"]
 # Local-stack tests need a running kind cluster, so they are opt-in: the
 # default suite must stay runnable on a machine with no Docker.
-addopts = "-q -m 'not local'"
-markers = ["local: requires the local validation stack (make local-up)"]
+addopts = "-q -m 'not local and not integration'"
+markers = [
+    "local: requires the local validation stack (make local-up)",
+    "integration: crosses a boundary this code does not own; needs the real dependency",
+]
 
 [tool.coverage.report]
 fail_under = 90
