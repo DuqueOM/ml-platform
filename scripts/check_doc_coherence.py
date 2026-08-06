@@ -17,6 +17,7 @@ Exit code 1 on any failure. Run before declaring a round complete.
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from datetime import date, datetime
 from pathlib import Path
@@ -30,6 +31,11 @@ AGENTIC = REPO_ROOT / "agentic"
 
 # How stale the independent-audit marker may become before it is a finding.
 AUDIT_MAX_AGE_DAYS = 90
+
+# Commits a repository may accumulate before the ABSENCE of an audit is itself
+# a finding. Ten is the template's cadence, and it is short on purpose: an
+# audit deferred until "there is enough to audit" is one deferred forever.
+AUDIT_GRACE_COMMITS = 10
 
 _ADR_FILE = re.compile(r"^ADR-(\d{3})-[a-z0-9-]+\.md$")
 _ADR_REF = re.compile(r"(?<!template-)\bADR-(\d{3})")
@@ -239,7 +245,21 @@ def check_audit_freshness() -> None:
         _read(REPO_ROOT / "AGENTS.md") + _read(PLAN),
     )
     if not marker:
-        ok("C7", "no independent audit recorded yet (expected before the first phase completes)")
+        # This previously returned ok() unconditionally, which made C7 a check
+        # that PASSED BECAUSE THE THING WAS ABSENT — anti-pattern P-09, and a
+        # gate designed never to fail. Absence is tolerable only while the
+        # repository has no history worth auditing.
+        commits = _commit_count()
+        if commits > AUDIT_GRACE_COMMITS:
+            fail(
+                "C7",
+                f"no independent audit recorded after {commits} commits "
+                f"(grace: {AUDIT_GRACE_COMMITS}). ADR-005 rule B requires one in a "
+                "SEPARATE session — self-review cannot find a fact its author believed. "
+                "Run QA-4, then add 'Last independent audit: YYYY-MM-DD' to AGENTS.md.",
+            )
+        else:
+            ok("C7", f"no audit yet, {commits}/{AUDIT_GRACE_COMMITS} commits into the grace period")
         return
 
     audited = datetime.strptime(marker.group(1), "%Y-%m-%d").date()
@@ -250,6 +270,44 @@ def check_audit_freshness() -> None:
         ok("C7", f"last independent audit {age} days ago")
 
 
+def _commit_count() -> int:
+    result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "rev-list", "--count", "HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    return int(result.stdout.strip()) if result.returncode == 0 else 0
+
+
+def check_changelog_covers_the_commit_range() -> None:
+    """C8 — [Unreleased] reflects the commits since the last tag.
+
+    This repository reached eighteen commits with NO CHANGELOG at all, while
+    shipping a release workflow that requires one per version and would have
+    failed on the first tag. Nothing reported it because nothing was looking.
+
+    The check is deliberately coarse: it cannot know whether an entry is
+    accurate, only whether the section exists and is not empty while commits
+    have accumulated. Accuracy is QA-5's judgement step.
+    """
+    changelog = REPO_ROOT / "CHANGELOG.md"
+    if not changelog.is_file():
+        fail("C8", "CHANGELOG.md is absent; release-on-tag.yml requires a section per version")
+        return
+
+    text = changelog.read_text(encoding="utf-8")
+    if "## [Unreleased]" not in text:
+        fail("C8", "CHANGELOG.md has no [Unreleased] section to accumulate into")
+        return
+
+    section = text.split("## [Unreleased]", 1)[1].split("\n## ", 1)[0]
+    if len(section.strip()) < 80:
+        fail("C8", "[Unreleased] is effectively empty while commits have accumulated")
+        return
+
+    ok("C8", f"CHANGELOG [Unreleased] present, {_commit_count()} commits on this branch")
+
+
 def main() -> int:
     adrs = _adr_files()
     check_adr_index(adrs)
@@ -258,6 +316,7 @@ def main() -> int:
     check_gate_traceability()
     check_agentic_surface()
     check_language_and_privacy()
+    check_changelog_covers_the_commit_range()
     check_audit_freshness()
 
     for note in notes:

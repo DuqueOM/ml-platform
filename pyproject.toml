@@ -15,6 +15,9 @@ dev = [
     "pytest-cov~=6.0",
     "mypy~=1.13",
     "ruff~=0.16",
+    # Without stubs, every `import yaml` in scripts/ is an error under the
+    # widened type gate — and silently untyped under the narrow one.
+    "types-PyYAML~=6.0",
 ]
 
 # uv workspace. Internal dependencies resolve from source, so a breaking change
@@ -66,7 +69,19 @@ module = ["torch.*", "tensorflow.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["ml_core.*", "data_contracts.*", "llm_core.*", "serving_core.*"]
+# Third-party packages that ship no type information. Listed explicitly rather
+# than set globally, so a NEW untyped import has to be added here deliberately
+# instead of being absorbed in silence.
+module = ["pyarrow.*", "pyiceberg.*", "duckdb.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# feature_defs was missing from this list while every sibling was present.
+# It owns the point-in-time join and the leakage detector — the code where a
+# type error is most likely to be a correctness error — and it was the one
+# library checked loosely. Absence from an allow-list is invisible; nothing
+# reports "you forgot one".
+module = ["ml_core.*", "data_contracts.*", "feature_defs.*", "llm_core.*", "serving_core.*"]
 strict = true
 
 [tool.pytest.ini_options]

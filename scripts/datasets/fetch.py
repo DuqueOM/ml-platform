@@ -36,6 +36,7 @@ import urllib.error
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from registry import REGISTRY, Access, Dataset, Redistribution, get
@@ -137,7 +138,7 @@ def fetch(dataset: Dataset, dry_run: bool) -> int:
         return 0
 
     throttle = SEC_MIN_INTERVAL_S if any("sec.gov" in u for u in dataset.urls) else 0.0
-    entries: list[dict] = []
+    entries: list[dict[str, Any]] = []
     for url in dataset.urls:
         name = url.rsplit("/", 1)[-1]
         target = target_dir / name

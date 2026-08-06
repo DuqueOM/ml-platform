@@ -27,6 +27,7 @@ import argparse
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -59,7 +60,7 @@ def ok(check: str, msg: str) -> None:
     notes.append(f"[{check}] {msg}")
 
 
-def _front_matter(text: str) -> dict | None:
+def _front_matter(text: str) -> dict[str, Any] | None:
     """Parse leading YAML front-matter, or None when absent/invalid."""
     if not text.startswith("---"):
         return None
@@ -88,7 +89,7 @@ def _modes_in(text: str, modes: list[str]) -> set[str]:
     return found
 
 
-def collect_canonical(manifest: dict) -> dict[str, dict[str, Path]]:
+def collect_canonical(manifest: dict[str, Any]) -> dict[str, dict[str, Path]]:
     out: dict[str, dict[str, Path]] = {}
     for kind, store in manifest["stores"].items():
         root = REPO_ROOT / store["path"]
@@ -100,7 +101,7 @@ def collect_canonical(manifest: dict) -> dict[str, dict[str, Path]]:
     return out
 
 
-def check_parity(manifest: dict, canonical: dict[str, dict[str, Path]]) -> None:
+def check_parity(manifest: dict[str, Any], canonical: dict[str, dict[str, Path]]) -> None:
     """V1 — every canonical body reaches every surface."""
     for surface, cfg in manifest["surfaces"].items():
         for kind, entries in canonical.items():
@@ -137,7 +138,7 @@ def check_skill_front_matter(canonical: dict[str, dict[str, Path]], modes: list[
     ok("V2", f"{len(canonical.get('skills', {}))} skills carry front-matter and a declared mode")
 
 
-def check_no_de_escalation(manifest: dict, canonical: dict[str, dict[str, Path]], modes: list[str]) -> None:
+def check_no_de_escalation(manifest: dict[str, Any], canonical: dict[str, dict[str, Path]], modes: list[str]) -> None:
     """V3 — a surface may never weaken a mode its canonical body asserts.
 
     The dangerous direction is one-way: a mirror that drops a STOP has removed
@@ -160,7 +161,7 @@ def check_no_de_escalation(manifest: dict, canonical: dict[str, dict[str, Path]]
     ok("V3", "no surface de-escalates a mode")
 
 
-def check_mirror_fidelity(manifest: dict, canonical: dict[str, dict[str, Path]]) -> None:
+def check_mirror_fidelity(manifest: dict[str, Any], canonical: dict[str, dict[str, Path]]) -> None:
     """V4 — a mirror is byte-identical to its source, modulo the header."""
     for surface, cfg in manifest["surfaces"].items():
         if cfg["mode"] != "mirror":
@@ -179,7 +180,7 @@ def check_mirror_fidelity(manifest: dict, canonical: dict[str, dict[str, Path]])
             ok("V4", f"{surface}: all mirrored bodies match canonical")
 
 
-def check_pointer_purity(manifest: dict) -> None:
+def check_pointer_purity(manifest: dict[str, Any]) -> None:
     """V5 — a pointer surface restates no policy.
 
     A pointer that grows policy text has become a second source of truth, and
@@ -202,7 +203,7 @@ def check_pointer_purity(manifest: dict) -> None:
     ok("V5", "pointer surfaces contain no policy text")
 
 
-def check_rule_authority(canonical: dict[str, dict[str, Path]], manifest: dict) -> None:
+def check_rule_authority(canonical: dict[str, dict[str, Path]], manifest: dict[str, Any]) -> None:
     """V6 — a rule names its authority, and the authority exists."""
     known = {v["path"] for v in manifest["canonical"].values()}
     for name, path in canonical.get("rules", {}).items():

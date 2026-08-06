@@ -56,7 +56,11 @@ jobs:
           uv run ruff format --check .
 
       - name: Types
-        run: uv run mypy libs/
+        # scripts/ is in scope deliberately. It holds the gates that enforce
+        # every other claim in this repository, and it was the code the type
+        # gate did NOT check — 26 errors sat there while the step reported
+        # green. A gate scoped away from the gates is not a gate.
+        run: uv run mypy libs/ scripts/ projects/demand-forecast/src/
 
       - name: Agentic surface is current
         # --check, never a write: a commit must not be able to carry a
