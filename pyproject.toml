@@ -28,6 +28,7 @@ ml-core = { workspace = true }
 data-contracts = { workspace = true }
 llm-core = { workspace = true }
 serving-core = { workspace = true }
+feature-defs = { workspace = true }
 
 [tool.ruff]
 line-length = 120
