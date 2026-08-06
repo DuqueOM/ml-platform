@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**22 of 86 committed technologies implemented (25%)** — plus 17 studied and 10 rejected, which are decisions rather than gaps.
+**28 of 86 committed technologies implemented (32%)** — plus 17 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 |:-:|---|
@@ -54,14 +54,14 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | 📓 | `docker-compose` | studied | kind used instead: the local stack must exercise Kubernetes manifests, which compose cannot. |
 | 📓 | `devcontainers` | studied |  |
 
-### CI/CD — 1 built, 1 pending
+### CI/CD — 2 built, 0 pending
 
 | | Technology | Tier | Note |
 |:-:|---|---|---|
 | ✅ | `github-actions` | core | |
 | 📓 | `codecov` | studied |  |
 | 📓 | `release-automation` | studied |  |
-| ⬜ | `dependabot` | core |  |
+| ✅ | `dependabot` | core | |
 
 ### Security and supply chain — 1 built, 9 pending
 
@@ -113,12 +113,12 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `s3-tables` | core |  |
 | 🚫 | `delta-lake` | rejected | Iceberg chosen for vendor-neutral multi-cloud support (ADR-004). |
 
-### Data engineering — 0 built, 7 pending
+### Data engineering — 2 built, 5 pending
 
 | | Technology | Tier | Note |
 |:-:|---|---|---|
-| ⬜ | `duckdb` | core |  |
-| ⬜ | `polars` | core |  |
+| ✅ | `duckdb` | core | |
+| ✅ | `polars` | core | |
 | ⬜ | `dbt` | demonstrated |  |
 | ⬜ | `elementary` | demonstrated |  |
 | ⬜ | `spark` | demonstrated | Historical backfill only; the DuckDB crossover threshold is measured, not assumed. |
@@ -141,11 +141,11 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `bigquery` | core |  |
 | ⬜ | `athena` | core |  |
 
-### Data quality — 0 built, 3 pending
+### Data quality — 1 built, 2 pending
 
 | | Technology | Tier | Note |
 |:-:|---|---|---|
-| ⬜ | `pandera` | core |  |
+| ✅ | `pandera` | core | |
 | ⬜ | `great-expectations` | demonstrated |  |
 | ⬜ | `gx-data-docs` | demonstrated |  |
 
@@ -203,14 +203,14 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `mimir` | core |  |
 | 📓 | `sentry` | studied | OTel error events overlap; Sentry revisited if error triage needs its ergonomics. |
 
-### Testing — 0 built, 4 pending
+### Testing — 1 built, 3 pending
 
 | | Technology | Tier | Note |
 |:-:|---|---|---|
 | ⬜ | `k6` | core |  |
 | ⬜ | `schemathesis` | core |  |
 | ⬜ | `behavioral-testing` | core |  |
-| ⬜ | `contract-testing` | core |  |
+| ✅ | `contract-testing` | core | |
 
 ### Monorepo tooling — 3 built, 1 pending
 
@@ -222,14 +222,14 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ✅ | `copier-project-generator` | core | |
 | 📓 | `pants` | studied | Correct at a build-time threshold not yet reached (ADR-001 revisit trigger). |
 
-### Governance — 2 built, 4 pending
+### Governance — 3 built, 3 pending
 
 | | Technology | Tier | Note |
 |:-:|---|---|---|
 | ⬜ | `eu-ai-act` | core |  |
 | ⬜ | `iso-42001` | core |  |
 | ⬜ | `nist-ai-rmf` | core |  |
-| ⬜ | `model-cards` | core |  |
+| ✅ | `model-cards` | core | |
 | ✅ | `adrs` | core | |
 | ✅ | `quality-gates` | core | |
 

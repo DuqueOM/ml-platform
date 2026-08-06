@@ -1,0 +1,85 @@
+# Dependabot — automated dependency updates.
+#
+# Declared Core in docs/architecture/technology-inventory.yaml, which per
+# ADR-004 means the critical path depends on it. It was committed to without
+# being sequenced into any phase of the technical plan — anti-pattern P-14,
+# "nothing left hanging". Implementing it is cheaper than scheduling it.
+#
+# Grouping is the design decision here. Ungrouped, Dependabot opens a pull
+# request per package: on a monorepo that is dozens a week, each triggering the
+# full gate suite, and the predictable outcome is that nobody reads them. A PR
+# nobody reads is worse than no PR — it looks like the dependency surface is
+# being maintained.
+version: 2
+
+updates:
+  # --- Python, across every workspace member -------------------------------
+  # uv workspaces resolve to one lockfile at the root, so a single ecosystem
+  # entry covers libs/ and projects/ together. Splitting per member would
+  # produce PRs that cannot be merged independently anyway.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    labels: [dependencies, python]
+    groups:
+      # Dev tooling moves fast and breaks nothing in production. One PR.
+      dev-tooling:
+        patterns: ["ruff", "mypy", "pytest*", "pre-commit", "types-*", "copier"]
+        update-types: [minor, patch]
+      # The ML stack is where a silent upgrade actually hurts: numpy 2.x has
+      # broken joblib-persisted models in practice. Grouped so the blast
+      # radius is reviewed together, and MAJORS are deliberately excluded from
+      # the group so each arrives as its own PR with its own scrutiny.
+      ml-stack:
+        patterns: ["numpy", "scikit-learn", "polars", "duckdb", "pandera", "pyarrow"]
+        update-types: [minor, patch]
+      # Everything else, patch-only. A patch that breaks something is a
+      # supplier defect worth seeing in isolation.
+      remaining-patches:
+        patterns: ["*"]
+        update-types: [patch]
+
+  # --- GitHub Actions ------------------------------------------------------
+  # Actions are pinned; without this the pins rot and the workflow silently
+  # runs a version nobody chose (anti-pattern Q-01 in the sibling template).
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "ci(deps)"
+    labels: [dependencies, github-actions]
+    groups:
+      actions:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  # --- Container images in the local validation stack ----------------------
+  # Postgres, MinIO, the OTel collector, Jaeger, Prometheus and Grafana are
+  # pinned by tag in platform/local/manifests/. An unpinned or stale image is
+  # a supply-chain surface, and the local stack is where an upgrade should
+  # break first — at zero cost — rather than in a cloud window.
+  - package-ecosystem: docker
+    directory: /platform/local/manifests
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(images)"
+    labels: [dependencies, containers]
+    groups:
+      local-stack-images:
+        patterns: ["*"]
+        update-types: [minor, patch]
