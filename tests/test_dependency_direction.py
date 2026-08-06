@@ -35,7 +35,20 @@ LIBS_ROOT = REPO_ROOT / "libs"
 PROJECTS_ROOT = REPO_ROOT / "projects"
 
 # Directories that are never part of the import graph.
-_SKIP_DIRS = {".venv", "__pycache__", ".git", "node_modules", ".mypy_cache", ".pytest_cache", "build", "dist"}
+# "templates" holds un-rendered generator source whose Jinja tokens are not
+# parseable Python. It is verified by rendering (test_project_generator.py),
+# which is a stronger check than parsing it in place would be.
+_SKIP_DIRS = {
+    ".venv",
+    "__pycache__",
+    ".git",
+    "node_modules",
+    ".mypy_cache",
+    ".pytest_cache",
+    "build",
+    "dist",
+    "templates",
+}
 
 
 def _iter_python_files(root: Path) -> list[Path]:

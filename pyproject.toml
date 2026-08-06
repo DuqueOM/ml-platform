@@ -32,6 +32,9 @@ serving-core = { workspace = true }
 [tool.ruff]
 line-length = 120
 target-version = "py311"
+# Un-rendered generator source: Jinja tokens are not valid Python.
+# Verified by rendering it, not by linting it in place.
+extend-exclude = ["templates/project"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "PT", "SIM", "RUF"]
@@ -61,6 +64,7 @@ strict = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "libs", "projects"]
+norecursedirs = ["templates"]
 # Local-stack tests need a running kind cluster, so they are opt-in: the
 # default suite must stay runnable on a machine with no Docker.
 addopts = "-q -m 'not local'"

@@ -1,0 +1,22 @@
+[project]
+name = "{@ project_kebab @}"
+version = "0.1.0"
+description = "{@ project_name @}"
+requires-python = ">=3.11"
+# Dependencies point DOWN into libs/ only. A project never depends on another
+# project — shared code moves down, never sideways (ADR-001 rule 2), and
+# tests/test_dependency_direction.py enforces it.
+dependencies = [
+    "ml-core",
+    "data-contracts",
+{% if project_kind in ["tabular", "deep-learning"] %}    "serving-core",
+{% endif %}{% if project_kind in ["llm", "agent"] %}    "llm-core",
+    "serving-core",
+{% endif %}]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/{@ project_slug @}"]
