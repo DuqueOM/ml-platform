@@ -41,7 +41,7 @@ uv run python scripts/check_doc_coherence.py     # check C4
 Then check what it cannot:
 
 | Direction | Finding when it fails |
-|---|---|
+| --- | --- |
 | README claim → gate row | An unenforced claim. Either remove it or gate it |
 | Gate row → command exists and runs | A row referencing a command nobody can run is worse than no row: it looks like coverage |
 | Gate → actually runs in CI | A local-only gate is a suggestion |

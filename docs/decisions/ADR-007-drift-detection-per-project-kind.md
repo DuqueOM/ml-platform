@@ -21,7 +21,7 @@ effort.
 ### 1. The word means different things
 
 | Kind | What actually drifts | Why PSI does not apply |
-|---|---|---|
+| --- | --- | --- |
 | Tabular | Input feature distribution; the input→label relationship | — it is the right tool here |
 | Deep learning (documents) | Layout, scan quality, template changes | PSI over raw pixels is noise. The signal lives in embedding space |
 | LLM / RAG | Retrieval quality as the corpus grows; **the provider silently changing the model behind a version alias**; response and cost distribution | There is no input feature distribution to bin |
@@ -40,7 +40,7 @@ differs so much between kinds that the *same* detector cannot be scheduled, let
 alone interpreted:
 
 | Kind | Ground truth | Consequence |
-|---|---|---|
+| --- | --- | --- |
 | `demand-forecast` | Hours (the trip either happened) | Concept drift is measurable almost live |
 | `credit-risk` | **Months** (a default matures) | Concept drift is measurable long after the model that caused it was replaced |
 | `rag-assistant` | Only from a curated eval set | Concept drift is *re-measured*, never *observed* |
@@ -138,7 +138,7 @@ project declares that explicitly rather than running a check that cannot work.
 ## Alternatives considered
 
 | Alternative | Why rejected |
-|---|---|
+| --- | --- |
 | One shared implementation, PSI everywhere | Correct for tabular, noise for embeddings, meaningless for trajectories, and blind to provider drift |
 | Per-project detectors with no shared contract | `agent-ops` would need to know each project's format; the platform claim (criterion C1) weakens with every project added |
 | Evidently for everything | Excellent for tabular, not designed for trajectory or retrieval drift. Using it everywhere would mean forcing the other kinds into a tabular shape |

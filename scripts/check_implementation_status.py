@@ -193,7 +193,7 @@ def render(rows: list[tuple[Component, str, str]]) -> str:
         "",
     ]
     for phase in sorted({c.phase for c, _, _ in rows}):
-        lines += [f"### Phase {phase}", "", "| | Component | Evidence |", "|:-:|---|---|"]
+        lines += [f"### Phase {phase}", "", "| | Component | Evidence |", "| :-: | --- | --- |"]
         for component, marker, evidence in rows:
             if component.phase == phase:
                 lines.append(f"| {marker} | {component.name} | {evidence} |")

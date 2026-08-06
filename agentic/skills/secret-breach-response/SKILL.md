@@ -32,14 +32,17 @@ mode: STOP   # Halt. Requires explicit, recorded human authorisation. Canonical:
 ## 🚨 STOP EVERYTHING FIRST
 
 If you are the agent:
+
 1. **Halt any running pipeline step** (CI deploy, K8s apply, image push)
 2. **Emit**:
-   ```
+
+   ```text
    [AGENT MODE: STOP]
    Operation: Secret breach response
    Finding: <secret-type> exposed in <location>
    Waiting for: Human confirmation to proceed with rotation
    ```
+
 3. **Do NOT attempt to rewrite git history or rotate credentials without explicit
    authorization.** Silent rotation destroys the audit trail.
 
@@ -48,7 +51,7 @@ If you are the agent:
 Classify the exposed credential:
 
 | Type | Example pattern | Rotation urgency |
-|------|----------------|------------------|
+| ------ | ---------------- | ------------------ |
 | AWS access key | `AKIA[0-9A-Z]{16}` | **P1** — minutes |
 | GCP service account JSON | `"private_key": "-----BEGIN PRIVATE KEY-----` | **P1** — minutes |
 | GitHub PAT | `ghp_[A-Za-z0-9]{36}` | **P1** — minutes |
@@ -58,6 +61,7 @@ Classify the exposed credential:
 | Slack/webhook URL | `hooks.slack.com/services/...` | **P3** — 24h |
 
 Determine exposure scope:
+
 - [ ] Where was the leak? (git log, CI logs, image layer, Slack message)
 - [ ] How long has it been exposed? (git commit timestamp, log retention)
 - [ ] Was it pushed to a public remote? (`git log origin/main`)
@@ -70,6 +74,7 @@ Output classification to `incidents/secret-breach-<YYYY-MM-DD-HHMM>.md`.
 **This phase requires human confirmation.** Agent proposes, human executes.
 
 ### AWS
+
 ```bash
 # Delete the access key at the root of the tree
 aws iam delete-access-key --access-key-id <AKIA...> --user-name <username>
@@ -78,6 +83,7 @@ aws iam update-access-key --access-key-id <AKIA...> --status Inactive --user-nam
 ```
 
 ### GCP
+
 ```bash
 # Delete the service account key
 gcloud iam service-accounts keys delete <KEY_ID> \
@@ -85,10 +91,12 @@ gcloud iam service-accounts keys delete <KEY_ID> \
 ```
 
 ### GitHub
-1. https://github.com/settings/tokens → revoke the PAT
+
+1. <https://github.com/settings/tokens> → revoke the PAT
 2. If it was a fine-grained PAT, check which repos had access
 
 ### Database/internal
+
 - Rotate per the service's own runbook
 - Never use the same password for the replacement — generate fresh
 
@@ -97,6 +105,7 @@ gcloud iam service-accounts keys delete <KEY_ID> \
 Determine what the leaked credential could have accessed during its exposure:
 
 ### AWS
+
 ```bash
 # CloudTrail lookup for this access key
 aws cloudtrail lookup-events \
@@ -105,6 +114,7 @@ aws cloudtrail lookup-events \
 ```
 
 ### GCP
+
 ```bash
 # Cloud Audit Logs
 gcloud logging read 'protoPayload.authenticationInfo.serviceAccountKeyName="<key-id>"' \
@@ -112,6 +122,7 @@ gcloud logging read 'protoPayload.authenticationInfo.serviceAccountKeyName="<key
 ```
 
 ### GitHub
+
 - Repository audit log: Settings → Audit log
 - Filter by the PAT user
 
@@ -122,6 +133,7 @@ Save to `incidents/secret-breach-<timestamp>/access-audit.md`.
 Generate replacement via the appropriate secret manager (D-18):
 
 ### AWS
+
 ```bash
 # Update the secret in Secrets Manager (not create a new one — preserves ARN)
 aws secretsmanager update-secret \
@@ -130,6 +142,7 @@ aws secretsmanager update-secret \
 ```
 
 ### GCP
+
 ```bash
 # Add a new version to the existing secret (old version disabled)
 echo -n "<new-value>" | gcloud secrets versions add <secret-name> --data-file=-
@@ -137,6 +150,7 @@ gcloud secrets versions disable <old-version> --secret=<secret-name>
 ```
 
 Restart services that consume the secret (they pick up new version on next pod start):
+
 ```bash
 kubectl rollout restart deployment/<service> -n <namespace>
 ```
@@ -169,6 +183,7 @@ scraped by bots within seconds. Rotation (phase 4) is the only mitigation.
 ## Phase 7 — Post-Mortem (AUTO, async)
 
 Within 48h, open a post-mortem issue with:
+
 - **Timeline**: detection, revocation, rotation, notification
 - **Root cause**: why did the secret reach the code / log / artifact?
 - **Controls that failed**: why didn't gitleaks / pre-commit / CI catch it?

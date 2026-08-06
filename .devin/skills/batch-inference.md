@@ -55,7 +55,7 @@ skew AND training/batch skew — the classic silent-ML-failure mode.
 
 ## Architecture
 
-```
+```text
 templates/service/
 ├── app/                 # real-time API (unchanged)
 ├── src/{service}/
@@ -74,6 +74,7 @@ propagates to both.
 ### Step 1 — Confirm intent (AUTO, 30s)
 
 Agent confirms:
+
 - service name + code path exists
 - business cadence (hourly / daily / weekly / monthly)
 - input source (BigQuery table, S3 parquet, GCS folder)
@@ -92,9 +93,9 @@ The scaffolded module MUST:
 5. **Also** call `log_prediction()` for each row — the closed-loop
    flywheel works for batch too (template-ADR-006, D-20/D-22)
 6. Emit metrics:
-   * `{service}_batch_rows_processed_total`
-   * `{service}_batch_duration_seconds`
-   * `{service}_batch_errors_total`
+   - `{service}_batch_rows_processed_total`
+   - `{service}_batch_duration_seconds`
+   - `{service}_batch_errors_total`
 
 ```python
 # src/{service}/batch.py (excerpt)
@@ -173,6 +174,7 @@ kubectl logs job/{service}-batch-dryrun-... --follow
 ```
 
 Verify:
+
 - Row count matches expected
 - Schema validation passed
 - Scores distribution matches a reference sample
@@ -182,7 +184,7 @@ Verify:
 
 Enabling the CronJob in production is a STOP operation:
 
-```
+```text
 [AGENT MODE: STOP]
 Operation: Enable {service}-batch schedule in prod
 Rationale: Will start scoring {N} entities nightly at 02:00 UTC. Output

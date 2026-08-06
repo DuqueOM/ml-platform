@@ -52,7 +52,7 @@ Phase 0 deliverable while it did not exist. Nothing reported it, because a plan
 states intent and nothing was checking intent against reality.
 
 | Marker | Meaning |
-|---|---|
+| --- | --- |
 | ⬜ | Not started |
 | 🟡 | In progress |
 | ✅ | Acceptance criteria pass |
@@ -66,7 +66,7 @@ Make the monorepo claim enforceable before there is anything to enforce it on.
 This phase produces no ML capability and is the shortest path to preventing the
 failure modes ADR-001 and ADR-005 describe.
 
-**Deliverables**
+### Deliverables
 
 - uv workspace with `libs/*` and `projects/*` members; one lockfile.
 - `tests/test_dependency_direction.py` — parses the import graph; fails on a
@@ -78,7 +78,7 @@ failure modes ADR-001 and ADR-005 describe.
 - Documentation coherence gate wired into CI.
 - Ruff, mypy, pre-commit, secret scanning.
 
-**Acceptance**
+### Acceptance
 
 ```bash
 uv sync && uv run pytest tests/ -q
@@ -107,7 +107,7 @@ Chosen because it has genuine temporal drift (no synthetic injection needed), is
 parquet-native and monthly-partitioned so backfills are real, exists in the
 public data catalogues of both target clouds, and carries no licensing friction.
 
-**Deliverables**
+### Deliverables
 
 - Ingestion into Iceberg with monthly partitions; historical backfill via
   serverless Spark, incremental via DuckDB/Polars, with the crossover threshold
@@ -131,7 +131,7 @@ public data catalogues of both target clouds, and carries no licensing friction.
   is measurable almost live — which is *not* true of the later projects, and is
   why the contract is shared while the detectors are not.
 
-**Acceptance**
+### Acceptance
 
 ```bash
 uv run pytest projects/demand-forecast -q            # incl. point-in-time test
@@ -156,7 +156,7 @@ What local validation can prove — and therefore what cloud spend must not be
 used to discover:
 
 | Property | Provable locally |
-|---|---|
+| --- | --- |
 | The service starts, serves, and shuts down gracefully | yes |
 | Point-in-time feature retrieval is correct | yes |
 | The training pipeline runs end to end | yes |
@@ -166,7 +166,7 @@ used to discover:
 | Quality gates fail on known-bad input | yes |
 | Managed-service behaviour, IAM federation, real latency, real cost | **no** — these are what the cloud window is *for* |
 
-**Deliverables**
+### Deliverables
 
 - `platform/local/`: a `kind` cluster definition with the full stack —
   service, Postgres with pgvector, object storage, observability — brought up
@@ -176,7 +176,7 @@ used to discover:
   cannot cover, so the cloud window has a defined purpose rather than being a
   repeat.
 
-**Acceptance**
+### Acceptance
 
 ```bash
 make local-up            # cluster + stack, from nothing
@@ -194,7 +194,7 @@ has not been validated; it has been remembered.
 
 ## Phase 2 — Multi-cloud parity and GitOps ⬜
 
-**Deliverables**
+### Deliverables
 
 - The Phase 1 project deploys to both GCP and AWS from one definition;
   differences isolated to an adapter layer whose surface is measured and
@@ -212,7 +212,7 @@ has not been validated; it has been remembered.
   the endpoint proves what is true.
 - Ephemeral per-PR environments with a database branch.
 
-**Acceptance**
+### Acceptance
 
 ```bash
 terraform -chdir=platform/terraform/gcp plan -detailed-exitcode
@@ -244,7 +244,7 @@ teardown is proof, and a shared project can never produce that proof.
 
 ## Phase 3 — LLM and agent track ⬜
 
-**Deliverables**
+### Deliverables
 
 - `agent-local` migrated with history per [ADR-002](../decisions/ADR-002-absorbing-agent-local.md);
   ADR renumbering map written.
@@ -254,7 +254,7 @@ teardown is proof, and a shared project can never produce that proof.
 - Evaluation gates that **block merge** — the LLM-domain equivalent of the
   tabular quality gates.
 
-**Acceptance**
+### Acceptance
 
 ```bash
 uv run pytest libs/llm-core projects/store-assistant projects/rag-assistant -q
@@ -275,7 +275,7 @@ The phase that answers "does this person model, or only deploy?"
 **Project**: `credit-risk` — Home Credit (multi-table, point-in-time joins)
 plus Folktables/ACS (real distribution shift with sensitive attributes).
 
-**Deliverables**
+### Deliverables
 
 - Probability calibration with reliability curves; threshold selected by
   **expected cost of error**, not F1.
@@ -288,7 +288,7 @@ plus Folktables/ACS (real distribution shift with sensitive attributes).
   LABEL LATENCY, not by convenience: a default matures in months, so a weekly
   check reports noise for a quarter and then a step change.
 
-**Acceptance**
+### Acceptance
 
 ```bash
 uv run pytest projects/credit-risk -q               # incl. leakage + fairness
@@ -306,14 +306,14 @@ Hardware is available and currently unclaimed: an RTX 5070 Laptop with roughly
 7.6 GiB of usable VRAM, measured by repeated sampling. That is sufficient for
 LoRA fine-tuning of a small document model and for the quantisation work below.
 
-**Deliverables**
+### Deliverables
 
 - LoRA fine-tune of a document model.
 - ONNX export, quantisation, Triton serving.
 - **Measured** before/after on latency, throughput, memory and cost per 1k
   inferences. The optimisation is the deliverable; the model is the vehicle.
 
-**Acceptance**
+### Acceptance
 
 ```bash
 uv run pytest projects/doc-intelligence -q
@@ -328,7 +328,7 @@ this class of error.
 
 ## Phase 6 — Governance, compliance and closed loop ⬜
 
-**Deliverables**
+### Deliverables
 
 - SLSA Level 3 provenance with in-toto attestations.
 - EU AI Act risk classification, ISO/IEC 42001 and NIST AI RMF mapping, human
@@ -340,7 +340,7 @@ this class of error.
 - Recurring independent audit (ADR-005 rule B) with its staleness marker wired
   into the coherence gate.
 
-**Acceptance**
+### Acceptance
 
 ```bash
 cosign verify-attestation --type slsaprovenance "$IMAGE_DIGEST"
@@ -371,7 +371,7 @@ evidence capture — is built in the phases before it.
 ## Risk register
 
 | Risk | Likelihood | Response |
-|---|---|---|
+| --- | --- | --- |
 | Scope exceeds available time | High | Narrow multi-cloud parity to one cloud plus a documented adapter seam. Named in ADR-000's revisit triggers |
 | Library boundaries wrong (C1 fails) | Medium | Detected at Phase 3, not Phase 6. Re-derive `libs/` before continuing |
 | Cloud spend outlives a validation window | Medium | Teardown is an acceptance criterion, not a follow-up. Billing export checked in cost review |

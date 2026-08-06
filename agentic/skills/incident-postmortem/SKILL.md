@@ -37,6 +37,7 @@ primary source**, not memory of what happened.
 ```bash
 git log --since="<incident-start>" --until="<incident-end>" --oneline
 ```
+
 Pull from, in order of reliability: `ops/audit.jsonl` (structured
 records), Alertmanager firing/resolved timestamps, `git log` (deploys,
 reverts), CI run history (`gh run list`). **Never reconstruct from
@@ -85,7 +86,7 @@ than any single bug.
 
 ## Action items
 | # | Action | Owner | Date | Verifies |
-|---|--------|-------|------|----------|
+| --- | -------- | ------- | ------ | ---------- |
 | 1 | | | | |
 ```
 

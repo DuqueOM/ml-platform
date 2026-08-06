@@ -23,7 +23,7 @@ been validated — it has been remembered.
 ## What it contains, and why each piece
 
 | Component | Local choice | Why not the cloud one |
-|---|---|---|
+| --- | --- | --- |
 | Postgres + pgvector | `pgvector/pgvector:pg17` | Same engine, same extension. SQL and schema are validated identically; only the endpoint changes |
 | Object storage | MinIO | Same S3 API the Iceberg warehouse uses in cloud |
 | Trace collection | OpenTelemetry Collector | Identical to cloud — this is the piece that must not differ |
@@ -76,7 +76,7 @@ window a defined purpose instead of being a repeat, and it is what must not be
 claimed on the strength of a green local run.
 
 | Property | Why not local | Where it is proven |
-|---|---|---|
+| --- | --- | --- |
 | Managed-service behaviour | Cloud SQL, S3 and their equivalents differ from Postgres and MinIO in consistency, quotas and failure modes | Phase 2 |
 | Workload identity federation | There is no cloud IAM to federate against. Local uses a password; production must use no static credential at all | Phase 2 |
 | Real latency | No network between components, no cross-zone hop, no cold start | Phase 2 load test |
@@ -116,7 +116,7 @@ the namespace raised to **enforce** `restricted`.
 **3. The quota made rolling updates impossible — correctly.** Applying the
 security contexts stalled the Postgres and MinIO rollouts:
 
-```
+```text
 Error creating: pods "postgres-…" is forbidden: exceeded quota: stack-budget,
 requested: limits.memory=320Mi, used: 1512Mi, limited: 1824Mi
 ```
@@ -136,7 +136,7 @@ All three are now asserted by `make local-verify`, so none can silently return.
 ## Endpoints
 
 | Service | URL |
-|---|---|
+| --- | --- |
 | Postgres | `localhost:15432` (db/user `mlplatform`) |
 | MinIO API / console | `localhost:19000` / `localhost:19001` |
 | Jaeger | `localhost:16686` |

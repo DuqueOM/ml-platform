@@ -18,7 +18,7 @@ error types in the units the business actually uses.
 
 ## Layout
 
-```
+```text
 contracts/   schema contracts (Pandera at the code boundary)
 evals/       quality gates AS DATA — thresholds with their rationale
 src/demand_forecast/

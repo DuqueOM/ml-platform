@@ -14,12 +14,12 @@ description: Python ML training — pipeline structure, quality gates, fairness,
 > Any `ADR-NNN` cited below refers to the template's numbering, not this
 > repository's. The AUTO / CONSULT / STOP protocol in `AGENTS.md` binds here.
 
-
 # Python ML Training Rules
 
 ## Training Pipeline Structure
 
 Every trainer MUST follow this sequence:
+
 1. `load_data()` + Pandera validation
 2. `engineer_features()`
 3. `split_train_val_test()` — no temporal leakage if dates exist
@@ -54,6 +54,7 @@ def should_promote(new_metrics: dict, current_prod_metrics: dict) -> bool:
 ## Fairness Requirements
 
 Disparate Impact Ratio (DIR) per protected attribute:
+
 ```python
 dir_value = min(pos_rate_group_a, pos_rate_group_b) / max(pos_rate_group_a, pos_rate_group_b)
 assert dir_value >= 0.80, f"Fairness violation: DIR={dir_value}"
@@ -90,6 +91,7 @@ drift consumers use `common_utils.eda_artifacts`.
 - `test_fairness_disparate_impact()` — DIR >= 0.80
 
 ## When NOT to Apply
+
 - Serving code (`app/*.py`) — use `04a-python-serving` rules instead
 - Test files — conventions differ (synthetic data OK, stubs OK)
 - Notebook/exploration code

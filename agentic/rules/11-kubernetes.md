@@ -10,12 +10,12 @@ description: Kubernetes patterns for ML serving — single-worker pods, CPU-only
 > Any `ADR-NNN` cited below refers to the template's numbering, not this
 > repository's. The AUTO / CONSULT / STOP protocol in `AGENTS.md` binds here.
 
-
 # Kubernetes Rules for ML Services
 
 ## Single-Worker Pod Pattern (MANDATORY)
 
 `uvicorn --workers N` is an anti-pattern in K8s:
+
 - Multiple workers in one pod share CPU limits → CPU thrashing
 - HPA cannot distinguish worker load → scaling signal diluted
 
@@ -35,6 +35,7 @@ containers:
 ## CPU-Only HPA (MANDATORY)
 
 NEVER use memory as an HPA metric for ML services:
+
 - Model memory footprint is constant (loaded model = fixed RAM)
 - Memory-based HPA never scales down: `ceil(replicas × usage / target)` stays constant
 

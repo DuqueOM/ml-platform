@@ -6,7 +6,7 @@
 ## Claims carry their provenance
 
 | Claim about | Verified by | Never by |
-|---|---|---|
+| --- | --- | --- |
 | Code behaviour | Reading or running the code | An error message, or a memory of one |
 | Third-party behaviour | Executing against it | Its documentation alone |
 | A measurement | **Repeated** observation, method recorded | A single reading |

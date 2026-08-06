@@ -30,6 +30,14 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
+        # The interpreter is pinned by .python-version, not left to whatever
+        # the runner image ships. Unpinned, CI resolved 3.12 while local
+        # resolved 3.11, and mypy — told to parse as 3.11 — choked on numpy
+        # stubs written in 3.12 syntax. Local green then meant nothing about
+        # CI, which is the failure mode this repository has already hit once.
+        #
+        # 3.11 specifically: it is the declared floor in requires-python, and
+        # the floor is the version most likely to break unnoticed.
         with:
           enable-cache: true
 

@@ -28,7 +28,7 @@ Load `agentic/skills/ci-green-verify/SKILL.md` and follow its steps:
 
 ## 2. Report
 
-```
+```text
 CI status for {ref} @ {sha}:
   ✅ CI — Examples, Unit Tests & Coverage    success
   ✅ Validate Templates                       success
@@ -40,7 +40,7 @@ Verdict: ALL GREEN — safe to proceed.
 
 or, if not all green:
 
-```
+```text
 CI status for {ref} @ {sha}:
   ✅ CI — Examples, Unit Tests & Coverage    success
   ❌ Template-Context Tests                   failure  (run 28552562658)

@@ -40,14 +40,17 @@ mode: AUTO   # Execute and report. Reversible or read-only. Canonical: AGENTS.md
 Guides creation of a complete, production-ready ML service using the template system.
 
 ## Inputs
+
 - `$service-name`: Service slug (e.g., `bankchurn`, `frauddetect`)
 - `$business-problem`: What the service predicts/classifies
 
 ## Goal
+
 A fully deployed, tested, monitored ML service with all quality gates passing,
 drift detection running, and documentation complete.
 
 ## Pre-conditions
+
 - `templates/scripts/new-service.sh` exists and is executable
 - The caller has specified ServiceName (PascalCase) and service_slug (snake_case)
 - Cloud target is known (gcp, aws, or both)
@@ -55,9 +58,11 @@ drift detection running, and documentation complete.
 ## Steps
 
 ### 1. Gather Requirements
+
 **Human checkpoint**: Confirm requirements before scaffolding.
 
 Answer these questions:
+
 1. **Business problem**: What does this service predict/classify/estimate?
 2. **Dataset**: Source, size, features, target distribution
 3. **Model type**: Classification, regression, NLP, time series?
@@ -71,6 +76,7 @@ bash templates/scripts/new-service.sh "$service-name" "$service-slug"
 ```
 
 Verify no remaining placeholders:
+
 ```bash
 grep -r "{@ service_name @}\|{@ service_slug @}\|{@ SERVICE_NAME @}" $service-name/ --include="*.py" --include="*.yaml" | head -20
 ```
@@ -133,6 +139,7 @@ grep -r "{@ service_name @}\|{@ service_slug @}\|{@ SERVICE_NAME @}" $service-na
 1. Customize `Dockerfile` (multi-stage, non-root, HEALTHCHECK)
 2. Verify `.dockerignore` excludes models/, data/raw/, tests/
 3. Build and test locally:
+
    ```bash
    docker build -t $service-name:dev .
    docker run -p 8000:8000 $service-name:dev
@@ -207,6 +214,7 @@ grep -r "{@ service_name @}\|{@ service_slug @}\|{@ SERVICE_NAME @}" $service-na
 **Success criteria**: `pytest tests/ -v --cov=src --cov-report=term-missing` shows >= 90% coverage.
 
 ## Rules
+
 - Never skip quality gates — all must pass before deployment
 - Never use `==` for ML package pinning — use `~=` (compatible release)
 - Never bake models into Docker images — use init container pattern
@@ -216,6 +224,7 @@ grep -r "{@ service_name @}\|{@ service_slug @}\|{@ SERVICE_NAME @}" $service-na
 ## Acceptance Criteria
 
 A service is production-ready when ALL of these pass:
+
 - [ ] Test coverage >= 90%
 - [ ] Load test < 1% errors under 100 concurrent users
 - [ ] P95 latency within SLA

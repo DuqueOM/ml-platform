@@ -29,7 +29,8 @@ aws ce get-cost-and-usage \
 ## 3. Build Cost Breakdown
 
 Fill in the template:
-```
+
+```text
 Compute serving (N APIs × 2 clouds):  $___/mo
 Compute training (Spot, monthly avg):  $___/mo
 Databases (Cloud SQL + RDS):           $___/mo
@@ -71,6 +72,7 @@ curl -s 'http://prometheus:9090/api/v1/query?query=kube_horizontalpodautoscaler_
 ## 6. Identify Optimizations
 
 ### Right-Sizing
+
 ```bash
 # Pods with CPU usage < 30% of request (candidates for downsizing)
 kubectl top pods -n ${NAMESPACE} --sort-by=cpu
@@ -80,6 +82,7 @@ kubectl get hpa -n ${NAMESPACE}
 ```
 
 ### Storage Cleanup
+
 ```bash
 # Check bucket sizes
 gsutil du -s gs://${BUCKET}
@@ -87,6 +90,7 @@ aws s3 ls --summarize --human-readable s3://${BUCKET}
 ```
 
 ### Image Cleanup
+
 ```bash
 # Delete images older than 90 days
 gcloud artifacts docker images list ${REGISTRY} --filter="updateTime<-P90D"
@@ -95,6 +99,7 @@ gcloud artifacts docker images list ${REGISTRY} --filter="updateTime<-P90D"
 ## 7. Document Findings
 
 Update:
+
 - Service READMEs with current costs
 - FinOps ADR with trend analysis
 - Budget projections for next month
@@ -102,6 +107,7 @@ Update:
 ## 8. Action Items
 
 Create GitHub Issues for any optimization opportunities:
+
 ```bash
 gh issue create \
   --title "FinOps: ${OPTIMIZATION}" \

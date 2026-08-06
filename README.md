@@ -19,7 +19,7 @@ This is the fourth step of a connected line, and it exists because the third
 step's scope limits were correct.
 
 | Repository | Scope |
-|---|---|
+| --- | --- |
 | [ML-MLOps-Portfolio](https://github.com/DuqueOM/ML-MLOps-Portfolio) | Three end-to-end ML services. Where the lessons were paid for |
 | [ml-service-template](https://github.com/DuqueOM/ml-service-template) | A governed scaffold for **one** tabular ML service on Kubernetes |
 | [agent-local](https://github.com/DuqueOM/agent-local) | A local multi-tier LLM agent core with a deterministic policy gate — **absorbed into this repository** ([ADR-002](docs/decisions/ADR-002-absorbing-agent-local.md)) |
@@ -82,7 +82,7 @@ reader never has to guess whether something is operated or merely present. See
 
 ## Layout
 
-```
+```text
 libs/            ml-core · data-contracts · llm-core · serving-core
 projects/        one deployable ML system each; uniform structure
 orchestration/   Airflow DAGs + KFP pipelines
@@ -104,7 +104,7 @@ Each is chosen to exercise a different problem shape, because a substrate that
 serves only one shape has not been shown to be a substrate.
 
 | Project | Domain | Dataset | Demonstrates |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `demand-forecast` | Time series | NYC TLC | Lakehouse, feature store, conformal intervals, real temporal drift |
 | `rag-assistant` | LLM / retrieval | SEC EDGAR | pgvector, evaluation gates that block merge, cost per request |
 | `store-assistant` | Agents | — | Migrated agent platform: policy gate, tool contract, tier routing |
@@ -130,7 +130,7 @@ uv run python scripts/check_doc_coherence.py
 ## Documents
 
 | Document | Role |
-|---|---|
+| --- | --- |
 | [AGENTS.md](AGENTS.md) | Canonical contract for agents and contributors |
 | [ADRs](docs/decisions/) | Decisions, with alternatives rejected and revisit triggers |
 | [Technical plan](docs/architecture/technical-plan.md) | Phases with executable acceptance criteria |

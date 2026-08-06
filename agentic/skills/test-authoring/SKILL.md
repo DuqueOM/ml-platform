@@ -29,7 +29,7 @@ Coverage is a **floor**, never evidence of adequacy.
 ### 1. The name states the failure being prevented
 
 | Weak | Strong |
-|---|---|
+| --- | --- |
 | `test_handles_none` | `test_missing_credential_raises_rather_than_calling_unauthenticated` |
 | `test_config_loads` | `test_second_local_tier_is_rejected` |
 | `test_works` | `test_projects_never_import_each_other` |
@@ -100,7 +100,7 @@ nothing, push it down a level — faster and more precise.
 The failure each level exists for:
 
 | Level | The failure it catches |
-|---|---|
+| --- | --- |
 | Unit | Wrong logic |
 | Integration | Right logic, wrong assumption about the dependency — a query that returns different types than mocked, a client that retries when you assumed it raised |
 | End-to-end | Right logic, right assumptions, wrong composition — every stage green, the chain broken |
@@ -112,7 +112,7 @@ where the real one would go.
 ## Anti-patterns
 
 | Anti-pattern | Why it fails |
-|---|---|
+| --- | --- |
 | Test written after the fix, never run against the broken code | Proves nothing; may not even exercise the fixed path |
 | Mocking the thing under test | Tests the mock |
 | One test asserting six unrelated things | On failure, you learn one of six things broke |

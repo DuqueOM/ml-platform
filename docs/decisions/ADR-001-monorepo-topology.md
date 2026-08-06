@@ -32,7 +32,7 @@ trivially by a rule about *direction*.
 Four layers, with a strict dependency direction. Arrows point the only way
 imports may flow.
 
-```
+```text
 projects/*  ──►  libs/*  ──►  (third-party only)
      │
      └──────►  platform/*   (declarative only — never imported)
@@ -40,7 +40,7 @@ orchestration/*  ──►  projects/*  and  libs/*
 ```
 
 | Layer | Contains | May import |
-|---|---|---|
+| --- | --- | --- |
 | `libs/` | Business-agnostic, reusable Python packages | Third-party, and other `libs/` |
 | `projects/` | One deployable ML system each: data, model, service, tests, ADRs | `libs/`, third-party |
 | `orchestration/` | Airflow DAGs and KFP pipeline definitions that coordinate projects | `projects/`, `libs/` |
@@ -65,7 +65,7 @@ Libraries are split by **stability and blast radius**, not by subject matter.
 The question is not "is this about data?" but "who breaks when this changes?"
 
 | Package | Owns | Deliberately excludes |
-|---|---|---|
+| --- | --- | --- |
 | `ml-core` | Determinism (seeding), evaluation, calibration, model persistence, metric contracts | Anything that knows a feature name |
 | `data-contracts` | Pandera schemas, validation suites, contract versioning and evolution rules | Storage, IO, orchestration |
 | `llm-core` | Tier routing, policy gate, tool registry, evaluation harness, LLM telemetry | Prompts, domain policy content |
@@ -79,7 +79,7 @@ The question is not "is this about data?" but "who breaks when this changes?"
 
 Every project is uniform, so that knowing one means knowing all of them:
 
-```
+```text
 projects/<name>/
 ├── README.md              # what it predicts, for whom, at what cost of error
 ├── pyproject.toml         # workspace member; declares its libs/ dependencies
@@ -139,7 +139,7 @@ An ADR whose consequences reach beyond one project belongs in the root
 ## Alternatives considered
 
 | Alternative | Why rejected |
-|---|---|
+| --- | --- |
 | Flat layout: every project at the repository root | No place for shared code that is not also a project. The `libs/` boundary is precisely what the platform claim rests on |
 | Split libraries by subject (`data/`, `training/`, `serving/`) | Subject boundaries do not predict blast radius. A change to "data" can break everything or nothing, and the layout gives no signal about which |
 | Bazel or Pants for the build graph | Strongest correctness story and genuinely impressive, but the setup cost lands before the first project ships. Revisit if build times become the constraint |

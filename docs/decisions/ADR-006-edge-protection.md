@@ -11,7 +11,7 @@
 three deployment shapes:
 
 | Shape | Its default |
-|---|---|
+| --- | --- |
 | GCP only | Cloud Armor |
 | AWS only | AWS WAFv2 + Shield Standard |
 | **Concurrent multi-cloud** | *"Either native option per-cluster, or Cloudflare as one control plane spanning both — adopter's explicit choice"* |
@@ -127,7 +127,7 @@ because an environment is labelled "dev".
 ## Alternatives considered
 
 | Alternative | Why rejected |
-|---|---|
+| --- | --- |
 | Native per-cloud (the template's default) | Two rule syntaxes, two managed rule sets, two log formats, kept in sync by discipline. This repository's entire defect history is divergence between things that were supposed to agree |
 | Cloudflare with no origin lock | The failure mode that looks protected and is not. Traffic routes around the edge by IP |
 | Cloudflare for AWS, native for GCP | Combines both maintenance burdens and adds a third: reasoning about which cloud has which semantics during an incident |

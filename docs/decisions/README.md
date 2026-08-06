@@ -9,7 +9,7 @@ blast radius, matching the library decomposition rule in
 [ADR-001](ADR-001-monorepo-topology.md).
 
 | ADR | Title | Status |
-|-----|-------|--------|
+| ----- | ------- | -------- |
 | [ADR-000](ADR-000-charter-and-scope.md) | Charter: what this platform is, and what it refuses to be | Accepted |
 | [ADR-001](ADR-001-monorepo-topology.md) | Monorepo topology and the dependency direction that enforces it | Accepted |
 | [ADR-002](ADR-002-absorbing-agent-local.md) | Absorbing `agent-local` with history, rather than coordinating with it | Accepted |

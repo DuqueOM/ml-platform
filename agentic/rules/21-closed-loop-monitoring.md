@@ -23,7 +23,6 @@ description: Closed-loop monitoring invariants — prediction logging, ground tr
 > Any `ADR-NNN` cited below refers to the template's numbering, not this
 > repository's. The AUTO / CONSULT / STOP protocol in `AGENTS.md` binds here.
 
-
 # Closed-Loop Monitoring Rules (template-ADR-006 / template-ADR-007 / template-ADR-008)
 
 Applies to every file that touches prediction logging, ground-truth
@@ -33,6 +32,7 @@ These invariants exist because concept drift is silent without them.
 ## Non-negotiable invariants
 
 ### D-20 — Identity + lineage on every logged prediction
+
 - Every prediction MUST carry a unique `prediction_id` (UUID hex) and a stable
   business `entity_id`. The `entity_id` is the JOIN key with delayed labels.
 - `model_version` MUST be present on every logged event. Without it, drift
@@ -44,6 +44,7 @@ These invariants exist because concept drift is silent without them.
   business key (customer_id, transaction_id, session_id).
 
 ### D-21 — Prediction logging is fire-and-forget
+
 - `log_prediction()` MUST return immediately after enqueueing. It MUST NOT
   perform synchronous I/O on the hot path.
 - The handler MUST NOT `await` a network call to the log backend directly;
@@ -53,6 +54,7 @@ These invariants exist because concept drift is silent without them.
 - The buffer MUST drain on `FastAPI.lifespan` shutdown (`await close()`).
 
 ### D-22 — Observability failures never break serving
+
 - `log_prediction()` MUST swallow exceptions. Enqueue errors increment the
   Prometheus counter `prediction_log_errors_total` but MUST NOT propagate.
 - Flush errors are logged at WARNING and counted — the handler NEVER sees
@@ -103,19 +105,23 @@ These invariants exist because concept drift is silent without them.
 ## Agent behavior on closed-loop files
 
 ### Before editing fastapi_app.py or main.py (AUTO)
+
 - Verify D-21/D-22 are preserved: no `await` on backend I/O, no exceptions
   leak from the log path.
 
 ### Before editing prediction_logger.py (CONSULT)
+
 - Changes to buffering or backend semantics affect every service that
   adopts the template. Propose a diff with reasoning before applying.
 
 ### Before editing champion_challenger.py or its config (STOP)
+
 - Margins and alpha are governance parameters. An ADR addendum MUST
   accompany any change, even for dev environments (drift between envs
   makes the gate meaningless).
 
 ### When adding a new backend (CONSULT)
+
 - New backends MUST implement `write_batch()` and `health_check()`.
 - Add a unit test exercising `write_batch` on a real (or mocked) store.
 - Document the env vars in `.env.example` under the same section.

@@ -14,7 +14,6 @@ description: Observability patterns — Prometheus metrics, Grafana dashboards, 
 > Any `ADR-NNN` cited below refers to the template's numbering, not this
 > repository's. The AUTO / CONSULT / STOP protocol in `AGENTS.md` binds here.
 
-
 # Monitoring Rules
 
 ## Metrics Every Service MUST Export
@@ -47,7 +46,7 @@ drift_detection_last_run_timestamp = Gauge(
 ## Alert Severity Levels (MANDATORY)
 
 | Level | SLA | Action | Example |
-|-------|-----|--------|---------|
+| ------- | ----- | -------- | --------- |
 | **P1** | 15 min | Immediate rollback | High error rate (>5%) |
 | **P2** | 4 hours | Trigger retraining | Primary metric degraded |
 | **P3** | 24 hours | Investigate + plan | Significant drift on critical feature |
@@ -79,6 +78,7 @@ groups:
 ## Grafana Dashboard Requirements
 
 Every service dashboard MUST include:
+
 - Request rate and error rate
 - Latency percentiles (p50, p95, p99)
 - Prediction score distribution
@@ -89,11 +89,13 @@ Every service dashboard MUST include:
 ## PSI (Population Stability Index)
 
 ALWAYS use quantile-based bins (not uniform):
+
 ```python
 breakpoints = np.percentile(reference, np.linspace(0, 100, bins + 1))
 ```
 
 Thresholds:
+
 - PSI < 0.10: No significant change
 - 0.10 <= PSI < 0.20: Moderate change → monitor
 - PSI >= 0.20: Significant change → action required
@@ -103,5 +105,6 @@ For temporal data: use Year-over-Year comparison instead of standard PSI.
 ## Heartbeat Alert (MANDATORY)
 
 Every CronJob-based process MUST have a heartbeat alert:
+
 - Drift detection CronJob → alert if no report in 48h
 - Prevents silently broken automation from going unnoticed
