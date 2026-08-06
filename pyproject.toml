@@ -91,3 +91,13 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["scripts"]
+
+[tool.bandit]
+# Tests are excluded at the hook level: they legitimately construct bad input,
+# and flagging that teaches people to ignore the scanner.
+exclude_dirs = ["tests", ".venv", "templates"]
+# B404/B603/B607: subprocess use. Every call site here passes a literal command
+# defined in this repository, never input — and each one carries a comment
+# saying so. Blanket-suppressed rather than per-line so the suppressions do not
+# accumulate silently.
+skips = ["B404", "B603", "B607"]

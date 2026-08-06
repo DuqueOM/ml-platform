@@ -1,0 +1,15 @@
+# Rules relaxed deliberately, each with its reason.
+config:
+  # Long lines are normal in tables and in prose that carries a command.
+  MD013: false
+  # Duplicate headings are legitimate across ADR sections (every ADR has
+  # "Context", "Decision", "Consequences").
+  MD024: {siblings_only: true}
+  # Inline HTML is used for the generated-block markers the derived documents
+  # depend on.
+  MD033: false
+  # A document may open with something other than a top-level heading — the
+  # generated status files open with a warning banner.
+  MD041: false
+globs: ["**/*.md"]
+ignores: [".claude", ".cursor", ".codex", ".devin", "templates", ".venv", "node_modules"]

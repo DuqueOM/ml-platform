@@ -107,6 +107,35 @@ jobs:
         # directory nothing checks, and every future project comes from it.
         run: uv run pytest tests/test_project_generator.py -q
 
+  supply-chain:
+    name: Supply chain
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Trivy filesystem scan
+        # Covers what gitleaks and dependabot do not: IaC misconfiguration and
+        # vulnerabilities in transitive dependencies the lockfile pulled in.
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH
+          # Report rather than block, for now: a CRITICAL in a transitive dep
+          # with no available fix would otherwise block every unrelated merge.
+          # Promoted to blocking once the finding volume is known — which is a
+          # measurement, not a guess.
+          exit-code: "0"
+
+      - uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy.sarif
+
   secrets:
     name: Secret scan
     runs-on: ubuntu-latest

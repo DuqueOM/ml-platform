@@ -1,0 +1,34 @@
+# Documentation lint.
+#
+# This repository's documentation is a load-bearing artifact — ADRs, the
+# derived status tables, the governance documents — so it gets the same
+# treatment as code. A broken link or a malformed table in an ADR is a defect
+# in the thing the ADR exists to be.
+name: Docs quality
+
+on:
+  push:
+    branches: [main]
+    paths: ["**/*.md"]
+  pull_request:
+    paths: ["**/*.md"]
+
+permissions:
+  contents: read
+
+jobs:
+  markdownlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: DavidAnson/markdownlint-cli2-action@v24.1.0
+        with:
+          # Generated surfaces mirror canonical bodies; linting them reports
+          # every canonical finding four times.
+          globs: |
+            **/*.md
+            !.claude/**
+            !.cursor/**
+            !.codex/**
+            !.devin/**
+            !templates/**
