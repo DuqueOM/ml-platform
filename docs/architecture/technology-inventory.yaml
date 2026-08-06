@@ -141,6 +141,22 @@ categories:
       - {id: prompt-registry, tier: core, detect: ["pattern:prompt_registry|libs/llm-core"]}
       - {id: semantic-cache, tier: core, detect: ["pattern:semantic_cache|libs/llm-core"]}
       - {id: guardrails, tier: core, detect: ["pattern:guardrail|libs/llm-core"]}
+  - name: Edge protection
+    # ADR-006. The inherited rule, skill and workflow presupposed a decision
+    # this repository had not made — and nothing here tracked whether any edge
+    # protection existed at all, while AGENTS.md carried a STOP on weakening
+    # one. A control with an enforcement mechanism and no record of the thing
+    # being enforced.
+    items:
+      - {id: cloudflare-waf, tier: core, detect: ["platform/terraform/edge"]}
+      - {id: cloudflare-rate-limiting, tier: core, detect: ["pattern:rate_limit|platform/terraform/edge"]}
+      - {id: origin-lock-gcp, tier: core, detect: ["pattern:cloudflare|platform/terraform/gcp"], note: "Cloud Armor allowing only Cloudflare ranges. Without it the load balancer is reachable by IP and the edge is decorative."}
+      - {id: origin-lock-aws, tier: core, detect: ["pattern:cloudflare|platform/terraform/aws"], note: "ALB security group + WAFv2 IP set. Same failure mode as GCP."}
+      - {id: origin-lock-external-check, tier: core, detect: ["pattern:origin_lock|tests"], note: "Reaching the endpoint proves what is TRUE; reading Terraform proves only what was declared."}
+      - {id: cloud-armor, tier: demonstrated, detect: ["pattern:compute_security_policy|platform/terraform/gcp"], note: "Narrowed from full WAF to origin lock by ADR-006."}
+      - {id: aws-wafv2, tier: demonstrated, detect: ["pattern:wafv2|platform/terraform/aws"], note: "Narrowed to origin lock by ADR-006."}
+      - {id: aws-shield-standard, tier: core, detect: ["pattern:shield|platform/terraform/aws"], note: "Automatic and free for ALB; listed so its presence is recorded rather than assumed."}
+
   - name: Observability
     items:
       - {id: opentelemetry, tier: core, detect: ["platform/local/manifests/30-observability.yaml"]}

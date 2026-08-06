@@ -199,6 +199,12 @@ has not been validated; it has been remembered.
   detection demonstrated by mutating a resource out-of-band and showing
   reconciliation.
 - External Secrets Operator; default-deny NetworkPolicies.
+- **Edge protection** ([ADR-006](../decisions/ADR-006-edge-protection.md)):
+  Cloudflare as the single control plane across both clouds, plus the native
+  **origin lock** that stops traffic routing around it by IP. The lock is
+  verified from OUTSIDE — a direct request to the load balancer's public
+  address must be refused. Reading Terraform proves what was declared; reaching
+  the endpoint proves what is true.
 - Ephemeral per-PR environments with a database branch.
 
 **Acceptance**

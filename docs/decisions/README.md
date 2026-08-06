@@ -16,6 +16,7 @@ blast radius, matching the library decomposition rule in
 | [ADR-003](ADR-003-service-template-consumption.md) | Consume `ml-service-template`; never reimplement it | Accepted |
 | [ADR-004](ADR-004-tooling-triage.md) | Tooling triage: Core, Demonstrated, Studied | Accepted |
 | [ADR-005](ADR-005-agentic-governance.md) | Agentic governance: verification, coherence, testing and QA as executable procedure | Accepted |
+| [ADR-006](ADR-006-edge-protection.md) | Cloudflare as the single edge control plane, with a gated origin lock | Accepted |
 
 ## Format
 
