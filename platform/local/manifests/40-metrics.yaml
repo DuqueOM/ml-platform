@@ -63,7 +63,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: prometheus
-          image: prom/prometheus:v3.4.1
+          image: prom/prometheus:v3.13.2
           args:
             - --config.file=/etc/prometheus/prometheus.yml
             - --storage.tsdb.retention.time=2h
