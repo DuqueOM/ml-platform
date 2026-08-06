@@ -59,7 +59,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 | 🟡 | libs/ml-core implementation | 3 file(s), no verification command |
 | 🟡 | libs/data-contracts implementation | 1 file(s), no verification command |
 | ⬜ | libs/serving-core implementation | absent |
-| 🟡 | projects/demand-forecast | 5 file(s), no verification command |
+| 🟡 | projects/demand-forecast | 9 file(s), no verification command |
 | ⬜ | Lakehouse ingestion (Iceberg) | absent |
 | 🟡 | Feature store definitions | 3 file(s), no verification command |
 | ⬜ | Training pipeline (KFP v2) | absent |

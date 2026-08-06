@@ -80,8 +80,25 @@ jobs:
         # document asserting something false, which is itself a defect.
         run: uv run python scripts/check_implementation_status.py --check
 
-      - name: Tests
-        run: uv run pytest -q
+      - name: Tests with coverage
+        # quality-gates.md L1/L2 declare >=90% lines and >=80% branches for
+        # libs/. Declaring a threshold while CI never measures it is a claim
+        # with no gate — the failure rule K exists to prevent.
+        run: |
+          uv run pytest -q \
+            --cov=libs --cov=scripts --cov=projects \
+            --cov-branch --cov-report=xml --cov-report=term
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false   # a Codecov outage must not block a merge
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: MCP registry
+        run: uv run python scripts/check_mcp_registry.py
 
       - name: Project generator renders a usable project
         # templates/project/ is excluded from lint and the dependency test

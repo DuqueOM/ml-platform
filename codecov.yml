@@ -1,0 +1,64 @@
+# Codecov configuration.
+#
+# Exists because docs/governance/quality-gates.md declares L1 (>=90% lines) and
+# L2 (>=80% branches) as GATES, and CI never measured coverage — a published
+# claim with nothing able to fail on it, which is exactly what rule K forbids.
+#
+# Two deliberate choices:
+#
+# 1. `patch` is stricter than `project`. A repository can hold its overall
+#    percentage while every new line arrives untested; the patch target is what
+#    stops coverage decaying one PR at a time.
+# 2. `informational: false` on the library target. A gate that only comments is
+#    a gate that gets ignored — and libs/ is where an untested path reaches
+#    every consumer.
+coverage:
+  precision: 1
+  round: down
+  range: "70...95"
+
+  status:
+    project:
+      default:
+        target: auto
+        # A drop this small is noise from a refactor, not a regression.
+        threshold: 1%
+        informational: false
+      libs:
+        # The threshold quality-gates.md L1 declares. It applies HERE because
+        # libs/ has the widest blast radius: an untested path reaches every
+        # project that imports it.
+        target: 90%
+        threshold: 0%
+        paths: ["libs/"]
+        informational: false
+      scripts:
+        # The gate scripts enforce every other claim in the repository and were
+        # 0% covered until tests/test_gate_scripts.py. Lower target than libs/
+        # because they are invoked end-to-end rather than unit-tested, and that
+        # is the appropriate shape for them.
+        target: 60%
+        threshold: 0%
+        paths: ["scripts/"]
+        informational: false
+
+    patch:
+      default:
+        # New code must be tested. Holding the project percentage while every
+        # new line arrives uncovered is how a suite stops meaning anything.
+        target: 85%
+        threshold: 0%
+        informational: false
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: true
+
+ignore:
+  - "templates/project/**"   # un-rendered generator source; verified by rendering it
+  - "**/tests/**"
+  - ".claude/**"
+  - ".cursor/**"
+  - ".codex/**"
+  - ".devin/**"

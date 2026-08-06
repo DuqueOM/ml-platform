@@ -1,0 +1,112 @@
+# MCP registry — which servers this platform's agents may use, and under what risk.
+#
+# Ported from ml-service-template and re-scoped: the template's registry serves
+# ONE tabular service, this one serves a monorepo with a lakehouse, an
+# orchestrator, four project kinds and two clouds.
+#
+# Three rules, each because its absence is a real failure:
+#
+# 1. **An MCP server is a tool the agent can act through, so it inherits the
+#    AUTO/CONSULT/STOP protocol.** A server whose risk mode is undeclared is a
+#    capability nobody assessed. `risk_mode` here is a CEILING: a server marked
+#    AUTO can still be used inside a CONSULT operation, never the reverse.
+#
+# 2. **Credentials are scoped to the narrowest thing that works.** An agent
+#    holding admin scope is an agent whose mistakes are unbounded. Each entry
+#    states the minimum.
+#
+# 3. **Nothing here is auto-installed.** Install mode is `documented` or
+#    `user_confirmed` — never automatic. An MCP server is remote code with
+#    access to this repository's context; adding one silently is a supply-chain
+#    decision made on someone's behalf.
+#
+# `scripts/check_mcp_registry.py` validates this file and reports which servers
+# a given surface actually has configured.
+version: 1
+
+mcps:
+  github:
+    purpose: Read PRs, CI status, run logs, release evidence
+    risk_mode: AUTO
+    authority: "AGENTS.md#Agent Behavior Protocol"
+    required_for: [ci-green-verify, release-checklist, pr-review, enterprise-audit]
+    minimum_scope: "repo:read + workflow:read"
+    install_mode: {claude: documented, cursor: documented, codex: user_confirmed, devin: documented}
+    notes: >
+      Read-only is sufficient for every skill listed. NEVER grant admin:org to
+      an agent MCP — the blast radius of a mistaken write at org scope is the
+      organisation, not the repository.
+
+  kubectl:
+    purpose: Inspect cluster state, pod logs, events, rollout status
+    risk_mode: CONSULT
+    authority: "AGENTS.md#Agent Behavior Protocol"
+    required_for: [deploy-gke, deploy-aws, rollback, debug-ml-inference]
+    minimum_scope: "read-only ServiceAccount, namespace-scoped"
+    install_mode: {claude: documented, cursor: documented, codex: user_confirmed, devin: documented}
+    notes: >
+      CONSULT rather than AUTO because the same client that reads can write,
+      and the protocol's mode is a property of what the tool CAN do, not of
+      what a given call intends. A read-only ServiceAccount narrows the
+      capability itself, which is stronger than narrowing the intent.
+
+  postgres:
+    purpose: Inspect the online feature store and pgvector indexes
+    risk_mode: CONSULT
+    authority: "AGENTS.md#Agent Behavior Protocol"
+    required_for: [drift-detection, debug-ml-inference]
+    minimum_scope: "SELECT on the feature schema; never the application role"
+    install_mode: {claude: documented, cursor: documented, codex: user_confirmed, devin: documented}
+    notes: >
+      Materialising features to the production online store is CONSULT in the
+      permissions matrix; a client that could do it accidentally must not be
+      AUTO. Point it at a read replica where one exists.
+
+  terraform:
+    purpose: Read plan output, module documentation, provider schemas
+    risk_mode: STOP
+    authority: "AGENTS.md#Agent Behavior Protocol"
+    required_for: [deploy-gke, deploy-aws, cost-audit, edge-audit]
+    minimum_scope: "plan only; no apply credentials"
+    install_mode: {claude: documented, cursor: user_confirmed, codex: user_confirmed, devin: documented}
+    notes: >
+      STOP because `terraform apply` in prod is STOP and the tool cannot
+      distinguish environments reliably enough to be trusted with the
+      difference. Reading a plan is safe; holding credentials that could apply
+      one is not.
+
+  prometheus:
+    purpose: Query metrics during drift triage and incident diagnosis
+    risk_mode: AUTO
+    authority: "AGENTS.md#Agent Behavior Protocol"
+    required_for: [drift-detection, performance-degradation-rca, incident-postmortem]
+    minimum_scope: "read-only query endpoint"
+    install_mode: {claude: documented, cursor: documented, codex: user_confirmed, devin: documented}
+    notes: PromQL is read-only by construction, which is why this one is genuinely AUTO.
+
+  docker:
+    purpose: Inspect local containers and images during Phase 1b validation
+    risk_mode: CONSULT
+    authority: "AGENTS.md#Agent Behavior Protocol"
+    required_for: []
+    recommended_for: [diagnose-bug]
+    minimum_scope: "local daemon only"
+    install_mode: {claude: documented, cursor: documented, codex: user_confirmed, devin: documented}
+    notes: >
+      Docker socket access is effectively root on the host. Local-only, and
+      never in an environment that also holds cloud credentials.
+
+# Where each surface expects its MCP configuration. Paths are the tool's, not
+# this repository's — an MCP config committed here would carry credentials.
+surfaces:
+  claude: {config_path: "~/.claude.json", committed_example: null}
+  cursor: {config_path: "~/.cursor/mcp.json", committed_example: null}
+  codex: {config_path: ".codex/mcp.json", committed_example: ".codex/mcp.example.json"}
+  devin: {config_path: "~/.codeium/mcp_config.json", committed_example: null}
+
+# What a healthy setup looks like, so `check_mcp_registry.py` can report a gap
+# rather than leaving "is MCP working?" to impression.
+diagnostics:
+  required_fields: [purpose, risk_mode, authority, minimum_scope, install_mode]
+  valid_risk_modes: [AUTO, CONSULT, STOP]
+  forbidden_in_committed_config: [token, password, secret, api_key, PAT]
