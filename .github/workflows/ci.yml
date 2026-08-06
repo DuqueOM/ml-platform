@@ -34,7 +34,15 @@ jobs:
           enable-cache: true
 
       - name: Sync workspace
-        run: uv sync --all-extras
+        # --all-packages, not just --all-extras: without it uv installs the
+        # ROOT project's dependencies only, and every workspace member's
+        # dependencies are missing. mypy then reports "cannot find polars" for
+        # code that runs fine locally.
+        #
+        # This diverged for several commits because the local command was
+        # changed and the workflow was not — the exact class of drift this
+        # repository keeps finding, in the file that verifies everything else.
+        run: uv sync --all-packages --all-extras
 
       - name: Lockfile is current
         run: uv lock --check
