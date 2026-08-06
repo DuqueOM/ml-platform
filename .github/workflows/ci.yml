@@ -50,6 +50,17 @@ jobs:
       - name: Types
         run: uv run mypy libs/
 
+      - name: Agentic surface is current
+        # --check, never a write: a commit must not be able to carry a
+        # canonical change without its four rendered surfaces.
+        run: uv run python scripts/sync_agentic_adapters.py --check
+
+      - name: Agentic surface integrity
+        # Parity across claude/cursor/codex/devin, a declared AUTO/CONSULT/STOP
+        # mode per skill, no mode de-escalation in a mirror, no policy text in
+        # a pointer.
+        run: uv run python scripts/validate_agentic_surface.py --strict
+
       - name: Documentation coherence (ADR-005)
         run: uv run python scripts/check_doc_coherence.py
 

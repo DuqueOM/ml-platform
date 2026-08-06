@@ -1,0 +1,114 @@
+# =============================================================================
+# Agentic manifest — the index that drives adapter rendering.
+# =============================================================================
+# READ-ONLY INDEX. It never contains policy text: canonical bodies live in
+# agentic/{rules,skills,workflows}/ and nowhere else.
+#
+#   scripts/sync_agentic_adapters.py     renders the surfaces below
+#   scripts/validate_agentic_surface.py  fails CI when they drift
+#
+# Two render modes, because the tools differ in kind:
+#   pointer  — the surface file names its canonical source and nothing more.
+#              Used where the tool can follow a path.
+#   mirror   — the surface file carries the full canonical body, with a
+#              generated header. Used where the tool ingests file contents and
+#              cannot follow a pointer. A mirror is drift-checked byte for byte;
+#              a stale mirror is a CI failure, never a silent divergence.
+# =============================================================================
+version: 1
+
+# -----------------------------------------------------------------------------
+# Authority chain. Every policy claim in a rule, skill or workflow resolves to
+# one of these. The validator rejects a surface whose authority does not.
+# -----------------------------------------------------------------------------
+canonical:
+  behavior_protocol:
+    path: AGENTS.md
+    authority: "AGENTS.md#Agent Behavior Protocol"
+  anti_patterns:
+    path: AGENTS.md
+    authority: "AGENTS.md#Anti-patterns"
+  invariants:
+    path: AGENTS.md
+    authority: "AGENTS.md#Invariants — never violate"
+  quality_gates:
+    path: docs/governance/quality-gates.md
+    authority: docs/decisions/ADR-005-agentic-governance.md
+  qa_procedures:
+    path: docs/governance/qa-procedures.md
+    authority: docs/decisions/ADR-005-agentic-governance.md
+  tooling_triage:
+    path: docs/decisions/ADR-004-tooling-triage.md
+    authority: docs/decisions/ADR-004-tooling-triage.md
+  topology:
+    path: docs/decisions/ADR-001-monorepo-topology.md
+    authority: docs/decisions/ADR-001-monorepo-topology.md
+
+# -----------------------------------------------------------------------------
+# Canonical stores. Single source of truth for every surface.
+# -----------------------------------------------------------------------------
+stores:
+  rules:
+    path: agentic/rules
+    glob: "*.md"
+  skills:
+    path: agentic/skills
+    glob: "*/SKILL.md"
+  workflows:
+    path: agentic/workflows
+    glob: "*.md"
+
+# -----------------------------------------------------------------------------
+# Adapter surfaces. Parity is the point: a rule that binds under one tool binds
+# under all of them. Adding a surface must never require editing a canonical
+# body.
+# -----------------------------------------------------------------------------
+surfaces:
+  claude:
+    root: .claude
+    mode: pointer
+    layout:
+      rules: rules
+      skills: skills
+      workflows: commands
+    extension: .md
+
+  cursor:
+    root: .cursor
+    mode: pointer
+    layout:
+      rules: rules
+      skills: skills
+      workflows: commands
+    extension: .mdc
+
+  codex:
+    root: .codex
+    mode: pointer
+    layout:
+      rules: rules
+      skills: skills
+      workflows: automations
+    extension: .md
+
+  devin:
+    # Devin ingests file bodies and cannot follow a pointer, so this surface
+    # carries full copies. That is why it is drift-checked: a mirror is the one
+    # place where the canonical body can silently go stale.
+    root: .devin
+    mode: mirror
+    layout:
+      rules: rules
+      skills: skills
+      workflows: workflows
+    extension: .md
+
+# -----------------------------------------------------------------------------
+# Modes an operation may carry. Ordered by increasing restriction; the
+# validator uses this order to reject any surface that de-escalates a mode
+# relative to its canonical body.
+# -----------------------------------------------------------------------------
+modes:
+  - AUTO
+  - CONSULT
+  - STOP

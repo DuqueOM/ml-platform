@@ -1,18 +1,57 @@
-# /new-adr
+---
+description: Create a new Architecture Decision Record with proper structure and numbering
+---
 
-Create an Architecture Decision Record.
+# /new-adr Workflow
 
-1. Confirm the decision is non-trivial. A preference is not a decision.
-2. Determine blast radius: repository-wide → `docs/decisions/`; one project →
-   `projects/<name>/docs/decisions/`.
-3. Next free number; filename `ADR-NNN-kebab-title.md`.
-4. Format: Context → Decision → Consequences (positive/negative/neutral) →
-   Alternatives considered → Revisit triggers → Related.
-5. **Alternatives carry the reason they lost.** A decision without rejected
-   alternatives is a preference.
-6. **Revisit triggers are concrete and observable.** "If requirements change"
-   is not a trigger.
-7. **Measurements carry their method** (rule 02-verification).
-8. Add it to the index, and reference it from the technical plan at the phase
-   whose work it governs. An ADR that exists only as a file is not integrated.
-9. Run `scripts/check_doc_coherence.py`.
+## 1. Determine ADR Number
+
+```bash
+ls docs/decisions/ | sort -n | tail -1
+```
+// turbo
+
+Next number = last + 1, zero-padded to 3 digits.
+
+## 2. Create ADR File
+
+Use template at `templates/docs/decisions/adr-template.md`:
+
+```bash
+export ADR_NUM="NNN"
+export ADR_SLUG="short-decision-name"
+cp templates/docs/decisions/adr-template.md docs/decisions/${ADR_NUM}-${ADR_SLUG}.md
+```
+
+## 3. Fill in Sections
+
+Required sections:
+1. **Title**: `ADR-${ADR_NUM}: ${TITLE}`
+2. **Status**: Proposed (will change to Accepted after review)
+3. **Date**: Today's date (YYYY-MM-DD)
+4. **Context**: What problem are we solving? What constraints exist?
+5. **Options Considered**: Table with at least 2 options, Pros/Cons each
+6. **Decision**: What we decided
+7. **Rationale**: Why this option over alternatives
+8. **Consequences**: Positive (what we gain) and Negative (what we trade off)
+9. **Revisit When**: Conditions that would invalidate this decision
+
+## 4. Validation Checklist
+
+- [ ] Context explains the problem clearly for someone unfamiliar
+- [ ] At least 2 options considered with honest pros/cons
+- [ ] Decision is clear and actionable
+- [ ] Rationale explains WHY, not just WHAT
+- [ ] Consequences include both positive and negative
+- [ ] Revisit When has concrete, measurable conditions
+- [ ] Uses real measured data where applicable (not estimates)
+
+## 5. Cross-Reference
+
+- If the ADR relates to a specific service, reference it in the service README
+- If the ADR introduces a new invariant, update `AGENTS.md`
+- If the ADR changes a K8s pattern, update the relevant rule in `agentic/rules/`
+
+## 6. Review
+
+Request review from a peer or lead engineer. ADR moves from Proposed → Accepted after review.

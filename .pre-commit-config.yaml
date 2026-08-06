@@ -1,0 +1,131 @@
+# Pre-commit hooks for ml-platform.
+#
+# Design rule: a hook here must be FAST and LOCAL. Anything requiring network,
+# cloud credentials or minutes of runtime belongs in CI, not in the commit
+# path — a slow pre-commit gets bypassed with `--no-verify`, and a bypassed
+# gate is worse than an absent one because it still appears on the list.
+#
+# The split, deliberately:
+#   pre-commit  — formatting, linting, types, secrets, agentic surface parity
+#   CI          — the full suite, coverage, load tests, supply chain
+#
+# Install:
+#   uv run pre-commit install
+#   uv run pre-commit install --hook-type commit-msg
+#
+# Run over everything once (do this after cloning):
+#   uv run pre-commit run --all-files
+
+default_language_version:
+  python: python3.11
+
+# Generated surfaces are validated by their own hook below, not linted as
+# hand-written source. Linting a mirror reports the same finding N times.
+exclude: '^(\.claude|\.cursor|\.codex|\.devin)/'
+
+repos:
+  # --- hygiene -------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: detect-private-key
+      - id: check-added-large-files
+        # Datasets are versioned by reference, never committed
+        # (docs/datasets/register.md). This is the backstop for that rule.
+        args: [--maxkb=512]
+      - id: no-commit-to-branch
+        args: [--branch, main]
+
+  # --- lint + format -------------------------------------------------------
+  # Ruff replaces black + isort + flake8 in one pass (ADR-004, Core tier).
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.1
+    hooks:
+      - id: ruff-check
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  # --- types ---------------------------------------------------------------
+  # libs/ has the widest blast radius, so it is checked strictly. Kept in
+  # pre-commit despite the cost because a type error in a shared library
+  # reaches every consumer, and finding it at push time is late.
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.18.2
+    hooks:
+      - id: mypy
+        files: ^libs/
+        additional_dependencies: [types-PyYAML]
+
+  # --- secrets -------------------------------------------------------------
+  # Scans staged content. The commit-history scan lives in CI: the working tree
+  # cannot show what a previous commit already published.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+
+  # --- lockfile ------------------------------------------------------------
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.9.9
+    hooks:
+      - id: uv-lock
+
+  # --- commit messages -----------------------------------------------------
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+
+  # --- repository invariants (local; no network) ---------------------------
+  - repo: local
+    hooks:
+      - id: dependency-direction
+        name: dependency direction (ADR-001)
+        description: >
+          libs/ never imports projects/; projects never import each other;
+          no cycles in libs/. The only mechanical evidence for charter
+          criterion C1.
+        entry: uv run pytest tests/test_dependency_direction.py -q
+        language: system
+        pass_filenames: false
+        files: '^(libs|projects|platform)/.*\.py$'
+
+      - id: agentic-surface-sync
+        name: agentic surface is current
+        description: >
+          Every rule, skill and workflow is published to all four tool
+          surfaces. Fails rather than writing, so a commit can never carry a
+          canonical change without its rendered surfaces.
+        entry: uv run python scripts/sync_agentic_adapters.py --check
+        language: system
+        pass_filenames: false
+        files: '^agentic/'
+
+      - id: agentic-surface-valid
+        name: agentic surface integrity
+        description: >
+          Parity, declared AUTO/CONSULT/STOP mode per skill, no mode
+          de-escalation in a mirror, no policy text in a pointer.
+        entry: uv run python scripts/validate_agentic_surface.py --strict
+        language: system
+        pass_filenames: false
+        files: '^(agentic/|AGENTS\.md)'
+
+      - id: doc-coherence
+        name: documentation coherence (ADR-005)
+        description: >
+          ADR index completeness, dangling ADR references, gate traceability,
+          agentic counts, private-reference guard, audit staleness.
+        entry: uv run python scripts/check_doc_coherence.py
+        language: system
+        pass_filenames: false
+        files: '\.md$'

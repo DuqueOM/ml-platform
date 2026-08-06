@@ -32,7 +32,10 @@ AGENTIC = REPO_ROOT / "agentic"
 AUDIT_MAX_AGE_DAYS = 90
 
 _ADR_FILE = re.compile(r"^ADR-(\d{3})-[a-z0-9-]+\.md$")
-_ADR_REF = re.compile(r"ADR-(\d{3})")
+_ADR_REF = re.compile(r"(?<!template-)\bADR-(\d{3})")
+# Inherited bodies use ml-service-template's numbering, namespaced so a
+# reference can never silently resolve against the wrong index (ADR-002).
+_INHERITED_ADR_REF = re.compile(r"\btemplate-ADR-(\d{3})")
 
 failures: list[str] = []
 notes: list[str] = []
@@ -64,7 +67,9 @@ def _rel_parts(path: Path) -> set[str]:
 def _is_scannable(path: Path, exclude: set[str] = frozenset()) -> bool:  # type: ignore[assignment]
     """True when a markdown file is part of the documentation surface."""
     parts = _rel_parts(path)
-    return not (parts & ({".git", ".venv", "node_modules", ".mypy_cache", ".pytest_cache"} | set(exclude)))
+    generated = {".claude", ".cursor", ".codex", ".devin"}
+    infra = {".git", ".venv", "node_modules", ".mypy_cache", ".pytest_cache"}
+    return not (parts & (infra | generated | set(exclude)))
 
 
 def _adr_files() -> dict[str, Path]:
@@ -197,8 +202,27 @@ def check_language_and_privacy() -> None:
         if not _is_scannable(path, exclude={"projects"}):
             continue
         scanned += 1
-        for _owner, repo in repo_link.findall(_read(path)):
-            if repo.removesuffix(".git") not in public_repos:
+        placeholders = {"OWNER", "REPO", "ORG", "USER", "your-org", "your-repo", "<owner>", "<repo>"}
+        # github.com/<reserved>/... are product URLs, not repository links.
+        reserved = {
+            "settings",
+            "features",
+            "orgs",
+            "apps",
+            "marketplace",
+            "security",
+            "enterprise",
+            "pricing",
+            "about",
+            "site",
+            "codespaces",
+            "sponsors",
+        }
+        for owner, repo in repo_link.findall(_read(path)):
+            repo = repo.removesuffix(".git")
+            if owner in placeholders or repo in placeholders or owner in reserved:
+                continue
+            if repo not in public_repos:
                 fail("C6", f"{path.relative_to(REPO_ROOT)} links to non-public repository {repo!r}")
     ok("C6", f"{scanned} files checked for private references")
 
