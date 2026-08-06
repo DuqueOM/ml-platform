@@ -33,7 +33,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**8 done · 2 partial · 23 absent** — of 33 tracked components.
+**11 done · 0 partial · 22 absent** — of 33 tracked components.
 
 ### Phase 0
 
@@ -42,19 +42,19 @@ modules, and a coherence filter examining zero files, both stayed green.
 | ✅ | uv workspace + lockfile | `uv lock --check` passes |
 | ✅ | Dependency direction test | `uv run pytest tests/test_dependency_direction.py -q` passes |
 | ✅ | Documentation coherence gate | `uv run python scripts/check_doc_coherence.py` passes |
-| 🟡 | Agentic canonical store | 74 file(s), no verification command |
+| ✅ | Agentic canonical store | `uv run python scripts/validate_agentic_surface.py --strict` passes |
 | ✅ | Agentic 4-tool surfaces | `uv run python scripts/sync_agentic_adapters.py --check` passes |
 | ✅ | Agentic surface integrity | `uv run python scripts/validate_agentic_surface.py --strict` passes |
 | ✅ | pre-commit | `uv run pre-commit validate-config .pre-commit-config.yaml` passes |
 | ✅ | Lint + format | `uv run ruff check . && uv run ruff format --check .` passes |
 | ✅ | Type checking (libs, strict) | `uv run mypy libs/` passes |
-| 🟡 | CI workflow | 1 file(s), no verification command |
+| ✅ | CI workflow | `uv run python scripts/check_ci_references.py` passes |
 
 ### Phase 1
 
 | | Component | Evidence |
 |:-:|---|---|
-| ⬜ | Dataset acquisition scripts | absent |
+| ✅ | Dataset acquisition scripts | `uv run pytest tests/test_dataset_registry.py -q` passes |
 | ⬜ | Local validation stack | absent |
 | ⬜ | libs/ml-core implementation | absent |
 | ⬜ | libs/data-contracts implementation | absent |
