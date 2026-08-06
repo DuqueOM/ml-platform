@@ -262,7 +262,7 @@ def test_container_rehost_preserves_device_and_weights(monkeypatch):
 
     assert "llama-e4b" in endpoint.url
     assert endpoint.device == "gpu"
-    assert endpoint.weights_gb == 5.0
+    assert endpoint.weights_gb == 4.95
 
 
 def test_missing_tier_zero_is_rejected(tmp_path, monkeypatch):

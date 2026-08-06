@@ -9,6 +9,33 @@ are backwards-compatible by default (new behaviour is opt-in or fail-closed).
 
 ## [Unreleased]
 
+### Fixed
+- **ADR-012 corrected the same day it was written — two claims were wrong, both
+  from treating a single observation as a measurement.**
+  1. *VRAM budget*: `5987 MiB free` was one sample of a fluctuating quantity.
+     Sampled repeatedly, the desktop holds **241–252 MiB**, not ~1900; free
+     VRAM is **~7650 MiB**. `memory_budget_gb.gpu` corrected 5.8 → 7.4, and
+     the config now records the sampling command next to the value.
+  2. *That the 12B does not fit*: the rejection cited June's `bench/RESULTS.md`
+     figure of 8.87 tok/s — but that run used `-ngl 20`, partial offload. It
+     measured what happens when you assume the model does not fit, never
+     whether it does. Re-measured with `llama-bench -ngl 99`:
+     **12B = 29.53 tok/s (6.86 GiB, clears its ≥10 gate by 195%, 3.3× the June
+     figure)**; **E4B = 70.37 tok/s (4.95 GiB, +63% over June)**.
+- **What the correction does not change**: 4.95 + 6.86 = 11.81 GiB cannot be
+  co-resident in ~7.65 GiB, so `max_local_tiers: 1` stands; and a 12B serving
+  the whole loop exceeds the 8 s SLA at measured rates (~2.7 s to route, ~5.1 s
+  to generate) where E4B does the same work in ~4.3 s. ADR-011's topology is
+  unaffected.
+- **What it does change**: the 12B is a viable *local* tier for
+  latency-tolerant work — nightly evals, offline verification, batch scoring —
+  where `bench/RESULTS.md` had concluded only a 2.5 tok/s path existed. And
+  routing the display to the integrated GPU, which prompted the re-measurement,
+  turns out to free ~243 MiB: noise at this scale. The constraint was never the
+  desktop's VRAM, it was `-ngl`.
+- `bench/RESULTS.md` carries the re-measurement as a header; the June results
+  are preserved unedited as the historical record.
+
 ### Added
 - **ADR-012 — "local" is two budgets, not one.** ADR-011 justified its
   resident-memory invariant with system-RAM measurements only. Measuring the
@@ -36,7 +63,7 @@ are backwards-compatible by default (new behaviour is opt-in or fail-closed).
   `AGENT_TIER0_DEVICE`, so removing the reservation makes the budget check
   fail loudly instead of the host swapping quietly.
 - Six tests covering the device budget, including the exact measured failure
-  (5.0 GiB on a 4.0 GiB CPU budget) and its mirror (same weights, GPU device,
+  (4.95 GiB on a 4.0 GiB CPU budget) and its mirror (same weights, GPU device,
   accepted), plus a regression test that `LLAMA_HOST` container rehosting
   preserves `device` — losing it would silently disarm the check inside the
   container.

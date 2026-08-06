@@ -99,6 +99,71 @@ answer it negatively for every candidate:
 | Move Tier 0 to CPU, put a bigger model on the GPU | 5.0 GB of weights against 4.0 GB available RAM. This is the Docker bug, adopted deliberately |
 | A small embedding model in the residual VRAM | Genuinely fits (~0.3–1 GB) and would upgrade retrieval from BM25-only to hybrid. **Deferred, not rejected** — it is a retrieval-quality decision that needs its own evaluation evidence, not a memory decision |
 
+## Correction (2026-08-05, same day)
+
+Two claims above were wrong. Both came from the same methodological error —
+treating a single observation as a measurement — and they are preserved rather
+than edited away, because the error is more instructive than the numbers.
+
+### Wrong claim 1: the VRAM budget
+
+The `5987 MiB free` figure was **one sample of a fluctuating quantity**. The
+desktop's hold on the dGPU varies with compositor activity; sampled repeatedly
+it sits at **241–252 MiB**, with the ~1900 MiB reading an outlier captured
+during a burst.
+
+| | Claimed | Measured (repeated sampling) |
+|---|---|---|
+| VRAM held by desktop | 1905 MiB (fixed) | 241–252 MiB steady, transient spikes to ~1970 |
+| VRAM free | 5987 MiB | **~7650 MiB** |
+
+`limits.memory_budget_gb.gpu` is corrected from `5.8` to `7.4`.
+
+### Wrong claim 2: that the 12B does not fit
+
+The rejection table stated the 12B "fails its gate by 11%", citing
+`bench/RESULTS.md`. That June measurement used **`-ngl 20`** — partial offload,
+where most layers stream across PCIe. It was never a measurement of whether the
+model *fits*; it was a measurement of what happens when you assume it does not.
+
+Re-measured with `llama-bench -ngl 99`, both models under one method:
+
+| Model | Size | Params | pp128 | tg128 | Gate ≥10 tok/s |
+|---|---|---|---|---|---|
+| E4B Q4_K_M | 4.95 GiB | 7.52 B | 407.09 t/s | **70.37 t/s** | — (router gate ≥25) |
+| 12B Q4_K_M | 6.86 GiB | 11.91 B | 746.47 t/s | **29.53 t/s** | **passes by 195%** |
+
+The 12B fits fully in VRAM and is **3.3× faster** than the June figure. Peak
+observed during the run: 7635 MiB used, 257 MiB free — tight, but it holds.
+
+### What this does and does not change
+
+**Does not change the topology.** The two models are 4.95 + 6.86 = 11.81 GiB
+against ~7.65 GiB free: they cannot be co-resident, so `max_local_tiers: 1`
+stands. And a 12B serving the whole loop breaks the interactive SLA at the
+measured rates — routing ~80 tokens at 29.53 t/s is 2.7 s and generation ~150
+tokens is 5.1 s, which with the planning station exceeds the 8000 ms budget.
+E4B does the same work in roughly 4.3 s.
+
+**Does change what the 12B is for.** At 29.53 tok/s it is a viable *local*
+tier for latency-tolerant work — nightly evaluation runs, offline verification,
+batch scoring — where `bench/RESULTS.md` had concluded only the 26B-at-2.5-tok/s
+batch path was available. That is a materially better option than it recorded,
+and it costs no cloud spend.
+
+**Makes the discrete-GPU switch a non-lever.** Routing the display to the
+integrated Intel UHD adapter would free ~243 MiB. At this scale that is noise.
+The constraint was never the desktop's VRAM; it was `-ngl`.
+
+### The methodological lesson
+
+Both errors have the same shape: a number was read once and written down as
+*measured*. A single reading of a fluctuating quantity is an anecdote, and a
+benchmark run under an assumption cannot test that assumption. Where a budget
+or a gate depends on a measurement, the measurement must be repeated, and the
+conditions it was taken under must be recorded next to it — which is why the
+corrected budgets below carry their sampling method, not just their value.
+
 ## Consequences
 
 ### Positive

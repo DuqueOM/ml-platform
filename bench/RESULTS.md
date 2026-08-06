@@ -1,5 +1,40 @@
 # Benchmark Results — Gemma-4 Tiers
 
+> ## ⚠️ Re-measured 2026-08-05 — the June results below understate two models
+>
+> The June run offloaded partially (`-ngl 20` for the 12B, `-ngl 10` for the
+> 26B) on the assumption that the models would not fit in 8 GB of VRAM. That
+> assumption was never tested. Re-measured with `llama-bench -ngl 99`, one
+> method for both models:
+>
+> | Model | Size | Params | pp128 | tg128 | vs. June |
+> |---|---|---|---|---|---|
+> | E4B Q4_K_M | 4.95 GiB | 7.52 B | 407.09 t/s | **70.37 t/s** | +63% (was 43.19) |
+> | 12B Q4_K_M | 6.86 GiB | 11.91 B | 746.47 t/s | **29.53 t/s** | **+233%** (was 8.87) |
+>
+> `llama.cpp` build e36a602ba (9659), RTX 5070 Laptop, 8150 MiB VRAM.
+>
+> **The 12B fits fully in VRAM and clears its ≥10 tok/s gate by 195%** — the
+> "CRITICAL FAILURE" verdict below was a measurement of partial offload, not of
+> capacity. Peak during the run: 7635 MiB used, 257 MiB free.
+>
+> What this does **not** change: E4B (4.95) + 12B (6.86) = 11.81 GiB cannot be
+> co-resident in ~7.65 GiB, and a 12B serving the whole loop exceeds the 8 s
+> interactive SLA at 29.53 t/s. The hybrid topology of ADR-011 stands. What it
+> does change is that the 12B is now a viable **local** tier for
+> latency-tolerant work (nightly evals, offline verification, batch scoring)
+> where this document had concluded only the 26B-at-2.5-t/s path existed.
+>
+> See the "Correction" section of
+> [ADR-012](../docs/decisions/ADR-012-device-aware-memory-budget.md) for the
+> methodological failure this exposed: a benchmark run under an assumption
+> cannot test that assumption.
+>
+> The June results are preserved unedited below as the historical record.
+
+---
+
+
 **Hardware**: 11GB RAM, RTX 5070 8GB, Ubuntu 24.04  
 **llama.cpp**: version 9659 (e36a602ba)  
 **Models**: Q4_K_M (ggml-org official target quant)  

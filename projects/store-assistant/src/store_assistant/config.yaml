@@ -47,7 +47,7 @@ tier_endpoints:
     # charged against. The measured 43 tok/s (bench/RESULTS.md) is a GPU
     # number; the same model on CPU exceeds available system RAM and swaps.
     device: "${AGENT_TIER0_DEVICE:-gpu}"
-    weights_gb: 5.0                                        # E4B Q4_K_M, measured
+    weights_gb: 4.95                    # E4B Q4_K_M, reported by llama-bench
   1:                                                       # mid reasoning
     url: "${AGENT_TIER1_URL:-}"
     kind: remote
@@ -87,14 +87,24 @@ limits:
                             # killer discover the overcommit at request time.
 
   # Per-device budgets (ADR-012), measured on the reference workstation
-  # 2026-08-05 — not estimated. Re-measure before changing either number.
-  #   gpu: RTX 5070 Laptop, 8151 MiB total - 1905 MiB held by the Windows
-  #        desktop = 5987 MiB free. Stated slightly under to leave KV headroom.
+  # 2026-08-05. Each value records HOW it was obtained, because the first
+  # version of these numbers came from single readings and was wrong — see
+  # the "Correction" section of ADR-012.
+  #
+  #   gpu: RTX 5070 Laptop, 8150 MiB total. The desktop's hold on the dGPU
+  #        FLUCTUATES; sampled repeatedly it sits at 241-252 MiB, not the
+  #        ~1900 MiB an unlucky single sample reported. Free is therefore
+  #        ~7650 MiB. Stated at 7.4 to leave KV-cache and compute-buffer
+  #        headroom (a fully-offloaded 12B peaked at 7635 MiB used).
+  #        Re-measure by SAMPLING, never by one reading:
+  #          for i in $(seq 1 10); do \
+  #            nvidia-smi --query-gpu=memory.used --format=csv,noheader; \
+  #            sleep 3; done
   #   cpu: system RAM available to WSL2 under its default 50% host allocation.
   #        Raising this requires a .wslconfig change — see
   #        docs/workstation-memory-budget.md.
   memory_budget_gb:
-    gpu: 5.8
+    gpu: 7.4
     cpu: 4.0
 
 router:
