@@ -14,7 +14,7 @@ habit.
 Inherited from the agent behaviour protocol and binding on every procedure here.
 
 | Mode | Meaning |
-|---|---|
+| --- | --- |
 | **AUTO** | Proceed and report |
 | **CONSULT** | Present the plan and its evidence; wait for a decision |
 | **STOP** | Halt. Requires explicit human authorisation to continue, and the authorisation is recorded |
@@ -30,7 +30,7 @@ Runs on every change before it is proposed for review.
 
 **Preconditions**: a clean working tree at a known commit.
 
-**Steps**
+### Steps
 
 1. Run the gates the change touches, from
    [quality-gates.md](quality-gates.md). Path-filtered CI decides which; when
@@ -56,7 +56,7 @@ Applied whenever tests are written. Implements ADR-005 rule J.
 **The question a test must answer**: *what regression would this catch?* If the
 answer is "none specific", the test is coverage theatre and should be replaced.
 
-**Requirements**
+### Requirements
 
 1. **Name or docstring states the failure being prevented.** `test_handles_none`
    says nothing; `test_missing_credential_raises_rather_than_calling_unauthenticated`
@@ -81,7 +81,7 @@ run after.
 
 Runs when a gate threshold is proposed for change, and on a recurring cadence.
 
-**Steps**
+### Steps
 
 1. Verify every README claim has a row in
    [quality-gates.md](quality-gates.md), and every row's command exists and
@@ -105,7 +105,7 @@ Implements ADR-005 rule B. **Runs in a separate session from the work it
 audits.** Self-review cannot find an error its author made confidently, and
 running it in the authoring session makes it self-review regardless of intent.
 
-**Method**
+### Method
 
 1. **Verify by executing, never by reading.** "142 tests pass" → run them.
    "No type errors" → run the checker. A claim that cannot be executed cannot
@@ -125,7 +125,7 @@ running it in the authoring session makes it self-review regardless of intent.
 
 **Evidence format** — every finding:
 
-```
+```text
 [P0|P1|P2|P3] <one-line claim>
   file:line
   $ <command>
@@ -134,7 +134,7 @@ running it in the authoring session makes it self-review regardless of intent.
 ```
 
 | Severity | Meaning |
-|---|---|
+| --- | --- |
 | P0 | Something promised is broken |
 | P1 | Security or data risk |
 | P2 | Real debt with a cost |
@@ -192,7 +192,7 @@ appended (see the ADR format conventions).
 
 ## QA-6 — Release (CONSULT, with STOP points)
 
-**Preconditions**
+### Preconditions
 
 - Every applicable gate green **on the release commit** — not on an ancestor,
   not on a similar branch.
@@ -200,7 +200,7 @@ appended (see the ADR format conventions).
 - CHANGELOG reflects the actual commit range.
 - Model cards current for every deployed model.
 
-**STOP points**
+### STOP points
 
 1. Releasing with any gate red.
 2. Releasing without verified-green CI.
@@ -228,7 +228,7 @@ the one nobody can undo.
 ## Cadence
 
 | Procedure | When |
-|---|---|
+| --- | --- |
 | QA-1 Change verification | Every change |
 | QA-2 Test authoring | Whenever tests are written |
 | QA-5 Doc coherence | Every round that touches documentation |

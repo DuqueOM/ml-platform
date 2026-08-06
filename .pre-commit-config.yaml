@@ -138,3 +138,19 @@ repos:
         entry: uv run python scripts/check_implementation_status.py --check
         language: system
         pass_filenames: false
+
+  # markdownlint ran ONLY in CI, and a Dependabot bump of the action (v23 → v24,
+  # bringing markdownlint v0.41 and its new MD060 rule) turned 553 violations
+  # red in a build that could not be reproduced locally. A gate that exists only
+  # in CI is a gate whose failures arrive after the work is pushed.
+  #
+  # Pinned via the same tag CI uses, so the two cannot disagree about which
+  # rules are in force.
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.23.2
+    hooks:
+      - id: markdownlint-cli2
+        name: markdown lint (same rules as CI)
+        # Config and ignores come from .markdownlint-cli2.yaml, not from here —
+        # two lists of exclusions would drift.
+        args: []

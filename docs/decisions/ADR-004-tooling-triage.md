@@ -41,7 +41,7 @@ the tier carries obligations.
 ### Tier definitions
 
 | Tier | Meaning | Obligations | Where it may live |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **Core** | The critical path depends on it. It is operated, not merely invoked. | An ADR; a failing-capable CI gate; a runbook covering failure and recovery; named in the architecture document | Anywhere |
 | **Demonstrated** | Used once, narrowly, at the point where it is the right answer. Not load-bearing. | A stated *reason for the narrow scope*; a working example; an entry in this matrix | One project or one pipeline stage |
 | **Studied** | Deliberately learned; findings recorded. Not wired in. | A dated note in `docs/labs/` stating what was tried, what was learned, and why it did not advance a tier | `docs/labs/` only |
@@ -63,7 +63,7 @@ Three rules govern movement between tiers:
 #### Core
 
 | Technology | Role | Why Core |
-|---|---|---|
+| --- | --- | --- |
 | Python 3.11+, **uv**, **Ruff** | Language, dependency resolution, lint+format | One lockfile across the workspace is what makes ADR-001 enforceable. Ruff replaces black+isort+flake8 in one pass |
 | **Pandera** | Schema validation at the code boundary | Typed `DataFrameModel` in function signatures catches contract breaks at the point of use, where the stack trace is still meaningful |
 | **Apache Iceberg** | Lakehouse table format | Time travel and schema evolution are what make "retrain on the data as it stood on date D" a mechanical operation. Supported natively by both target clouds |
@@ -81,7 +81,7 @@ Three rules govern movement between tiers:
 #### Demonstrated
 
 | Technology | Where, exactly | Why the scope is narrow |
-|---|---|---|
+| --- | --- | --- |
 | **Apache Spark** (Dataproc Serverless / EMR Serverless) | The one-time historical backfill of the largest dataset | The volume genuinely justifies it, and serverless means no cluster to operate. Reinstated — see "Reversals" |
 | **Great Expectations** | Post-ingestion validation of warehouse tables, with Data Docs published as a CI artifact | Its distinctive value is organisational — a shared expectation catalogue readable by non-engineers — which appears at the warehouse boundary, not at the function boundary where Pandera already sits. Reinstated — see "Reversals" |
 | **dbt** + Elementary | Warehouse-side transformation and its tests for one project | Where data quality actually lives in many organisations; worth operating once, not everywhere |
@@ -92,7 +92,7 @@ Three rules govern movement between tiers:
 #### Studied
 
 | Technology | Why it is not advancing yet |
-|---|---|
+| --- | --- |
 | **Backstage** | Software templates scaffolding from `ml-service-template` would be a strong platform-engineering signal, but the operating cost lands before any project ships. Promote only if platform-engineering roles become the explicit target |
 | **Kubeflow (full platform)** | The valuable part is the KFP SDK, already Core. The platform itself is heavy to operate and increasingly displaced by managed offerings |
 | **Istio / Linkerd** | mTLS and traffic policy matter at a service count this repository will not reach. NetworkPolicies cover the actual need |

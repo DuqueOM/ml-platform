@@ -6,7 +6,7 @@
 Nothing enters without a tier, and the tier carries obligations.
 
 | Tier | Obligations |
-|---|---|
+| --- | --- |
 | **Core** | An ADR, a failing-capable CI gate, a runbook, a place in the architecture document |
 | **Demonstrated** | A stated reason for the narrow scope, a working example, a row in the matrix |
 | **Studied** | A dated note in `docs/labs/`; never wired in |

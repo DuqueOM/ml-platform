@@ -41,7 +41,7 @@ the source repository.**
 Following [ADR-001](ADR-001-monorepo-topology.md)'s split by blast radius:
 
 | Source | Destination | Rationale |
-|---|---|---|
+| --- | --- | --- |
 | `core/` | `libs/llm-core/src/llm_core/` | Business-agnostic by construction — the source repository's ADR-001 already established that separation |
 | `usecases/tienda/` | `projects/store-assistant/` | A use-case is a project: it has a domain, a policy, its own evaluation sets |
 | `app/` | `libs/serving-core/` + project entrypoint | The serving contract is shared; the use-case binding is not |
@@ -110,7 +110,7 @@ the new location before archiving.
 ## Alternatives considered
 
 | Alternative | Why rejected |
-|---|---|
+| --- | --- |
 | Keep both repositories; publish `llm-core` to a registry | Version skew between a library and its only consumer, plus release overhead, to solve a problem that does not exist at one consumer |
 | Keep both; maintain the shared plan document | The status quo, and the cost this ADR exists to remove |
 | Delete `agent-local` | Destroys eleven ADRs, an OWASP-mapped threat model and a full audit history — the slowest artefacts to reproduce |

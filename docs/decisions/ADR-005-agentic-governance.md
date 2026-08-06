@@ -51,7 +51,7 @@ protocol, the following invariants are binding.
 Every assertion about state carries the method that established it:
 
 | Claim about | Verified by | Never by |
-|---|---|---|
+| --- | --- | --- |
 | Code behaviour | Reading the code, or running it | An error message, or a memory of it |
 | Third-party behaviour | Executing against it | Its documentation alone |
 | A measurement | **Repeated** observation, with the sampling method recorded | A single reading |
@@ -137,7 +137,7 @@ is expected to recall under pressure.
 ### The surface
 
 | Plane | Answers | Example |
-|---|---|---|
+| --- | --- | --- |
 | **Rules** | "What is always true here?" | Dependency direction; no credentials in config |
 | **Skills** | "How is this procedure performed?" | `doc-coherence`, `enterprise-audit`, `test-authoring`, `quality-metrics`, `qa-procedure` |
 | **Workflows** | "What does this slash command run?" | `/audit`, `/document-changes`, `/qa` |

@@ -35,7 +35,7 @@ that a decision was reversed.
 Apply to every commit, regardless of what changed.
 
 | # | Claim | Command | Threshold | Why this value |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | P1 | Dependency direction holds | `uv run pytest tests/test_dependency_direction.py` | Zero violations | Charter criterion C1 is unfalsifiable without it. Non-negotiable |
 | P2 | Type-checked | `uv run mypy libs/ projects/` | Zero errors, strict on `libs/` | `libs/` has the widest blast radius; a type error there reaches every project |
 | P3 | Lint and format clean | `uv run ruff check . && uv run ruff format --check .` | Zero | Formatting arguments are a tax; a tool ends them |
@@ -46,7 +46,7 @@ Apply to every commit, regardless of what changed.
 ## Library gates
 
 | # | Claim | Command | Threshold | Why this value |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | L1 | Line coverage | `uv run pytest libs/ --cov --cov-fail-under=90` | ≥90% | Shared code; an untested path here fails in every consumer |
 | L2 | Branch coverage | same, `--cov-branch` | ≥80% | Branches are where the untested paths hide |
 | L3 | Public API documented | `uv run python scripts/check_docstrings.py libs/` | 100% of public symbols | A library is its contract; an undocumented public function has none |
@@ -58,7 +58,7 @@ worse, because the number invites trust.
 ## Service gates
 
 | # | Claim | Command | Threshold | Why this value |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | S1 | API contract holds | `uv run schemathesis run "$OPENAPI_URL"` | Zero failures | Generated cases find what hand-written tests assume away |
 | S2 | Latency SLO | `k6 run <project>/tests/load.js` | p99 within the project's stated SLO | The claim is public; the gate makes it accountable |
 | S3 | Serving invariants | `uv run pytest -k serving_contract` | Zero | Inherited from `ml-service-template` (ADR-003) — every one encodes a past incident |
@@ -69,7 +69,7 @@ worse, because the number invites trust.
 Evaluated before promotion, never after.
 
 | # | Claim | Command | Threshold | Why this value |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | M1 | Primary metric | `uv run python -m <project>.gates --check metric` | Per project, in `evals/gates.yaml` | Set from the cost of error, documented per project — never a default |
 | M2 | No temporal leakage | `uv run pytest -k leakage` | Must fail on a naive feature build | A leakage test that passes on naive code proves nothing |
 | M3 | Fairness | `--check fairness` | Disparate impact ratio ≥0.80 | The four-fifths rule: a recognised external reference rather than a number chosen here |
@@ -80,7 +80,7 @@ Evaluated before promotion, never after.
 ## LLM and agent gates
 
 | # | Claim | Command | Threshold | Why this value |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | A1 | Retrieval quality | `uv run python -m rag_assistant.evals --check retrieval` | recall@k per project | Generation quality is bounded by retrieval; measure the bound |
 | A2 | Answer faithfulness | `uv run promptfoo eval -c evals/config.yaml` | Per project | Blocks merge — the LLM equivalent of M1 |
 | A3 | Policy gate holds under injection | `uv run pytest -k injection_containment` | Zero bypasses | Asserts the *loop's* behaviour when the model is fooled, never the model's judgement |
@@ -90,7 +90,7 @@ Evaluated before promotion, never after.
 ## Compliance gates
 
 | # | Claim | Command | Threshold |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | C1 | Provenance attested | `cosign verify-attestation --type slsaprovenance` | SLSA L3 |
 | C2 | SBOM published per image | `scripts/check_sbom.py` | Present and attested |
 | C3 | Compliance mapping current | `scripts/check_compliance_mapping.py` | Every control mapped |
@@ -103,7 +103,7 @@ Evaluated before promotion, never after.
 Recorded so their absence reads as a decision rather than an oversight.
 
 | Not gated | Why |
-|---|---|
+| --- | --- |
 | Documentation prose quality | Not mechanically checkable. Covered by independent audit (ADR-005 rule B) |
 | Architecture conformance beyond dependency direction | Coarser rules produce false positives that train people to bypass gates |
 | Model accuracy above the promotion threshold | Ratcheting the threshold on every improvement makes later legitimate variation look like regression |

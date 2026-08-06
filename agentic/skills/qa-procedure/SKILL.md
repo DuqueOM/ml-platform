@@ -21,7 +21,7 @@ most — during an incident, under time pressure, at the end of a long session.
 ## Selecting the procedure
 
 | Situation | Procedure | Mode |
-|---|---|---|
+| --- | --- | --- |
 | A change is ready for review | QA-1 change verification | AUTO |
 | Tests are being written | QA-2 test authoring → `test-authoring` | AUTO |
 | A threshold is changing, or recurring review | QA-3 metric review → `quality-metrics` | CONSULT |

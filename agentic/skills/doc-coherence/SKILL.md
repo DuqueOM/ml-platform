@@ -37,7 +37,7 @@ files. These rules cover the gap.
 How a claim was established travels with it.
 
 | Claim about | Verified by | Never by |
-|---|---|---|
+| --- | --- | --- |
 | Code behaviour | Reading or running the code | An error message, or a memory of one |
 | Third-party behaviour | Executing against it | Its documentation alone |
 | A measurement | **Repeated** observation, method recorded | A single reading |

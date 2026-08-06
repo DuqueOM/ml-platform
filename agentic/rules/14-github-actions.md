@@ -10,12 +10,11 @@ description: GitHub Actions CI/CD patterns for ML services
 > Any `ADR-NNN` cited below refers to the template's numbering, not this
 > repository's. The AUTO / CONSULT / STOP protocol in `AGENTS.md` binds here.
 
-
 # GitHub Actions Rules
 
 ## Workflow Organization
 
-```
+```text
 .github/workflows/
 ├── ci.yml                    # Lint, test, build — on push to main/develop
 ├── ci-infra.yml              # Terraform validate, tfsec, checkov — on infra/ changes
@@ -59,6 +58,7 @@ jobs:
 ## Infrastructure CI (`ci-infra.yml`)
 
 Triggered on changes to `infra/` or `k8s/`:
+
 ```yaml
 jobs:
   terraform-validate:
@@ -103,6 +103,7 @@ jobs:
 ## Retraining Workflows
 
 Triggered by `workflow_dispatch` (from drift detection or manual):
+
 ```yaml
 on:
   workflow_dispatch:
@@ -175,7 +176,7 @@ jobs:
 Environments to configure in `Settings → Environments`:
 
 | Env name | Reviewers | Wait timer | Deployment branches |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `{cloud}-dev` | 0 | 0 | all |
 | `{cloud}-staging` | 1 | 0 | main + tags |
 | `{cloud}-production` | 2 | 5 min | version tags only |

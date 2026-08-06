@@ -80,7 +80,7 @@ repository generates from it and does not fork it.**
 ## Alternatives considered
 
 | Alternative | Why rejected |
-|---|---|
+| --- | --- |
 | Vendor the template's service code into `libs/` | Copies without an update path. Every upstream fix becomes a manual merge |
 | Reimplement serving from scratch | Rediscovers, by incident, invariants that are already written down |
 | Absorb the template as this repository did with `agent-local` (ADR-002) | The template has adopters and standalone value; `agent-local` had neither. Absorbing it would delete a working artifact to save a dependency |

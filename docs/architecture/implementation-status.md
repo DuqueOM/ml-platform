@@ -15,7 +15,7 @@ a human maintains will drift; one that a script derives cannot.
 ## How to read it
 
 | Marker | Meaning |
-|---|---|
+| --- | --- |
 | ✅ | Exists and its gate passes |
 | 🟡 | Exists but incomplete — the criterion below it says what is missing |
 | ⬜ | Does not exist. **Not "planned" — absent** |
@@ -38,7 +38,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 ### Phase 0
 
 | | Component | Evidence |
-|:-:|---|---|
+| :-: | --- | --- |
 | ✅ | uv workspace + lockfile | `uv lock --check` passes |
 | ✅ | Dependency direction test | `uv run pytest tests/test_dependency_direction.py -q` passes |
 | 🟡 | Documentation coherence gate | `uv run python scripts/check_doc_coherence.py` FAILS |
@@ -53,7 +53,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 ### Phase 1
 
 | | Component | Evidence |
-|:-:|---|---|
+| :-: | --- | --- |
 | ✅ | Dataset acquisition scripts | `uv run pytest tests/test_dataset_registry.py -q` passes |
 | 🟡 | Local validation stack | `uv run python scripts/local/preflight.py --samples 1 --interval 0` FAILS |
 | 🟡 | libs/ml-core implementation | 4 file(s), no verification command |
@@ -69,7 +69,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 ### Phase 2
 
 | | Component | Evidence |
-|:-:|---|---|
+| :-: | --- | --- |
 | ⬜ | Terraform (GCP) | absent |
 | ⬜ | Terraform (AWS) | absent |
 | ⬜ | Kubernetes manifests | absent |
@@ -79,7 +79,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 ### Phase 3
 
 | | Component | Evidence |
-|:-:|---|---|
+| :-: | --- | --- |
 | 🟡 | libs/llm-core implementation | 1 file(s), no verification command |
 | ⬜ | projects/store-assistant | absent |
 | ⬜ | projects/rag-assistant | absent |
@@ -87,19 +87,19 @@ modules, and a coherence filter examining zero files, both stayed green.
 ### Phase 4
 
 | | Component | Evidence |
-|:-:|---|---|
+| :-: | --- | --- |
 | ⬜ | projects/credit-risk | absent |
 
 ### Phase 5
 
 | | Component | Evidence |
-|:-:|---|---|
+| :-: | --- | --- |
 | ⬜ | projects/doc-intelligence | absent |
 
 ### Phase 6
 
 | | Component | Evidence |
-|:-:|---|---|
+| :-: | --- | --- |
 | ⬜ | projects/agent-ops | absent |
 | ⬜ | Compliance mapping | absent |
 

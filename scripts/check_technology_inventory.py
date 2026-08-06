@@ -132,6 +132,17 @@ _MARK = {
 }
 
 
+def _row(*cells: str) -> str:
+    """One table row in markdownlint's "compact" style: exactly one space per side.
+
+    Built from cells rather than an f-string because an EMPTY cell interpolated
+    into `| {note} |` produces two spaces, which MD060 rejects. That defect
+    generated 115 lint errors in one file, and it was invisible locally because
+    markdownlint ran only in CI.
+    """
+    return "|" + "|".join(f" {cell.strip()} " if cell.strip() else " " for cell in cells) + "|"
+
+
 def render(rows: list[tuple[str, dict[str, Any], str]], full: bool) -> str:
     counts: dict[str, int] = {}
     for _, _, state in rows:
@@ -150,7 +161,7 @@ def render(rows: list[tuple[str, dict[str, Any], str]], full: bool) -> str:
         f"rejected, which are decisions rather than gaps.",
         "",
         "| | Meaning |",
-        "|:-:|---|",
+        "| :-: | --- |",
         "| ✅ | A real artifact exists. Documentation alone never counts |",
         '| ⬜ | Committed to, not built. **Not** "nearly done" |',
         "| 📓 | Studied: deliberately not wired in (ADR-004) |",
@@ -163,17 +174,15 @@ def render(rows: list[tuple[str, dict[str, Any], str]], full: bool) -> str:
         built = sum(1 for _, state in entries if state == "implemented")
         pending = sum(1 for _, state in entries if state == "planned")
         lines += [
-            f"### {category} — {built} built, {pending} pending",
+            f"## {category} — {built} built, {pending} pending",
             "",
             "| | Technology | Tier | Note |",
-            "|:-:|---|---|---|",
+            "| :-: | --- | --- | --- |",
         ]
         for item, state in entries:
-            if not full and state == "implemented":
-                lines.append(f"| ✅ | `{item['id']}` | {item.get('tier', 'core')} | |")
-                continue
-            note = item.get("note", "")
-            lines.append(f"| {_MARK[state]} | `{item['id']}` | {item.get('tier', 'core')} | {note} |")
+            note = "" if (not full and state == "implemented") else str(item.get("note", ""))
+            mark = "✅" if (not full and state == "implemented") else _MARK[state]
+            lines.append(_row(mark, f"`{item['id']}`", str(item.get("tier", "core")), note))
         lines.append("")
 
     lines.append(END)

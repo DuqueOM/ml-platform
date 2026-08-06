@@ -20,7 +20,6 @@ description: Cross-document coherence & versioning — single source of truth, t
 > Any `ADR-NNN` cited below refers to the template's numbering, not this
 > repository's. The AUTO / CONSULT / STOP protocol in `AGENTS.md` binds here.
 
-
 # Rule 16 — Documentation Coherence & Versioning
 
 Rule 06 governs **per-document standards** (what an ADR/README/runbook must
@@ -38,7 +37,7 @@ the gate enforces.
 ## Single source of truth (SSoT) register
 
 | Fact | Canonical owner | Mirrors that MUST track it |
-|------|-----------------|-----------------------------|
+| ------ | ----------------- | ----------------------------- |
 | Release version | `VERSION` | `CHANGELOG.md` latest released heading, `llms.txt` `> Version:`, README badges, `releases/vX.Y.Z.md` |
 | Release publication | `releases/vX.Y.Z.md` | the GitHub Release (title = its H1, body = the file) — published automatically by `.github/workflows/release-on-tag.yml` on tag push, never by hand |
 | Anti-pattern catalogue size | `AGENTS.md` (highest `D-NN` row) | README "N anti-patterns", `llms.txt` `(D-01 to D-NN)`, CLAUDE.md header + skills |
@@ -65,7 +64,7 @@ canonical owner first, then propagating. The gate fails CI when a mirror drifts.
 
 Every non-trivial change MUST be relatable end-to-end:
 
-```
+```text
 decision → ADR-NNN  ⇄  CHANGELOG [Unreleased] entry  ⇄  release vX.Y.Z  ⇄  VERSION
 ```
 
@@ -85,7 +84,7 @@ decision → ADR-NNN  ⇄  CHANGELOG [Unreleased] entry  ⇄  release vX.Y.Z  �
 ## The cascade map — "if you touch X, update Y"
 
 | If you change… | You MUST also update… |
-|----------------|------------------------|
+| ---------------- | ------------------------ |
 | `VERSION` / cut a release | `CHANGELOG.md` dated heading, `llms.txt` version, README badges, `releases/vX.Y.Z.md` (title + body the GitHub Release will use), git tag `vX.Y.Z` pushed |
 | Add/remove an anti-pattern in `AGENTS.md` | README count, `llms.txt` range, CLAUDE.md header + table, rule-audit + debug-ml-inference skills |
 | Add/remove a rule, skill, or workflow | `agentic_manifest.yaml`, run `sync_agentic_adapters.py`, CLAUDE.md counts, AGENTS.md index, `llms.txt` |

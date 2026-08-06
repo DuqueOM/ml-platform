@@ -34,7 +34,7 @@ is the skill working.
 ### 1. Verify by executing, never by reading
 
 | The document claims | You run |
-|---|---|
+| --- | --- |
 | "142 tests pass" | the test suite |
 | "no type errors" | the type checker |
 | "no secrets committed" | the scanner **over commits, not the working tree** |
@@ -81,7 +81,7 @@ has made its own findings unverifiable.
 
 Every finding, without exception:
 
-```
+```text
 [P0|P1|P2|P3] <one-line claim>
   file:line
   $ <command>
@@ -90,7 +90,7 @@ Every finding, without exception:
 ```
 
 | Severity | Meaning |
-|---|---|
+| --- | --- |
 | **P0** | Something promised is broken |
 | **P1** | Security or data risk |
 | **P2** | Real debt with a cost |

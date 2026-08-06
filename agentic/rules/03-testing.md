@@ -29,7 +29,7 @@ required by a **trigger**, not by taste — "when it feels necessary" is how the
 never get written.
 
 | Level | Required when | Proves what unit tests cannot |
-|---|---|---|
+| --- | --- | --- |
 | **Unit** | Always | Logic in isolation |
 | **Integration** | Code crosses a boundary it does not own: a database, an object store, a message broker, a cloud API, another service | That the boundary behaves as assumed. A mocked boundary tests the mock |
 | **End-to-end** | A user-visible path exists: request → feature lookup → inference → response, or a pipeline from raw data to a promoted model | That the pieces compose. Every unit and integration test can pass while the chain is broken |

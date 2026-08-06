@@ -14,7 +14,6 @@ description: API contract versioning, OpenAPI snapshot tests, Pydantic schema ev
 > Any `ADR-NNN` cited below refers to the template's numbering, not this
 > repository's. The AUTO / CONSULT / STOP protocol in `AGENTS.md` binds here.
 
-
 # API Contract Rules
 
 ## Why this rule exists
@@ -37,7 +36,7 @@ update. Caught by the contract tests below.
 ## Semver rules for the API (NOT the package)
 
 | Change | Bump |
-|--------|------|
+| -------- | ------ |
 | Add optional field | minor |
 | Add new endpoint | minor |
 | Widen a validator (e.g. `ge=0` → `ge=-1`) | minor |
@@ -50,7 +49,7 @@ update. Caught by the contract tests below.
 
 ## Mandatory layout
 
-```
+```text
 templates/service/app/
 ├── schemas.py              # Pydantic models — SINGLE source of truth
 ├── main.py                 # app.version = "X.Y.Z" must match package

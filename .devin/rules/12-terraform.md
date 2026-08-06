@@ -14,7 +14,6 @@ description: Terraform IaC patterns for multi-cloud ML infrastructure
 > Any `ADR-NNN` cited below refers to the template's numbering, not this
 > repository's. The AUTO / CONSULT / STOP protocol in `AGENTS.md` binds here.
 
-
 # Terraform Rules
 
 ## Remote State (MANDATORY)
@@ -33,6 +32,7 @@ NEVER commit `terraform.tfstate` to the repository. Always use remote backends:
 ## Variable Conventions
 
 Every variable MUST have:
+
 ```hcl
 variable "machine_type" {
   description = "GKE node pool machine type"
@@ -49,7 +49,7 @@ variable "machine_type" {
 
 ## File Organization
 
-```
+```text
 infra/terraform/
 ├── gcp/
 │   ├── main.tf          # Provider, backend
@@ -97,6 +97,7 @@ infra/terraform/
 ## Budget Alerts
 
 Always include budget alerting:
+
 ```hcl
 resource "google_billing_budget" "ml_budget" {
   amount { specified_amount { units = var.monthly_budget } }

@@ -14,7 +14,6 @@ description: Data validation with Pandera — schema definitions, validation poi
 > Any `ADR-NNN` cited below refers to the template's numbering, not this
 > repository's. The AUTO / CONSULT / STOP protocol in `AGENTS.md` binds here.
 
-
 # Data Validation Rules
 
 ## Why Pandera (Not Great Expectations)
@@ -23,11 +22,13 @@ description: Data validation with Pandera — schema definitions, validation poi
 - Pandera: ~12 dependencies, DataFrame validation, Prometheus-compatible
 
 Use Pandera when:
+
 - Models use in-memory DataFrames from sklearn pipelines
 - Team is small (< 5 ML engineers)
 - No external data store contracts to validate
 
 Use Great Expectations when:
+
 - Multiple data sources (SQL + S3 + Kafka)
 - Shared data contracts between teams
 - Spark or Databricks pipelines
@@ -52,6 +53,7 @@ class ServiceInputSchema(pa.DataFrameModel):
 ## Validation Points (ALL THREE MANDATORY)
 
 ### Point 1: Before Training
+
 ```python
 # data/validate_data.py
 @pa.check_types
@@ -63,6 +65,7 @@ def validate_training_data(df: pa.typing.DataFrame[ServiceInputSchema]) -> pd.Da
 ```
 
 ### Point 2: API Endpoint
+
 ```python
 # app/fastapi_app.py — /predict endpoint
 # Pydantic validates request structure
@@ -71,6 +74,7 @@ def validate_training_data(df: pa.typing.DataFrame[ServiceInputSchema]) -> pd.Da
 ```
 
 ### Point 3: Drift Detection
+
 ```python
 # monitoring/drift_detection.py
 # Schema validation of production batch before calculating PSI

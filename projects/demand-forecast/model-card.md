@@ -21,7 +21,7 @@ Thresholds and their rationale live in `evals/gates.yaml`. This section records
 what was **measured**, with the method:
 
 | Metric | Value | How it was measured |
-|---|---|---|
+| --- | --- | --- |
 | TODO | TODO | TODO — a number without its method is unverified |
 
 ## Fairness

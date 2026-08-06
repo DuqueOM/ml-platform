@@ -11,7 +11,7 @@
 Three repositories already exist in this lineage, each with a decided scope:
 
 | Repository | Scope | Status |
-|---|---|---|
+| --- | --- | --- |
 | `ML-MLOps-Portfolio` | Three end-to-end ML services. Where the lessons were paid for. | Historical, stable |
 | `ml-service-template` | A governed scaffold for **one tabular ML service** on Kubernetes. Scope boundaries are themselves an ADR. | Active, stable, consumed by this repo |
 | `agent-local` | A business-agnostic local LLM agent core with a deterministic policy gate. | Absorbed into this repo (see ADR-002) |
@@ -95,7 +95,7 @@ These are refusals, not deferrals. Reversing one requires a superseding ADR.
 The charter is met when all of the following hold simultaneously:
 
 | # | Criterion | How it is verified |
-|---|---|---|
+| --- | --- | --- |
 | C1 | A second project reuses ≥3 shared libraries with no fork | Dependency graph test in CI |
 | C2 | The same project deploys to GCP and AWS from one definition | Both deploy jobs green on one commit |
 | C3 | Every quality claim in the README maps to a failing-capable gate | `docs/governance/quality-gates.md` traceability table |
@@ -142,7 +142,7 @@ projects and the platform claim is false.
 ## Alternatives considered
 
 | Alternative | Why rejected |
-|---|---|
+| --- | --- |
 | Extend `ml-service-template` in place | Its scope boundary is an accepted ADR and the reason it is recommendable. Widening it converts a small, readable artifact into a large, unfocused one and breaks every adopter's expectations |
 | Polyrepo: one repository per project plus shared libraries published to a registry | Cross-repo version skew hides exactly the breakage a platform exists to surface. Also multiplies CI, governance and documentation surfaces, which is the maintenance cost that already limits available time |
 | Keep `agent-local` separate and coordinate via a shared plan document | This is the status quo, and it is what a cross-repo contract costs: two CIs, two changelogs, two ADR sets, one plan governing both. Consolidation removes the coordination rather than optimising it |

@@ -41,7 +41,7 @@ workflow must map each of its operations to a mode.
 ### The three modes
 
 | Mode | Meaning | Example |
-|------|---------|---------|
+| ------ | --------- | --------- |
 | **AUTO** | Execute without asking. Reversible or low-risk. | Running tests, generating a report, scaffolding a service |
 | **CONSULT** | Propose the plan and its evidence; wait for approval before executing. | Promoting a model to staging, `terraform apply` in staging |
 | **STOP** | Do nothing. Block. Require explicit, recorded human instruction. | `terraform apply` in prod, rotating a secret, overriding a failed gate |
@@ -54,7 +54,7 @@ Certainty never downgrades a STOP, and neither does urgency.
 Inherited operations:
 
 | Operation | Mode | Notes |
-|---|---|---|
+| --- | --- | --- |
 | Run tests, lint, type check, validators | AUTO | Read-only or sandboxed |
 | Generate ADR, README, runbook | AUTO | Reviewable in a PR |
 | Scaffold a service from `ml-service-template` | AUTO | Reversible |
@@ -81,7 +81,7 @@ Inherited operations:
 Platform-scoped additions:
 
 | Operation | Mode | Notes |
-|---|---|---|
+| --- | --- | --- |
 | Read a lakehouse table, any snapshot | AUTO | Time travel is read-only |
 | Write or compact a lakehouse table in dev | AUTO | Snapshots are revertible |
 | Expire snapshots, or rewrite table history | **STOP** | Destroys the reproducibility guarantee time travel exists to provide |
@@ -120,7 +120,7 @@ Escalate to STOP even from AUTO or CONSULT when any of these hold:
 
 ### Signalling a mode transition
 
-```
+```text
 [AGENT MODE: CONSULT]
 Operation: materialise features to the production online store
 Rationale: offline validation green, point-in-time test passing
@@ -210,7 +210,7 @@ it (ADR-003). They are not restated here — restating them creates two document
 that will disagree, and the template is authoritative.
 
 | Range | Domain |
-|---|---|
+| --- | --- |
 | D-01..D-08 | Serving and ML quality: workers, HPA, async, SHAP, drift, leakage |
 | D-09..D-12 | Operations: heartbeat, tfstate, model-in-image, quality gates |
 | D-13..D-16 | EDA and data validation |
@@ -234,7 +234,7 @@ agree with and a failure is easy to recognise. Entries marked ⚑ were found in
 this repository's own work rather than imagined.
 
 | # | Anti-pattern | Enforced by |
-|---|---|---|
+| --- | --- | --- |
 | **P-01** | `libs/` imports `projects/` — the library is now a project | `tests/test_dependency_direction.py` |
 | **P-02** | A project imports another project instead of moving code down into `libs/` | same |
 | **P-03** | A cycle between libraries — the boundary is drawn wrong | same |
@@ -278,7 +278,7 @@ load-bearing is promoted with a gate, or removed.
 
 ## Layout
 
-```
+```text
 libs/            ml-core · data-contracts · llm-core · serving-core
 projects/        one deployable ML system each; uniform structure
 orchestration/   Airflow DAGs + KFP pipelines
@@ -294,7 +294,7 @@ tests/           repository-level invariants
 generated from it, so a rule that binds under one tool binds under all of them:
 
 | Surface | Mode | Why |
-|---|---|---|
+| --- | --- | --- |
 | `.claude/` `.cursor/` `.codex/` | pointer | The tool can follow a path, so the file names its source and restates nothing — it cannot drift |
 | `.devin/` | mirror | The tool ingests file bodies and cannot follow a pointer, so it carries full copies — and is therefore drift-checked byte for byte |
 
@@ -327,7 +327,7 @@ uv run ruff check . && uv run mypy libs/           # lint + types
 ## Documents
 
 | Document | Role |
-|---|---|
+| --- | --- |
 | [docs/decisions/](docs/decisions/) | Every non-trivial decision, with alternatives and revisit triggers |
 | [docs/architecture/technical-plan.md](docs/architecture/technical-plan.md) | Phases with executable acceptance criteria |
 | [docs/governance/quality-gates.md](docs/governance/quality-gates.md) | Claim → gate traceability |

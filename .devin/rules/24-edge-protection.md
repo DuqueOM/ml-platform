@@ -14,7 +14,6 @@ description: Edge-protection patterns — native-cloud-first WAF/DDoS/rate-limit
 > Any `ADR-NNN` cited below refers to the template's numbering, not this
 > repository's. The AUTO / CONSULT / STOP protocol in `AGENTS.md` binds here.
 
-
 # Edge Protection Rules
 
 ## Native-cloud-first (MANDATORY default)
@@ -56,7 +55,7 @@ Unlike most Terraform applies in this template (`03-terraform.md`),
 edge-protection resources do NOT get a lighter mode in dev:
 
 | Action | Mode | Never downgrade to |
-|---|---|---|
+| --- | --- | --- |
 | Read/audit edge-protection coverage | AUTO | — |
 | `terraform apply` of Cloud Armor / WAFv2 / Cloudflare resources, ANY environment | CONSULT | AUTO, even in dev — creates public exposure + real cost regardless of environment label |
 | Disable, remove, or loosen an existing WAF/rate-limit rule, ANY environment | STOP | CONSULT or AUTO, ever — removing a safety control is always a human decision |

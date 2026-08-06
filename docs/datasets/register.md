@@ -20,7 +20,7 @@ Two rules:
 ### NYC TLC Trip Records
 
 | | |
-|---|---|
+| --- | --- |
 | **Project** | `demand-forecast` (Phase 1) |
 | **Access** | Public HTTPS parquet, monthly partitions. Also mirrored in the public data catalogues of both target clouds |
 | **Licence** | Public domain / open data. No redistribution restriction |
@@ -57,7 +57,7 @@ preprocessing folklore.
 ### Folktables (ACS PUMS)
 
 | | |
-|---|---|
+| --- | --- |
 | **Project** | `credit-risk` (Phase 4) |
 | **Access** | `folktables` Python package over US Census ACS microdata |
 | **Licence** | US Census public use |
@@ -75,7 +75,7 @@ inherited silently from an example.
 ### Home Credit Default Risk
 
 | | |
-|---|---|
+| --- | --- |
 | **Project** | `credit-risk` (Phase 4) |
 | **Access** | Kaggle competition data; download script, not committed |
 | **Licence** | Competition terms — **use permitted, redistribution not**. Never commit derived files without checking |
@@ -93,7 +93,7 @@ leakage.
 ### Olist Brazilian E-Commerce
 
 | | |
-|---|---|
+| --- | --- |
 | **Project** | Feature-store and CDC demonstrations |
 | **Access** | Kaggle; loaded into managed Postgres |
 | **Licence** | CC BY-NC-SA — **non-commercial**, attribution required |
@@ -109,7 +109,7 @@ enough to load into a free-tier database.
 ### FUNSD · CORD · DocVQA
 
 | | |
-|---|---|
+| --- | --- |
 | **Project** | `doc-intelligence` (Phase 5) |
 | **Access** | Public research downloads |
 | **Licence** | Per-dataset research terms — check each before publishing derived artifacts |
@@ -125,7 +125,7 @@ enough for LoRA fine-tuning within the available ~7.6 GiB of VRAM.
 ### SEC EDGAR filings
 
 | | |
-|---|---|
+| --- | --- |
 | **Project** | `rag-assistant` (Phase 3) |
 | **Access** | Public EDGAR full-text search and bulk endpoints |
 | **Licence** | US public record |
@@ -141,7 +141,7 @@ limits; the ingestion client must honour both.
 ### BEIR / MS MARCO / HotpotQA
 
 | | |
-|---|---|
+| --- | --- |
 | **Project** | `rag-assistant` retrieval benchmarking |
 | **Licence** | Per-dataset research terms |
 
@@ -153,7 +153,7 @@ comparable to a literature number rather than to nothing.
 ## Considered and not adopted
 
 | Dataset | Why not |
-|---|---|
+| --- | --- |
 | UCI Adult | Superseded by Folktables, which has real shift and cleaner provenance |
 | Criteo 1TB click logs | Scale would justify Spark, but the features are anonymised integers — no interpretability, fairness or feature-engineering story |
 | MIMIC-IV / eICU | Excellent for a clinical governance track, but requires CITI training and a signed data use agreement. Revisit if healthcare becomes a target domain |
