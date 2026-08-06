@@ -98,7 +98,16 @@ COMPONENTS: list[Component] = [
         ["scripts/datasets"],
         "uv run pytest tests/test_dataset_registry.py -q",
     ),
-    Component("1", "Local validation stack", ["platform/local"]),
+    Component(
+        "1",
+        "Local validation stack",
+        ["platform/local", "scripts/local"],
+        # Preflight only: bringing the cluster up takes minutes and needs
+        # Docker, so status derivation checks that the entry point works, not
+        # that the stack is currently running. `make local-verify` is the
+        # assertion that it functions.
+        "uv run python scripts/local/preflight.py --samples 1 --interval 0",
+    ),
     Component("1", "libs/ml-core implementation", ["libs/ml-core/src"]),
     Component("1", "libs/data-contracts implementation", ["libs/data-contracts/src"]),
     Component("1", "libs/serving-core implementation", ["libs/serving-core/src"]),

@@ -61,7 +61,10 @@ strict = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "libs", "projects"]
-addopts = "-q"
+# Local-stack tests need a running kind cluster, so they are opt-in: the
+# default suite must stay runnable on a machine with no Docker.
+addopts = "-q -m 'not local'"
+markers = ["local: requires the local validation stack (make local-up)"]
 
 [tool.coverage.report]
 fail_under = 90

@@ -1,0 +1,64 @@
+# Postgres 17 + pgvector: online feature store and vector store.
+# In cloud this is a managed instance; locally it is the same engine and the
+# same extension, so SQL and schema are validated identically.
+apiVersion: v1
+kind: Secret
+metadata: { name: postgres-credentials, namespace: ml-platform }
+stringData:
+  # Local-only credential. The cloud path reads from a secret manager via
+  # External Secrets — never from a committed file (rule 06-security-governance).
+  POSTGRES_PASSWORD: "local-only-not-a-secret"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: postgres, namespace: ml-platform }
+spec:
+  replicas: 1
+  strategy:
+    # Single replica over emptyDir: a RollingUpdate provides no
+    # availability benefit and needs double the memory, which the
+    # namespace quota (= the declared budget) deliberately refuses.
+    type: Recreate
+  selector: { matchLabels: { app: postgres } }
+  template:
+    metadata: { labels: { app: postgres } }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: postgres
+          image: pgvector/pgvector:pg17
+          ports: [{ containerPort: 5432 }]
+          env:
+            - name: POSTGRES_DB
+              value: mlplatform
+            - name: POSTGRES_USER
+              value: mlplatform
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: postgres-credentials, key: POSTGRES_PASSWORD } }
+          resources:
+            requests: { memory: "192Mi", cpu: "100m" }
+            limits:   { memory: "320Mi" }        # platform/local/budget.yaml
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", "mlplatform", "-d", "mlplatform"] }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts: [{ name: data, mountPath: /var/lib/postgresql/data }]
+      volumes: [{ name: data, emptyDir: {} }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: postgres, namespace: ml-platform }
+spec:
+  type: NodePort
+  selector: { app: postgres }
+  ports: [{ port: 5432, targetPort: 5432, nodePort: 30432 }]

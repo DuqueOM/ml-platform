@@ -1,0 +1,82 @@
+# Memory budget for the local validation stack (Phase 1b).
+#
+# The same discipline the sibling agent platform arrived at the hard way: a
+# resident-memory overcommit whose alternative discovery mechanism is the OOM
+# killer, mid-run, choosing a victim that is usually not the culprit.
+#
+# `scripts/local/preflight.py` sums `limit_mb` below, compares it against
+# MEASURED available memory, and refuses to start the stack when it does not
+# fit. Every limit is also applied as a Kubernetes resource limit, so a
+# component that exceeds its share dies with an attributable cause instead of
+# taking the host down with it.
+#
+# Re-measure before changing any number. Do it by SAMPLING, never with a single
+# reading:
+#   for i in $(seq 1 10); do free -m | awk 'NR==2{print $7}'; sleep 3; done
+#
+# Measured on the reference workstation 2026-08-06: 5920 MB available (min of
+# 4 samples, spread 6 MB). The totals below leave ~430 MB of slack inside the
+# allowance. An earlier revision left 12 MB, which is not headroom — it is a
+# budget that happened to fit once.
+version: 1
+
+# Fraction of measured available memory the stack may claim. The remainder is
+# for the IDE, the browser and the shell that will be running alongside it —
+# a stack that fits only on an otherwise idle machine has not been budgeted.
+max_utilisation: 0.55
+
+components:
+  - name: kind-control-plane
+    limit_mb: 800
+    note: >
+      kubelet + etcd + apiserver + containerd. Not enforceable as a pod limit —
+      it is the node itself — so it is budgeted and then verified after start.
+
+  - name: postgres
+    limit_mb: 320
+    note: Postgres 17 with pgvector. Online feature store and vector store.
+
+  - name: minio
+    limit_mb: 320
+    note: S3-compatible object storage backing the local Iceberg warehouse.
+
+  - name: otel-collector
+    limit_mb: 160
+    note: Single ingestion point for traces and metrics (OTLP).
+
+  - name: jaeger
+    limit_mb: 256
+    note: >
+      Trace storage and UI, all-in-one with in-memory storage. Deliberately not
+      the full LGTM stack: locally the property being validated is that a trace
+      spans the whole request path, which Jaeger shows at a fraction of the
+      memory. The cloud environment runs the real stack.
+
+  - name: prometheus
+    limit_mb: 256
+    note: >
+      Metric storage with a deliberately short local retention — locally the
+      property being validated is that metrics are emitted and scraped, not
+      that they survive a week.
+
+  - name: grafana
+    limit_mb: 200
+    note: Dashboards over both, so the correlation path is exercised locally.
+
+  - name: workload
+    limit_mb: 512
+    note: >
+      Reserved for the service under test plus a training job. Sized so a
+      project can run alongside the platform rather than instead of it.
+
+# Host ports the stack binds. Checked by preflight before cluster creation:
+# a collision otherwise surfaces after the node image is pulled, as a Docker
+# error that names the port but not the cause.
+host_ports:
+  - { port: 15432, service: postgres }
+  - { port: 19000, service: minio-api }
+  - { port: 19001, service: minio-console }
+  - { port: 16686, service: jaeger }
+  - { port: 19090, service: prometheus }
+  - { port: 13000, service: grafana }
+  - { port: 18080, service: workload }

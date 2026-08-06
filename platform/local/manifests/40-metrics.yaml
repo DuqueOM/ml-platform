@@ -1,0 +1,157 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: prometheus-config, namespace: ml-platform }
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+    scrape_configs:
+      - job_name: otel-collector
+        static_configs: [{ targets: ["otel-collector:8889"] }]
+      # Annotation-driven discovery, matching how the cloud overlays scrape.
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs: [{ role: pod, namespaces: { names: [ml-platform] } }]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: { name: prometheus, namespace: ml-platform }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata: { name: prometheus, namespace: ml-platform }
+rules:
+  # Namespace-scoped and read-only. A local convenience that granted cluster
+  # admin would teach a permission model the cloud path must not inherit.
+  - apiGroups: [""]
+    resources: [pods, services, endpoints]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: { name: prometheus, namespace: ml-platform }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: prometheus }
+subjects: [{ kind: ServiceAccount, name: prometheus, namespace: ml-platform }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: prometheus, namespace: ml-platform }
+spec:
+  replicas: 1
+  strategy:
+    # Single replica over emptyDir: a RollingUpdate provides no
+    # availability benefit and needs double the memory, which the
+    # namespace quota (= the declared budget) deliberately refuses.
+    type: Recreate
+  selector: { matchLabels: { app: prometheus } }
+  template:
+    metadata: { labels: { app: prometheus } }
+    spec:
+      serviceAccountName: prometheus
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v3.4.1
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.retention.time=2h
+            - --storage.tsdb.retention.size=256MB
+          ports: [{ containerPort: 9090 }]
+          resources:
+            requests: { memory: "160Mi", cpu: "50m" }
+            limits:   { memory: "256Mi" }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet: { path: /-/ready, port: 9090 }
+            initialDelaySeconds: 5
+          volumeMounts: [{ name: conf, mountPath: /etc/prometheus }]
+      volumes: [{ name: conf, configMap: { name: prometheus-config } }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: prometheus, namespace: ml-platform }
+spec:
+  type: NodePort
+  selector: { app: prometheus }
+  ports: [{ port: 9090, targetPort: 9090, nodePort: 30090 }]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: grafana-datasources, namespace: ml-platform }
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        url: http://prometheus:9090
+        isDefault: true
+      - name: Jaeger
+        type: jaeger
+        url: http://jaeger:16686
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: grafana, namespace: ml-platform }
+spec:
+  replicas: 1
+  strategy:
+    # Single replica over emptyDir: a RollingUpdate provides no
+    # availability benefit and needs double the memory, which the
+    # namespace quota (= the declared budget) deliberately refuses.
+    type: Recreate
+  selector: { matchLabels: { app: grafana } }
+  template:
+    metadata: { labels: { app: grafana } }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 472
+        fsGroup: 472
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: grafana
+          image: grafana/grafana:12.0.1
+          env:
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "true"
+            - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+              value: Admin
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: "local-only-not-a-secret"
+          ports: [{ containerPort: 3000 }]
+          resources:
+            requests: { memory: "128Mi", cpu: "50m" }
+            limits:   { memory: "200Mi" }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet: { path: /api/health, port: 3000 }
+            initialDelaySeconds: 10
+          volumeMounts: [{ name: ds, mountPath: /etc/grafana/provisioning/datasources }]
+      volumes: [{ name: ds, configMap: { name: grafana-datasources } }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: grafana, namespace: ml-platform }
+spec:
+  type: NodePort
+  selector: { app: grafana }
+  ports: [{ port: 3000, targetPort: 3000, nodePort: 30300 }]

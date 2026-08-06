@@ -1,0 +1,139 @@
+# Observability: one OTLP ingestion point, traces in Jaeger, metrics in
+# Prometheus, both visible in Grafana.
+#
+# Deliberately NOT the full LGTM stack. Locally the property being validated is
+# that a single trace spans request -> feature lookup -> inference, and that
+# metrics are emitted and scraped. Jaeger shows the first at a fraction of
+# Tempo's memory; the cloud environment runs the real stack. What local
+# observability CANNOT prove is listed in platform/local/README.md.
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: otel-collector-config, namespace: ml-platform }
+data:
+  config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc: { endpoint: 0.0.0.0:4317 }
+          http: { endpoint: 0.0.0.0:4318 }
+    processors:
+      batch: { timeout: 5s }
+      memory_limiter:
+        check_interval: 2s
+        limit_percentage: 75
+        spike_limit_percentage: 20
+    exporters:
+      otlp/jaeger:
+        endpoint: jaeger:4317
+        tls: { insecure: true }
+      prometheus:
+        endpoint: 0.0.0.0:8889
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [otlp/jaeger]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [prometheus]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: otel-collector, namespace: ml-platform }
+spec:
+  replicas: 1
+  strategy:
+    # Single replica over emptyDir: a RollingUpdate provides no
+    # availability benefit and needs double the memory, which the
+    # namespace quota (= the declared budget) deliberately refuses.
+    type: Recreate
+  selector: { matchLabels: { app: otel-collector } }
+  template:
+    metadata:
+      labels: { app: otel-collector }
+      annotations: { prometheus.io/scrape: "true", prometheus.io/port: "8889" }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: collector
+          image: otel/opentelemetry-collector-contrib:0.128.0
+          args: ["--config=/conf/config.yaml"]
+          ports: [{ containerPort: 4317 }, { containerPort: 4318 }, { containerPort: 8889 }]
+          resources:
+            requests: { memory: "96Mi", cpu: "50m" }
+            limits:   { memory: "160Mi" }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts: [{ name: conf, mountPath: /conf }]
+      volumes: [{ name: conf, configMap: { name: otel-collector-config } }]
+---
+apiVersion: v1
+kind: Service
+metadata: { name: otel-collector, namespace: ml-platform }
+spec:
+  selector: { app: otel-collector }
+  ports:
+    - { name: grpc, port: 4317, targetPort: 4317 }
+    - { name: http, port: 4318, targetPort: 4318 }
+    - { name: metrics, port: 8889, targetPort: 8889 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: jaeger, namespace: ml-platform }
+spec:
+  replicas: 1
+  strategy:
+    # Single replica over emptyDir: a RollingUpdate provides no
+    # availability benefit and needs double the memory, which the
+    # namespace quota (= the declared budget) deliberately refuses.
+    type: Recreate
+  selector: { matchLabels: { app: jaeger } }
+  template:
+    metadata: { labels: { app: jaeger } }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: jaeger
+          image: jaegertracing/all-in-one:1.71.0
+          env:
+            - name: COLLECTOR_OTLP_ENABLED
+              value: "true"
+            # In-memory storage with a bounded trace count: local validation
+            # needs the last few traces, not a retention policy.
+            - name: SPAN_STORAGE_TYPE
+              value: memory
+            - name: MEMORY_MAX_TRACES
+              value: "5000"
+          ports: [{ containerPort: 16686 }, { containerPort: 4317 }]
+          resources:
+            requests: { memory: "160Mi", cpu: "50m" }
+            limits:   { memory: "256Mi" }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet: { path: /, port: 16686 }
+            initialDelaySeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata: { name: jaeger, namespace: ml-platform }
+spec:
+  type: NodePort
+  selector: { app: jaeger }
+  ports:
+    - { name: ui, port: 16686, targetPort: 16686, nodePort: 30686 }
+    - { name: otlp, port: 4317, targetPort: 4317 }

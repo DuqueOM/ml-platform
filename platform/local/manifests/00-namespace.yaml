@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ml-platform
+  labels:
+    # Pod Security Standards, matching what the cloud overlays enforce. Applied
+    # locally so a manifest that would be rejected in production is rejected
+    # here first, where the feedback costs nothing.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: stack-budget
+  namespace: ml-platform
+spec:
+  hard:
+    # Total of platform/local/budget.yaml minus the node's own allocation.
+    # A component added without updating the budget is rejected by the quota
+    # rather than discovered by the OOM killer.
+    limits.memory: 1824Mi

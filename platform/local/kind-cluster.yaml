@@ -1,0 +1,44 @@
+# Local validation cluster (Phase 1b).
+#
+# Single node on purpose. A multi-node kind cluster multiplies kubelet and
+# containerd overhead without validating anything a single node does not:
+# scheduling across real nodes, zone affinity and node-pool behaviour are
+# cloud properties, and are listed in platform/local/README.md as things this
+# stack explicitly CANNOT prove.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: ml-platform-local
+nodes:
+  - role: control-plane
+    kubeadmConfigPatches:
+      # Allow workloads on the control plane — there is no other node.
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
+    # Host ports are deliberately in a high range: 5432, 3000 and 8080 are
+    # commonly occupied on a developer machine, and a collision fails DEEP into
+    # cluster creation with a Docker error rather than at preflight.
+    extraPortMappings:
+      - containerPort: 30432   # postgres
+        hostPort: 15432
+        protocol: TCP
+      - containerPort: 30900   # minio api
+        hostPort: 19000
+        protocol: TCP
+      - containerPort: 30901   # minio console
+        hostPort: 19001
+        protocol: TCP
+      - containerPort: 30686   # jaeger ui
+        hostPort: 16686
+        protocol: TCP
+      - containerPort: 30300   # grafana
+        hostPort: 13000
+        protocol: TCP
+      - containerPort: 30090   # prometheus
+        hostPort: 19090
+        protocol: TCP
+      - containerPort: 30800   # service under test
+        hostPort: 18080
+        protocol: TCP
