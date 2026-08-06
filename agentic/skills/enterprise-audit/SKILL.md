@@ -1,0 +1,123 @@
+---
+name: enterprise-audit
+description: Staff-level verification audit over prior work or the whole repository — "trust but verify" with executed evidence, never declared evidence. Runs in a separate session from the work it audits.
+when_to_use: >
+  Before a phase is declared complete, before any milestone, after several
+  rounds without cross-review, or when asked to check another session's work.
+  Examples: 'audit what the last session built', 'pre-release review',
+  'verify the plan tells the truth'.
+mode: AUTO within its own session; never modifies the repository
+---
+
+# enterprise-audit
+
+Implements [ADR-005](../../../docs/decisions/ADR-005-agentic-governance.md)
+rules B and E–I, and procedure QA-4.
+
+## Why this runs in a separate session
+
+Coherence checking is self-review by construction. It compares documents with
+each other and **cannot detect a fact its author believed**. Running this audit
+inside the authoring session makes it self-review regardless of intent — the
+same context that produced the error will reproduce the reasoning that made it
+look correct.
+
+If you are the session that produced the work, say so and decline. That refusal
+is the skill working.
+
+## Method
+
+### 1. Verify by executing, never by reading
+
+| The document claims | You run |
+|---|---|
+| "142 tests pass" | the test suite |
+| "no type errors" | the type checker |
+| "no secrets committed" | the scanner **over commits, not the working tree** |
+| "p99 under 200 ms" | the load test |
+| "gate X is enforced" | the gate, against known-bad input |
+
+A claim that cannot be executed cannot be audited. Report it as unverifiable —
+that is a finding in itself, not a gap in the audit.
+
+### 2. Interrogate every measurement
+
+This is where the highest-severity findings come from, because a number looks
+like evidence.
+
+- **Was it sampled or read once?** A single observation of a varying quantity
+  is an anecdote. Ask what the variance is; if nobody knows, it was not measured.
+- **Was the configuration chosen because of the expected answer?** A benchmark
+  run under an assumption cannot test that assumption. Check the flags before
+  citing the result.
+- **Is the method recorded next to the value?** If not, treat the number as
+  unverified however precise it looks.
+
+### 3. Report what works, with its evidence
+
+An audit that returns only problems has not demonstrated that it examined
+anything else. List the verified-correct surfaces and the commands that
+verified them.
+
+### 4. Doc/code divergence is a finding on its own
+
+Even when the code is correct. **The document asserting something false is the
+defect.** Rank it by what a reader would do wrongly if they believed it.
+
+### 5. Non-interference
+
+Read-only plus verification commands. Never fix, never commit, never touch
+another session's working tree. Corrections are a separate round with their own
+record.
+
+An auditor that edits has destroyed the evidence it was sent to collect, and
+has made its own findings unverifiable.
+
+## Evidence format
+
+Every finding, without exception:
+
+```
+[P0|P1|P2|P3] <one-line claim>
+  file:line
+  $ <command>
+  <actual output, not a summary of it>
+  Fix: <specific correction>
+```
+
+| Severity | Meaning |
+|---|---|
+| **P0** | Something promised is broken |
+| **P1** | Security or data risk |
+| **P2** | Real debt with a cost |
+| **P3** | Cosmetic |
+
+Close with **one sentence**: are the audited claims trustworthy?
+
+## High-yield surfaces
+
+Where findings have actually come from. Extend this list as the audit learns —
+a surface that produced a P0 once will produce another.
+
+- "Verified" or "complete" claims in plans and status documents, against reality.
+- Measurements presented without a sampling method.
+- Benchmarks whose configuration presupposes their conclusion.
+- Status markers (✅/🟡) set without evidence in CI.
+- Configuration that *appears* active: keys absent from the tool's schema, so
+  silently ignored.
+- Gates that have never failed — either the risk is absent, or the gate does
+  not work. Run them against known-bad input to find out which.
+- Filter expressions matching on absolute paths, which can silently exclude
+  everything and produce a check that passes without examining anything.
+- Test doubles whose contract has drifted from the implementation they stand in
+  for.
+- Truthiness comparisons against string environment variables.
+
+## Output
+
+1. Scope audited, and what was deliberately not audited.
+2. Verified-correct surfaces with their commands.
+3. Findings, most severe first, in the format above.
+4. One-sentence verdict.
+
+Corrections are **not** part of this output. They are the next round's work.

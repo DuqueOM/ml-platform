@@ -1,0 +1,86 @@
+---
+name: qa-procedure
+description: Run the repository's QA procedures (QA-1..QA-7) as executable steps with preconditions, evidence requirements and STOP points, rather than as a checklist someone is expected to recall.
+when_to_use: >
+  Before proposing a change for review, before a release, during an incident,
+  or when asked to verify work. Examples: 'is this ready to merge?', 'run QA',
+  'prepare the release', 'we have an incident'.
+mode: per procedure — see the table
+---
+
+# qa-procedure
+
+Implements [ADR-005](../../../docs/decisions/ADR-005-agentic-governance.md)
+rule L. Full definitions in
+[docs/governance/qa-procedures.md](../../../docs/governance/qa-procedures.md);
+this skill selects and drives them.
+
+Procedures are executable because recall is worst exactly when they matter
+most — during an incident, under time pressure, at the end of a long session.
+
+## Selecting the procedure
+
+| Situation | Procedure | Mode |
+|---|---|---|
+| A change is ready for review | QA-1 change verification | AUTO |
+| Tests are being written | QA-2 test authoring → `test-authoring` | AUTO |
+| A threshold is changing, or recurring review | QA-3 metric review → `quality-metrics` | CONSULT |
+| A phase or milestone is being declared done | QA-4 independent audit → `enterprise-audit` | separate session |
+| Documentation may have drifted | QA-5 doc coherence → `doc-coherence` | AUTO |
+| A release is being prepared | QA-6 release | CONSULT + STOP points |
+| Production is broken | QA-7 incident and rollback | STOP throughout |
+
+## QA-1 — change verification
+
+The default. Run before proposing anything for review.
+
+1. **Run the gates the change touches.** When in doubt, run more.
+2. **For a change to `libs/`, run every dependent project's suite.** This is
+   the monorepo's whole value proposition, and the step most often skipped
+   because it is slow.
+3. **Confirm each new test fails without the change** (see `test-authoring`).
+4. **Update the documents the change makes stale — in the same round.**
+
+Evidence: the commands with their **actual output**, not a summary. "All tests
+pass" is a claim; the output is evidence.
+
+If a gate fails, the change is not ready. That is not a stop; that is the gate
+working.
+
+## QA-6 — release
+
+**Preconditions, all of them:**
+
+- Every applicable gate green **on the release commit** — not on an ancestor,
+  not on a similar branch.
+- CI verified green **by reading CI**, not inferred from a local run. A local
+  pass and a CI pass are different claims.
+- CHANGELOG reflects the actual commit range.
+- Model cards current for every deployed model.
+
+**STOP points**, each requiring explicit recorded authorisation:
+
+1. Releasing with any gate red.
+2. Releasing without verified-green CI.
+3. Any change to a production model's promotion status.
+
+## QA-7 — incident and rollback
+
+Every step is STOP. The procedure exists to make the fast path also the
+recorded path: under pressure, an unrecorded action is the one nobody can undo.
+
+1. **Stabilise first, diagnose second.** Rollback precedes root cause.
+2. **Capture evidence before mutating state.** A restarted pod has destroyed
+   the evidence. Logs, metrics, traces, and the current manifest — first.
+3. **Record every action with its timestamp, as it happens.** Not afterwards
+   from memory.
+4. **Blameless post-mortem**, with action items each carrying an owner and a
+   date. An action item without both is a wish.
+
+## Reporting
+
+State plainly what ran, what passed, what failed, and **what was skipped**.
+
+A partially-run QA reported as complete is worse than one reported as partial,
+because the next person builds on a guarantee that was never given. If a
+procedure could not complete, name the step and the reason.

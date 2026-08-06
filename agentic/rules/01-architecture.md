@@ -1,0 +1,34 @@
+# 01 — Architecture
+
+**Authority**: `AGENTS.md` + [ADR-001](../../docs/decisions/ADR-001-monorepo-topology.md)
+**Applies to**: `libs/**`, `projects/**`, `orchestration/**`, `platform/**`
+
+## Dependency direction
+
+1. `libs/` never imports `projects/`. A library that knows about a project is a project.
+2. `projects/` never import each other. Shared code moves **down** into `libs/`, never sideways.
+3. `libs/` may depend on `libs/`, acyclically. A cycle means a library boundary is wrong.
+4. `platform/` is declarative and is never imported.
+
+Enforced by `tests/test_dependency_direction.py`. **Never skip, weaken or
+`xfail` it** — it is the only mechanical evidence for charter criterion C1, and
+review discipline does not survive schedule pressure.
+
+## Decomposition
+
+Libraries are split by **stability and blast radius**, not by subject. The
+question is not "is this about data?" but "who breaks when this changes?"
+
+There is deliberately no `utils` package. `utils` is where blast radius goes to
+hide.
+
+## Services
+
+Services are **generated** from `ml-service-template` via `copier`
+([ADR-003](../../docs/decisions/ADR-003-service-template-consumption.md)) —
+never hand-written, never hand-copied. A hand-copied service has no update path
+and is a fork with extra steps.
+
+Where this repository and the template disagree on serving, containers, probes
+or supply chain, **the template wins**. A disagreement is a defect in one of
+them, to be resolved rather than tolerated.
