@@ -1,0 +1,25 @@
+{
+  "_comment": "Example only. Copy to .codex/mcp.json (gitignored) and fill from your environment. NEVER commit a real token \u2014 the value below is a placeholder the registry check enforces.",
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+    "prometheus": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-server-prometheus"
+      ],
+      "env": {
+        "PROMETHEUS_URL": "http://localhost:19090"
+      }
+    }
+  }
+}

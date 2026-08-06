@@ -88,6 +88,31 @@ likely place for a defect. Prioritise:
 Asserting a log message tests the log message. Assert the observable contract:
 return value, raised exception, persisted state, emitted request.
 
+## Choosing the level
+
+Write the unit test always. Then ask what it CANNOT prove:
+
+- Does this code talk to something it does not own — a database, object store,
+  broker, cloud API, another service? → an **integration** test against the
+  real dependency. The Phase 1b local stack exists so that costs nothing.
+- Is there a user-visible path end to end? → an **e2e** test asserting the
+  outcome, not the steps.
+
+Both must answer "what would this catch that the level below would not?" If
+nothing, push it down a level — faster and more precise.
+
+The failure each level exists for:
+
+| Level | The failure it catches |
+|---|---|
+| Unit | Wrong logic |
+| Integration | Right logic, wrong assumption about the dependency — a query that returns different types than mocked, a client that retries when you assumed it raised |
+| End-to-end | Right logic, right assumptions, wrong composition — every stage green, the chain broken |
+
+**An integration test that mocks its integration is a unit test with a
+misleading name**, and it is worse than absent because it occupies the slot
+where the real one would go.
+
 ## Anti-patterns
 
 | Anti-pattern | Why it fails |

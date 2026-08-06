@@ -155,6 +155,7 @@ version = "0.1.0"
 source = { editable = "projects/demand-forecast" }
 dependencies = [
     { name = "data-contracts" },
+    { name = "feature-defs" },
     { name = "ml-core" },
     { name = "serving-core" },
 ]
@@ -162,6 +163,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "data-contracts", editable = "libs/data-contracts" },
+    { name = "feature-defs", editable = "libs/feature-defs" },
     { name = "ml-core", editable = "libs/ml-core" },
     { name = "serving-core", editable = "libs/serving-core" },
 ]

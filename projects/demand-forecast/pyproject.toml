@@ -10,6 +10,7 @@ dependencies = [
     "ml-core",
     "data-contracts",
     "serving-core",
+    "feature-defs",
 ]
 
 [build-system]

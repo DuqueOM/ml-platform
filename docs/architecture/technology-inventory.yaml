@@ -47,8 +47,13 @@ categories:
   - name: CI/CD
     items:
       - {id: github-actions, tier: core, detect: [".github/workflows/ci.yml"]}
-      - {id: codecov, tier: studied}
-      - {id: release-automation, tier: studied}
+      - {id: codecov, tier: core, detect: ["codecov.yml"], note: "Declared L1/L2 coverage thresholds were unenforced until this existed — a published claim with no gate."}
+      - {id: coverage-gate, tier: core, detect: ["pattern:--cov-branch|.github/workflows/ci.yml"]}
+      - {id: release-on-tag, tier: core, detect: [".github/workflows/release-on-tag.yml"], note: "The template added this after finding six tags with zero published releases."}
+      - {id: openssf-scorecard, tier: core, detect: [".github/workflows/scorecard.yml"]}
+      - {id: docs-quality-lint, tier: core, detect: [".github/workflows/docs-quality.yml"], note: "markdownlint over the documentation surface."}
+      - {id: branch-protection-as-code, tier: core, detect: ["scripts/setup_branch_protection.sh"]}
+      - {id: ci-failure-triage, tier: demonstrated, detect: ["scripts/ci_classify_failure.py"], note: "Inherited CI self-healing; Demonstrated until this repository has enough CI history to classify."}
       - {id: dependabot, tier: core, detect: [".github/dependabot.yml"]}
   - name: Security and supply chain
     items:
@@ -142,6 +147,18 @@ categories:
       - {id: prompt-registry, tier: core, detect: ["pattern:prompt_registry|libs/llm-core"]}
       - {id: semantic-cache, tier: core, detect: ["pattern:semantic_cache|libs/llm-core"]}
       - {id: guardrails, tier: core, detect: ["pattern:guardrail|libs/llm-core"]}
+  - name: Repository hygiene
+    # Found by diffing this repository against ml-service-template rather than
+    # by inspection. Several inherited tools were never listed here, so nothing
+    # could report them absent — an inventory can only track what it knows to
+    # look for.
+    items:
+      - {id: gitattributes, tier: core, detect: [".gitattributes"], note: "Line-ending normalisation. Its absence surfaces as a whole-file diff on a one-line change."}
+      - {id: editorconfig, tier: studied, note: "Ruff already enforces the formatting that matters; EditorConfig adds a second source for the same rules."}
+      - {id: audit-trail, tier: core, detect: ["scripts/audit_record.py"], note: "Operational memory: an append-only record of agent actions taken."}
+      - {id: test-clock-isolation, tier: core, detect: ["pattern:clock|tests/test_gate_scripts.py"], note: "A test depending on wall-clock time fails at midnight, in another timezone, or on a leap day — always far from the change that introduced it."}
+      - {id: mcp-registry, tier: core, detect: ["agentic/mcp_registry.yaml"], note: "An MCP server is a tool the agent acts through, so it inherits AUTO/CONSULT/STOP. Undeclared risk mode is an unassessed capability."}
+
   - name: Drift detection
     # ADR-007. The inherited machinery was built for ONE project kind — a
     # tabular service — and the plan carried a single tabular line as if it
