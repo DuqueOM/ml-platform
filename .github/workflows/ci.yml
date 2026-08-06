@@ -69,6 +69,12 @@ jobs:
         # claims to test, while still showing up in a green build.
         run: uv run python scripts/check_ci_references.py
 
+      - name: Technology inventory matches the filesystem
+        # "Is the platform ready?" must not be answerable by an impression.
+        # Detectors never match documentation: the easiest way to appear
+        # finished is to write about being finished.
+        run: uv run python scripts/check_technology_inventory.py --check
+
       - name: Implementation status matches the filesystem
         # The plan states intent; this derives what exists. A stale table is a
         # document asserting something false, which is itself a defect.

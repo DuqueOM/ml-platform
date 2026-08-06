@@ -25,12 +25,14 @@ verify: ## Run every repository gate (what CI runs)
 	uv run python scripts/validate_agentic_surface.py --strict
 	uv run python scripts/check_doc_coherence.py
 	uv run python scripts/check_ci_references.py
+	uv run python scripts/check_technology_inventory.py --check
 	uv run python scripts/check_implementation_status.py --check
 	uv run pytest -q
 
 .PHONY: sync
 sync: ## Re-render agentic surfaces and refresh derived docs
 	uv run python scripts/sync_agentic_adapters.py
+	uv run python scripts/check_technology_inventory.py --write
 	uv run python scripts/check_implementation_status.py --write
 
 # --- local validation stack (Phase 1b) --------------------------------------

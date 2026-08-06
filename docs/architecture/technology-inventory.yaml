@@ -1,0 +1,174 @@
+# Technology inventory — the full stack this platform commits to, and what
+# actually exists of it.
+#
+# `scripts/check_technology_inventory.py` reads this file and DERIVES the state
+# of each entry from the filesystem. It exists because "is it ready?" is a
+# question that must not be answerable by anyone's impression, including mine.
+#
+# `detect` is a list of shell-globbable paths and/or `pattern:` content
+# searches. An entry is IMPLEMENTED only when a detector matches a real
+# artifact — never when the name merely appears in prose. A technology named
+# in a plan, an ADR or a status table is PLANNED, and saying otherwise is the
+# defect class ADR-005 rule H names.
+#
+# `tier` follows ADR-004: core (critical path, needs a gate and a runbook),
+# demonstrated (one narrow use), studied (recorded findings, not wired in),
+# rejected (evaluated and declined, with the reason).
+version: 1
+
+categories:
+  - name: Python toolchain
+    items:
+      - {id: uv, tier: core, detect: ["uv.lock", "pattern:tool.uv.workspace|pyproject.toml"]}
+      - {id: pyproject, tier: core, detect: ["pyproject.toml"]}
+      - {id: ruff, tier: core, detect: ["pattern:tool.ruff|pyproject.toml"]}
+      - {id: mypy, tier: core, detect: ["pattern:tool.mypy|pyproject.toml"]}
+      - {id: pytest, tier: core, detect: ["pattern:tool.pytest|pyproject.toml"]}
+      - {id: coverage, tier: core, detect: ["pattern:--cov-fail-under|.github/workflows/ci.yml"]}
+      - {id: black, tier: rejected, note: "Superseded by ruff format (ADR-004). Keeping both is two formatters disagreeing."}
+      - {id: isort, tier: rejected, note: "Superseded by ruff's I rules (ADR-004)."}
+      - {id: poetry, tier: rejected, note: "uv chosen (ADR-004); two resolvers is two lockfiles."}
+  - name: Quality
+    items:
+      - {id: pre-commit, tier: core, detect: [".pre-commit-config.yaml"]}
+      - {id: conventional-commits, tier: core, detect: ["pattern:conventional-pre-commit|.pre-commit-config.yaml"]}
+      - {id: commitizen, tier: studied, note: "conventional-pre-commit already enforces the format; commitizen adds release automation not yet needed."}
+  - name: Automation
+    items:
+      - {id: makefile, tier: core, detect: ["Makefile"]}
+      - {id: invoke, tier: rejected, note: "Makefile chosen; a second task runner splits the entry points."}
+      - {id: nox, tier: studied, note: "Single supported Python version; matrix testing has nothing to vary yet."}
+      - {id: tox, tier: rejected, note: "Superseded by nox if matrix testing is ever needed."}
+  - name: Containers
+    items:
+      - {id: docker, tier: core, detect: ["platform/local/kind-cluster.yaml"]}
+      - {id: docker-compose, tier: studied, note: "kind used instead: the local stack must exercise Kubernetes manifests, which compose cannot."}
+      - {id: devcontainers, tier: studied}
+  - name: CI/CD
+    items:
+      - {id: github-actions, tier: core, detect: [".github/workflows/ci.yml"]}
+      - {id: codecov, tier: studied}
+      - {id: release-automation, tier: studied}
+      - {id: dependabot, tier: core, detect: [".github/dependabot.yml"]}
+  - name: Security and supply chain
+    items:
+      - {id: gitleaks, tier: core, detect: ["pattern:gitleaks|.pre-commit-config.yaml"]}
+      - {id: trivy, tier: core, detect: ["pattern:trivy|.github/workflows"]}
+      - {id: bandit, tier: core, detect: ["pattern:bandit|.pre-commit-config.yaml"]}
+      - {id: safety, tier: studied, note: "Overlaps trivy/dependabot for Python advisories."}
+      - {id: slsa-l3, tier: core, detect: ["pattern:slsaprovenance|.github/workflows"]}
+      - {id: in-toto, tier: core, detect: ["pattern:in-toto|.github/workflows"]}
+      - {id: cosign, tier: core, detect: ["pattern:cosign|.github/workflows"]}
+      - {id: sbom, tier: core, detect: ["pattern:sbom|.github/workflows"]}
+      - {id: external-secrets, tier: core, detect: ["platform/kubernetes/external-secrets"]}
+      - {id: vault, tier: studied, note: "Cloud secret managers cover the need; Vault adds an operated dependency."}
+      - {id: network-policies, tier: core, detect: ["pattern:NetworkPolicy|platform"]}
+      - {id: linkerd, tier: studied}
+      - {id: istio, tier: studied, note: "mTLS and traffic policy matter at a service count this repository will not reach."}
+      - {id: kyverno, tier: core, detect: ["platform/policies"]}
+  - name: Orchestration and pipelines
+    items:
+      - {id: airflow-3, tier: core, detect: ["orchestration/dags/*.py"]}
+      - {id: kfp-v2, tier: core, detect: ["orchestration/pipelines/*.py"]}
+      - {id: vertex-ai-pipelines, tier: core, detect: ["pattern:aiplatform|orchestration"]}
+      - {id: sagemaker-pipelines, tier: core, detect: ["pattern:sagemaker|orchestration"]}
+      - {id: cloud-composer, tier: demonstrated, note: "Managed Airflow inside a validation window only; never self-hosted."}
+      - {id: mwaa, tier: demonstrated}
+      - {id: dagster, tier: studied, note: "Airflow chosen for market weight (ADR-004); Dagster's asset graph revisited if lineage becomes the constraint."}
+      - {id: prefect, tier: rejected, note: "Airflow chosen; a third orchestrator has no distinct role."}
+  - name: GitOps and deployment
+    items:
+      - {id: argocd, tier: core, detect: ["platform/gitops"]}
+      - {id: applicationsets, tier: core, detect: ["pattern:ApplicationSet|platform"]}
+      - {id: argo-rollouts, tier: core, detect: ["pattern:Rollout|platform"]}
+      - {id: flux, tier: rejected, note: "ArgoCD chosen; two reconcilers fight."}
+  - name: Lakehouse
+    items:
+      - {id: apache-iceberg, tier: core, detect: ["platform/lakehouse"]}
+      - {id: biglake, tier: core, detect: ["pattern:biglake|platform/terraform"]}
+      - {id: s3-tables, tier: core, detect: ["pattern:s3tables|platform/terraform"]}
+      - {id: delta-lake, tier: rejected, note: "Iceberg chosen for vendor-neutral multi-cloud support (ADR-004)."}
+  - name: Data engineering
+    items:
+      - {id: duckdb, tier: core, detect: ["pattern:duckdb|libs/ml-core/pyproject.toml"]}
+      - {id: polars, tier: core, detect: ["pattern:polars|libs/ml-core/pyproject.toml"]}
+      - {id: dbt, tier: demonstrated, detect: ["projects/*/dbt"]}
+      - {id: elementary, tier: demonstrated, detect: ["pattern:elementary|projects"]}
+      - {id: spark, tier: demonstrated, detect: ["pattern:pyspark|orchestration"], note: "Historical backfill only; the DuckDB crossover threshold is measured, not assumed."}
+      - {id: dataproc-serverless, tier: demonstrated, detect: ["pattern:dataproc|platform/terraform"]}
+      - {id: emr-serverless, tier: demonstrated, detect: ["pattern:emr|platform/terraform"]}
+  - name: Feature store
+    items:
+      - {id: feast, tier: core, detect: ["libs/feature-defs"]}
+      - {id: point-in-time-joins, tier: core, detect: ["pattern:merge_asof|libs/feature-defs"]}
+  - name: Databases
+    items:
+      - {id: postgres, tier: core, detect: ["platform/local/manifests/10-postgres.yaml"]}
+      - {id: pgvector, tier: core, detect: ["pattern:pgvector|platform/local"]}
+      - {id: bigquery, tier: core, detect: ["pattern:bigquery|platform/terraform"]}
+      - {id: athena, tier: core, detect: ["pattern:athena|platform/terraform"]}
+  - name: Data quality
+    items:
+      - {id: pandera, tier: core, detect: ["pattern:pandera|libs/data-contracts/pyproject.toml"]}
+      - {id: great-expectations, tier: demonstrated, detect: ["pattern:great_expectations|projects"]}
+      - {id: gx-data-docs, tier: demonstrated, detect: ["pattern:data_docs|projects"]}
+  - name: ML serving
+    items:
+      - {id: fastapi, tier: core, detect: ["pattern:fastapi|libs/serving-core"], note: "Arrives via ml-service-template's copier (ADR-003), never hand-written."}
+      - {id: kserve, tier: studied}
+      - {id: triton, tier: demonstrated, detect: ["pattern:triton|projects"]}
+      - {id: onnx, tier: demonstrated, detect: ["pattern:onnx|projects"]}
+  - name: ML lifecycle
+    items:
+      - {id: mlflow, tier: core, detect: ["pattern:mlflow|libs/ml-core/pyproject.toml"]}
+      - {id: dvc, tier: core, detect: [".dvc", "dvc.yaml"]}
+      - {id: evidently, tier: core, detect: ["pattern:evidently|libs/ml-core/pyproject.toml"]}
+      - {id: ray-tune, tier: demonstrated, detect: ["pattern:ray|projects"]}
+      - {id: katib, tier: rejected, note: "Ray Tune chosen; Katib requires operating Kubeflow."}
+  - name: Deep learning
+    items:
+      - {id: lora-peft, tier: demonstrated, detect: ["pattern:peft|projects"]}
+      - {id: layoutlm, tier: demonstrated, detect: ["pattern:layoutlm|projects"]}
+      - {id: donut, tier: studied}
+  - name: LLMOps
+    items:
+      - {id: litellm, tier: core, detect: ["pattern:litellm|libs/llm-core"]}
+      - {id: promptfoo, tier: demonstrated, detect: ["projects/*/evals/*promptfoo*"]}
+      - {id: ragas, tier: studied}
+      - {id: deepeval, tier: studied}
+      - {id: langfuse, tier: demonstrated, detect: ["pattern:langfuse|libs/llm-core"]}
+      - {id: arize-phoenix, tier: rejected, note: "Langfuse chosen; two LLM tracing backends duplicate instrumentation."}
+      - {id: prompt-registry, tier: core, detect: ["pattern:prompt_registry|libs/llm-core"]}
+      - {id: semantic-cache, tier: core, detect: ["pattern:semantic_cache|libs/llm-core"]}
+      - {id: guardrails, tier: core, detect: ["pattern:guardrail|libs/llm-core"]}
+  - name: Observability
+    items:
+      - {id: opentelemetry, tier: core, detect: ["platform/local/manifests/30-observability.yaml"]}
+      - {id: prometheus, tier: core, detect: ["platform/local/manifests/40-metrics.yaml"]}
+      - {id: grafana, tier: core, detect: ["pattern:grafana|platform/local"]}
+      - {id: jaeger, tier: core, detect: ["pattern:jaeger|platform/local"], note: "Local trace backend; Tempo runs in cloud."}
+      - {id: loki, tier: core, detect: ["pattern:loki|platform/observability"]}
+      - {id: tempo, tier: core, detect: ["pattern:tempo|platform/observability"]}
+      - {id: mimir, tier: core, detect: ["pattern:mimir|platform/observability"]}
+      - {id: sentry, tier: studied, note: "OTel error events overlap; Sentry revisited if error triage needs its ergonomics."}
+  - name: Testing
+    items:
+      - {id: k6, tier: core, detect: ["projects/*/tests/load.js"]}
+      - {id: schemathesis, tier: core, detect: ["pattern:schemathesis|.github/workflows"]}
+      - {id: behavioral-testing, tier: core, detect: ["pattern:invariance|projects"]}
+      - {id: contract-testing, tier: core, detect: ["projects/*/contracts"]}
+  - name: Monorepo tooling
+    items:
+      - {id: uv-workspaces, tier: core, detect: ["pattern:tool.uv.workspace|pyproject.toml"]}
+      - {id: paths-filter, tier: core, detect: ["pattern:paths-filter|.github/workflows"]}
+      - {id: dependency-direction, tier: core, detect: ["tests/test_dependency_direction.py"]}
+      - {id: copier-project-generator, tier: core, detect: ["copier.yml"]}
+      - {id: pants, tier: studied, note: "Correct at a build-time threshold not yet reached (ADR-001 revisit trigger)."}
+  - name: Governance
+    items:
+      - {id: eu-ai-act, tier: core, detect: ["pattern:EU AI Act|docs/governance/compliance-mapping.md"]}
+      - {id: iso-42001, tier: core, detect: ["pattern:42001|docs/governance/compliance-mapping.md"]}
+      - {id: nist-ai-rmf, tier: core, detect: ["pattern:AI RMF|docs/governance/compliance-mapping.md"]}
+      - {id: model-cards, tier: core, detect: ["projects/*/model-card.md"]}
+      - {id: adrs, tier: core, detect: ["docs/decisions/ADR-000-charter-and-scope.md"]}
+      - {id: quality-gates, tier: core, detect: ["docs/governance/quality-gates.md"]}
