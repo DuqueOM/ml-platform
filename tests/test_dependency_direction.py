@@ -73,11 +73,10 @@ def _imported_roots(path: Path) -> set[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             roots.update(alias.name.split(".")[0] for alias in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            # level > 0 is a relative import: within the same package by
-            # definition, so it can never cross a layer boundary.
-            if node.level == 0 and node.module:
-                roots.add(node.module.split(".")[0])
+        # level > 0 is a relative import: within the same package by definition,
+        # so it can never cross a layer boundary and is not part of the graph.
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            roots.add(node.module.split(".")[0])
     return roots
 
 

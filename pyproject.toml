@@ -42,8 +42,13 @@ disallow_untyped_defs = true
 
 # libs/ has the widest blast radius: a type error there reaches every project,
 # so it is checked strictly while projects/ is allowed to be looser.
+#
+# These patterns are the IMPORTABLE module names, not the directory names: a
+# member at libs/data-contracts publishes `data_contracts`. An override written
+# as `libs.*` matches nothing and mypy reports it only as a note — a setting
+# that appears active while doing nothing.
 [[tool.mypy.overrides]]
-module = "libs.*"
+module = ["ml_core.*", "data_contracts.*", "llm_core.*", "serving_core.*"]
 strict = true
 
 [tool.pytest.ini_options]
