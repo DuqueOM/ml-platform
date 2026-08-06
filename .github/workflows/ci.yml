@@ -1,0 +1,69 @@
+name: CI
+
+# Phase 0 gates only (docs/architecture/technical-plan.md). Project and model
+# gates are added as their phases land — a workflow step referencing work that
+# does not exist yet is a green check that means nothing.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  invariants:
+    name: Repository invariants
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Secret scanning must see history: the working tree cannot show
+          # what a previous commit already published.
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Sync workspace
+        run: uv sync --all-extras
+
+      - name: Lockfile is current
+        run: uv lock --check
+
+      - name: Dependency direction (ADR-001)
+        run: uv run pytest tests/test_dependency_direction.py -q
+
+      - name: Lint and format
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Types
+        run: uv run mypy libs/
+
+      - name: Documentation coherence (ADR-005)
+        run: uv run python scripts/check_doc_coherence.py
+
+      - name: Tests
+        run: uv run pytest -q
+
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
