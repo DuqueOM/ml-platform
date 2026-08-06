@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**28 of 86 committed technologies implemented (32%)** — plus 17 studied and 10 rejected, which are decisions rather than gaps.
+**28 of 94 committed technologies implemented (29%)** — plus 17 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 |:-:|---|
@@ -189,6 +189,19 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `prompt-registry` | core |  |
 | ⬜ | `semantic-cache` | core |  |
 | ⬜ | `guardrails` | core |  |
+
+### Edge protection — 0 built, 8 pending
+
+| | Technology | Tier | Note |
+|:-:|---|---|---|
+| ⬜ | `cloudflare-waf` | core |  |
+| ⬜ | `cloudflare-rate-limiting` | core |  |
+| ⬜ | `origin-lock-gcp` | core | Cloud Armor allowing only Cloudflare ranges. Without it the load balancer is reachable by IP and the edge is decorative. |
+| ⬜ | `origin-lock-aws` | core | ALB security group + WAFv2 IP set. Same failure mode as GCP. |
+| ⬜ | `origin-lock-external-check` | core | Reaching the endpoint proves what is TRUE; reading Terraform proves only what was declared. |
+| ⬜ | `cloud-armor` | demonstrated | Narrowed from full WAF to origin lock by ADR-006. |
+| ⬜ | `aws-wafv2` | demonstrated | Narrowed to origin lock by ADR-006. |
+| ⬜ | `aws-shield-standard` | core | Automatic and free for ALB; listed so its presence is recorded rather than assumed. |
 
 ### Observability — 4 built, 3 pending
 
