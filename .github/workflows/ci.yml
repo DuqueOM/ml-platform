@@ -64,6 +64,11 @@ jobs:
       - name: Documentation coherence (ADR-005)
         run: uv run python scripts/check_doc_coherence.py
 
+      - name: Implementation status matches the filesystem
+        # The plan states intent; this derives what exists. A stale table is a
+        # document asserting something false, which is itself a defect.
+        run: uv run python scripts/check_implementation_status.py --check
+
       - name: Tests
         run: uv run pytest -q
 

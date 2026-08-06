@@ -129,3 +129,12 @@ repos:
         language: system
         pass_filenames: false
         files: '\.md$'
+
+      - id: implementation-status
+        name: implementation status is derived, not declared
+        description: >
+          Regenerates the status table from the filesystem and fails if the
+          committed one disagrees. A plan states intent; this states fact.
+        entry: uv run python scripts/check_implementation_status.py --check
+        language: system
+        pass_filenames: false

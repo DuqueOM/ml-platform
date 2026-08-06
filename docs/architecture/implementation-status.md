@@ -1,0 +1,124 @@
+# Implementation status
+
+**Generated section below is machine-derived. Do not hand-edit it.**
+Run `python scripts/check_implementation_status.py --write` to refresh.
+
+This document exists because of a specific failure: the technical plan listed
+pre-commit as a Phase 0 deliverable, and it did not exist. Nothing reported
+that, because a plan is a statement of intent and nothing checks intent against
+the filesystem.
+
+The rule this enforces is ADR-005 rule H — **a document asserting something
+false is itself a defect, even when the code is correct.** A status table that
+a human maintains will drift; one that a script derives cannot.
+
+## How to read it
+
+| Marker | Meaning |
+|---|---|
+| ✅ | Exists and its gate passes |
+| 🟡 | Exists but incomplete — the criterion below it says what is missing |
+| ⬜ | Does not exist. **Not "planned" — absent** |
+
+A component marked ⬜ has no files. If the technical plan describes it, the
+plan is describing the future, and that is fine only as long as this document
+says so plainly.
+
+## What "done" means here
+
+A component is ✅ only when a command proves it. Existence of files is not
+evidence of function — that is exactly how a mypy override matching zero
+modules, and a coherence filter examining zero files, both stayed green.
+
+<!-- BEGIN GENERATED -->
+<!-- Populated by scripts/check_implementation_status.py -->
+
+**8 done · 2 partial · 23 absent** — of 33 tracked components.
+
+### Phase 0
+
+| | Component | Evidence |
+|:-:|---|---|
+| ✅ | uv workspace + lockfile | `uv lock --check` passes |
+| ✅ | Dependency direction test | `uv run pytest tests/test_dependency_direction.py -q` passes |
+| ✅ | Documentation coherence gate | `uv run python scripts/check_doc_coherence.py` passes |
+| 🟡 | Agentic canonical store | 74 file(s), no verification command |
+| ✅ | Agentic 4-tool surfaces | `uv run python scripts/sync_agentic_adapters.py --check` passes |
+| ✅ | Agentic surface integrity | `uv run python scripts/validate_agentic_surface.py --strict` passes |
+| ✅ | pre-commit | `uv run pre-commit validate-config .pre-commit-config.yaml` passes |
+| ✅ | Lint + format | `uv run ruff check . && uv run ruff format --check .` passes |
+| ✅ | Type checking (libs, strict) | `uv run mypy libs/` passes |
+| 🟡 | CI workflow | 1 file(s), no verification command |
+
+### Phase 1
+
+| | Component | Evidence |
+|:-:|---|---|
+| ⬜ | Dataset acquisition scripts | absent |
+| ⬜ | Local validation stack | absent |
+| ⬜ | libs/ml-core implementation | absent |
+| ⬜ | libs/data-contracts implementation | absent |
+| ⬜ | libs/serving-core implementation | absent |
+| ⬜ | projects/demand-forecast | absent |
+| ⬜ | Lakehouse ingestion (Iceberg) | absent |
+| ⬜ | Feature store definitions | absent |
+| ⬜ | Training pipeline (KFP v2) | absent |
+| ⬜ | Orchestration DAGs (Airflow) | absent |
+| ⬜ | Observability (OTel + LGTM) | absent |
+
+### Phase 2
+
+| | Component | Evidence |
+|:-:|---|---|
+| ⬜ | Terraform (GCP) | absent |
+| ⬜ | Terraform (AWS) | absent |
+| ⬜ | Kubernetes manifests | absent |
+| ⬜ | GitOps (ArgoCD) | absent |
+| ⬜ | Admission policies | absent |
+
+### Phase 3
+
+| | Component | Evidence |
+|:-:|---|---|
+| ⬜ | libs/llm-core implementation | absent |
+| ⬜ | projects/store-assistant | absent |
+| ⬜ | projects/rag-assistant | absent |
+
+### Phase 4
+
+| | Component | Evidence |
+|:-:|---|---|
+| ⬜ | projects/credit-risk | absent |
+
+### Phase 5
+
+| | Component | Evidence |
+|:-:|---|---|
+| ⬜ | projects/doc-intelligence | absent |
+
+### Phase 6
+
+| | Component | Evidence |
+|:-:|---|---|
+| ⬜ | projects/agent-ops | absent |
+| ⬜ | Compliance mapping | absent |
+
+<!-- END GENERATED -->
+
+## Deliberately absent, in order
+
+Nothing below is late. The sequence is fixed by
+[the technical plan](technical-plan.md) and by four constraints the maintainer
+set explicitly:
+
+1. **No cloud deployment until everything else is finished.** Contracts
+   defined, template complete, and deployment the only remaining step —
+   mirroring how `ml-service-template` reached its current state.
+2. **The first deployment is `ml-service-template`'s, not this repository's.**
+   Only once that one is validated and stable does this one deploy.
+3. **Infrastructure is greenfield.** When the time comes, every resource is
+   built from scratch. No existing cloud project, cluster, bucket or service
+   account is reused.
+4. **Local validation precedes cloud.** The full behaviour of the system is
+   exercised on a local cluster first, so that cloud spend buys confirmation
+   rather than discovery.
