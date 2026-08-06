@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**42 of 116 committed technologies implemented (36%)** — plus 16 studied and 10 rejected, which are decisions rather than gaps.
+**44 of 117 committed technologies implemented (37%)** — plus 16 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 |:-:|---|
@@ -109,11 +109,11 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `argo-rollouts` | core |  |
 | 🚫 | `flux` | rejected | ArgoCD chosen; two reconcilers fight. |
 
-### Lakehouse — 0 built, 3 pending
+### Lakehouse — 1 built, 2 pending
 
 | | Technology | Tier | Note |
 |:-:|---|---|---|
-| ⬜ | `apache-iceberg` | core |  |
+| ✅ | `apache-iceberg` | core | |
 | ⬜ | `biglake` | core |  |
 | ⬜ | `s3-tables` | core |  |
 | 🚫 | `delta-lake` | rejected | Iceberg chosen for vendor-neutral multi-cloud support (ADR-004). |
@@ -247,10 +247,11 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `mimir` | core |  |
 | 📓 | `sentry` | studied | OTel error events overlap; Sentry revisited if error triage needs its ergonomics. |
 
-### Testing — 1 built, 3 pending
+### Testing — 2 built, 3 pending
 
 | | Technology | Tier | Note |
 |:-:|---|---|---|
+| ✅ | `integration-tests` | core | |
 | ⬜ | `k6` | core |  |
 | ⬜ | `schemathesis` | core |  |
 | ⬜ | `behavioral-testing` | core |  |
