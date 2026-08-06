@@ -6,6 +6,24 @@ and to `agentic/`; they must not duplicate policy.
 
 Read this fully before writing code.
 
+## Independent audit
+
+No independent audit has been recorded. Check C7 fails until one is, and CI
+stays red because of it — deliberately, since a gate that passes while the
+thing it checks for is absent is the anti-pattern this repository exists to
+avoid.
+
+`docs/governance/audit-brief.md` is written FOR the auditing session: what was
+asked, what was planned, every defect found during construction, and a ranked
+list of where the author's own confidence is weakest. Read it first.
+
+When the audit completes, record it with `scripts/audit_record.py` and add a
+line here:
+
+```text
+Last independent audit: YYYY-MM-DD
+```
+
 ## What this repository is
 
 A multi-project ML platform monorepo: shared substrate — data, features,
