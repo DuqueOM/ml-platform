@@ -28,6 +28,7 @@ import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -47,13 +48,15 @@ class Artifact:
     body: str
 
 
-def _load_manifest() -> dict:
+def _load_manifest() -> dict[str, Any]:
     if not MANIFEST.is_file():
         sys.exit(f"missing manifest: {MANIFEST.relative_to(REPO_ROOT)}")
-    return yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
+    loaded = yaml.safe_load(MANIFEST.read_text(encoding="utf-8"))
+    assert isinstance(loaded, dict), f"{MANIFEST} must be a mapping"
+    return loaded
 
 
-def collect(manifest: dict) -> list[Artifact]:
+def collect(manifest: dict[str, Any]) -> list[Artifact]:
     """Read every canonical body named by the manifest's stores."""
     artifacts: list[Artifact] = []
     for kind, store in manifest["stores"].items():
@@ -104,10 +107,10 @@ def render_mirror(artifact: Artifact, surface: str) -> str:
 {artifact.body}"""
 
 
-def target_path(artifact: Artifact, surface_cfg: dict) -> Path:
-    subdir = surface_cfg["layout"][artifact.kind]
-    ext = surface_cfg["extension"]
-    return REPO_ROOT / surface_cfg["root"] / subdir / f"{artifact.name}{ext}"
+def target_path(artifact: Artifact, surface_cfg: dict[str, Any]) -> Path:
+    subdir = str(surface_cfg["layout"][artifact.kind])
+    ext = str(surface_cfg["extension"])
+    return REPO_ROOT / str(surface_cfg["root"]) / subdir / f"{artifact.name}{ext}"
 
 
 def sync(check_only: bool) -> int:

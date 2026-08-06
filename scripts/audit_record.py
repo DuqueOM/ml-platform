@@ -23,6 +23,7 @@ import json
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TRAIL = REPO_ROOT / "ops" / "audit.jsonl"
@@ -30,7 +31,7 @@ TRAIL = REPO_ROOT / "ops" / "audit.jsonl"
 VALID_MODES = ("AUTO", "CONSULT", "STOP")
 
 
-def _chain_hash(previous: str, payload: dict) -> str:
+def _chain_hash(previous: str, payload: dict[str, Any]) -> str:
     """Hash this entry together with the previous one.
 
     The chain is what makes the trail tamper-evident: editing any entry breaks
@@ -41,7 +42,7 @@ def _chain_hash(previous: str, payload: dict) -> str:
     return hashlib.sha256(f"{previous}\x1f{canonical}".encode()).hexdigest()
 
 
-def _entries() -> list[dict]:
+def _entries() -> list[dict[str, Any]]:
     if not TRAIL.is_file():
         return []
     return [json.loads(line) for line in TRAIL.read_text(encoding="utf-8").splitlines() if line.strip()]

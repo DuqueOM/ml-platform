@@ -26,6 +26,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -69,7 +70,7 @@ def sample_available(count: int, interval: float) -> tuple[int, int, int]:
     return min(samples), sum(samples) // len(samples), max(samples)
 
 
-def occupied_ports(ports: list[dict]) -> list[tuple[int, str]]:
+def occupied_ports(ports: list[dict[str, Any]]) -> list[tuple[int, str]]:
     """Host ports already bound.
 
     Checked BEFORE cluster creation because the alternative is a collision

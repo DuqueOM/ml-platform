@@ -23,6 +23,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -95,7 +96,7 @@ def _content_matches(pattern: str, scope: str) -> bool:
     return False
 
 
-def implemented(item: dict) -> bool:
+def implemented(item: dict[str, Any]) -> bool:
     """True when at least one detector matches a real artifact."""
     for spec in item.get("detect") or []:
         if spec.startswith("pattern:"):
@@ -107,9 +108,9 @@ def implemented(item: dict) -> bool:
     return False
 
 
-def evaluate(inventory: dict) -> list[tuple[str, dict, str]]:
+def evaluate(inventory: dict[str, Any]) -> list[tuple[str, dict[str, Any], str]]:
     """Return (category, item, state) for every entry."""
-    rows: list[tuple[str, dict, str]] = []
+    rows: list[tuple[str, dict[str, Any], str]] = []
     for category in inventory["categories"]:
         for item in category["items"]:
             tier = item.get("tier", "core")
@@ -131,7 +132,7 @@ _MARK = {
 }
 
 
-def render(rows: list[tuple[str, dict, str]], full: bool) -> str:
+def render(rows: list[tuple[str, dict[str, Any], str]], full: bool) -> str:
     counts: dict[str, int] = {}
     for _, _, state in rows:
         counts[state] = counts.get(state, 0) + 1

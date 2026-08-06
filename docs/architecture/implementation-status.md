@@ -33,7 +33,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**11 done · 5 partial · 17 absent** — of 33 tracked components.
+**10 done · 8 partial · 15 absent** — of 33 tracked components.
 
 ### Phase 0
 
@@ -41,7 +41,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 |:-:|---|---|
 | ✅ | uv workspace + lockfile | `uv lock --check` passes |
 | ✅ | Dependency direction test | `uv run pytest tests/test_dependency_direction.py -q` passes |
-| ✅ | Documentation coherence gate | `uv run python scripts/check_doc_coherence.py` passes |
+| 🟡 | Documentation coherence gate | `uv run python scripts/check_doc_coherence.py` FAILS |
 | ✅ | Agentic canonical store | `uv run python scripts/validate_agentic_surface.py --strict` passes |
 | ✅ | Agentic 4-tool surfaces | `uv run python scripts/sync_agentic_adapters.py --check` passes |
 | ✅ | Agentic surface integrity | `uv run python scripts/validate_agentic_surface.py --strict` passes |
@@ -56,12 +56,12 @@ modules, and a coherence filter examining zero files, both stayed green.
 |:-:|---|---|
 | ✅ | Dataset acquisition scripts | `uv run pytest tests/test_dataset_registry.py -q` passes |
 | 🟡 | Local validation stack | `uv run python scripts/local/preflight.py --samples 1 --interval 0` FAILS |
-| 🟡 | libs/ml-core implementation | 3 file(s), no verification command |
-| 🟡 | libs/data-contracts implementation | 1 file(s), no verification command |
-| ⬜ | libs/serving-core implementation | absent |
+| 🟡 | libs/ml-core implementation | 4 file(s), no verification command |
+| 🟡 | libs/data-contracts implementation | 2 file(s), no verification command |
+| 🟡 | libs/serving-core implementation | 1 file(s), no verification command |
 | 🟡 | projects/demand-forecast | 11 file(s), no verification command |
 | ⬜ | Lakehouse ingestion (Iceberg) | absent |
-| 🟡 | Feature store definitions | 3 file(s), no verification command |
+| 🟡 | Feature store definitions | 4 file(s), no verification command |
 | ⬜ | Training pipeline (KFP v2) | absent |
 | ⬜ | Orchestration DAGs (Airflow) | absent |
 | ⬜ | Observability (OTel + LGTM) | absent |
@@ -80,7 +80,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 
 | | Component | Evidence |
 |:-:|---|---|
-| ⬜ | libs/llm-core implementation | absent |
+| 🟡 | libs/llm-core implementation | 1 file(s), no verification command |
 | ⬜ | projects/store-assistant | absent |
 | ⬜ | projects/rag-assistant | absent |
 
