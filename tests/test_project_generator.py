@@ -114,7 +114,11 @@ def test_generated_pyproject_is_valid_and_depends_only_downward(rendered: Path) 
     dependencies = manifest["project"]["dependencies"]
 
     libs = {p.name for p in (REPO_ROOT / "libs").iterdir() if p.is_dir()}
-    projects = {p.name for p in (REPO_ROOT / "projects").iterdir() if p.is_dir()}
+    # projects/ is legitimately empty before Phase 1, and git does not track
+    # empty directories — so a clean clone may not have it at all. Assuming it
+    # exists is how this test passed locally and failed in CI.
+    projects_root = REPO_ROOT / "projects"
+    projects = {p.name for p in projects_root.iterdir() if p.is_dir()} if projects_root.is_dir() else set()
 
     assert dependencies, "generated project declares no libs/ dependencies — nothing is being reused"
     for dependency in dependencies:
