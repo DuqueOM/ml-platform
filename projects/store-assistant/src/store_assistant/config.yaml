@@ -43,6 +43,11 @@ tier_endpoints:
     kind: "${AGENT_TIER0_KIND:-local}"
     model: "${AGENT_TIER0_MODEL:-}"
     api_key_env: "${AGENT_TIER0_API_KEY_ENV:-}"
+    # ADR-012: where the weights are resident decides which budget they are
+    # charged against. The measured 43 tok/s (bench/RESULTS.md) is a GPU
+    # number; the same model on CPU exceeds available system RAM and swaps.
+    device: "${AGENT_TIER0_DEVICE:-gpu}"
+    weights_gb: 5.0                                        # E4B Q4_K_M, measured
   1:                                                       # mid reasoning
     url: "${AGENT_TIER1_URL:-}"
     kind: remote
@@ -75,11 +80,22 @@ tiers:
 limits:
   observation_chars: 4000   # per tool result injected into a prompt
   retrieval_chars: 2000     # per BM25 document returned by semantic_retrieval
-  max_local_tiers: 1        # how many tiers may hold a model in RAM at once.
+  max_local_tiers: 1        # how many tiers may hold a model in memory at once.
                             # Raising this is a deliberate act: each additional
                             # local tier costs its full quantised model size,
                             # and config load fails rather than let the OOM
                             # killer discover the overcommit at request time.
+
+  # Per-device budgets (ADR-012), measured on the reference workstation
+  # 2026-08-05 — not estimated. Re-measure before changing either number.
+  #   gpu: RTX 5070 Laptop, 8151 MiB total - 1905 MiB held by the Windows
+  #        desktop = 5987 MiB free. Stated slightly under to leave KV headroom.
+  #   cpu: system RAM available to WSL2 under its default 50% host allocation.
+  #        Raising this requires a .wslconfig change — see
+  #        docs/workstation-memory-budget.md.
+  memory_budget_gb:
+    gpu: 5.8
+    cpu: 4.0
 
 router:
   prompt_file: "prompts/router.md"

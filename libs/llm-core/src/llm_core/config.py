@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import os
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import yaml
@@ -251,7 +251,7 @@ def load_usecase(name: str) -> UsecaseConfig:
         endpoint = TierEndpoint.from_raw(spec)
         if llama_host and endpoint.is_local:
             rehosted = endpoint.url.replace("127.0.0.1", llama_host).replace("localhost", llama_host)
-            endpoint = TierEndpoint(url=rehosted, kind=endpoint.kind, model=endpoint.model)
+            endpoint = replace(endpoint, url=rehosted)
         tier_endpoints[int(key)] = endpoint
 
     # Tier 0 is the routing floor: every escalation resolves down to it and the
@@ -265,7 +265,8 @@ def load_usecase(name: str) -> UsecaseConfig:
     # Resident-memory invariant (ADR-011). A workstation cannot hold several
     # GGUF models at once, so exceeding the cap is a configuration error, not a
     # runtime surprise discovered when the OOM killer fires.
-    max_local_tiers = int(raw.get("limits", {}).get("max_local_tiers", 1))
+    limits = raw.get("limits", {})
+    max_local_tiers = int(limits.get("max_local_tiers", 1))
     local_tiers = sorted(tier for tier, ep in tier_endpoints.items() if ep.is_local)
     if len(local_tiers) > max_local_tiers:
         raise ValueError(
@@ -274,6 +275,26 @@ def load_usecase(name: str) -> UsecaseConfig:
             f"Switch the surplus tiers from kind: {LOCAL} to kind: {REMOTE}, "
             f"or raise limits.max_local_tiers deliberately."
         )
+
+    # Per-device memory budget (ADR-012). Counting resident tiers is not enough:
+    # the same model that fits in VRAM may not fit in system RAM, and the two
+    # paths fail differently — VRAM overflow degrades to partial offload, system
+    # RAM overflow swaps or invokes the OOM killer. Declaring weights and
+    # budgets turns "it silently ran on the wrong device" into a load error.
+    memory_budget_gb = {str(k).lower(): float(v) for k, v in (limits.get("memory_budget_gb") or {}).items()}
+    charged: dict[str, float] = {}
+    for tier in local_tiers:
+        endpoint = tier_endpoints[tier]
+        charged[endpoint.device] = charged.get(endpoint.device, 0.0) + endpoint.weights_gb
+    for device, required in charged.items():
+        budget = memory_budget_gb.get(device)
+        if budget is not None and required > budget:
+            raise ValueError(
+                f"use-case {name!r} places {required:.1f} GiB of weights on device {device!r} "
+                f"but limits.memory_budget_gb.{device} is {budget:.1f} GiB (ADR-012). "
+                f"Move the tier to another device, use a smaller quantisation, "
+                f"or raise the budget after re-measuring the machine."
+            )
 
     return UsecaseConfig(
         name=raw.get("name", name),

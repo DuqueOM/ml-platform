@@ -10,6 +10,36 @@ are backwards-compatible by default (new behaviour is opt-in or fail-closed).
 ## [Unreleased]
 
 ### Added
+- **ADR-012 — "local" is two budgets, not one.** ADR-011 justified its
+  resident-memory invariant with system-RAM measurements only. Measuring the
+  GPU showed the framing was incomplete: 8151 MiB total, 1905 MiB held
+  persistently by the Windows desktop, **5987 MiB actually free** — against a
+  Tier-0 model of **5.0 GB**. The VRAM was never idle; it is what makes the
+  benchmarked 43.19 tok/s router possible, and nothing else on disk fits
+  beside it (12B = 6.9 GB, 26B = 16 GB, 31B = 18 GB, all already measured as
+  gate failures in `bench/RESULTS.md`).
+- **Real bug found and fixed via that measurement**: `docker-compose.yml`
+  passed `-ngl 99` with the GPU reservation block commented out. A container
+  without a device reservation has no GPU to offload to, so llama.cpp fell
+  back to CPU — where 5.0 GB of weights meet 4.0 GB of available RAM and the
+  host swaps. The benchmarked number came from a bare `llama-server` and was
+  never reproducible through Docker. `max_local_tiers` counted one either way
+  and reported success.
+- **Device-aware invariant**: `TierEndpoint` gains `device` (`gpu`/`cpu`) and
+  `weights_gb`; `memory_pool` returns `None` for remote tiers, which cost
+  tokens rather than memory. `limits.memory_budget_gb` declares a budget per
+  device, checked at config load. Budgets carry their measurement provenance
+  in the config so revising one requires re-measuring. An undeclared
+  `weights_gb` means *unmeasured*, not *free* — the check is skipped rather
+  than passed.
+- `docker-compose.yml` now reserves the GPU (`gpus: all`) and passes
+  `AGENT_TIER0_DEVICE`, so removing the reservation makes the budget check
+  fail loudly instead of the host swapping quietly.
+- Six tests covering the device budget, including the exact measured failure
+  (5.0 GiB on a 4.0 GiB CPU budget) and its mirror (same weights, GPU device,
+  accepted), plus a regression test that `LLAMA_HOST` container rehosting
+  preserves `device` — losing it would silently disarm the check inside the
+  container.
 - **ADR-011 — hybrid tier topology; resident memory is the binding
   constraint.** The four-local-`llama-server` topology assumed since Phase 1
   was never runnable on the development workstation: 16 GB host, 9.7 GB

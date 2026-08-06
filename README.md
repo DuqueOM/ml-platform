@@ -222,6 +222,7 @@ bring-your-own-models) and [CONTRIBUTING.md](CONTRIBUTING.md).
 - [ADR-009](docs/decisions/ADR-009-reflection-notes-channel.md) — reflection output is a notes channel, never an observation
 - [ADR-010](docs/decisions/ADR-010-mcp-a2a-interop-rejected.md) — MCP / A2A interoperability: Rejected (with revisit triggers)
 - [ADR-011](docs/decisions/ADR-011-hybrid-tier-topology.md) — hybrid tier topology: resident memory is the binding constraint
+- [ADR-012](docs/decisions/ADR-012-device-aware-memory-budget.md) — "local" is two budgets, not one: device-aware memory invariant
 - [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) — OWASP Top 10 for LLM Applications control-by-control map
 - [docs/workstation-memory-budget.md](docs/workstation-memory-budget.md) — running the platform on a memory-constrained machine (ADR-011 in practice)
 - [CHANGELOG.md](CHANGELOG.md) — version history

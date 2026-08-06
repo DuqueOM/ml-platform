@@ -33,6 +33,14 @@ T = TypeVar("T")
 LOCAL = "local"
 REMOTE = "remote"
 
+# Memory pools a local tier can be resident in. They are separate budgets with
+# different capacities and different failure modes: exceeding VRAM makes
+# llama.cpp fall back to partial offload (slow but alive), while exceeding
+# system RAM makes the host swap or the OOM killer fire (ADR-012).
+GPU = "gpu"
+CPU = "cpu"
+DEVICES = (GPU, CPU)
+
 
 class MissingCredential(RuntimeError):
     """A remote tier declares ``api_key_env`` but that variable is unset.
@@ -63,17 +71,31 @@ class TierEndpoint:
             by remote providers.
         api_key_env: Name of the environment variable holding the bearer
             token. ``None`` for unauthenticated (local) endpoints.
+        device: Which memory pool a *local* tier is resident in — ``"gpu"`` or
+            ``"cpu"``. Ignored for remote tiers. "Local" is not one budget:
+            the same model that fits in VRAM may not fit in system RAM, and
+            the two deployment paths fail differently (ADR-012).
+        weights_gb: Size of the quantised weights in GiB, used to check the
+            tier against its device budget at config load. ``0.0`` disables
+            the check for that tier.
     """
 
     url: str
     kind: str = LOCAL
     model: str | None = None
     api_key_env: str | None = None
+    device: str = CPU
+    weights_gb: float = 0.0
 
     @property
     def is_local(self) -> bool:
         """True when this tier consumes local resident memory."""
         return self.kind == LOCAL
+
+    @property
+    def memory_pool(self) -> str | None:
+        """Which budget this tier is charged against, or ``None`` if remote."""
+        return self.device if self.is_local else None
 
     @property
     def supports_grammar(self) -> bool:
@@ -116,7 +138,18 @@ class TierEndpoint:
         if kind == REMOTE and not model:
             raise ValueError(f"remote tier {url!r} requires a 'model' (providers reject an unset model)")
 
-        return cls(url=url, kind=kind, model=model, api_key_env=raw.get("api_key_env") or None)
+        device = str(raw.get("device") or CPU).lower()
+        if kind == LOCAL and device not in DEVICES:
+            raise ValueError(f"local tier device must be one of {DEVICES}, got {device!r}")
+
+        return cls(
+            url=url,
+            kind=kind,
+            model=model,
+            api_key_env=raw.get("api_key_env") or None,
+            device=device,
+            weights_gb=float(raw.get("weights_gb") or 0.0),
+        )
 
     def auth_headers(self) -> dict[str, str]:
         """Build request headers, resolving the credential from the environment.

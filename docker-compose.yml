@@ -23,6 +23,17 @@ services:
       - ${MODELS_DIR:?set MODELS_DIR in .env to your host model directory}:/models:ro
     # Sized for a Q4_K_M router model plus its 8192-token KV cache. Raise
     # deliberately if you swap in a larger Tier-0 model.
+    # ADR-012: `-ngl 99` above asks llama.cpp to offload every layer to the
+    # GPU, but a container without a device reservation has no GPU to offload
+    # to — it silently falls back to CPU, where the 5.0 GiB E4B weights exceed
+    # the RAM available to WSL2 and the host swaps. The reservation below is
+    # what makes the benchmarked 43 tok/s reproducible through Docker rather
+    # than only through a bare `llama-server`.
+    #
+    # Requires the NVIDIA Container Toolkit. Without it, set
+    # AGENT_TIER0_DEVICE=cpu and use a smaller quantisation — do not simply
+    # drop this block, or the failure becomes silent again.
+    gpus: all
     mem_limit: ${LLAMA_MEM_LIMIT:-4g}
     ports:
       - "8091:8091"
@@ -41,12 +52,18 @@ services:
     #         - driver: nvidia
     #           count: 1
     #           capabilities: [gpu]
+    # (The `deploy.resources.reservations` form above is the Swarm-compatible
+    # equivalent of `gpus: all`. Use one or the other, never both.)
 
   agent:
     build: .
     environment:
       AGENT_USECASE: ${AGENT_USECASE:-tienda}
       LLAMA_HOST: llama-e4b   # retargets config's LOCAL 127.0.0.1 endpoints only
+      # Must match where llama.cpp actually put the weights (ADR-012). If the
+      # GPU reservation above is removed, set this to `cpu` so the device
+      # budget check fails loudly instead of the host swapping quietly.
+      AGENT_TIER0_DEVICE: ${AGENT_TIER0_DEVICE:-gpu}
       # Remote tiers (ADR-011 hybrid profile). Unset -> the higher tiers are
       # dropped at config load and everything resolves to the local Tier 0.
       AGENT_TIER1_URL: ${AGENT_TIER1_URL:-}

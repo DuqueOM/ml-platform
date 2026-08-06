@@ -8,13 +8,23 @@ run it.
 ## Why this exists
 
 The platform's binding constraint on a developer workstation is resident
-memory, not token cost or CPU. A single mid-size model quantised to Q4_K_M
-occupies roughly 4–5 GB; the KV cache for an 8192-token context adds several
-hundred megabytes more. Two such models do not fit in a 16 GB laptop that is
-also running an IDE, a browser and Docker.
+memory, not token cost or CPU. But "resident memory" is **two budgets**
+([ADR-012](decisions/ADR-012-device-aware-memory-budget.md)), and which one
+binds depends on where the weights land:
 
-ADR-011 removes the need for more than one. This document removes the other
-avoidable losses.
+| Pool | Measured here | Failure mode when exceeded |
+|---|---|---|
+| VRAM | 8151 MiB total − 1905 MiB held by the Windows desktop = **5987 MiB free** | llama.cpp falls back to partial offload — slow, but alive |
+| System RAM (WSL2) | **4.0 GB available** before tuning | The host swaps, or the OOM killer fires |
+
+The shipped Tier-0 model (`E4B Q4_K_M`) is **5.0 GB**. It fits in VRAM with
+about a gigabyte to spare for the KV cache, and does **not** fit in available
+system RAM. That single fact explains both the benchmarked 43.19 tok/s (GPU)
+and the swapping that occurs whenever the model silently lands on the CPU.
+
+ADR-011 removes the need for more than one model. ADR-012 makes sure the one
+model is charged against the budget it actually occupies. This document removes
+the other avoidable losses.
 
 ## Step 1 — reclaim RAM from WSL2 (largest single win)
 
@@ -49,6 +59,26 @@ wsl --shutdown
 Reopen the WSL terminal and confirm with `free -h`. Expect roughly 4 GB more
 available than before. Leave at least 4 GB for Windows; going higher trades
 Linux headroom for desktop responsiveness and usually nets out worse.
+
+## Step 1b — confirm the model is actually on the GPU
+
+The most expensive silent failure on this machine is a model that was *asked*
+to use the GPU and did not get one. `-ngl 99` instructs llama.cpp to offload
+every layer; a container with no device reservation has no GPU to offload to,
+so it falls back to CPU without erroring — and then 5.0 GB of weights meet
+4.0 GB of RAM.
+
+```bash
+nvidia-smi --query-compute-apps=pid,used_memory,name --format=csv
+```
+
+With Tier 0 up, this must list a `llama-server` process holding several
+gigabytes. An empty list while the server is running means it is on the CPU.
+
+Through Docker, the reservation is `gpus: all` in `docker-compose.yml` and
+requires the NVIDIA Container Toolkit. If it is unavailable, set
+`AGENT_TIER0_DEVICE=cpu` — the device budget check will then fail at config
+load, which is the intended outcome: a loud error instead of a swapping host.
 
 ## Step 2 — keep exactly one model resident
 

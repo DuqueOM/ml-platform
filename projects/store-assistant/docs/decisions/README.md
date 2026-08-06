@@ -15,6 +15,7 @@ Non-trivial decisions are recorded here with their context and trade-offs.
 | [ADR-009](ADR-009-reflection-notes-channel.md) | Reflection output is a notes channel, never an observation | Accepted |
 | [ADR-010](ADR-010-mcp-a2a-interop-rejected.md) | MCP / A2A interoperability: Rejected (with revisit triggers) | Rejected |
 | [ADR-011](ADR-011-hybrid-tier-topology.md) | Hybrid tier topology: resident memory is the binding constraint | Accepted |
+| [ADR-012](ADR-012-device-aware-memory-budget.md) | "Local" is two budgets, not one: device-aware memory invariant | Accepted |
 
 ## Format
 

@@ -186,6 +186,85 @@ def test_extra_local_tiers_allowed_when_the_cap_is_raised_deliberately(tmp_path,
     assert config.local_tiers == [0, 1]
 
 
+def test_weights_exceeding_the_device_budget_are_rejected(tmp_path, monkeypatch):
+    """The measured failure: a 5.0 GiB model placed on a 4.0 GiB CPU budget.
+
+    This is what a container running `-ngl 99` with no GPU reservation
+    actually does — llama.cpp falls back to CPU and the host swaps. Counting
+    resident tiers cannot catch it, because the count is still one.
+    """
+    _write_usecase(
+        tmp_path,
+        monkeypatch,
+        {0: {"url": "http://127.0.0.1:8091/v1", "kind": "local", "device": "cpu", "weights_gb": 5.0}},
+        limits={"memory_budget_gb": {"gpu": 5.8, "cpu": 4.0}},
+    )
+
+    with pytest.raises(ValueError, match=r"5\.0 GiB of weights on device 'cpu'"):
+        load_usecase("probe")
+
+
+def test_same_weights_fit_on_the_gpu_budget(tmp_path, monkeypatch):
+    """Identical model, different device, different verdict — the whole point."""
+    _write_usecase(
+        tmp_path,
+        monkeypatch,
+        {0: {"url": "http://127.0.0.1:8091/v1", "kind": "local", "device": "gpu", "weights_gb": 5.0}},
+        limits={"memory_budget_gb": {"gpu": 5.8, "cpu": 4.0}},
+    )
+
+    config = load_usecase("probe")
+
+    assert config.tier_endpoints[0].device == "gpu"
+    assert config.tier_endpoints[0].memory_pool == "gpu"
+
+
+def test_device_budget_check_is_skipped_when_weights_are_undeclared(tmp_path, monkeypatch):
+    """Absent `weights_gb` means "unknown", not "zero-cost" — but it must not
+    block a use-case that has not measured its model yet."""
+    _write_usecase(
+        tmp_path,
+        monkeypatch,
+        {0: {"url": "http://127.0.0.1:8091/v1", "kind": "local", "device": "cpu"}},
+        limits={"memory_budget_gb": {"cpu": 4.0}},
+    )
+
+    assert load_usecase("probe").tier_endpoints[0].weights_gb == 0.0
+
+
+def test_unknown_device_is_rejected(tmp_path, monkeypatch):
+    _write_usecase(
+        tmp_path,
+        monkeypatch,
+        {0: {"url": "http://127.0.0.1:8091/v1", "kind": "local", "device": "tpu"}},
+    )
+
+    with pytest.raises(ValueError, match="device must be one of"):
+        load_usecase("probe")
+
+
+def test_remote_tiers_are_charged_to_no_device_budget(monkeypatch):
+    """A remote tier costs tokens, not memory — it must not consume a budget."""
+    _enable_tier(monkeypatch, 1)
+
+    config = load_usecase("tienda")
+
+    assert config.tier_endpoints[1].memory_pool is None
+    assert config.tier_endpoints[0].memory_pool == "gpu"
+
+
+def test_container_rehost_preserves_device_and_weights(monkeypatch):
+    """LLAMA_HOST rewrites the host only; losing `device` would silently
+    disarm the budget check inside the container."""
+    monkeypatch.setenv("LLAMA_HOST", "llama-e4b")
+
+    endpoint = load_usecase("tienda").tier_endpoints[0]
+
+    assert "llama-e4b" in endpoint.url
+    assert endpoint.device == "gpu"
+    assert endpoint.weights_gb == 5.0
+
+
 def test_missing_tier_zero_is_rejected(tmp_path, monkeypatch):
     """Tier 0 is the router and the degradation floor — never optional."""
     _write_usecase(tmp_path, monkeypatch, {2: {"url": "http://127.0.0.1:8093/v1", "kind": "local"}})
