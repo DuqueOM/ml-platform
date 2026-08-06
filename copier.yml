@@ -1,0 +1,96 @@
+# ───────────────────────────────────────────────────────────────────────────
+# Copier configuration — ml-platform PROJECT generator
+# ───────────────────────────────────────────────────────────────────────────
+# This repository is NOT a template to be copied out — that refusal is
+# ADR-000 #1. This copier does something different: it generates a new
+# `projects/<name>/` INSIDE the monorepo.
+#
+# The reason is ADR-001. Every project shares one structure, and that
+# uniformity is what lets a single agentic skill operate on all of them
+# without per-project special cases. Creating project number five by hand is
+# how that uniformity degrades — one directory at a time, with nothing
+# reporting it.
+#
+# Two-level composition:
+#   1. THIS generator creates the project skeleton — contracts, evals, model
+#      card, tests, and a pyproject already wired to libs/ so the
+#      dependency-direction test passes on the first commit.
+#   2. For the serving component, the generated project then runs
+#      `ml-service-template`'s copier (ADR-003). This repository never
+#      reimplements serving.
+#
+# Both levels write `.copier-answers.yml`, so `copier update` keeps working at
+# each level independently.
+#
+# DELIMITERS: `{@ … @}` rather than `{{ … }}`, matching ml-service-template.
+# A generated project ships GitHub Actions workflows, where `${{ … }}` is
+# pervasive and would collide. The sibling repository established this
+# convention empirically; adopting it avoids re-deriving the same conclusion.
+_min_copier_version: "9.0.0"
+_subdirectory: "templates/project"
+_answers_file: ".copier-answers.yml"
+# Render EVERY file, not only those suffixed `.jinja`. Without this copier
+# copies verbatim and the tokens reach the generated project — a placeholder
+# in a real project's pyproject, which installs and then fails at import under
+# a name nobody would search for.
+_templates_suffix: ""
+_envops:
+  block_start_string: "{%"
+  block_end_string: "%}"
+  variable_start_string: "{@"
+  variable_end_string: "@}"
+  comment_start_string: "{#"
+  comment_end_string: "#}"
+  keep_trailing_newline: true
+
+project_slug:
+  type: str
+  help: "Python package name (snake_case) — becomes src/<slug>/ and the import path"
+  validator: >-
+    {% if not (project_slug | regex_search('^[a-z][a-z0-9_]*$')) %}
+    must be snake_case: lowercase, digits and underscores, starting with a letter
+    {% endif %}
+
+project_kebab:
+  type: str
+  help: "Directory name under projects/ (kebab-case)"
+  default: "{@ project_slug | replace('_', '-') @}"
+
+project_name:
+  type: str
+  help: "Human-readable name, used in the README and model card"
+
+project_kind:
+  type: str
+  help: "What kind of system this is — decides which libs/ are wired in"
+  choices:
+    tabular ML: tabular
+    deep learning: deep-learning
+    LLM / retrieval: llm
+    agent: agent
+
+dataset_key:
+  type: str
+  help: "Registered dataset key from docs/datasets/register.md (or 'none' for now)"
+  default: "none"
+
+owner:
+  type: str
+  help: "Who is accountable for this project's quality gates"
+
+# Prove the new project satisfies the layering invariant before anyone commits
+# it. A generator that emits a project which fails CI has moved the problem,
+# not solved it.
+_tasks:
+  - "python3 -c \"import pathlib,sys; sys.exit(0 if pathlib.Path('src').is_dir() else 1)\""
+
+_message_after_copy: |
+  ✓ Project "{@ project_name @}" scaffolded under projects/{@ project_kebab @}/
+
+  Next:
+    1. uv sync                                  # register the workspace member
+    2. uv run pytest tests/test_dependency_direction.py -q
+    3. Fill projects/{@ project_kebab @}/evals/gates.yaml — thresholds need a
+       RECORDED REASON, never a default (docs/governance/quality-gates.md)
+    4. For the serving component, run ml-service-template's copier inside the
+       project (ADR-003). Never hand-write a service.

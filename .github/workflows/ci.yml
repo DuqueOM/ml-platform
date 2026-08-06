@@ -77,6 +77,13 @@ jobs:
       - name: Tests
         run: uv run pytest -q
 
+      - name: Project generator renders a usable project
+        # templates/project/ is excluded from lint and the dependency test
+        # because Jinja is not valid Python. That exclusion is only defensible
+        # if something renders it — otherwise the generator is the one
+        # directory nothing checks, and every future project comes from it.
+        run: uv run pytest tests/test_project_generator.py -q
+
   secrets:
     name: Secret scan
     runs-on: ubuntu-latest
