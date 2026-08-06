@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**28 of 103 committed technologies implemented (27%)** — plus 17 studied and 10 rejected, which are decisions rather than gaps.
+**32 of 105 committed technologies implemented (30%)** — plus 17 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 |:-:|---|
@@ -125,12 +125,12 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `dataproc-serverless` | demonstrated |  |
 | ⬜ | `emr-serverless` | demonstrated |  |
 
-### Feature store — 0 built, 2 pending
+### Feature store — 2 built, 0 pending
 
 | | Technology | Tier | Note |
 |:-:|---|---|---|
-| ⬜ | `feast` | core |  |
-| ⬜ | `point-in-time-joins` | core |  |
+| ✅ | `feast` | core | |
+| ✅ | `point-in-time-joins` | core | |
 
 ### Databases — 2 built, 2 pending
 
@@ -141,11 +141,13 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `bigquery` | core |  |
 | ⬜ | `athena` | core |  |
 
-### Data quality — 1 built, 2 pending
+### Data quality — 3 built, 2 pending
 
 | | Technology | Tier | Note |
 |:-:|---|---|---|
 | ✅ | `pandera` | core | |
+| ✅ | `data-contracts` | core | |
+| ✅ | `leakage-detection` | core | |
 | ⬜ | `great-expectations` | demonstrated |  |
 | ⬜ | `gx-data-docs` | demonstrated |  |
 

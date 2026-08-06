@@ -100,7 +100,7 @@ categories:
   - name: Feature store
     items:
       - {id: feast, tier: core, detect: ["libs/feature-defs"]}
-      - {id: point-in-time-joins, tier: core, detect: ["pattern:merge_asof|libs/feature-defs"]}
+      - {id: point-in-time-joins, tier: core, detect: ["pattern:join_asof|libs/feature-defs"], note: "as_of_join plus a leakage detector, and naive_join kept deliberately so the detector can be shown to catch something real."}
   - name: Databases
     items:
       - {id: postgres, tier: core, detect: ["platform/local/manifests/10-postgres.yaml"]}
@@ -110,6 +110,8 @@ categories:
   - name: Data quality
     items:
       - {id: pandera, tier: core, detect: ["pattern:pandera|libs/data-contracts/pyproject.toml"]}
+      - {id: data-contracts, tier: core, detect: ["libs/data-contracts/src/data_contracts/contract.py"], note: "Versioned contracts with an explicit compatibility rule. A schema says what the data looks like; a contract says what a producer may change without asking."}
+      - {id: leakage-detection, tier: core, detect: ["pattern:detect_leakage|libs/feature-defs"], note: "Runs on the JOINED frame, so it catches the mistake regardless of which join produced it."}
       - {id: great-expectations, tier: demonstrated, detect: ["pattern:great_expectations|projects"]}
       - {id: gx-data-docs, tier: demonstrated, detect: ["pattern:data_docs|projects"]}
   - name: ML serving
