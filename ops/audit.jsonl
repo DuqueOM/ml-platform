@@ -1,0 +1,1 @@
+{"ts": "2026-08-06T20:42:52.255649+00:00", "actor": "duqueom", "action": "bootstrap", "target": "ml-platform", "mode": "AUTO", "outcome": "completed", "evidence": "audit trail created; 11 repository gates green at 859f5d7", "previous": "genesis", "hash": "6a4ee65ff7df2d28aeacae29e7a6750fa446aa7bf29173125f0e5078619ed1f9"}

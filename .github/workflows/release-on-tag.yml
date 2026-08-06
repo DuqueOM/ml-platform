@@ -1,0 +1,46 @@
+# Publish a GitHub Release whenever a version tag is pushed.
+#
+# ml-service-template added this after an audit found SIX tags with zero
+# published Releases: the history existed in git and was invisible to anyone
+# using the Releases UI. Inherited here before the same thing can happen,
+# rather than after.
+name: Release on tag
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # notes are generated from the commit range
+
+      - name: Extract the CHANGELOG section for this tag
+        id: notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          # Take the section between this version's heading and the next one.
+          awk -v v="$version" '
+            $0 ~ "^## \\[" v "\\]" {found=1; next}
+            found && /^## \[/ {exit}
+            found {print}
+          ' CHANGELOG.md > release-notes.md || true
+
+          if [ ! -s release-notes.md ]; then
+            # A tag with no CHANGELOG section is a release nobody described.
+            # Fail rather than publishing an empty one — an empty release is
+            # worse than a late one, because it looks complete.
+            echo "::error::no CHANGELOG.md section found for version $version"
+            exit 1
+          fi
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" --notes-file release-notes.md --verify-tag

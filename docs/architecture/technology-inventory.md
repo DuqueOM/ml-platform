@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**36 of 116 committed technologies implemented (31%)** — plus 16 studied and 10 rejected, which are decisions rather than gaps.
+**42 of 116 committed technologies implemented (36%)** — plus 16 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 |:-:|---|
@@ -54,27 +54,27 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | 📓 | `docker-compose` | studied | kind used instead: the local stack must exercise Kubernetes manifests, which compose cannot. |
 | 📓 | `devcontainers` | studied |  |
 
-### CI/CD — 4 built, 5 pending
+### CI/CD — 8 built, 1 pending
 
 | | Technology | Tier | Note |
 |:-:|---|---|---|
 | ✅ | `github-actions` | core | |
 | ✅ | `codecov` | core | |
 | ✅ | `coverage-gate` | core | |
-| ⬜ | `release-on-tag` | core | The template added this after finding six tags with zero published releases. |
-| ⬜ | `openssf-scorecard` | core |  |
-| ⬜ | `docs-quality-lint` | core | markdownlint over the documentation surface. |
-| ⬜ | `branch-protection-as-code` | core |  |
+| ✅ | `release-on-tag` | core | |
+| ✅ | `openssf-scorecard` | core | |
+| ✅ | `docs-quality-lint` | core | |
+| ✅ | `branch-protection-as-code` | core | |
 | ⬜ | `ci-failure-triage` | demonstrated | Inherited CI self-healing; Demonstrated until this repository has enough CI history to classify. |
 | ✅ | `dependabot` | core | |
 
-### Security and supply chain — 1 built, 9 pending
+### Security and supply chain — 2 built, 8 pending
 
 | | Technology | Tier | Note |
 |:-:|---|---|---|
 | ✅ | `gitleaks` | core | |
-| ⬜ | `trivy` | core |  |
-| ⬜ | `bandit` | core |  |
+| ✅ | `trivy` | core | |
+| ⬜ | `bandit` | core | Local and fast; catches the Python patterns Trivy's dependency scan does not look for. |
 | 📓 | `safety` | studied | Overlaps trivy/dependabot for Python advisories. |
 | ⬜ | `slsa-l3` | core |  |
 | ⬜ | `in-toto` | core |  |
@@ -196,13 +196,13 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `semantic-cache` | core |  |
 | ⬜ | `guardrails` | core |  |
 
-### Repository hygiene — 2 built, 2 pending
+### Repository hygiene — 3 built, 1 pending
 
 | | Technology | Tier | Note |
 |:-:|---|---|---|
 | ✅ | `gitattributes` | core | |
 | 📓 | `editorconfig` | studied | Ruff already enforces the formatting that matters; EditorConfig adds a second source for the same rules. |
-| ⬜ | `audit-trail` | core | Operational memory: an append-only record of agent actions taken. |
+| ✅ | `audit-trail` | core | |
 | ⬜ | `test-clock-isolation` | core | A test depending on wall-clock time fails at midnight, in another timezone, or on a leap day — always far from the change that introduced it. |
 | ✅ | `mcp-registry` | core | |
 

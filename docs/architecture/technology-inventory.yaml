@@ -58,8 +58,8 @@ categories:
   - name: Security and supply chain
     items:
       - {id: gitleaks, tier: core, detect: ["pattern:gitleaks|.pre-commit-config.yaml"]}
-      - {id: trivy, tier: core, detect: ["pattern:trivy|.github/workflows"]}
-      - {id: bandit, tier: core, detect: ["pattern:bandit|.pre-commit-config.yaml"]}
+      - {id: trivy, tier: core, detect: ["pattern:trivy|.github/workflows"], note: "Reports rather than blocks until the finding volume is MEASURED — a CRITICAL in a transitive dep with no fix would otherwise block every unrelated merge."}
+      - {id: bandit, tier: core, detect: ["pattern:bandit|.pre-commit-config.yaml"], note: "Local and fast; catches the Python patterns Trivy's dependency scan does not look for."}
       - {id: safety, tier: studied, note: "Overlaps trivy/dependabot for Python advisories."}
       - {id: slsa-l3, tier: core, detect: ["pattern:slsaprovenance|.github/workflows"]}
       - {id: in-toto, tier: core, detect: ["pattern:in-toto|.github/workflows"]}
