@@ -60,7 +60,12 @@ COMPONENTS: list[Component] = [
         ["scripts/check_doc_coherence.py"],
         "uv run python scripts/check_doc_coherence.py",
     ),
-    Component("0", "Agentic canonical store", ["agentic/rules", "agentic/skills", "agentic/workflows"]),
+    Component(
+        "0",
+        "Agentic canonical store",
+        ["agentic/rules", "agentic/skills", "agentic/workflows"],
+        "uv run python scripts/validate_agentic_surface.py --strict",
+    ),
     Component(
         "0",
         "Agentic 4-tool surfaces",
@@ -78,9 +83,21 @@ COMPONENTS: list[Component] = [
     ),
     Component("0", "Lint + format", ["pyproject.toml"], "uv run ruff check . && uv run ruff format --check ."),
     Component("0", "Type checking (libs, strict)", ["libs"], "uv run mypy libs/"),
-    Component("0", "CI workflow", [".github/workflows/ci.yml"]),
+    Component(
+        "0",
+        "CI workflow",
+        [".github/workflows/ci.yml"],
+        # A workflow that references a script that does not exist is a green
+        # check meaning nothing. This asserts every `run:` script resolves.
+        "uv run python scripts/check_ci_references.py",
+    ),
     # --- Phase 1: first vertical slice --------------------------------------
-    Component("1", "Dataset acquisition scripts", ["scripts/datasets"]),
+    Component(
+        "1",
+        "Dataset acquisition scripts",
+        ["scripts/datasets"],
+        "uv run pytest tests/test_dataset_registry.py -q",
+    ),
     Component("1", "Local validation stack", ["platform/local"]),
     Component("1", "libs/ml-core implementation", ["libs/ml-core/src"]),
     Component("1", "libs/data-contracts implementation", ["libs/data-contracts/src"]),

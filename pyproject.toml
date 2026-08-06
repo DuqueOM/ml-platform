@@ -36,6 +36,12 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "PT", "SIM", "RUF"]
 
+[tool.ruff.lint.per-file-ignores]
+# These modules extend sys.path so a sibling module resolves before import.
+# The path manipulation MUST run first, so the import cannot move to the top.
+"scripts/datasets/fetch.py" = ["E402"]
+"tests/test_dataset_registry.py" = ["E402"]
+
 [tool.mypy]
 python_version = "3.11"
 warn_return_any = true
