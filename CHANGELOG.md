@@ -88,6 +88,15 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   Production does not auto-sync and nothing prunes: with prod auto-syncing the
   promotion gate stops being a gate, and prune deletes what a human added
   during an incident at the moment it is load-bearing.
+- **External Secrets**, split on the same boundary as the Terraform adapters:
+  the `ExternalSecret` is shared because what a pod needs is a Secret with
+  known keys, and the `SecretStore` is per-overlay because where the values
+  come from is a property of the cloud. Both authenticate by identity —
+  Workload Identity and IRSA — so neither carries a bootstrap key that never
+  rotates. A test asserts no committed credential lacks the
+  `local-only-not-a-secret` marker, which fails a real password even inside
+  `platform/local/`; excluding that path was the first thing I reached for and
+  would have allowed exactly the leak the check exists to prevent.
 - **Default-deny NetworkPolicies**, with the DNS egress that a default-deny
   namespace breaks first and that is suspected last.
 - **What local validation cannot prove, tested as such**: kind runs kindnet,

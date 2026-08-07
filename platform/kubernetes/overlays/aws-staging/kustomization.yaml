@@ -5,7 +5,9 @@ namespace: demand-forecast-staging
 
 resources:
   - ../../base
+  - ../../base/secrets
   - ../../../policies
+  - secret-store.yaml
 
 patches:
   - path: replicas.yaml
