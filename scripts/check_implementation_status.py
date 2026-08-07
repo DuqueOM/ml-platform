@@ -140,6 +140,12 @@ COMPONENTS: list[Component] = [
         ["projects/demand-forecast/src/demand_forecast/lakehouse.py"],
         "uv run pytest projects/demand-forecast/tests/test_overwrite_scope.py -q",
     ),
+    Component(
+        "1",
+        "Panel-aware temporal splitting",
+        ["projects/demand-forecast/src/demand_forecast/backtest.py"],
+        "uv run pytest projects/demand-forecast/tests/test_backtest.py -q",
+    ),
     Component("1", "Lakehouse module shared across projects", ["platform/lakehouse"]),
     Component("1", "Feature store definitions", ["libs/feature-defs", "projects/demand-forecast/features"]),
     Component(

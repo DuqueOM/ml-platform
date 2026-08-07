@@ -196,3 +196,121 @@ def test_a_series_too_short_is_refused(report) -> None:  # type: ignore[no-untyp
     """Better a failed run than a report computed over an unstated design."""
     with pytest.raises(ValueError, match="cannot support"):
         evaluate(_demand(400, zones=1), n_folds=5, horizon=168)
+
+
+# --- panel data: two defects synthetic single-series data cannot show -------
+#
+# Both of these passed every test above and both were wrong on the real feed.
+# A single ordered series hides them completely, which is the argument for
+# wiring real data in early rather than at the end.
+
+
+def _panel_demand(hours: int = 1400, zones: int = 4, seed: int = 0) -> pl.DataFrame:
+    """Several zones with different levels, advancing together."""
+    generator = np.random.default_rng(seed)
+    frames = []
+    for zone in range(1, zones + 1):
+        index = np.arange(hours)
+        counts = np.clip(
+            40 * zone + 25 * np.sin(2 * np.pi * index / 168) + generator.normal(0, 3 * zone, hours), 0, None
+        )
+        frames.append(
+            pl.DataFrame(
+                {
+                    "zone_id": [zone] * hours,
+                    "event_time": [datetime(2024, 1, 1) + timedelta(hours=int(i)) for i in index],
+                    "trip_count": counts,
+                }
+            )
+        )
+    return pl.concat(frames).sort(["zone_id", "event_time"])
+
+
+@pytest.fixture(scope="module")
+def panel_report():  # type: ignore[no-untyped-def]
+    return evaluate(_panel_demand(), n_folds=2, horizon=168, seed=42)
+
+
+def test_the_baseline_is_never_nan_on_panel_data(panel_report) -> None:  # type: ignore[no-untyped-def]
+    """Regression: forward-filling the baseline produced nan on the real feed.
+
+    `seasonal_naive` is null for the first 168 hours of EVERY zone. Filling
+    forward bled one zone's last value into the next zone's first rows and left
+    nan at the very start, which propagated into the aggregate — so the report
+    printed `baseline nan`, `skill +nan%`, and `beats_baseline: False`. The
+    comparison had silently stopped existing while every test still passed.
+    """
+    assert np.isfinite(panel_report.baseline_mae), "the baseline is nan; the comparison does not exist"
+    assert panel_report.baseline_mae > 0
+    for fold in panel_report.folds:
+        assert np.isfinite(fold.baseline_mae), f"fold {fold.index} baseline is nan"
+
+    # The baseline must be THIS zone's value 168 hours back — not a neighbour's
+    # bled across by a forward fill. Checked on the series itself, because the
+    # aggregate above stays finite either way once nan rows are excluded.
+    featured = build_features(_panel_demand())
+    baseline = seasonal_naive(featured)
+    for zone in (1, 4):
+        rows = featured.with_columns(baseline.alias("baseline")).filter(pl.col("zone_id") == zone)
+        counts = rows["trip_count"].to_list()
+        assert rows["baseline"][300] == counts[300 - 168], f"zone {zone}'s baseline is not its own past"
+        assert rows["baseline"][10] is None, "a missing baseline was filled from another zone"
+
+
+def test_intervals_stay_calibrated_across_zones(panel_report) -> None:  # type: ignore[no-untyped-def]
+    """Regression: the calibration slice selected one zone, not recent hours.
+
+    Holding out the last N ROW POSITIONS of a panel sorted by (zone, hour)
+    takes the tail of the LAST zone. The residual quantile was then estimated
+    from a single zone's scale and applied to all of them: on the real feed
+    that gave 53.8% empirical coverage against a 90% target.
+
+    Fixed by cutting the calibration window on TIME, across every zone.
+    """
+    assert panel_report.intervals_are_calibrated(tolerance=0.10), (
+        f"coverage {panel_report.coverage:.1%} against {1 - ALPHA:.0%}\n{panel_report.summary()}"
+    )
+
+
+def test_calibration_draws_from_every_zone() -> None:
+    """The mechanism behind the test above, by CALLING the production code.
+
+    An earlier version of this test recomputed the selection itself. It
+    therefore checked that the data admits the property rather than that the
+    code has it, and it passed with the defect deliberately reintroduced —
+    a vacuous regression test, which is worse than none.
+    """
+    from demand_forecast.backtest import expanding_window_folds_by_time
+    from demand_forecast.features import LONGEST_LAG, build_features
+    from demand_forecast.train import calibration_split
+
+    featured = build_features(_panel_demand())
+    times = featured["event_time"].to_numpy().astype("datetime64[h]")
+    zones = featured["zone_id"].to_numpy()
+
+    fold = expanding_window_folds_by_time(featured, n_folds=1, horizon_hours=168, gap_hours=LONGEST_LAG)[0]
+    _, calibration = calibration_split(times, fold)
+
+    assert len(set(zones[calibration].tolist())) == 4, (
+        "the calibration window covers a subset of the zones; it is selecting positions, not hours"
+    )
+    # And it must be the RECENT hours, not merely a spread of zones.
+    assert times[calibration].min() > times[fold.train].max() - np.timedelta64(200, "h")
+
+
+def test_zones_with_too_little_history_are_dropped() -> None:
+    """The real feed has 261 zones, a median of 367 hours and a minimum of 1."""
+    from demand_forecast.train import MIN_ZONE_HOURS, select_modellable_zones
+
+    panel = _panel_demand(hours=1400, zones=3)
+    sparse = pl.DataFrame(
+        {
+            "zone_id": [99] * 10,
+            "event_time": [datetime(2024, 1, 1) + timedelta(hours=i) for i in range(10)],
+            "trip_count": [1.0] * 10,
+        }
+    )
+    kept = select_modellable_zones(pl.concat([panel, sparse]), min_hours=MIN_ZONE_HOURS)
+
+    assert 99 not in kept["zone_id"].to_list(), "a zone with 10 hours of history was kept"
+    assert kept["zone_id"].n_unique() == 3

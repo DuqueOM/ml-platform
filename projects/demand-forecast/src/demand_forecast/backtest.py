@@ -164,3 +164,75 @@ def assert_no_temporal_leakage(frame: pl.DataFrame, folds: list[Fold], *, time_c
                 f"fold {fold.index} trains on {latest_train} and tests from {earliest_test}: "
                 "the training set contains the future"
             )
+
+
+def expanding_window_folds_by_time(
+    frame: pl.DataFrame,
+    *,
+    n_folds: int = 3,
+    horizon_hours: int,
+    gap_hours: int,
+    time_column: str = "event_time",
+) -> list[Fold]:
+    """Expanding-window folds cut on TIME, for panel data.
+
+    :func:`expanding_window_folds` splits on row position, which is correct for
+    a single ordered series and silently wrong for a panel. A frame of 261
+    zones sorted by ``(zone_id, event_time)`` has row 0 through row N inside
+    zone 1, so a positional cut trains on some zones entirely and tests on
+    others — a cross-ENTITY split wearing the shape of a temporal one. Every
+    fold still looks well-formed and the score is meaningless.
+
+    This cuts on the timestamp instead, so the boundary is the same instant for
+    every entity, which is what "the model has not seen the future" means when
+    several series advance together.
+
+    Args:
+        frame: Panel data, one row per (entity, hour).
+        n_folds: Evaluations, oldest first.
+        horizon_hours: Length of each test window, in hours.
+        gap_hours: Hours skipped between train and test. At least the longest
+            feature lag.
+        time_column: Timestamp column.
+
+    Returns:
+        Folds whose ``train``/``test`` are row positions into ``frame`` as
+        given. The frame is NOT re-sorted: positions must match the array the
+        caller will index, and silently reordering here would misalign them.
+
+    Raises:
+        ValueError: If the observed span is too short for the requested design.
+    """
+    if horizon_hours < 1:
+        raise ValueError(f"horizon_hours must be at least 1, got {horizon_hours}")
+    if gap_hours < 0:
+        raise ValueError(f"gap_hours must not be negative, got {gap_hours}")
+
+    # Kept in numpy datetime64 throughout. Polars' min()/max() return a union
+    # wide enough that arithmetic on it is unchecked, and the arithmetic here
+    # is the part that must be right.
+    values = frame[time_column].to_numpy().astype("datetime64[h]")
+    start, end = values.min(), values.max()
+    span_hours = int((end - start) / np.timedelta64(1, "h"))
+
+    needed = n_folds * horizon_hours + gap_hours + horizon_hours
+    if span_hours < needed:
+        raise ValueError(
+            f"the series spans {span_hours} hours, which cannot support {n_folds} folds "
+            f"of {horizon_hours}h with a {gap_hours}h gap: at least {needed} are required"
+        )
+
+    first_cut = end - np.timedelta64(n_folds * horizon_hours + gap_hours, "h")
+
+    folds = []
+    for index in range(n_folds):
+        train_end = first_cut + np.timedelta64(index * horizon_hours, "h")
+        test_start = train_end + np.timedelta64(gap_hours, "h")
+        test_end = test_start + np.timedelta64(horizon_hours, "h")
+
+        train = np.flatnonzero(values < train_end)
+        test = np.flatnonzero((values >= test_start) & (values < test_end))
+        if len(train) == 0 or len(test) == 0:
+            continue
+        folds.append(Fold(index=index, train=train, test=test, gap=gap_hours))
+    return folds

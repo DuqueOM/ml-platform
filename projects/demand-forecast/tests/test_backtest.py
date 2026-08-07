@@ -20,6 +20,7 @@ import pytest
 from demand_forecast.backtest import (
     assert_no_temporal_leakage,
     expanding_window_folds,
+    expanding_window_folds_by_time,
     random_split_folds,
 )
 from sklearn.ensemble import HistGradientBoostingRegressor
@@ -143,3 +144,62 @@ def test_random_split_is_not_used_in_the_pipeline() -> None:
         if path.name != "backtest.py" and "random_split_folds" in path.read_text(encoding="utf-8")
     ]
     assert not callers, f"random_split_folds is a counter-example, not an option; called from {callers}"
+
+
+# --- panel data: the positional splitter is silently wrong ------------------
+
+
+def _panel(hours: int = 1000, zones: int = 3) -> pl.DataFrame:
+    """Several series advancing together, sorted the way features need."""
+    rows = []
+    for zone in range(1, zones + 1):
+        index = np.arange(hours)
+        rows.append(
+            pl.DataFrame(
+                {
+                    "zone_id": [zone] * hours,
+                    "event_time": [datetime(2024, 1, 1) + timedelta(hours=int(i)) for i in index],
+                    "trip_count": 50.0 + 10 * zone + 0.1 * index,
+                }
+            )
+        )
+    return pl.concat(rows).sort(["zone_id", "event_time"])
+
+
+def test_positional_folds_are_wrong_on_panel_data() -> None:
+    """The counter-example that justifies the time-based splitter.
+
+    Sorted by (zone, hour), row positions run through zone 1 entirely before
+    reaching zone 2. A positional cut therefore trains on some zones and tests
+    on others — a cross-ENTITY split wearing the shape of a temporal one. Every
+    fold still looks well-formed, which is why this needs measuring rather than
+    trusting.
+    """
+    panel = _panel()
+    positional = expanding_window_folds(panel.height, n_folds=3, horizon=168, gap=168)
+
+    with pytest.raises(AssertionError, match="contains the future"):
+        assert_no_temporal_leakage(panel, positional)
+
+
+def test_time_based_folds_are_correct_on_the_same_panel() -> None:
+    panel = _panel()
+    folds = expanding_window_folds_by_time(panel, n_folds=3, horizon_hours=168, gap_hours=168)
+
+    assert len(folds) == 3
+    assert_no_temporal_leakage(panel, folds)
+
+
+def test_every_entity_shares_the_same_temporal_boundary() -> None:
+    """The property a panel split exists for: one cut, all series."""
+    panel = _panel(zones=3)
+    for fold in expanding_window_folds_by_time(panel, n_folds=2, horizon_hours=168, gap_hours=168):
+        tested = panel[fold.test.tolist()]
+        assert tested["zone_id"].n_unique() == 3, "a fold tests a subset of the zones"
+        per_zone = tested.group_by("zone_id").agg(pl.col("event_time").min().alias("first"))
+        assert per_zone["first"].n_unique() == 1, "zones enter the test window at different times"
+
+
+def test_a_span_too_short_is_refused() -> None:
+    with pytest.raises(ValueError, match="cannot support"):
+        expanding_window_folds_by_time(_panel(hours=200), n_folds=3, horizon_hours=168, gap_hours=168)
