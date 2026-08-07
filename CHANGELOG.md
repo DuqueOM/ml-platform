@@ -62,6 +62,15 @@ minutes of pointing the backtest at the real feed:
   start, which propagated into the aggregate. The report printed
   `baseline nan`, `skill +nan%` and `beats_baseline: False` — the comparison
   had stopped existing while every test passed.
+- **Corrupt pickup timestamps reached the lakehouse.** The real 2024-01/02
+  feed carries pickups stamped 2002, 2008 and 2009 — 33 rows across the two
+  files. They pass every column bound, so the reject rate stayed at **0.00%**
+  and no alarm could fire, yet they moved the observed start of the series
+  from January 2024 to December 2002: a backtest computing its span from
+  min/max saw a 21-year history containing 60 days of data. The ingest now
+  bounds pickups to the month the FILE declares in its own name, counts them
+  separately from ordinary cleaning, and the bound is on pickup only so a trip
+  crossing midnight into the next month is kept.
 - **Both regression tests were vacuous on the first attempt.** They recomputed
   the selection instead of calling the production code, so they passed with the
   defects deliberately reintroduced. `calibration_split` was extracted to be

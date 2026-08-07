@@ -11,7 +11,9 @@ then the question is which of them to recompute.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import polars as pl
@@ -39,6 +41,11 @@ class IngestReport:
     rows_read: int
     rows_written: int
     violations: list[ContractViolation]
+    #: Rows dropped because the pickup fell outside the file's own month.
+    #: Counted separately from ordinary cleaning: an out-of-month timestamp is
+    #: a corrupt record, not a row that merely failed a bound, and it moves the
+    #: series' apparent start by years.
+    out_of_month: int = 0
 
     @property
     def reject_rate(self) -> float:
@@ -48,6 +55,7 @@ class IngestReport:
         return (
             f"{self.source}: {self.rows_read:,} read, {self.rows_written:,} written "
             f"({self.reject_rate:.2%} rejected), {len(self.violations)} contract violation(s)"
+            + (f", {self.out_of_month} out-of-month timestamp(s)" if self.out_of_month else "")
         )
 
 
@@ -70,6 +78,48 @@ def read_trips(path: Path) -> pl.LazyFrame:
     validation budget does not have.
     """
     return pl.scan_parquet(path).select(TRIPS_RAW.columns)
+
+
+_MONTH_IN_NAME = re.compile(r"(\d{4})-(\d{2})")
+
+
+def month_of(path: Path) -> tuple[datetime, datetime] | None:
+    """The half-open month window a TLC file is supposed to contain.
+
+    TLC publishes one file per month, named `yellow_tripdata_YYYY-MM.parquet`,
+    so the file itself declares which hours are legitimate. Returns ``None``
+    when the name carries no month — a caller with a differently-named file
+    gets no bound rather than a wrong one.
+    """
+    match = _MONTH_IN_NAME.search(path.stem)
+    if not match:
+        return None
+    year, month = int(match.group(1)), int(match.group(2))
+    start = datetime(year, month, 1)
+    end = datetime(year + (month == 12), (month % 12) + 1, 1)
+    return start, end
+
+
+def drop_out_of_month(frame: pl.DataFrame, window: tuple[datetime, datetime] | None) -> tuple[pl.DataFrame, int]:
+    """Remove rows whose PICKUP falls outside the file's month.
+
+    The real 2024-01/02 feed carries pickups stamped 2002, 2008 and 2009 — 18
+    rows out of 151,920, or 0.012%. They are far below the reject-rate alarm,
+    they pass every column bound, and they moved the observed start of the
+    series from January 2024 to December 2002. Any backtest computing a span
+    from min/max then reads a 21-year history that contains 60 days of data.
+
+    Bounded on pickup only. A trip starting at 23:50 on the last day of the
+    month and ending in the next is legitimate and belongs to this file.
+
+    Returns:
+        The filtered frame and the number of rows removed.
+    """
+    if window is None:
+        return frame, 0
+    start, end = window
+    kept = frame.filter(pl.col("tpep_pickup_datetime").is_between(start, end, closed="left"))
+    return kept, frame.height - kept.height
 
 
 def clean(frame: pl.DataFrame) -> pl.DataFrame:
@@ -117,8 +167,15 @@ def ingest_file(path: Path, *, strict: bool = True) -> tuple[pl.DataFrame, Inges
     # MUCH is wrong, not merely that something is.
     violations = TRIPS_RAW.validate(raw, enforce=False)
     cleaned = clean(raw)
+    cleaned, out_of_month = drop_out_of_month(cleaned, month_of(path))
 
-    report = IngestReport(source=path.name, rows_read=rows_read, rows_written=cleaned.height, violations=violations)
+    report = IngestReport(
+        source=path.name,
+        rows_read=rows_read,
+        rows_written=cleaned.height,
+        violations=violations,
+        out_of_month=out_of_month,
+    )
 
     if strict and report.reject_rate > MAX_REJECT_RATE:
         raise IngestRejectedError(
