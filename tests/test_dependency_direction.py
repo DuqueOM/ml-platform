@@ -26,6 +26,8 @@ from __future__ import annotations
 
 import ast
 from collections import defaultdict
+from collections.abc import Iterator
+from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 
 import pytest
@@ -200,3 +202,63 @@ def test_platform_is_not_imported() -> None:
         "platform/ must contain no importable Python (ADR-001). "
         "Infrastructure is declarative:\n" + "\n".join(str(p.relative_to(REPO_ROOT)) for p in offending)
     )
+
+
+# --- the gate must FAIL on an injected violation ----------------------------
+#
+# The four tests above assert over the REAL repository, so they pass by
+# describing a tree that happens to be correct. An independent audit noted that
+# none of them injects a violation, which is the difference between "the rule
+# holds today" and "the rule is enforced". AGENTS.md calls this file the only
+# mechanical evidence for charter criterion C1.
+
+
+def _with_file(path: Path, content: str) -> AbstractContextManager[None]:
+    @contextmanager
+    def _ctx() -> Iterator[None]:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        try:
+            yield
+        finally:
+            path.unlink(missing_ok=True)
+
+    return _ctx()
+
+
+def test_gate_fails_when_a_lib_imports_a_project(lib_packages: set[str], project_packages: set[str]) -> None:
+    """The inversion that would make a library depend on a consumer."""
+    probe = REPO_ROOT / "libs" / "ml-core" / "src" / "ml_core" / "_probe.py"
+    with (
+        _with_file(probe, "from demand_forecast import ingest  # noqa: F401\n"),
+        pytest.raises(AssertionError, match="must not import"),
+    ):
+        test_libs_never_import_projects(lib_packages, project_packages)
+
+
+def test_project_to_project_detection_works_on_a_synthetic_pair() -> None:
+    """The rule is currently VACUOUS: only one project exists.
+
+    A single project cannot import another, so
+    `test_projects_never_import_each_other` passes no matter what the detector
+    does — it is a test that will start meaning something when the second
+    project lands, and means nothing today. Saying so is the point of this
+    test; a rule that cannot be violated yet must not be counted as enforced.
+
+    So the DETECTOR is exercised directly against a synthetic package set,
+    which is the part that has to be correct before the second project arrives.
+    """
+    # Counted as DIRECTORIES: the project_packages fixture holds name variants
+    # (`demand-forecast` and `demand_forecast`), so its length is not a project
+    # count and asserting on it measures the wrong thing.
+    projects = [path for path in (REPO_ROOT / "projects").iterdir() if (path / "src").is_dir()]
+    assert len(projects) == 1, (
+        f"{len(projects)} projects exist — replace this with a real cross-project injection "
+        "in test_projects_never_import_each_other"
+    )
+
+    probe = REPO_ROOT / "projects" / "demand-forecast" / "src" / "demand_forecast" / "_probe.py"
+    with _with_file(probe, "from rag_assistant import retrieval  # noqa: F401\n"):
+        detected = _imported_roots(probe) & {"rag_assistant"}
+
+    assert detected == {"rag_assistant"}, "the import detector missed a cross-project import"

@@ -8,10 +8,20 @@ Read this fully before writing code.
 
 ## Independent audit
 
-No independent audit has been recorded. Check C7 fails until one is, and CI
-stays red because of it — deliberately, since a gate that passes while the
-thing it checks for is absent is the anti-pattern this repository exists to
-avoid.
+```text
+Last independent audit: 2026-08-06
+```
+
+QA-4 ran in a separate session against `f580c4f`, per ADR-005 rule B, and a
+cloud multi-agent review ran against `859f5d7`. Findings and evidence:
+`docs/governance/QA-4-independent-audit.md`.
+
+It found 4 P0, 2 P1, 8 P2 and 6 P3, plus a data-loss defect the cloud review
+caught that QA-4 missed. The two implementations flagged as most suspicious —
+conformal prediction and point-in-time correctness — were verified CORRECT
+under randomised adversarial testing. What failed was the documents: CI status,
+the coverage figure, the inventory's headline category, and four gate commands
+naming scripts that were never written.
 
 `docs/governance/audit-brief.md` is written FOR the auditing session: what was
 asked, what was planned, every defect found during construction, and a ranked
@@ -297,7 +307,7 @@ load-bearing is promoted with a gate, or removed.
 ## Layout
 
 ```text
-libs/            ml-core · data-contracts · llm-core · serving-core
+libs/            ml-core · data-contracts · feature-defs · llm-core · serving-core
 projects/        one deployable ML system each; uniform structure
 orchestration/   Airflow DAGs + KFP pipelines
 platform/        terraform · kubernetes · observability · policies
@@ -337,7 +347,7 @@ so a reference can never silently resolve against this repository's index.
 
 ```bash
 uv sync                                            # workspace
-uv run pytest tests/ -q                            # repository invariants
+uv run pytest tests/                            # repository invariants
 uv run python scripts/check_doc_coherence.py       # documentation gate
 uv run ruff check . && uv run mypy libs/           # lint + types
 ```

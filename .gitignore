@@ -21,3 +21,4 @@ data/
 
 # MCP config carries credentials; only the example is committed.
 .codex/mcp.json
+coverage.xml

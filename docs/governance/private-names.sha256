@@ -1,0 +1,23 @@
+# SHA-256 of names that must never appear in any committed file.
+#
+# Stored as hashes, not plaintext, for the reason the list exists: the names
+# are private, so writing them here would be the very disclosure the check
+# prevents. A hash commits to a name without revealing it, which is what lets
+# this ship in a public repository with no secret, no environment variable and
+# no untracked local file a fresh clone would be missing.
+#
+# Check C6 tokenises every git-tracked file and hashes each token. A match
+# fails the build and prints the FILE, never the name — a public CI log is
+# published output.
+#
+# Threat model, stated honestly: this stops an accidental mention by an agent
+# or a contributor. It does not stop someone who already knows the name from
+# confirming it by hashing a guess. That is acceptable; guarding against an
+# adversary who already has the secret is not what this is for.
+#
+# To add a name, without ever writing it down:
+#   printf '%s' 'the-name' | sha256sum | cut -d' ' -f1 >> docs/governance/private-names.sha256
+# Add the hyphenated and unhyphenated forms; C6 tokenises both.
+26eb5588ac893b8f2a412ee324189c219bae05c478cb065a93dd40757fece44d
+bb72081bb91acded5c799abb2c8e2476e5c9e59bd27cea41f7c87064a248bc96
+019f6bced9819b878a4c1576dfd8f04a0aba0458fac348f38136e921b1f9535c

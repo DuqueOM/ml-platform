@@ -104,7 +104,7 @@ categories:
       - {id: emr-serverless, tier: demonstrated, detect: ["pattern:emr|platform/terraform"]}
   - name: Feature store
     items:
-      - {id: feast, tier: core, detect: ["libs/feature-defs"]}
+      - {id: feast, tier: core, detect: ["pattern:feast|libs"], note: "Not wired in. libs/feature-defs holds point-in-time joins, which is not a feature store."}
       - {id: point-in-time-joins, tier: core, detect: ["pattern:join_asof|libs/feature-defs"], note: "as_of_join plus a leakage detector, and naive_join kept deliberately so the detector can be shown to catch something real."}
   - name: Databases
     items:
@@ -114,7 +114,7 @@ categories:
       - {id: athena, tier: core, detect: ["pattern:athena|platform/terraform"]}
   - name: Data quality
     items:
-      - {id: pandera, tier: core, detect: ["pattern:pandera|libs/data-contracts/pyproject.toml"]}
+      - {id: pandera, tier: core, detect: ["pattern:import pandera|libs"], note: "Declared as a dependency but not imported anywhere yet."}
       - {id: data-contracts, tier: core, detect: ["libs/data-contracts/src/data_contracts/contract.py"], note: "Versioned contracts with an explicit compatibility rule. A schema says what the data looks like; a contract says what a producer may change without asking."}
       - {id: leakage-detection, tier: core, detect: ["pattern:detect_leakage|libs/feature-defs"], note: "Runs on the JOINED frame, so it catches the mistake regardless of which join produced it."}
       - {id: great-expectations, tier: demonstrated, detect: ["pattern:great_expectations|projects"]}
@@ -207,7 +207,7 @@ categories:
       - {id: k6, tier: core, detect: ["projects/*/tests/load.js"]}
       - {id: schemathesis, tier: core, detect: ["pattern:schemathesis|.github/workflows"]}
       - {id: behavioral-testing, tier: core, detect: ["pattern:invariance|projects"]}
-      - {id: contract-testing, tier: core, detect: ["projects/*/contracts"]}
+      - {id: contract-testing, tier: core, detect: ["pattern:def test_|projects/demand-forecast/contracts"], note: "The contracts package exists; no contract TEST does."}
   - name: Monorepo tooling
     items:
       - {id: uv-workspaces, tier: core, detect: ["pattern:tool.uv.workspace|pyproject.toml"]}
@@ -220,6 +220,6 @@ categories:
       - {id: eu-ai-act, tier: core, detect: ["pattern:EU AI Act|docs/governance/compliance-mapping.md"]}
       - {id: iso-42001, tier: core, detect: ["pattern:42001|docs/governance/compliance-mapping.md"]}
       - {id: nist-ai-rmf, tier: core, detect: ["pattern:AI RMF|docs/governance/compliance-mapping.md"]}
-      - {id: model-cards, tier: core, detect: ["projects/*/model-card.md"]}
+      - {id: model-cards, tier: core, detect: ["filled:projects/*/model-card.md"], note: "The file exists; its sections are still TODO, and a card that says TODO documents nothing."}
       - {id: adrs, tier: core, detect: ["docs/decisions/ADR-000-charter-and-scope.md"]}
       - {id: quality-gates, tier: core, detect: ["docs/governance/quality-gates.md"]}

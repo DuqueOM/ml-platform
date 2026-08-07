@@ -20,6 +20,7 @@ import argparse
 import getpass
 import hashlib
 import json
+import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -81,8 +82,60 @@ def record(action: str, target: str, mode: str, outcome: str, evidence: str) -> 
     return 0
 
 
+def _committed_entries() -> list[str] | None:
+    """The trail's lines as of git HEAD, or None when git cannot answer.
+
+    The hash chain alone cannot detect TRUNCATION: dropping entries off the end
+    leaves every remaining link valid, so `--verify` reported "chain intact" on
+    a trail that had been shortened. The chain commits each entry to its
+    predecessor, but nothing committed to the trail's LENGTH.
+
+    Git is the external witness. Anything already committed is public history,
+    so the current file must extend it exactly — never shorten or rewrite it.
+    """
+    result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "show", f"HEAD:{TRAIL.relative_to(REPO_ROOT).as_posix()}"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    return [line for line in result.stdout.splitlines() if line.strip()]
+
+
+def _check_append_only() -> str | None:
+    """Return a failure message when the trail is not an extension of HEAD's."""
+    committed = _committed_entries()
+    if committed is None:
+        return None
+
+    current = (
+        [line for line in TRAIL.read_text(encoding="utf-8").splitlines() if line.strip()] if TRAIL.is_file() else []
+    )
+
+    if len(current) < len(committed):
+        return (
+            f"TRUNCATED — {len(committed)} entries are committed at HEAD, {len(current)} remain. "
+            "The trail is append-only; entries are never removed."
+        )
+    for index, (was, now) in enumerate(zip(committed, current, strict=False)):
+        if was != now:
+            return f"REWRITTEN at entry {index} — it differs from the version committed at HEAD."
+    return None
+
+
 def verify() -> int:
-    """Recompute the chain and report the first entry that diverges."""
+    """Recompute the chain, and confirm it only ever grew.
+
+    Two independent properties, because each misses what the other catches:
+    the hash chain detects EDITING, and the comparison against git HEAD detects
+    DELETION. A trail that is only hash-chained can be silently shortened.
+    """
+    truncation = _check_append_only()
+    if truncation:
+        print(f"[audit] {truncation}")
+        return 1
+
     entries = _entries()
     if not entries:
         print("[audit] OK — trail is empty")

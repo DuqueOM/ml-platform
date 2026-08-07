@@ -24,6 +24,16 @@ REGISTRY = REPO_ROOT / "agentic" / "mcp_registry.yaml"
 failures: list[str] = []
 notes: list[str] = []
 
+# The gate's own strictness lives HERE, not in the file it judges.
+#
+# These three were read from `agentic/mcp_registry.yaml` — the document under
+# test. One commit could add an unassessed MCP server and delete the check that
+# would have caught it, and the gate reported OK. A gate whose threshold is
+# supplied by the thing it judges cannot fail on purpose.
+REQUIRED_FIELDS = ("purpose", "risk_mode", "authority", "minimum_scope", "install_mode")
+VALID_RISK_MODES = ("AUTO", "CONSULT", "STOP")
+FORBIDDEN_IN_COMMITTED_CONFIG = ("token", "password", "secret", "api_key", "PAT")
+
 
 def main() -> int:
     if not REGISTRY.is_file():
@@ -31,9 +41,23 @@ def main() -> int:
         return 1
 
     registry = yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))
-    diagnostics = registry["diagnostics"]
-    required = diagnostics["required_fields"]
-    valid_modes = diagnostics["valid_risk_modes"]
+    required = REQUIRED_FIELDS
+    valid_modes = VALID_RISK_MODES
+
+    # The registry may still DECLARE its diagnostics, for readers. If it does,
+    # it must agree with the code — a document that quietly disagrees with the
+    # gate enforcing it is worse than one that stays silent.
+    declared = registry.get("diagnostics") or {}
+    for key, enforced in (
+        ("required_fields", REQUIRED_FIELDS),
+        ("valid_risk_modes", VALID_RISK_MODES),
+        ("forbidden_in_committed_config", FORBIDDEN_IN_COMMITTED_CONFIG),
+    ):
+        if key in declared and tuple(declared[key]) != enforced:
+            failures.append(
+                f"diagnostics.{key} in the registry says {declared[key]}, but the gate enforces "
+                f"{list(enforced)}. The gate is authoritative; update the registry to match."
+            )
 
     servers = registry.get("mcps") or {}
     if not servers:
@@ -54,7 +78,7 @@ def main() -> int:
         notes.append(f"{len(servers)} server(s), each with a declared risk mode and minimum scope")
 
     # Committed example configs must never carry a real credential.
-    forbidden = re.compile("|".join(diagnostics["forbidden_in_committed_config"]), re.IGNORECASE)
+    forbidden = re.compile("|".join(FORBIDDEN_IN_COMMITTED_CONFIG), re.IGNORECASE)
     checked = 0
     for surface, config in (registry.get("surfaces") or {}).items():
         example = config.get("committed_example")
@@ -65,14 +89,16 @@ def main() -> int:
             failures.append(f"{surface}: declares committed_example {example} which does not exist")
             continue
         checked += 1
-        for line in path.read_text(encoding="utf-8").splitlines():
-            # Only ASSIGNMENTS can carry a credential. Prose mentioning the
-            # word "token" — including a comment warning not to commit one —
-            # is not a leak, and flagging it teaches people to ignore this
-            # check, which is how a real finding gets skipped later.
-            assignment = re.match(r'\s*"([^"]+)"\s*:\s*"([^"]*)"', line)
-            if not assignment:
-                continue
+        # Scanned over the whole document with finditer, not line by line with
+        # match. The line-anchored version only saw assignments that BEGAN a
+        # line, so a minified config — every pair on one line, which is what a
+        # formatter or a copy-paste produces — passed with a real token in it.
+        #
+        # Only ASSIGNMENTS can carry a credential. Prose mentioning the word
+        # "token" — including a comment warning not to commit one — is not a
+        # leak, and flagging it teaches people to ignore this check, which is
+        # how a real finding gets skipped later.
+        for assignment in re.finditer(r'"([^"]+)"\s*:\s*"([^"]*)"', path.read_text(encoding="utf-8")):
             key, value = assignment.groups()
             if key.startswith("_") or not forbidden.search(key):
                 continue

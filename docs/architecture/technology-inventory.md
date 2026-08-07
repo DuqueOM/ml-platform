@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**44 of 117 committed technologies implemented (37%)** — plus 16 studied and 10 rejected, which are decisions rather than gaps.
+**41 of 117 committed technologies implemented (35%)** — plus 16 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 | :-: | --- |
@@ -15,7 +15,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | 📓 | Studied: deliberately not wired in (ADR-004) |
 | 🚫 | Rejected, with the reason recorded |
 
-## Python toolchain — 5 built, 1 pending
+## Python toolchain — 6 built, 0 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
@@ -24,7 +24,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ✅ | `ruff` | core | |
 | ✅ | `mypy` | core | |
 | ✅ | `pytest` | core | |
-| ⬜ | `coverage` | core | |
+| ✅ | `coverage` | core | |
 | 🚫 | `black` | rejected | Superseded by ruff format (ADR-004). Keeping both is two formatters disagreeing. |
 | 🚫 | `isort` | rejected | Superseded by ruff's I rules (ADR-004). |
 | 🚫 | `poetry` | rejected | uv chosen (ADR-004); two resolvers is two lockfiles. |
@@ -130,11 +130,11 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `dataproc-serverless` | demonstrated | |
 | ⬜ | `emr-serverless` | demonstrated | |
 
-## Feature store — 2 built, 0 pending
+## Feature store — 1 built, 1 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
-| ✅ | `feast` | core | |
+| ⬜ | `feast` | core | Not wired in. libs/feature-defs holds point-in-time joins, which is not a feature store. |
 | ✅ | `point-in-time-joins` | core | |
 
 ## Databases — 2 built, 2 pending
@@ -146,11 +146,11 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `bigquery` | core | |
 | ⬜ | `athena` | core | |
 
-## Data quality — 3 built, 2 pending
+## Data quality — 2 built, 3 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
-| ✅ | `pandera` | core | |
+| ⬜ | `pandera` | core | Declared as a dependency but not imported anywhere yet. |
 | ✅ | `data-contracts` | core | |
 | ✅ | `leakage-detection` | core | |
 | ⬜ | `great-expectations` | demonstrated | |
@@ -247,7 +247,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `mimir` | core | |
 | 📓 | `sentry` | studied | OTel error events overlap; Sentry revisited if error triage needs its ergonomics. |
 
-## Testing — 2 built, 3 pending
+## Testing — 1 built, 4 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
@@ -255,7 +255,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `k6` | core | |
 | ⬜ | `schemathesis` | core | |
 | ⬜ | `behavioral-testing` | core | |
-| ✅ | `contract-testing` | core | |
+| ⬜ | `contract-testing` | core | The contracts package exists; no contract TEST does. |
 
 ## Monorepo tooling — 3 built, 1 pending
 
@@ -267,14 +267,14 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ✅ | `copier-project-generator` | core | |
 | 📓 | `pants` | studied | Correct at a build-time threshold not yet reached (ADR-001 revisit trigger). |
 
-## Governance — 3 built, 3 pending
+## Governance — 2 built, 4 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
 | ⬜ | `eu-ai-act` | core | |
 | ⬜ | `iso-42001` | core | |
 | ⬜ | `nist-ai-rmf` | core | |
-| ✅ | `model-cards` | core | |
+| ⬜ | `model-cards` | core | The file exists; its sections are still TODO, and a card that says TODO documents nothing. |
 | ✅ | `adrs` | core | |
 | ✅ | `quality-gates` | core | |
 

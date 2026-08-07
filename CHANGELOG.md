@@ -34,7 +34,9 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   (never restated — two documents describing one thing will disagree), plus
   P-01…P-25 owned here. Six of the P-entries came from real failures in this
   repository's own construction.
-- **13 gates**, each verified to FAIL on known-bad input before being trusted:
+- **13 active gates**, each verified to FAIL on known-bad input before being
+  trusted, plus 15 declared but not yet runnable and marked ⏳ PENDING with the
+  phase that delivers them. The earlier count conflated the two:
   dependency direction, agentic surface sync and integrity, documentation
   coherence, CI references, MCP registry, technology inventory, implementation
   status, audit-trail chain, lint, format, types, tests.
@@ -103,13 +105,57 @@ rather than reading it:
   accepted ADR stays, with a dated `## Correction` section — the error is
   usually more instructive than the number.
 
+### Fixed — independent audit remediation
+
+QA-4 ran in a separate session against `f580c4f` (ADR-005 rule B) and a cloud
+multi-agent review against `859f5d7`. Findings and evidence:
+`docs/governance/QA-4-independent-audit.md`. The two implementations flagged as
+most suspicious — conformal prediction and point-in-time correctness — were
+verified CORRECT under randomised adversarial testing. What failed was the
+documents.
+
+- **`write_demand(overwrite=True)` deleted the entire table.** `Table.overwrite`
+  defaults to `AlwaysTrue()`, so a backfill of one month against a year of
+  history destroyed the other eleven and returned a snapshot id as if it had
+  worked. The predicate is now scoped to the months present, non-contiguous
+  months do not delete the gap, and an empty frame is refused rather than
+  selecting everything. The covering test had written one row twice and
+  asserted one row remained — which holds equally under total deletion — and
+  was marked `integration`, so it never ran in CI.
+- **CI had never executed 7 of its 18 steps.** One red gate aborted the job
+  under `bash -e`; the steps below it were `skipped`, not green. Each gate now
+  runs independently of the others while still requiring setup to succeed.
+- **The coverage gate that ran was not the one declared.** L1/L2 declare ≥90%
+  for `libs/`; CI measured `libs + scripts + projects` against the same number.
+  Split into two gates: `libs/` at 90 (93.45%) and `scripts/` at a 74 ratchet
+  floor. No threshold was lowered — `scripts/` never had one, which is how two
+  of its files reached 0%.
+- **The MCP gate read its own strictness from the file it validates.** One
+  commit could add an unassessed server and delete the check that would catch
+  it. The required fields and valid modes now live in the script; a registry
+  that disagrees fails.
+- **The audit trail was silently truncatable.** The hash chain detects editing;
+  nothing committed to its length, so deleting entries left a valid chain.
+  `--verify` now also compares against `git show HEAD:ops/audit.jsonl`.
+- **C6 could not catch a bare private name in prose** — the only form that fits
+  in a sentence. It scanned 105 of 331 markdown files and matched URLs only.
+  Now every git-tracked file is tokenised against a committed SHA-256 denylist,
+  so the forbidden name is enforced without ever being written down.
+- **Four declared gate commands named scripts that were never written**, while
+  C4 checked only that the row contained a backtick.
+- **`feast` was reported implemented on a directory name.** With `pandera`,
+  `contract-testing` and `model-cards`, four false ✅ removed: 44 → 40 of 117.
+  A `filled:` detector now refuses to count a document whose sections are TODO.
+
 ## Cadence note
 
-There is **no independent audit recorded yet**. ADR-005 rule B requires it to
-run in a *separate session* from the work it audits, because self-review cannot
-find a fact its author believed. Every check reported so far has been executed
-verification by the same agent that wrote the code — real, but not independent.
+The first independent audit ran on 2026-08-06 (`f580c4f`). Check C7 previously
+treated the absence of an audit as passing, indefinitely — a gate designed to
+pass, anti-pattern P-09 — and now fails once the repository has meaningful
+history.
 
-Check C7 previously treated the absence of an audit as passing, indefinitely.
-That was a gate designed to pass, which is anti-pattern P-09. It now fails once
-the repository has meaningful history.
+The audit's most useful result was not any single finding but the split: every
+executable claim in `libs/` survived adversarial testing, and the documents
+describing the system did not. The suspicion ranking written for the auditor
+was wrong in both directions, which is the argument for the procedure rather
+than against it.
