@@ -62,6 +62,14 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   minute. **Compilation is verified; execution is not** — that needs a managed
   backend and is Phase 2. The tests assert the specification and claim nothing
   about a run.
+- **One correlated trace across ingest, validation and training.** ADR-004
+  justifies OpenTelemetry with an artifact rather than a principle, so the unit
+  of value here is the TRACE, not the span: three stages emitting three
+  unrelated traces produce the same log lines and answer none of the questions
+  a trace exists for. Verified by exporting a real run and reading it back from
+  Jaeger's API — 4 spans, one trace id, carrying `skill` and `coverage` as
+  attributes. An absent collector disables tracing and says so, rather than
+  raising or going quietly no-op.
 - **A density check** — distinct hours against the hours the span implies —
   kept outside the suite because an expectation suite has no vocabulary for a
   shape the rows collectively have.

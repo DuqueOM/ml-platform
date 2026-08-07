@@ -182,7 +182,16 @@ COMPONENTS: list[Component] = [
         "uv run pytest tests/test_pipeline_spec.py -q",
     ),
     Component("1", "Orchestration DAGs (Airflow)", ["orchestration/dags"]),
-    Component("1", "Observability (OTel + LGTM)", ["platform/observability"]),
+    Component(
+        "1",
+        "Observability (OTel traces)",
+        ["projects/demand-forecast/src/demand_forecast/tracing.py"],
+        # Unit scope only. The round trip through a real collector is marked
+        # `local` and deselected here, because a verify command that silently
+        # skips is a command that reports success for doing nothing.
+        "uv run pytest projects/demand-forecast/tests/test_tracing.py -q",
+    ),
+    Component("1", "Grafana LGTM dashboards", ["platform/observability"]),
     # --- Phase 2: multi-cloud + GitOps --------------------------------------
     Component("2", "Terraform (GCP)", ["platform/terraform/gcp"]),
     Component("2", "Terraform (AWS)", ["platform/terraform/aws"]),
