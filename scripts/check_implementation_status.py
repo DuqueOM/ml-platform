@@ -41,6 +41,12 @@ class Component:
     #: Command proving it functions. Absent means presence is all we can check,
     #: which caps the component at 🟡 — deliberately, so an unverifiable
     #: component can never look finished.
+    #:
+    #: It MUST be reproducible: the same commit must produce the same result on
+    #: any machine. A command that reads host state — free ports, free memory,
+    #: a running daemon — makes this document depend on where it was generated,
+    #: and the committed copy then conflicts with CI's. See the Local
+    #: validation stack entry, which is where that happened.
     verify: str | None = None
     #: Files matching these are scaffolding, not implementation.
     ignore: list[str] = field(default_factory=lambda: ["__init__.py", ".gitkeep", "README.md"])
@@ -103,11 +109,21 @@ COMPONENTS: list[Component] = [
         "1",
         "Local validation stack",
         ["platform/local", "scripts/local"],
-        # Preflight only: bringing the cluster up takes minutes and needs
-        # Docker, so status derivation checks that the entry point works, not
-        # that the stack is currently running. `make local-verify` is the
-        # assertion that it functions.
-        "uv run python scripts/local/preflight.py --samples 1 --interval 0",
+        # NO verify command, deliberately.
+        #
+        # `scripts/local/preflight.py` was used here, and it inspects HOST
+        # state: free memory and whether the stack's ports are available. It
+        # therefore returned 🟡 on a developer machine with the stack already
+        # running and ✅ on a CI runner with the ports free — from the same
+        # commit. The derived document then disagreed with itself depending on
+        # where it was generated, and the check failed in CI while passing
+        # locally with no diff shown.
+        #
+        # A document that is committed and diffed must derive only from the
+        # repository. This component therefore caps at 🟡: the repository
+        # cannot prove the stack RUNS, only that its manifests exist.
+        # `make local-verify` is the assertion that it functions, and it is a
+        # human-run command for exactly that reason.
     ),
     Component("1", "libs/ml-core implementation", ["libs/ml-core/src"]),
     Component("1", "libs/data-contracts implementation", ["libs/data-contracts/src"]),

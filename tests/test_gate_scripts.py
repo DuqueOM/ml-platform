@@ -17,6 +17,7 @@ known-bad input.** A gate that cannot fail is not a gate.
 
 from __future__ import annotations
 
+import ast
 import subprocess
 import sys
 from collections.abc import Iterator
@@ -252,3 +253,32 @@ def test_probes_left_no_residue() -> None:
         REPO_ROOT / ".github" / "workflows" / "_gate_probe.yml",
     ]
     assert not [path for path in residue if path.exists()]
+
+
+def test_status_verification_commands_are_machine_independent() -> None:
+    """A committed derived document must not depend on host state.
+
+    `implementation-status.md` is generated, committed and diffed in CI. One
+    component verified itself with `scripts/local/preflight.py`, which reads
+    free memory and whether the local stack's ports are available — so the same
+    commit derived 🟡 on a developer machine with the stack up and ✅ on a CI
+    runner with the ports free. The check failed in CI while passing locally.
+
+    Host-dependent evidence belongs in a human-run command (`make
+    local-verify`), never in a document under version control.
+
+    Parsed with `ast` rather than imported: importing a script to inspect it
+    executes it, and these gates have side effects on the tree.
+    """
+    tree = ast.parse(GATES["implementation-status"].read_text(encoding="utf-8"))
+    literals = [node.value for node in ast.walk(tree) if isinstance(node, ast.Constant) and isinstance(node.value, str)]
+
+    host_dependent = ("scripts/local/", "preflight", "docker ", "kubectl ", "curl ", "nc ")
+    offenders = [
+        literal
+        for literal in literals
+        if literal.startswith("uv run ") and any(marker in literal for marker in host_dependent)
+    ]
+    assert not offenders, (
+        "verification commands read host state, so the derived document is machine-dependent:\n" + "\n".join(offenders)
+    )
