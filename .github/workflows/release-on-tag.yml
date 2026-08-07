@@ -50,4 +50,13 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "$GITHUB_REF_NAME" --notes-file release-notes.md --verify-tag
+        # --title is REQUIRED. Without it gh publishes a release whose name is
+        # the empty string; the web UI falls back to showing the tag, so it
+        # looks right there while the API, the Atom feed and anything consuming
+        # the Releases list get a blank. Found by actually publishing v0.1.0 —
+        # the dry run covers note extraction and cannot cover this.
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file release-notes.md \
+            --verify-tag

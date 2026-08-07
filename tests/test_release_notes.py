@@ -121,3 +121,18 @@ def test_the_changelog_declares_the_version_file_version() -> None:
     assert "Unreleased" in headings or version in headings, (
         f"CHANGELOG has neither [Unreleased] nor [{version}]; a tag would publish nothing. Found: {headings}"
     )
+
+
+def test_the_publish_step_sets_a_title() -> None:
+    """`gh release create` without --title publishes a release named "".
+
+    The web UI falls back to the tag, so it looks correct there while the API
+    and anything consuming the Releases list see a blank name. v0.1.0 shipped
+    that way; this is the regression guard.
+    """
+    workflow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    steps = workflow["jobs"]["release"]["steps"]
+    publish = next(step for step in steps if "gh release create" in step.get("run", ""))
+
+    assert "--title" in publish["run"], "gh release create has no --title; the release name will be empty"
+    assert "--verify-tag" in publish["run"], "an unverified tag lets a release point at an absent ref"
