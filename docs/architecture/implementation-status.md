@@ -33,7 +33,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**13 done · 7 partial · 15 absent** — of 35 tracked components.
+**15 done · 7 partial · 15 absent** — of 37 tracked components.
 
 ### Phase 0
 
@@ -59,11 +59,13 @@ modules, and a coherence filter examining zero files, both stayed green.
 | 🟡 | libs/ml-core implementation | 4 file(s), no verification command |
 | 🟡 | libs/data-contracts implementation | 2 file(s), no verification command |
 | 🟡 | libs/serving-core implementation | 1 file(s), no verification command |
-| 🟡 | projects/demand-forecast | 14 file(s), no verification command |
+| 🟡 | projects/demand-forecast | 17 file(s), no verification command |
 | ✅ | Iceberg ingestion (demand-forecast) | `uv run pytest projects/demand-forecast/tests/test_overwrite_scope.py -q` passes |
 | ⬜ | Lakehouse module shared across projects | absent |
 | 🟡 | Feature store definitions | 4 file(s), no verification command |
 | ✅ | Expanding-window backtesting | `uv run pytest projects/demand-forecast/tests/test_backtest.py -q` passes |
+| ✅ | Feature engineering (backward-only) | `uv run pytest projects/demand-forecast/tests/test_training.py -q -k feature` passes |
+| ✅ | Model training + baseline gate | `uv run pytest projects/demand-forecast/tests/test_training.py -q` passes |
 | ⬜ | Training pipeline (KFP v2) | absent |
 | ⬜ | Orchestration DAGs (Airflow) | absent |
 | ⬜ | Observability (OTel + LGTM) | absent |
