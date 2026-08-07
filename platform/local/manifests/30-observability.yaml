@@ -136,4 +136,8 @@ spec:
   selector: { app: jaeger }
   ports:
     - { name: ui, port: 16686, targetPort: 16686, nodePort: 30686 }
-    - { name: otlp, port: 4317, targetPort: 4317 }
+    # nodePort PINNED, not auto-assigned. kind maps host ports to fixed
+    # container ports, so a nodePort the API server chooses at random is one
+    # nothing on the host can reach — and a process on the host is exactly what
+    # needs to export a span during local validation.
+    - { name: otlp, port: 4317, targetPort: 4317, nodePort: 30317 }

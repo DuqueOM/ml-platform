@@ -42,3 +42,10 @@ nodes:
       - containerPort: 30800   # service under test
         hostPort: 18080
         protocol: TCP
+      # OTLP gRPC. Without this a process on the HOST cannot export a span:
+      # the collector is ClusterIP and Jaeger's OTLP nodePort was unmapped, so
+      # the only route was `kubectl port-forward`, which is a manual step and
+      # therefore not a route a test can rely on.
+      - containerPort: 30317   # jaeger OTLP gRPC
+        hostPort: 14317
+        protocol: TCP

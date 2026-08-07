@@ -43,3 +43,7 @@ warehouse-validation = [
 pipelines = [
     "kfp~=2.11",
 ]
+observability = [
+    "opentelemetry-exporter-otlp-proto-grpc~=1.30",
+    "opentelemetry-sdk~=1.30",
+]
