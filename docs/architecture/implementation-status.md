@@ -79,7 +79,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 | :-: | --- | --- |
 | 🟡 | Terraform (GCP) | 6 file(s), no verification command |
 | 🟡 | Terraform (AWS) | 6 file(s), no verification command |
-| 🟡 | Kubernetes manifests | 16 file(s), no verification command |
+| 🟡 | Kubernetes manifests | 24 file(s), no verification command |
 | 🟡 | GitOps (ArgoCD) | 1 file(s), no verification command |
 | 🟡 | Admission policies | 4 file(s), no verification command |
 

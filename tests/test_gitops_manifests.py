@@ -12,6 +12,7 @@ false evidence, because the API server reports success.
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -142,3 +143,103 @@ def test_the_local_cluster_cannot_validate_networkpolicies() -> None:
     assert "kindnet" in result.stdout, (
         "the CNI is no longer kindnet; NetworkPolicy enforcement may now be testable locally"
     )
+
+
+# --- secrets arrive from outside, and never from this repository ------------
+
+
+@pytest.mark.parametrize("cloud", CLOUDS)
+@pytest.mark.parametrize("env", ENVIRONMENTS)
+def test_every_overlay_pairs_an_external_secret_with_a_store(cloud: str, env: str) -> None:
+    """An ExternalSecret without a SecretStore resolves to nothing.
+
+    The pod then starts with an empty Secret rather than failing, and the
+    symptom is an authentication error against the warehouse — which reads as
+    a credential problem, which is exactly what it is not.
+    """
+    documents = _build(OVERLAYS / f"{cloud}-{env}")
+    kinds = {doc["kind"] for doc in documents}
+
+    assert "ExternalSecret" in kinds
+    assert "SecretStore" in kinds
+
+    external = next(doc for doc in documents if doc["kind"] == "ExternalSecret")
+    store = next(doc for doc in documents if doc["kind"] == "SecretStore")
+    assert external["spec"]["secretStoreRef"]["name"] == store["metadata"]["name"], (
+        "the ExternalSecret references a store that this overlay does not define"
+    )
+
+
+@pytest.mark.parametrize("cloud", CLOUDS)
+def test_each_cloud_uses_its_own_provider(cloud: str) -> None:
+    """The store is the adapter; using the wrong provider fails only at runtime."""
+    documents = _build(OVERLAYS / f"{cloud}-dev")
+    store = next(doc for doc in documents if doc["kind"] == "SecretStore")
+    provider = set(store["spec"]["provider"])
+
+    assert provider == {"gcpsm" if cloud == "gcp" else "aws"}
+
+
+@pytest.mark.parametrize("cloud", CLOUDS)
+def test_no_long_lived_credential_is_referenced(cloud: str) -> None:
+    """Workload Identity and IRSA reach the same place: an identity, not a file.
+
+    A `secretRef` here would mean a static key stored in a Secret to fetch
+    other Secrets — a bootstrap credential that never rotates and that every
+    incident runbook is written about.
+    """
+    documents = _build(OVERLAYS / f"{cloud}-dev")
+    store = next(doc for doc in documents if doc["kind"] == "SecretStore")
+    auth = next(iter(store["spec"]["provider"].values()))["auth"]
+
+    assert "secretRef" not in auth, f"{cloud} authenticates with a stored key rather than an identity"
+    assert {"workloadIdentity", "jwt"} & set(auth), f"{cloud} declares no identity-based auth: {auth}"
+
+
+#: Keys whose VALUE is a credential. A username is not one, and treating it as
+#: one would make this noisy enough to be switched off.
+_SECRET_KEY = re.compile(r"PASSWORD|TOKEN|SECRET|API_?KEY|PRIVATE", re.IGNORECASE)
+
+#: The marker a deliberately-public local credential must carry. The local
+#: stack needs SOME Postgres password, so the rule cannot be "no Secret
+#: exists" — a check that forbade it outright would be switched off the first
+#: time it blocked someone.
+_LOCAL_ONLY = "local-only-not-a-secret"
+
+
+def test_no_real_credential_is_committed() -> None:
+    """The property External Secrets exists to provide, checked against the repo.
+
+    A manifest names a remote KEY and the cluster resolves the value, so a
+    leaked manifest leaks a key name. The way that guarantee dies is someone
+    adding a `stringData:` block "temporarily".
+
+    The rule is that any committed credential must SAY it is not one, in its
+    own value. A real password therefore fails here even inside
+    `platform/local/` — which a path exclusion would have quietly allowed, and
+    a path exclusion was the first thing I reached for.
+    """
+    manifests = [path for path in (REPO_ROOT / "platform").rglob("*.yaml") if ".terraform" not in path.parts]
+    assert manifests, "no manifests found — this test would pass vacuously"
+
+    offenders = []
+    for path in manifests:
+        for document in yaml.safe_load_all(path.read_text(encoding="utf-8")):
+            if not isinstance(document, dict) or document.get("kind") != "Secret":
+                continue
+            values = {**document.get("data", {}), **document.get("stringData", {})}
+            offenders += [
+                f"{path.relative_to(REPO_ROOT).as_posix()}:{key}"
+                for key, value in values.items()
+                if _SECRET_KEY.search(key) and _LOCAL_ONLY not in str(value)
+            ]
+
+    assert not offenders, f"a credential is committed without the {_LOCAL_ONLY!r} marker: {offenders}"
+
+
+def test_the_credential_check_can_actually_fail() -> None:
+    """A guard never seen to reject anything is not a guard."""
+    values = {"POSTGRES_PASSWORD": "hunter2", "MINIO_ROOT_USER": "mlplatform"}
+    flagged = [key for key, value in values.items() if _SECRET_KEY.search(key) and _LOCAL_ONLY not in value]
+
+    assert flagged == ["POSTGRES_PASSWORD"], "the pattern misses a real password or flags a username"

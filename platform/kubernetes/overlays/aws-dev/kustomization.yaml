@@ -5,7 +5,9 @@ namespace: demand-forecast-dev
 
 resources:
   - ../../base
+  - ../../base/secrets
   - ../../../policies
+  - secret-store.yaml
 
 patches:
   - path: replicas.yaml
