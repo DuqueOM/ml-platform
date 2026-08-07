@@ -33,7 +33,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**16 done · 7 partial · 15 absent** — of 38 tracked components.
+**17 done · 7 partial · 15 absent** — of 39 tracked components.
 
 ### Phase 0
 
@@ -59,7 +59,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 | 🟡 | libs/ml-core implementation | 4 file(s), no verification command |
 | 🟡 | libs/data-contracts implementation | 2 file(s), no verification command |
 | 🟡 | libs/serving-core implementation | 1 file(s), no verification command |
-| 🟡 | projects/demand-forecast | 17 file(s), no verification command |
+| 🟡 | projects/demand-forecast | 19 file(s), no verification command |
 | ✅ | Iceberg ingestion (demand-forecast) | `uv run pytest projects/demand-forecast/tests/test_overwrite_scope.py -q` passes |
 | ✅ | Panel-aware temporal splitting | `uv run pytest projects/demand-forecast/tests/test_backtest.py -q` passes |
 | ⬜ | Lakehouse module shared across projects | absent |
@@ -67,6 +67,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 | ✅ | Expanding-window backtesting | `uv run pytest projects/demand-forecast/tests/test_backtest.py -q` passes |
 | ✅ | Feature engineering (backward-only) | `uv run pytest projects/demand-forecast/tests/test_training.py -q -k feature` passes |
 | ✅ | Model training + baseline gate | `uv run pytest projects/demand-forecast/tests/test_training.py -q` passes |
+| ✅ | Warehouse validation (Great Expectations) | `uv run pytest projects/demand-forecast/tests/test_warehouse_checks.py -q` passes |
 | ⬜ | Training pipeline (KFP v2) | absent |
 | ⬜ | Orchestration DAGs (Airflow) | absent |
 | ⬜ | Observability (OTel + LGTM) | absent |

@@ -30,3 +30,13 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/demand_forecast"]
+
+[project.optional-dependencies]
+# Great Expectations sits at the WAREHOUSE boundary, complementary to the
+# Pandera-style contracts at the function boundary (ADR-004). Optional because
+# its tier is `demonstrated`: it is worth operating once and showing, not worth
+# imposing on everyone who installs this project. It also pulls a large
+# dependency tree, which the local memory budget notices.
+warehouse-validation = [
+    "great-expectations~=1.3",
+]

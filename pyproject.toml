@@ -76,6 +76,14 @@ module = ["pyarrow.*", "pyiceberg.*", "duckdb.*", "sklearn.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# Great Expectations SHIPS py.typed, so it is not an untyped import — it
+# re-exports its expectation classes through `great_expectations.expectations`
+# without listing them in `__all__`. Adding it to the ignore_missing_imports
+# list above would state something false AND discard the types it does provide.
+module = ["great_expectations.*"]
+implicit_reexport = true
+
+[[tool.mypy.overrides]]
 # feature_defs was missing from this list while every sibling was present.
 # It owns the point-in-time join and the leakage detector — the code where a
 # type error is most likely to be a correctness error — and it was the one
