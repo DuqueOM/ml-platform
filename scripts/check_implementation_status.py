@@ -172,7 +172,15 @@ COMPONENTS: list[Component] = [
         ["projects/demand-forecast/src/demand_forecast/warehouse_checks.py"],
         "uv run pytest projects/demand-forecast/tests/test_warehouse_checks.py -q",
     ),
-    Component("1", "Training pipeline (KFP v2)", ["orchestration/pipelines"]),
+    Component(
+        "1",
+        "Training pipeline (KFP v2) — compiles",
+        ["orchestration/pipelines"],
+        # Compilation only. Execution needs a managed backend (Vertex /
+        # SageMaker) and is Phase 2; a verify command that cannot run the thing
+        # must not imply it did.
+        "uv run pytest tests/test_pipeline_spec.py -q",
+    ),
     Component("1", "Orchestration DAGs (Airflow)", ["orchestration/dags"]),
     Component("1", "Observability (OTel + LGTM)", ["platform/observability"]),
     # --- Phase 2: multi-cloud + GitOps --------------------------------------

@@ -54,6 +54,14 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   feed's own epoch, implausible counts, unknown zones. Each carries a prose
   `meta.reason`, because the audience ADR-004 names for Data Docs will never
   read the Python. Optional extra, matching its `demonstrated` tier.
+- **KFP v2 training pipeline** (`ingest → validate → backtest → gate`),
+  authored with the SDK that ADR-004 admits — Kubeflow the platform is Rejected
+  there. Components call the project's tested functions rather than restating
+  them, and every step pins one built image instead of installing packages at
+  run time, which would make each run depend on what the index served that
+  minute. **Compilation is verified; execution is not** — that needs a managed
+  backend and is Phase 2. The tests assert the specification and claim nothing
+  about a run.
 - **A density check** — distinct hours against the hours the span implies —
   kept outside the suite because an expectation suite has no vocabulary for a
   shape the rows collectively have.
@@ -97,6 +105,12 @@ minutes of pointing the backtest at the real feed:
   is scoped to the months present in the incoming data, so a full reingestion
   left 16 rows stamped 2002-2009 untouched — correct behaviour of the earlier
   data-loss fix, with a consequence worth stating rather than discovering.
+- **The pipeline's quality gate was handed its own verdict.** `coverage_ok=True`
+  was passed as a literal, so the calibration half of the gate could not fail
+  whatever the model did. That is the THIRD time this repository has written a
+  gate whose threshold comes from outside the thing it judges — the MCP
+  registry, a warehouse expectation, and now this. The backtest component now
+  returns both verdicts and a test fails if either becomes a constant.
 - **Both regression tests were vacuous on the first attempt.** They recomputed
   the selection instead of calling the production code, so they passed with the
   defects deliberately reintroduced. `calibration_split` was extracted to be

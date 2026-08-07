@@ -40,3 +40,6 @@ packages = ["src/demand_forecast"]
 warehouse-validation = [
     "great-expectations~=1.3",
 ]
+pipelines = [
+    "kfp~=2.11",
+]
