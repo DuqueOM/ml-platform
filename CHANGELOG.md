@@ -14,6 +14,20 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+Nothing yet. Entries accumulate here and are renamed to a version heading at
+tag time; check C8 accepts an empty section only while nothing has landed
+since the last tag.
+
+## [0.1.0] - 2026-08-07
+
+First tagged release. Cut deliberately early, and not because the platform is
+finished — Phase 1 is not complete and the technology inventory says so. It is
+cut because the release path had never executed, and an untested release path
+fails once, in public, on the tag that matters. Better a 0.1.0 with no
+consumers.
+
+Pre-1.0: minor versions may change contracts.
+
 ### Added
 
 - **Charter and governance.** Eight ADRs fixing scope, monorepo topology, the
