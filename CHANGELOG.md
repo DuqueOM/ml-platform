@@ -28,6 +28,16 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   honest 13.18, so a random split makes this model look **52% better than it
   is**. Measured in `test_backtest.py` rather than asserted in prose, and
   guarded by a test that nothing in the pipeline imports it.
+- **Backward-only feature engineering**: lags, shifted rolling windows and
+  calendar terms, computed within each zone. The decisive test mutates the
+  future of the series and asserts every earlier feature row is unchanged — a
+  lookahead bug survives shape checks, dtype checks and reading the code.
+- **Model training with a baseline gate and conformal intervals.** Seasonal
+  naive (last week, same hour) is the reference an MAE is meaningless without.
+  On synthetic seasonal data the model reports skill **+12.2%** over that
+  baseline with **88.7% empirical coverage against 90% nominal**. A model that
+  loses to repeating last week fails `beats_baseline()` rather than being
+  reported as a metric to interpret generously.
 
 ## [0.1.0] - 2026-08-07
 

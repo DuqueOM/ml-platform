@@ -148,6 +148,18 @@ COMPONENTS: list[Component] = [
         ["projects/demand-forecast/src/demand_forecast/backtest.py"],
         "uv run pytest projects/demand-forecast/tests/test_backtest.py -q",
     ),
+    Component(
+        "1",
+        "Feature engineering (backward-only)",
+        ["projects/demand-forecast/src/demand_forecast/features.py"],
+        "uv run pytest projects/demand-forecast/tests/test_training.py -q -k feature",
+    ),
+    Component(
+        "1",
+        "Model training + baseline gate",
+        ["projects/demand-forecast/src/demand_forecast/train.py"],
+        "uv run pytest projects/demand-forecast/tests/test_training.py -q",
+    ),
     Component("1", "Training pipeline (KFP v2)", ["orchestration/pipelines"]),
     Component("1", "Orchestration DAGs (Airflow)", ["orchestration/dags"]),
     Component("1", "Observability (OTel + LGTM)", ["platform/observability"]),
