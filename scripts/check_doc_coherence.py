@@ -369,6 +369,23 @@ def _commit_count() -> int:
     return int(result.stdout.strip()) if result.returncode == 0 else 0
 
 
+def _commits_since_last_tag() -> int:
+    """Commits since the most recent tag, or the whole history when untagged."""
+    describe = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "describe", "--tags", "--abbrev=0"],
+        capture_output=True,
+        text=True,
+    )
+    if describe.returncode != 0:
+        return _commit_count()
+    result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "rev-list", "--count", f"{describe.stdout.strip()}..HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    return int(result.stdout.strip() or 0)
+
+
 def check_changelog_covers_the_commit_range() -> None:
     """C8 — [Unreleased] reflects the commits since the last tag.
 
@@ -391,11 +408,29 @@ def check_changelog_covers_the_commit_range() -> None:
         return
 
     section = text.split("## [Unreleased]", 1)[1].split("\n## ", 1)[0]
-    if len(section.strip()) < 80:
-        fail("C8", "[Unreleased] is effectively empty while commits have accumulated")
+    if len(section.strip()) >= 80:
+        ok("C8", f"CHANGELOG [Unreleased] present, {_commit_count()} commits on this branch")
         return
 
-    ok("C8", f"CHANGELOG [Unreleased] present, {_commit_count()} commits on this branch")
+    # An empty [Unreleased] is CORRECT in two situations, and this check used
+    # to fail both — a gate that a legitimate state cannot satisfy.
+    #
+    # 1. The commit that prepares a release renames [Unreleased] to the version
+    #    and opens a fresh empty one. At that moment no tag exists yet, so
+    #    "commits since the last tag" is the whole history, and the work is
+    #    documented under the version heading rather than under [Unreleased].
+    # 2. Immediately after a tag, there is genuinely nothing unreleased.
+    version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    pending_release = f"## [{version}]" in text
+    if pending_release:
+        ok("C8", f"[Unreleased] is empty; the range is documented under [{version}], awaiting its tag")
+        return
+
+    if _commits_since_last_tag() == 0:
+        ok("C8", "[Unreleased] is empty and nothing has landed since the last tag")
+        return
+
+    fail("C8", "[Unreleased] is effectively empty while commits have accumulated")
 
 
 def main() -> int:
