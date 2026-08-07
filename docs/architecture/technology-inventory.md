@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**44 of 117 committed technologies implemented (37%)** — plus 16 studied and 10 rejected, which are decisions rather than gaps.
+**46 of 117 committed technologies implemented (39%)** — plus 16 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 | :-: | --- |
@@ -87,14 +87,14 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | 📓 | `istio` | studied | mTLS and traffic policy matter at a service count this repository will not reach. |
 | ⬜ | `kyverno` | core | |
 
-## Orchestration and pipelines — 0 built, 6 pending
+## Orchestration and pipelines — 2 built, 4 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
 | ⬜ | `airflow-3` | core | |
-| ⬜ | `kfp-v2` | core | |
+| ✅ | `kfp-v2` | core | |
 | ⬜ | `vertex-ai-pipelines` | core | |
-| ⬜ | `sagemaker-pipelines` | core | |
+| ✅ | `sagemaker-pipelines` | core | |
 | ⬜ | `cloud-composer` | demonstrated | Managed Airflow inside a validation window only; never self-hosted. |
 | ⬜ | `mwaa` | demonstrated | |
 | 📓 | `dagster` | studied | Airflow chosen for market weight (ADR-004); Dagster's asset graph revisited if lineage becomes the constraint. |
