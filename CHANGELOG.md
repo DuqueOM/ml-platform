@@ -70,6 +70,17 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   Jaeger's API — 4 spans, one trace id, carrying `skill` and `coverage` as
   attributes. An absent collector disables tracing and says so, rather than
   raising or going quietly no-op.
+- **Phase 2 groundwork, creating zero cloud resources.** Terraform for GKE and
+  EKS from one shared module, both `terraform validate` green, with partial
+  backends and a separate state bucket per environment — a prefix typo inside a
+  shared bucket reads another environment's state, and the first symptom is a
+  plan proposing to destroy production.
+- **The multi-cloud difference is measured, not asserted.**
+  `scripts/measure_cloud_surface.py` reports **68% of Terraform is
+  cloud-specific** (183 of 268 significant lines) against a 75% ceiling, and
+  the check is a CI gate. The number is uncomfortable and that is its value: at
+  this scale "one definition, two clouds" means two adapters agreeing on an
+  interface, not a large shared body.
 - **A density check** — distinct hours against the hours the span implies —
   kept outside the suite because an expectation suite has no vocabulary for a
   shape the rows collectively have.

@@ -152,6 +152,14 @@ jobs:
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
+      - name: Cloud-specific surface is measured and within budget
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        # Phase 2's claim is that the multi-cloud DIFFERENCE is isolated and
+        # counted, so the count is a gate. A share that drifts upward is the
+        # observable signal the abstraction is leaking, and it arrives as a
+        # number rather than as an impression during review.
+        run: uv run python scripts/measure_cloud_surface.py --check
+
       - name: MCP registry
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         run: uv run python scripts/check_mcp_registry.py

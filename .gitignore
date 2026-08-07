@@ -22,3 +22,8 @@ data/
 # MCP config carries credentials; only the example is committed.
 .codex/mcp.json
 coverage.xml
+
+# Terraform provider plugins and lock metadata from `init -backend=false`,
+# which the validation gate runs. The lock FILE is committed; the .terraform
+# directory it populates is a local cache.
+platform/terraform/**/.terraform/

@@ -40,6 +40,7 @@ Apply to every commit, regardless of what changed.
 | P2 | Type-checked | `uv run mypy libs/ scripts/ projects/demand-forecast/src/` | Zero errors, strict on `libs/` | `libs/` has the widest blast radius; a type error there reaches every project |
 | P3 | Lint and format clean | `uv run ruff check . && uv run ruff format --check .` | Zero | Formatting arguments are a tax; a tool ends them |
 | P4 | Documentation coherent | `uv run python scripts/check_doc_coherence.py` | Zero | ADR-005 rules C, D, H mechanised |
+| P6 | Cloud-specific surface | `uv run python scripts/measure_cloud_surface.py --check` | <= 75% of Terraform lines | Multi-cloud means the DIFFERENCE is small and counted, not that two configs exist. A rising share is the abstraction leaking |
 | P5 | No committed secrets | `gitleaks detect` over full history | Zero | Scanning the working tree misses what history already published |
 | P6 | Dependencies resolve reproducibly | `uv lock --check` | Lockfile current | An out-of-date lock means CI and local are different systems |
 

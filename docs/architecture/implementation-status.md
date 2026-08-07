@@ -33,7 +33,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**19 done · 7 partial · 14 absent** — of 40 tracked components.
+**19 done · 9 partial · 12 absent** — of 40 tracked components.
 
 ### Phase 0
 
@@ -77,8 +77,8 @@ modules, and a coherence filter examining zero files, both stayed green.
 
 | | Component | Evidence |
 | :-: | --- | --- |
-| ⬜ | Terraform (GCP) | absent |
-| ⬜ | Terraform (AWS) | absent |
+| 🟡 | Terraform (GCP) | 9 file(s), no verification command |
+| 🟡 | Terraform (AWS) | 9 file(s), no verification command |
 | ⬜ | Kubernetes manifests | absent |
 | ⬜ | GitOps (ArgoCD) | absent |
 | ⬜ | Admission policies | absent |
