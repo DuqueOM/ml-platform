@@ -230,3 +230,38 @@ def snapshots(catalog: Catalog | None = None) -> list[tuple[int, datetime]]:
     """
     table = ensure_table(catalog or local_catalog())
     return [(s.snapshot_id, datetime.fromtimestamp(s.timestamp_ms / 1000, tz=UTC)) for s in table.metadata.snapshots]
+
+
+def delete_before(cutoff: datetime, catalog: Catalog | None = None) -> WriteResult:
+    """Delete rows whose ``event_time`` precedes ``cutoff``.
+
+    The operation that exists because fixing an ingest does NOT clean what the
+    ingest already stored. `write_demand(overwrite=True)` is scoped to the
+    months present in the incoming data — deliberately, so a backfill of one
+    month cannot destroy the others — which means rows stamped outside every
+    ingested month survive a full reingestion untouched. Sixteen pickups
+    stamped 2002-2009 did exactly that.
+
+    Reversible, and that is the point of doing it here rather than by rewriting
+    files: Iceberg records the delete as a new snapshot, so the previous state
+    stays readable through `read_demand(snapshot_id=...)` until snapshots are
+    expired. Expiring them is the irreversible step, which is why the agent
+    protocol makes EXPIRY a STOP operation and this one merely CONSULT.
+
+    Args:
+        cutoff: Rows strictly before this instant are removed.
+        catalog: Defaults to the local MinIO-backed catalogue.
+
+    Returns:
+        A :class:`WriteResult` naming the snapshot the delete produced.
+    """
+    table = ensure_table(catalog or local_catalog())
+    before = len(table.scan().to_arrow())
+
+    table.delete(delete_filter=f"event_time < '{cutoff.isoformat()}'")
+
+    table.refresh()
+    snapshot = table.current_snapshot()
+    assert snapshot is not None, "a delete always produces a snapshot"
+    after = len(table.scan().to_arrow())
+    return WriteResult(snapshot_id=snapshot.snapshot_id, rows=before - after, mode="delete")

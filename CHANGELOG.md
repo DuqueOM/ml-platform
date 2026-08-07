@@ -47,6 +47,21 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   well-formed. The positional splitter is kept for single series and its
   failure on panel data is a test.
 
+- **Great Expectations at the warehouse boundary** (ADR-004), as a complement
+  to the contracts at the function boundary rather than a second copy of them.
+  Every expectation checks something a per-frame contract structurally cannot:
+  duplicate `(zone, hour)` rows from a repeated append, timestamps outside the
+  feed's own epoch, implausible counts, unknown zones. Each carries a prose
+  `meta.reason`, because the audience ADR-004 names for Data Docs will never
+  read the Python. Optional extra, matching its `demonstrated` tier.
+- **A density check** — distinct hours against the hours the span implies —
+  kept outside the suite because an expectation suite has no vocabulary for a
+  shape the rows collectively have.
+- **`delete_before`** on the lakehouse, for the case fixing an ingest cannot
+  reach: rows already stored outside every ingested month. Reversible, since
+  Iceberg records it as a snapshot — which is why EXPIRY is the STOP operation
+  and this is not.
+
 ### Fixed
 
 Three defects that synthetic single-series data could not expose, found within
@@ -71,6 +86,17 @@ minutes of pointing the backtest at the real feed:
   bounds pickups to the month the FILE declares in its own name, counts them
   separately from ordinary cleaning, and the bound is on pickup only so a trip
   crossing midnight into the next month is kept.
+- **The first warehouse timestamp expectation was circular.** It took its
+  bounds from `expected_window(demand)` — the min and max of the column it was
+  validating — so every value lay inside its own range and the suite passed on
+  a table containing pickups stamped 2002. This is the same defect the
+  independent audit found in the MCP registry gate: a threshold supplied by the
+  thing it judges. Committed again, in new code, three weeks later. The floor
+  is now a constant, and a test asserts it stays one.
+- **Fixing the ingest did not clean the warehouse.** `write_demand(overwrite=True)`
+  is scoped to the months present in the incoming data, so a full reingestion
+  left 16 rows stamped 2002-2009 untouched — correct behaviour of the earlier
+  data-loss fix, with a consequence worth stating rather than discovering.
 - **Both regression tests were vacuous on the first attempt.** They recomputed
   the selection instead of calling the production code, so they passed with the
   defects deliberately reintroduced. `calibration_split` was extracted to be

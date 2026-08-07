@@ -166,6 +166,12 @@ COMPONENTS: list[Component] = [
         ["projects/demand-forecast/src/demand_forecast/train.py"],
         "uv run pytest projects/demand-forecast/tests/test_training.py -q",
     ),
+    Component(
+        "1",
+        "Warehouse validation (Great Expectations)",
+        ["projects/demand-forecast/src/demand_forecast/warehouse_checks.py"],
+        "uv run pytest projects/demand-forecast/tests/test_warehouse_checks.py -q",
+    ),
     Component("1", "Training pipeline (KFP v2)", ["orchestration/pipelines"]),
     Component("1", "Orchestration DAGs (Airflow)", ["orchestration/dags"]),
     Component("1", "Observability (OTel + LGTM)", ["platform/observability"]),

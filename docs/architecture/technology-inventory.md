@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**42 of 117 committed technologies implemented (35%)** — plus 16 studied and 10 rejected, which are decisions rather than gaps.
+**44 of 117 committed technologies implemented (37%)** — plus 16 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 | :-: | --- |
@@ -146,15 +146,15 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `bigquery` | core | |
 | ⬜ | `athena` | core | |
 
-## Data quality — 2 built, 3 pending
+## Data quality — 4 built, 1 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
 | ⬜ | `pandera` | core | Declared as a dependency but not imported anywhere yet. |
 | ✅ | `data-contracts` | core | |
 | ✅ | `leakage-detection` | core | |
-| ⬜ | `great-expectations` | demonstrated | |
-| ⬜ | `gx-data-docs` | demonstrated | |
+| ✅ | `great-expectations` | demonstrated | |
+| ✅ | `gx-data-docs` | demonstrated | |
 
 ## ML serving — 0 built, 3 pending
 
