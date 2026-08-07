@@ -194,3 +194,68 @@ def test_the_real_feed_ingests_within_the_reject_budget() -> None:
     assert report.reject_rate < MAX_REJECT_RATE
     assert cleaned.height > 2_000_000
     assert to_hourly_demand(cleaned)["zone_id"].n_unique() > 200
+
+
+# --- the file's own month bounds its pickups --------------------------------
+#
+# The real 2024-01/02 feed carries pickups stamped 2002, 2008 and 2009. Eighteen
+# rows out of 151,920 — 0.012%, far below the reject-rate alarm, passing every
+# column bound — and they moved the observed start of the series from January
+# 2024 to December 2002. A backtest computing its span from min/max then sees a
+# 21-year history containing 60 days of data.
+
+
+def test_the_month_is_read_from_the_filename() -> None:
+    from demand_forecast.ingest import month_of
+
+    assert month_of(Path("yellow_tripdata_2024-01.parquet")) == (datetime(2024, 1, 1), datetime(2024, 2, 1))
+    assert month_of(Path("yellow_tripdata_2024-12.parquet")) == (datetime(2024, 12, 1), datetime(2025, 1, 1))
+
+
+def test_a_file_with_no_month_in_its_name_gets_no_bound() -> None:
+    """No bound is better than a wrong one guessed from the data."""
+    from demand_forecast.ingest import month_of
+
+    assert month_of(Path("trips.parquet")) is None
+
+
+def test_out_of_month_pickups_are_dropped_and_counted() -> None:
+    from demand_forecast.ingest import drop_out_of_month, month_of
+
+    frame = pl.DataFrame(
+        {
+            "tpep_pickup_datetime": [
+                datetime(2002, 12, 31, 22),  # the real corrupt record
+                datetime(2009, 1, 1),
+                datetime(2024, 1, 15, 9),
+                datetime(2024, 1, 31, 23, 50),  # legitimate: last hour of the month
+                datetime(2024, 2, 1),  # next month's file owns this
+            ]
+        }
+    )
+    kept, dropped = drop_out_of_month(frame, month_of(Path("yellow_tripdata_2024-01.parquet")))
+
+    assert dropped == 3
+    assert kept.height == 2
+    assert kept["tpep_pickup_datetime"].min() == datetime(2024, 1, 15, 9)
+
+
+def test_a_trip_starting_in_the_last_hour_is_kept() -> None:
+    """The bound is on PICKUP. A trip crossing midnight belongs to this file."""
+    from demand_forecast.ingest import drop_out_of_month, month_of
+
+    frame = pl.DataFrame({"tpep_pickup_datetime": [datetime(2024, 1, 31, 23, 59)]})
+    kept, dropped = drop_out_of_month(frame, month_of(Path("yellow_tripdata_2024-01.parquet")))
+
+    assert dropped == 0
+    assert kept.height == 1
+
+
+def test_no_bound_leaves_the_frame_untouched() -> None:
+    from demand_forecast.ingest import drop_out_of_month
+
+    frame = pl.DataFrame({"tpep_pickup_datetime": [datetime(2002, 1, 1)]})
+    kept, dropped = drop_out_of_month(frame, None)
+
+    assert dropped == 0
+    assert kept.height == 1
