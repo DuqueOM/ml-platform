@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**41 of 117 committed technologies implemented (35%)** — plus 16 studied and 10 rejected, which are decisions rather than gaps.
+**42 of 117 committed technologies implemented (35%)** — plus 16 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 | :-: | --- |
@@ -165,13 +165,13 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `triton` | demonstrated | |
 | ⬜ | `onnx` | demonstrated | |
 
-## ML lifecycle — 0 built, 3 pending
+## ML lifecycle — 1 built, 2 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
 | ⬜ | `mlflow` | core | |
 | ⬜ | `dvc` | core | |
-| ⬜ | `ray-tune` | demonstrated | |
+| ✅ | `ray-tune` | demonstrated | |
 | 🚫 | `katib` | rejected | Ray Tune chosen; Katib requires operating Kubeflow. |
 
 ## Deep learning — 0 built, 2 pending

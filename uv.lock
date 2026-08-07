@@ -453,6 +453,7 @@ dependencies = [
     { name = "ml-core" },
     { name = "pyarrow" },
     { name = "pyiceberg", extra = ["pyiceberg-core", "s3fs", "sql-sqlite"] },
+    { name = "scikit-learn" },
     { name = "serving-core" },
 ]
 
@@ -463,6 +464,7 @@ requires-dist = [
     { name = "ml-core", editable = "libs/ml-core" },
     { name = "pyarrow", specifier = "~=21.0" },
     { name = "pyiceberg", extras = ["s3fs", "sql-sqlite", "pyiceberg-core"], specifier = "~=0.10" },
+    { name = "scikit-learn", specifier = "~=1.5" },
     { name = "serving-core", editable = "libs/serving-core" },
 ]
 

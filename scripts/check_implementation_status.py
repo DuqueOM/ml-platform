@@ -129,8 +129,25 @@ COMPONENTS: list[Component] = [
     Component("1", "libs/data-contracts implementation", ["libs/data-contracts/src"]),
     Component("1", "libs/serving-core implementation", ["libs/serving-core/src"]),
     Component("1", "projects/demand-forecast", ["projects/demand-forecast"]),
-    Component("1", "Lakehouse ingestion (Iceberg)", ["platform/lakehouse"]),
+    # Two rows, because one row conflated two different things and read as
+    # "nothing ingests to Iceberg", which is false. The project DOES; a shared
+    # platform module does not, and deliberately: extracting one before a
+    # second consumer exists is the premature abstraction this repository's
+    # calibration rule warns about.
+    Component(
+        "1",
+        "Iceberg ingestion (demand-forecast)",
+        ["projects/demand-forecast/src/demand_forecast/lakehouse.py"],
+        "uv run pytest projects/demand-forecast/tests/test_overwrite_scope.py -q",
+    ),
+    Component("1", "Lakehouse module shared across projects", ["platform/lakehouse"]),
     Component("1", "Feature store definitions", ["libs/feature-defs", "projects/demand-forecast/features"]),
+    Component(
+        "1",
+        "Expanding-window backtesting",
+        ["projects/demand-forecast/src/demand_forecast/backtest.py"],
+        "uv run pytest projects/demand-forecast/tests/test_backtest.py -q",
+    ),
     Component("1", "Training pipeline (KFP v2)", ["orchestration/pipelines"]),
     Component("1", "Orchestration DAGs (Airflow)", ["orchestration/dags"]),
     Component("1", "Observability (OTel + LGTM)", ["platform/observability"]),
