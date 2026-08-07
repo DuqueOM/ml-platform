@@ -172,6 +172,16 @@ jobs:
         # number rather than as an impression during review.
         run: uv run python scripts/measure_cloud_surface.py --check
 
+      - name: GitOps overlays build
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        # Every overlay in the environment x cloud matrix renders. An overlay
+        # that stops building is an Application that syncs to nothing and
+        # reports Healthy, which is how a matrix loses a member unnoticed.
+        run: |
+          for overlay in platform/kubernetes/overlays/*/; do
+            kubectl kustomize "$overlay" > /dev/null
+          done
+
       - name: MCP registry
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         run: uv run python scripts/check_mcp_registry.py
