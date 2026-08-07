@@ -115,8 +115,12 @@ Broad shape:
 - 8 ADRs, `docs/decisions/`
 - Agentic surface: 23 rules, 29 skills, 22 workflows → 4 tool surfaces
   (74 artifacts × 4 = 296 generated files)
-- 5 libraries: `ml-core`, `data-contracts`, `feature-defs`, `llm-core`,
-  `serving-core`
+- 3 implemented libraries (`ml-core`, `data-contracts`, `feature-defs`) and
+  2 stubs (`llm-core`, `serving-core`, one file each). Listing five without
+  that split overstates what exists — which is the failure the derived
+  documents were built to prevent, occurring in the document that points at
+  them. `implementation-status.md` already marked both 🟡; only this prose
+  did not.
 - 1 project: `demand-forecast`
 - 28 declared gates; `scripts/` holds the enforcing code
 - `ops/audit.jsonl` — hash-chained append-only operational record

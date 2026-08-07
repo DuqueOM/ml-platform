@@ -37,7 +37,8 @@ categories. Each line: what + why + authority, e.g.:
 
 ```markdown
 ### Added
-- `supply-chain-evidence` job in `release-on-tag.yml`: source SBOM
+- `supply-chain-evidence` job (ml-service-template only — this repository's
+  `release-on-tag.yml` has a single `release` job): source SBOM
   (CycloneDX+SPDX) + keyless Sigstore signature attached to every
   release (AUDIT R11 M-2, template-ADR-043).
 ```
@@ -53,7 +54,8 @@ If the change touched any fact restated across documents:
 - New ADR → update the ADR count/range in `llms.txt` §Key files.
 - New `D-`/`Q-` anti-pattern → update the counts where the range is
   restated (README, llms.txt, CLAUDE.md for `D-`; rule 18 header for `Q-`).
-- Version bump → `VERSION` first, then CHANGELOG heading, then `llms.txt`.
+- Version bump → `VERSION` first, then the CHANGELOG heading. (`llms.txt`
+  is a ml-service-template artifact; this repository has none.)
 - Agentic surface changed → regenerate adapters:
 
 // turbo
