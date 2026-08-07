@@ -38,6 +38,34 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   baseline with **88.7% empirical coverage against 90% nominal**. A model that
   loses to repeating last week fails `beats_baseline()` rather than being
   reported as a metric to interpret generously.
+- **The backtest now runs on the real NYC TLC feed**: 151,904 hourly rows,
+  140 zones with enough history to model, three one-week folds. **Skill +55.8%
+  over seasonal naive, coverage 89.8% against 90% nominal.**
+- **Panel-aware splitting** (`expanding_window_folds_by_time`). Cutting a
+  261-zone frame by row position trains on some zones and tests on others — a
+  cross-entity split wearing the shape of a temporal one, with every fold still
+  well-formed. The positional splitter is kept for single series and its
+  failure on panel data is a test.
+
+### Fixed
+
+Three defects that synthetic single-series data could not expose, found within
+minutes of pointing the backtest at the real feed:
+
+- **The conformal calibration slice selected one zone, not recent hours.**
+  Holding out the last N row positions of a panel sorted by `(zone, hour)`
+  takes the tail of the LAST zone, so the residual quantile came from a single
+  zone's scale and was applied to all of them. Empirical coverage was **53.8%
+  against a 90% target**; cutting the window on time instead gives 89.8%.
+- **The baseline was silently `nan`.** Forward-filling `seasonal_naive` bled
+  one zone's last value into the next zone's first rows and left nan at the
+  start, which propagated into the aggregate. The report printed
+  `baseline nan`, `skill +nan%` and `beats_baseline: False` — the comparison
+  had stopped existing while every test passed.
+- **Both regression tests were vacuous on the first attempt.** They recomputed
+  the selection instead of calling the production code, so they passed with the
+  defects deliberately reintroduced. `calibration_split` was extracted to be
+  callable, and both tests were then confirmed failing against each bug.
 
 ## [0.1.0] - 2026-08-07
 
