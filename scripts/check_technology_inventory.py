@@ -48,6 +48,34 @@ _EXCLUDED_FILENAMES = {"README.md"}
 _DECIDED_ABSENT = {"studied", "rejected"}
 
 
+def _tracked_files() -> frozenset[str]:
+    """Every git-TRACKED file, as repo-relative posix paths.
+
+    A document derived from the filesystem must derive from the TRACKED
+    filesystem, or it differs between a working copy and a clean clone. That is
+    not hypothetical here: `terraform init` left provider binaries under
+    `platform/terraform/*/.terraform/` — gitignored, still on disk — and the
+    generator counted them locally while CI, which never runs init, reported
+    the committed document stale.
+
+    `git ls-files` is exhaustive. Excluding `__pycache__` by NAME, as this did,
+    fixes one instance and leaves the class open: every future build artifact
+    has to be discovered the same way, through a red CI on a green working copy.
+    """
+    result = subprocess.run(["git", "-C", str(REPO_ROOT), "ls-files"], capture_output=True, text=True, check=False)
+    return frozenset(result.stdout.splitlines())
+
+
+_TRACKED = _tracked_files()
+
+
+def _is_tracked(path: Path) -> bool:
+    try:
+        return path.relative_to(REPO_ROOT).as_posix() in _TRACKED
+    except ValueError:
+        return False
+
+
 def _has_substance(path: Path) -> bool:
     """True when a path is a file, or a directory holding more than a README.
 
@@ -60,8 +88,7 @@ def _has_substance(path: Path) -> bool:
     if not path.is_dir():
         return False
     return any(
-        child.is_file() and child.name not in _EXCLUDED_FILENAMES and "__pycache__" not in child.parts
-        for child in path.rglob("*")
+        child.is_file() and child.name not in _EXCLUDED_FILENAMES and _is_tracked(child) for child in path.rglob("*")
     )
 
 
@@ -90,7 +117,11 @@ def _content_matches(pattern: str, scope: str) -> bool:
         rel = Path(line).resolve().relative_to(REPO_ROOT).as_posix()
         if rel.startswith(_EXCLUDED_FROM_CONTENT_SEARCH) or Path(rel).name in _EXCLUDED_FILENAMES:
             continue
-        if "/__pycache__/" in rel or rel.startswith(".venv/"):
+        # Tracked only. grep walks the real filesystem, so a provider BINARY
+        # under an untracked `.terraform/` matched entries like `terraform` and
+        # `aws` — the committed report then depended on whether someone had run
+        # `terraform init`, and CI disagreed with every working copy.
+        if not _is_tracked(REPO_ROOT / rel):
             continue
         return True
     return False

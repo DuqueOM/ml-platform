@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**59 of 117 committed technologies implemented (50%)** — plus 16 studied and 10 rejected, which are decisions rather than gaps.
+**46 of 117 committed technologies implemented (39%)** — plus 16 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 | :-: | --- |
@@ -68,7 +68,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `ci-failure-triage` | demonstrated | Inherited CI self-healing; Demonstrated until this repository has enough CI history to classify. |
 | ✅ | `dependabot` | core | |
 
-## Security and supply chain — 3 built, 7 pending
+## Security and supply chain — 2 built, 8 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
@@ -82,7 +82,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `sbom` | core | |
 | ⬜ | `external-secrets` | core | |
 | 📓 | `vault` | studied | Cloud secret managers cover the need; Vault adds an operated dependency. |
-| ✅ | `network-policies` | core | |
+| ⬜ | `network-policies` | core | |
 | 📓 | `linkerd` | studied | |
 | 📓 | `istio` | studied | mTLS and traffic policy matter at a service count this repository will not reach. |
 | ⬜ | `kyverno` | core | |
@@ -100,25 +100,25 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | 📓 | `dagster` | studied | Airflow chosen for market weight (ADR-004); Dagster's asset graph revisited if lineage becomes the constraint. |
 | 🚫 | `prefect` | rejected | Airflow chosen; a third orchestrator has no distinct role. |
 
-## GitOps and deployment — 2 built, 1 pending
+## GitOps and deployment — 0 built, 3 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
 | ⬜ | `argocd` | core | |
-| ✅ | `applicationsets` | core | |
-| ✅ | `argo-rollouts` | core | |
+| ⬜ | `applicationsets` | core | |
+| ⬜ | `argo-rollouts` | core | |
 | 🚫 | `flux` | rejected | ArgoCD chosen; two reconcilers fight. |
 
-## Lakehouse — 3 built, 0 pending
+## Lakehouse — 1 built, 2 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
 | ✅ | `apache-iceberg` | core | |
-| ✅ | `biglake` | core | |
-| ✅ | `s3-tables` | core | |
+| ⬜ | `biglake` | core | |
+| ⬜ | `s3-tables` | core | |
 | 🚫 | `delta-lake` | rejected | Iceberg chosen for vendor-neutral multi-cloud support (ADR-004). |
 
-## Data engineering — 4 built, 3 pending
+## Data engineering — 2 built, 5 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
@@ -127,8 +127,8 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `dbt` | demonstrated | |
 | ⬜ | `elementary` | demonstrated | |
 | ⬜ | `spark` | demonstrated | Historical backfill only; the DuckDB crossover threshold is measured, not assumed. |
-| ✅ | `dataproc-serverless` | demonstrated | |
-| ✅ | `emr-serverless` | demonstrated | |
+| ⬜ | `dataproc-serverless` | demonstrated | |
+| ⬜ | `emr-serverless` | demonstrated | |
 
 ## Feature store — 1 built, 1 pending
 
@@ -137,14 +137,14 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `feast` | core | Not wired in. libs/feature-defs holds point-in-time joins, which is not a feature store. |
 | ✅ | `point-in-time-joins` | core | |
 
-## Databases — 4 built, 0 pending
+## Databases — 2 built, 2 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
 | ✅ | `postgres` | core | |
 | ✅ | `pgvector` | core | |
-| ✅ | `bigquery` | core | |
-| ✅ | `athena` | core | |
+| ⬜ | `bigquery` | core | |
+| ⬜ | `athena` | core | |
 
 ## Data quality — 4 built, 1 pending
 
@@ -221,18 +221,18 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `drift-response-required` | core | Every signal declares the ACTION each verdict triggers. A signal with no defined response is an alert nobody acts on. |
 | ⬜ | `evidently` | core | Scoped to the tabular kind by ADR-007; it was never designed for trajectory or retrieval drift. |
 
-## Edge protection — 4 built, 4 pending
+## Edge protection — 0 built, 8 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
 | ⬜ | `cloudflare-waf` | core | |
 | ⬜ | `cloudflare-rate-limiting` | core | |
 | ⬜ | `origin-lock-gcp` | core | Cloud Armor allowing only Cloudflare ranges. Without it the load balancer is reachable by IP and the edge is decorative. |
-| ✅ | `origin-lock-aws` | core | |
+| ⬜ | `origin-lock-aws` | core | ALB security group + WAFv2 IP set. Same failure mode as GCP. |
 | ⬜ | `origin-lock-external-check` | core | Reaching the endpoint proves what is TRUE; reading Terraform proves only what was declared. |
-| ✅ | `cloud-armor` | demonstrated | |
-| ✅ | `aws-wafv2` | demonstrated | |
-| ✅ | `aws-shield-standard` | core | |
+| ⬜ | `cloud-armor` | demonstrated | Narrowed from full WAF to origin lock by ADR-006. |
+| ⬜ | `aws-wafv2` | demonstrated | Narrowed to origin lock by ADR-006. |
+| ⬜ | `aws-shield-standard` | core | Automatic and free for ALB; listed so its presence is recorded rather than assumed. |
 
 ## Observability — 4 built, 3 pending
 
