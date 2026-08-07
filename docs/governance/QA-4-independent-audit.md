@@ -315,10 +315,10 @@ stay together.
 | P2 `gitleaks --no-git` | Fixed — row now reads `gitleaks detect` over full history |
 | P2 three more inventory entries | Fixed — see the `feast` row; a `filled:` detector was added so a stub document cannot count as an implementation |
 | P3 `AGENTS.md` omits feature-defs | Fixed |
-| P3 "5 libraries" counts stubs | Open — the count is accurate; the qualification is not yet written |
+| P3 "5 libraries" counts stubs | Fixed — the brief now reads 3 implemented + 2 stubs. `implementation-status.md` already marked both 🟡; only the prose did not |
 | P3 C6 docstring | Fixed — the docstring now states that no language check exists |
 | P3 `-qq` hides counts | Fixed |
 | P3 `coverage.xml` untracked | Fixed |
 | normal `overwrite` deletes the table | Fixed — the predicate is scoped to the months present, non-contiguous months do not delete the gap, and an empty frame is refused. Six unit tests, deliberately not `integration`, so they run in CI |
 | dead `pytestmark`, naive `datetime` | Fixed |
-| `release-on-tag` publishes the cadence note | Open — real, fires on the first tag; no tag exists yet |
+| `release-on-tag` publishes the cadence note | Fixed — the section boundary now stops at any H2, not only the next VERSION heading, and `\|\| true` no longer swallows an awk failure. `tests/test_release_notes.py` runs the workflow's own extraction against the real CHANGELOG; both regression tests were confirmed failing with the old boundary. Also found while fixing it: the ported `release.md` workflow instructed the agent to confirm a `releases/` directory that does not exist here, citing a check ("C6") that means something else in this repository |

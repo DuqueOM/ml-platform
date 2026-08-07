@@ -25,12 +25,19 @@ jobs:
         id: notes
         run: |
           version="${GITHUB_REF_NAME#v}"
-          # Take the section between this version's heading and the next one.
+          # Stop at the next H2 of ANY kind, not only the next VERSION
+          # heading. The earlier `/^## \[/` exit condition meant a non-version
+          # H2 — "## Cadence note" — did not end the section, so publishing
+          # v0.1.0 would have carried every following section into the release
+          # notes. Nothing caught it because the workflow had never run.
+          #
+          # No `|| true`: awk failing here must fail the release, not produce
+          # an empty file that the next check then blames on the CHANGELOG.
           awk -v v="$version" '
             $0 ~ "^## \\[" v "\\]" {found=1; next}
-            found && /^## \[/ {exit}
+            found && /^## / {exit}
             found {print}
-          ' CHANGELOG.md > release-notes.md || true
+          ' CHANGELOG.md > release-notes.md
 
           if [ ! -s release-notes.md ]; then
             # A tag with no CHANGELOG section is a release nobody described.

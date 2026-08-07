@@ -34,18 +34,27 @@ pytest --cov=src --cov-report=term-missing --cov-fail-under=90
 
 ## 3. Tag the Release
 
+Release notes come from the CHANGELOG here, not from a `releases/` directory
+— that layout belongs to `ml-service-template` and was never created in this
+repository. Check C4 catches a command naming a file that does not exist;
+this text named one for several commits and nothing caught it, because prose
+is not a command.
+
 ```bash
-# Confirm releases/v{VERSION}.md exists first — check_doc_coherence.py C6
-python3 scripts/check_doc_coherence.py
+# The notes are the CHANGELOG section for this version. Rename [Unreleased]
+# to [{VERSION}] with a date FIRST — the tag extracts by heading, so a tag
+# pushed before the rename publishes nothing and fails the workflow.
+python3 scripts/check_doc_coherence.py     # C8: [Unreleased] covers the range
+uv run pytest tests/test_release_notes.py  # dry run of the extraction itself
 
 git tag -a v{VERSION} -m "Release v{VERSION}: {summary}"
 git push origin v{VERSION}
 ```
 
 Pushing the tag triggers `.github/workflows/release-on-tag.yml`, which
-publishes the GitHub Release automatically (title + body from
-`releases/v{VERSION}.md`). Do not follow up with a manual
-`gh release create`/`edit` — verify instead:
+publishes the GitHub Release automatically, with the body taken from the
+matching `## [{VERSION}]` section of `CHANGELOG.md`. Do not follow up with a
+manual `gh release create`/`edit` — verify instead:
 
 ```bash
 gh release view v{VERSION}
