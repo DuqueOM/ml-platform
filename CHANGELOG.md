@@ -4,19 +4,30 @@ All notable changes are documented here, following
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-**Backfilled at commit 18.** This file should have existed from the first
-commit — `release-on-tag.yml` requires a section per version and would have
-failed on the first tag, and check C8 now enforces that `[Unreleased]` covers
-the commits since the last tag. Recorded here rather than quietly written as
-though it had always been maintained.
+**Backfilled at commit 18, before the first tag.** A CHANGELOG is for consumers
+upgrading between versions, so the real deadline is the first release, not the
+first commit — by that standard this was not late. What backfilling did cost is
+the reasoning: written retroactively, entries are reconstructed from commit
+messages and record what changed rather than why it mattered. Check C8 keeps
+`[Unreleased]` current so the next version is not written the same way.
+
+Recorded here rather than quietly written as though it had always been
+maintained.
 
 Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
-Nothing yet. Entries accumulate here and are renamed to a version heading at
-tag time; check C8 accepts an empty section only while nothing has landed
-since the last tag.
+### Added
+
+- **Expanding-window backtesting** for `demand-forecast`, with a gap sized to
+  the longest feature lag — training up to the first test hour leaks through
+  the lag window even when the timestamps look disjoint.
+- **`random_split_folds`, kept deliberately as a counter-example.** Same model,
+  same data, both splitters: the shuffled split scores MAE 6.26 against the
+  honest 13.18, so a random split makes this model look **52% better than it
+  is**. Measured in `test_backtest.py` rather than asserted in prose, and
+  guarded by a test that nothing in the pipeline imports it.
 
 ## [0.1.0] - 2026-08-07
 

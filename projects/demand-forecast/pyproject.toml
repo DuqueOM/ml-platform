@@ -14,6 +14,10 @@ dependencies = [
     # Explicit: pyiceberg accepts Arrow tables but does not pull pyarrow, and
     # the failure is an ImportError at first write rather than at install.
     "pyarrow~=21.0",
+    # HistGradientBoosting rather than LightGBM: comparable on tabular data at
+    # this size, and it is already a transitive dependency, so the forecast
+    # costs no new supply-chain surface.
+    "scikit-learn~=1.5",
     "ml-core",
     "data-contracts",
     "serving-core",
