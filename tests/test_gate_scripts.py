@@ -298,7 +298,12 @@ def test_derived_documents_ignore_untracked_files(gate: str, tmp_path: Path) -> 
     present must produce byte-identical output, which is only true if the
     generator derives from `git ls-files` rather than from `rglob`.
     """
-    intruder = REPO_ROOT / "platform" / "terraform" / ".probe_untracked" / "artifact.tf"
+    # The probe must be IGNORED, not merely untracked. A new file that is not
+    # yet tracked still belongs to the repository and must count — generating
+    # before `git add` otherwise produces a document describing a repository
+    # without its newest directories, which CI then calls stale. That is not a
+    # hypothetical: it happened on the commit that added platform/kubernetes/.
+    intruder = REPO_ROOT / "platform" / "terraform" / "gcp" / ".terraform" / "probe" / "artifact.tf"
     intruder.parent.mkdir(parents=True, exist_ok=True)
     intruder.write_text('resource "aws_s3_bucket" "probe" {}\nterraform {}\n', encoding="utf-8")
 
@@ -315,4 +320,34 @@ def test_derived_documents_ignore_untracked_files(gate: str, tmp_path: Path) -> 
         intruder.parent.rmdir()
 
     assert document.read_text(encoding="utf-8") == before, "the probe mutated the committed document"
-    assert result.returncode == 0, f"an untracked file changed what {gate} derives:\n{result.stdout}"
+    assert result.returncode == 0, f"an ignored file changed what {gate} derives:\n{result.stdout}"
+
+
+def test_a_new_unignored_file_is_visible_to_the_status_generator() -> None:
+    """The converse of the test above, and the half that actually bit.
+
+    A file that is not yet tracked but is not ignored either still belongs to
+    the repository. Deriving from plain `git ls-files` made brand-new
+    directories invisible, so regenerating BEFORE `git add` produced a document
+    describing a repository without them — and CI, where they are tracked,
+    called it stale. Three steps failed on the commit that added
+    `platform/kubernetes/`.
+
+    Asserted against implementation-status because it COUNTS files. The
+    inventory's detectors are boolean — one more matching file does not move a
+    ✅ that is already ✅ — so the inventory cannot express this property, and
+    asserting it there would be a test passing for the wrong reason.
+    """
+    newcomer = REPO_ROOT / "platform" / "kubernetes" / "_probe_new" / "extra.yaml"
+    newcomer.parent.mkdir(parents=True, exist_ok=True)
+    newcomer.write_text("kind: ConfigMap\n", encoding="utf-8")
+    try:
+        result = _run(GATES["implementation-status"], "--check")
+    finally:
+        newcomer.unlink(missing_ok=True)
+        newcomer.parent.rmdir()
+
+    assert result.returncode == 1, (
+        "a new unignored file was invisible to the generator; regenerating before "
+        "`git add` would silently produce a stale document"
+    )

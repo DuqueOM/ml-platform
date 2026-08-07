@@ -237,12 +237,25 @@ def _tracked_files() -> frozenset[str]:
     generator counted them locally and CI, which never ran init, reported the
     committed document STALE.
 
-    Deriving from `git ls-files` is exhaustive. The previous approach excluded
+    Deriving from git is exhaustive. The previous approach excluded
     `__pycache__` by NAME, which fixed one instance of this and left the class
     open; every future build artifact would have had to be discovered the same
     way, through a red CI on a green working copy.
+
+    `--cached` PLUS `--others --exclude-standard`: tracked files, and files not
+    yet tracked but not ignored either. Plain `ls-files` was not enough, and
+    the way it failed is instructive — regenerating BEFORE `git add` made
+    brand-new directories invisible, so the committed document described a
+    repository without them and CI, where they are tracked, called it stale.
+    The question that matters is not "is it tracked yet" but "does it belong to
+    the repository", and gitignored build output still does not.
     """
-    result = subprocess.run(["git", "-C", str(REPO_ROOT), "ls-files"], capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "ls-files", "--cached", "--others", "--exclude-standard"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     return frozenset(result.stdout.splitlines())
 
 

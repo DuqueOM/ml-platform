@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**46 of 117 committed technologies implemented (39%)** — plus 16 studied and 10 rejected, which are decisions rather than gaps.
+**50 of 117 committed technologies implemented (42%)** — plus 16 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 | :-: | --- |
@@ -68,7 +68,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `ci-failure-triage` | demonstrated | Inherited CI self-healing; Demonstrated until this repository has enough CI history to classify. |
 | ✅ | `dependabot` | core | |
 
-## Security and supply chain — 2 built, 8 pending
+## Security and supply chain — 4 built, 6 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
@@ -82,10 +82,10 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `sbom` | core | |
 | ⬜ | `external-secrets` | core | |
 | 📓 | `vault` | studied | Cloud secret managers cover the need; Vault adds an operated dependency. |
-| ⬜ | `network-policies` | core | |
+| ✅ | `network-policies` | core | |
 | 📓 | `linkerd` | studied | |
 | 📓 | `istio` | studied | mTLS and traffic policy matter at a service count this repository will not reach. |
-| ⬜ | `kyverno` | core | |
+| ✅ | `kyverno` | core | |
 
 ## Orchestration and pipelines — 2 built, 4 pending
 
@@ -100,12 +100,12 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | 📓 | `dagster` | studied | Airflow chosen for market weight (ADR-004); Dagster's asset graph revisited if lineage becomes the constraint. |
 | 🚫 | `prefect` | rejected | Airflow chosen; a third orchestrator has no distinct role. |
 
-## GitOps and deployment — 0 built, 3 pending
+## GitOps and deployment — 2 built, 1 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
-| ⬜ | `argocd` | core | |
-| ⬜ | `applicationsets` | core | |
+| ✅ | `argocd` | core | |
+| ✅ | `applicationsets` | core | |
 | ⬜ | `argo-rollouts` | core | |
 | 🚫 | `flux` | rejected | ArgoCD chosen; two reconcilers fight. |
 
