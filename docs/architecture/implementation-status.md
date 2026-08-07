@@ -55,7 +55,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 | | Component | Evidence |
 | :-: | --- | --- |
 | ✅ | Dataset acquisition scripts | `uv run pytest tests/test_dataset_registry.py -q` passes |
-| 🟡 | Local validation stack | `uv run python scripts/local/preflight.py --samples 1 --interval 0` FAILS |
+| 🟡 | Local validation stack | 8 file(s), no verification command |
 | 🟡 | libs/ml-core implementation | 4 file(s), no verification command |
 | 🟡 | libs/data-contracts implementation | 2 file(s), no verification command |
 | 🟡 | libs/serving-core implementation | 1 file(s), no verification command |
