@@ -282,3 +282,37 @@ def test_status_verification_commands_are_machine_independent() -> None:
     assert not offenders, (
         "verification commands read host state, so the derived document is machine-dependent:\n" + "\n".join(offenders)
     )
+
+
+@pytest.mark.parametrize("gate", ["implementation-status", "technology-inventory"])
+def test_derived_documents_ignore_untracked_files(gate: str, tmp_path: Path) -> None:
+    """A committed derived document must not depend on a working copy's litter.
+
+    `terraform init` leaves provider binaries under
+    `platform/terraform/*/.terraform/` — gitignored, still on disk. The
+    generators walked the real filesystem, so they counted them locally while
+    CI, which never runs init, reported the committed documents STALE. Three
+    steps failed on a green working copy.
+
+    The probe is a file that is on disk and NOT tracked. Regenerating with it
+    present must produce byte-identical output, which is only true if the
+    generator derives from `git ls-files` rather than from `rglob`.
+    """
+    intruder = REPO_ROOT / "platform" / "terraform" / ".probe_untracked" / "artifact.tf"
+    intruder.parent.mkdir(parents=True, exist_ok=True)
+    intruder.write_text('resource "aws_s3_bucket" "probe" {}\nterraform {}\n', encoding="utf-8")
+
+    document = {
+        "implementation-status": REPO_ROOT / "docs" / "architecture" / "implementation-status.md",
+        "technology-inventory": REPO_ROOT / "docs" / "architecture" / "technology-inventory.md",
+    }[gate]
+    before = document.read_text(encoding="utf-8")
+
+    try:
+        result = _run(GATES[gate], "--check")
+    finally:
+        intruder.unlink(missing_ok=True)
+        intruder.parent.rmdir()
+
+    assert document.read_text(encoding="utf-8") == before, "the probe mutated the committed document"
+    assert result.returncode == 0, f"an untracked file changed what {gate} derives:\n{result.stdout}"

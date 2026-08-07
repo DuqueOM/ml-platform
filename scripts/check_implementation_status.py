@@ -222,11 +222,38 @@ def _substantive_files(component: Component) -> int:
             total += 1
         elif path.is_dir():
             total += sum(
-                1
-                for p in path.rglob("*")
-                if p.is_file() and p.name not in component.ignore and "__pycache__" not in p.parts
+                1 for p in path.rglob("*") if p.is_file() and p.name not in component.ignore and _is_tracked(p)
             )
     return total
+
+
+def _tracked_files() -> frozenset[str]:
+    """Every git-TRACKED file, as repo-relative posix paths.
+
+    A document derived from the filesystem must derive from the tracked
+    filesystem, or it differs between a working copy and a clean clone — which
+    is exactly what happened: `terraform init` left provider binaries under
+    `platform/terraform/*/.terraform/`, gitignored but still on disk, so the
+    generator counted them locally and CI, which never ran init, reported the
+    committed document STALE.
+
+    Deriving from `git ls-files` is exhaustive. The previous approach excluded
+    `__pycache__` by NAME, which fixed one instance of this and left the class
+    open; every future build artifact would have had to be discovered the same
+    way, through a red CI on a green working copy.
+    """
+    result = subprocess.run(["git", "-C", str(REPO_ROOT), "ls-files"], capture_output=True, text=True, check=False)
+    return frozenset(result.stdout.splitlines())
+
+
+_TRACKED = _tracked_files()
+
+
+def _is_tracked(path: Path) -> bool:
+    try:
+        return path.relative_to(REPO_ROOT).as_posix() in _TRACKED
+    except ValueError:
+        return False
 
 
 def _verify(command: str) -> bool:
