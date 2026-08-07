@@ -41,6 +41,18 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Install Terraform
+        # Not optional. Without the binary, tests/test_cloud_surface.py skips
+        # ENTIRELY — so `terraform validate` never ran in CI for either
+        # adapter, and the coverage of measure_cloud_surface.py dropped below
+        # its floor. A test suite that silently skips its subject reports
+        # success for doing nothing, which is the failure this repository keeps
+        # finding in other forms.
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "1.15.5"
+          terraform_wrapper: false
+
       - name: Sync workspace
         id: sync
         # --all-packages, not just --all-extras: without it uv installs the
