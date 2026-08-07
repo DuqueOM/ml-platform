@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 
 import polars as pl
 import pyarrow as pa
@@ -135,24 +135,69 @@ def _to_arrow(demand: pl.DataFrame) -> pa.Table:
     return arrow.cast(DEMAND_SCHEMA.as_arrow())
 
 
+def _months_present(demand: pl.DataFrame) -> list[datetime]:
+    """First instant of every month appearing in ``demand``, ascending.
+
+    Months are enumerated individually rather than spanned min-to-max: data
+    covering January and March must not delete February, and a gap like that
+    is normal when a backfill re-ingests a non-contiguous set of files.
+    """
+    starts = demand.select(pl.col("event_time").dt.truncate("1mo").unique().sort()).to_series().to_list()
+    return [datetime(start.year, start.month, 1) for start in starts]
+
+
+def overwrite_filter(demand: pl.DataFrame) -> str:
+    """A predicate matching exactly the months the incoming data covers.
+
+    Without this, ``Table.overwrite`` defaults to ``AlwaysTrue()`` and deletes
+    every data file in the table before writing. A backfill of one month
+    against a year of history would silently destroy the other eleven, when the
+    caller asked only to replace what it was re-ingesting.
+
+    Returned as a string because pyiceberg accepts either that or a
+    ``BooleanExpression``, and the string form is checkable without a
+    catalogue — which is what lets this be a unit test rather than an
+    integration one that never runs in CI.
+    """
+    clauses = [
+        f"(event_time >= '{month.isoformat()}' and event_time < '{_next_month(month).isoformat()}')"
+        for month in _months_present(demand)
+    ]
+    return " or ".join(clauses)
+
+
+def _next_month(month: datetime) -> datetime:
+    return datetime(month.year + (month.month == 12), (month.month % 12) + 1, 1)
+
+
 def write_demand(demand: pl.DataFrame, catalog: Catalog | None = None, *, overwrite: bool = False) -> WriteResult:
     """Write hourly demand, returning the snapshot it created.
 
     Args:
         demand: Output of :func:`demand_forecast.ingest.to_hourly_demand`.
         catalog: Defaults to the local MinIO-backed catalogue.
-        overwrite: Replace matching rows instead of appending. Use for a
-            backfill of a month already present; appending there would double
-            every count silently.
+        overwrite: Replace the months present in ``demand`` instead of
+            appending to them. Use for a backfill of a month already present;
+            appending there would double every count silently. Months NOT
+            present in ``demand`` are left untouched.
 
     Returns:
         A :class:`WriteResult` carrying the snapshot id.
+
+    Raises:
+        ValueError: If ``overwrite`` is requested with an empty frame. The
+            months to replace are derived from the data, so an empty frame
+            names no scope — and the pyiceberg default for "no scope" is
+            "every row in the table".
     """
+    if overwrite and demand.is_empty():
+        raise ValueError("overwrite requires a non-empty frame: an empty one selects no months to replace")
+
     table = ensure_table(catalog or local_catalog())
     arrow = _to_arrow(demand)
 
     if overwrite:
-        table.overwrite(arrow)
+        table.overwrite(arrow, overwrite_filter=overwrite_filter(demand))
     else:
         table.append(arrow)
 
@@ -177,6 +222,11 @@ def read_demand(catalog: Catalog | None = None, *, snapshot_id: int | None = Non
 
 
 def snapshots(catalog: Catalog | None = None) -> list[tuple[int, datetime]]:
-    """Every snapshot, newest last, as ``(id, committed_at)``."""
+    """Every snapshot, newest last, as ``(id, committed_at)`` in UTC.
+
+    Timezone-aware deliberately: a naive local-time timestamp compared
+    against anything else in this repository — all of which is UTC — is
+    wrong by the local offset without ever raising.
+    """
     table = ensure_table(catalog or local_catalog())
-    return [(s.snapshot_id, datetime.fromtimestamp(s.timestamp_ms / 1000)) for s in table.metadata.snapshots]
+    return [(s.snapshot_id, datetime.fromtimestamp(s.timestamp_ms / 1000, tz=UTC)) for s in table.metadata.snapshots]

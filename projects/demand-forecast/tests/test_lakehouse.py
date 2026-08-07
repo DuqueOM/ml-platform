@@ -15,8 +15,6 @@ from datetime import datetime
 import polars as pl
 import pytest
 
-pytestmark = pytest.mark.integration
-
 
 def _minio_up() -> bool:
     try:
@@ -30,6 +28,23 @@ pytestmark = [
     pytest.mark.integration,
     pytest.mark.skipif(not _minio_up(), reason="local stack not running — run `make local-up`"),
 ]
+
+
+def _demand_at(zone: int, when: datetime, count: int) -> pl.DataFrame:
+    """Like :func:`_demand` but with the month under the test's control.
+
+    Needed to prove that overwriting one month leaves the others alone; a
+    fixture pinned to a single month cannot express that property.
+    """
+    return pl.DataFrame(
+        {
+            "zone_id": [zone],
+            "event_time": [when],
+            "trip_count": [count],
+            "mean_distance": [2.5],
+            "total_fare": [18.0],
+        }
+    )
 
 
 def _demand(zone: int, hour: int, count: int) -> pl.DataFrame:
@@ -119,11 +134,20 @@ def test_overwrite_does_not_double_count(catalog) -> None:  # type: ignore[no-un
     """
     from demand_forecast.lakehouse import read_demand, write_demand
 
-    write_demand(_demand(1, 8, 100), catalog)
-    write_demand(_demand(1, 8, 100), catalog, overwrite=True)
+    # Two DIFFERENT months. The previous version of this test wrote the same
+    # single row twice and asserted height == 1, which holds just as well when
+    # overwrite deletes the entire table first — it distinguished nothing, and
+    # the table-wiping bug lived underneath it.
+    write_demand(_demand_at(1, datetime(2024, 3, 1, 8), 100), catalog)
+    write_demand(_demand_at(1, datetime(2024, 4, 1, 8), 50), catalog)
+    write_demand(_demand_at(1, datetime(2024, 3, 1, 8), 100), catalog, overwrite=True)
 
     table = read_demand(catalog)
-    assert table.height == 1, f"overwrite appended instead of replacing: {table.height} rows"
+    assert table.height == 2, f"overwrite appended instead of replacing: {table.height} rows"
+
+    april = table.filter(pl.col("event_time") == datetime(2024, 4, 1, 8))
+    assert april.height == 1, "overwriting March deleted April — the filter is unscoped"
+    assert april["trip_count"][0] == 50, "April survived but was altered"
 
 
 def test_partitioning_is_declared_on_the_event_month(catalog) -> None:  # type: ignore[no-untyped-def]

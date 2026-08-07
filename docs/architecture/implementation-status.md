@@ -33,7 +33,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**10 done · 8 partial · 15 absent** — of 33 tracked components.
+**11 done · 7 partial · 15 absent** — of 33 tracked components.
 
 ### Phase 0
 
@@ -41,7 +41,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 | :-: | --- | --- |
 | ✅ | uv workspace + lockfile | `uv lock --check` passes |
 | ✅ | Dependency direction test | `uv run pytest tests/test_dependency_direction.py -q` passes |
-| 🟡 | Documentation coherence gate | `uv run python scripts/check_doc_coherence.py` FAILS |
+| ✅ | Documentation coherence gate | `uv run python scripts/check_doc_coherence.py` passes |
 | ✅ | Agentic canonical store | `uv run python scripts/validate_agentic_surface.py --strict` passes |
 | ✅ | Agentic 4-tool surfaces | `uv run python scripts/sync_agentic_adapters.py --check` passes |
 | ✅ | Agentic surface integrity | `uv run python scripts/validate_agentic_surface.py --strict` passes |
@@ -59,7 +59,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 | 🟡 | libs/ml-core implementation | 4 file(s), no verification command |
 | 🟡 | libs/data-contracts implementation | 2 file(s), no verification command |
 | 🟡 | libs/serving-core implementation | 1 file(s), no verification command |
-| 🟡 | projects/demand-forecast | 11 file(s), no verification command |
+| 🟡 | projects/demand-forecast | 12 file(s), no verification command |
 | ⬜ | Lakehouse ingestion (Iceberg) | absent |
 | 🟡 | Feature store definitions | 4 file(s), no verification command |
 | ⬜ | Training pipeline (KFP v2) | absent |

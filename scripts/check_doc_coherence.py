@@ -16,6 +16,7 @@ Exit code 1 on any failure. Run before declaring a round complete.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import subprocess
 import sys
@@ -165,11 +166,26 @@ def check_gate_traceability() -> None:
         fail("C4", "no gate rows found — the traceability table is empty")
         return
 
+    # quality-gates.md states its own rule: "a row whose command does not
+    # exist is a finding". Nothing enforced it. Testing for a BACKTICK reported
+    # "28 gates declared with commands" while four of those commands named
+    # scripts that were never written — a gate verifying other gates, passing
+    # on formatting.
+    script_ref = re.compile(r"scripts/[A-Za-z0-9_./-]+\.(?:py|sh)")
     for row in rows:
         gate_id = row.split("|")[1].strip()
         if "`" not in row:
             fail("C4", f"gate {gate_id} has no command — it cannot fail a build")
-    ok("C4", f"{len(rows)} gates declared with commands")
+            continue
+        if "PENDING" in row:
+            # Declared but not yet runnable, and it says so in the table. The
+            # finding is a command that does not exist while PRESENTING itself
+            # as enforced.
+            continue
+        for referenced in script_ref.findall(row):
+            if not (REPO_ROOT / referenced).is_file():
+                fail("C4", f"gate {gate_id} runs {referenced}, which does not exist")
+    ok("C4", f"{len(rows)} gates declared with commands that resolve")
 
 
 def check_agentic_surface() -> None:
@@ -192,23 +208,97 @@ def check_agentic_surface() -> None:
             fail("C5", f"skill {skill_dir.name} has no SKILL.md")
 
 
+DENYLIST = REPO_ROOT / "docs" / "governance" / "private-names.sha256"
+_TOKEN = re.compile(r"[a-z][a-z0-9]*(?:[-_][a-z0-9]+)+|[a-z][a-z0-9]{5,}")
+
+
+def _forbidden_hashes() -> set[str]:
+    """Hashes of names that must never appear in a committed file.
+
+    Stored as SHA-256 rather than plaintext for the obvious reason: the whole
+    point is that the name is not in this repository. A hash commits to it
+    without disclosing it, so the check needs no secret, no environment
+    variable, and no local file that a fresh clone would be missing.
+    """
+    if not DENYLIST.is_file():
+        return set()
+    return {
+        line.strip().lower()
+        for line in DENYLIST.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.startswith("#")
+    }
+
+
+def _check_forbidden_names() -> None:
+    """Scan EVERY committed file for a denylisted name, not only markdown.
+
+    The previous C6 matched `github.com/owner/repo` in `*.md`, excluding
+    `projects/` — 105 of 331 committed markdown files, and no other file type.
+    An independent audit showed that a bare name in prose, a URL in a `.py`,
+    and a URL under `projects/` all passed. The bare name in prose is the most
+    likely way the constraint actually gets broken, since it is the only form
+    that fits inside a sentence.
+    """
+    forbidden = _forbidden_hashes()
+    if not forbidden:
+        return
+
+    tracked = subprocess.run(["git", "-C", str(REPO_ROOT), "ls-files"], capture_output=True, text=True)
+    for rel in tracked.stdout.splitlines():
+        path = REPO_ROOT / rel
+        if not path.is_file() or rel == DENYLIST.relative_to(REPO_ROOT).as_posix():
+            continue
+        try:
+            content = path.read_text(encoding="utf-8", errors="ignore").lower()
+        except OSError:
+            continue
+        for token in set(_TOKEN.findall(content)):
+            if hashlib.sha256(token.encode()).hexdigest() in forbidden:
+                # The name itself is never printed — doing so would commit it
+                # to the CI log, which is public on a public repository.
+                fail("C6", f"{rel} contains a denylisted private name (hash match). Remove it.")
+
+
 def check_language_and_privacy() -> None:
     """C6 — the repository is public: English documentation, no private references.
 
-    Scans committed markdown for markers of non-English prose and for links to
-    repositories that are not part of the public lineage. Project content that
-    legitimately serves a non-English audience lives under projects/ and is
-    excluded.
+    Scans for links to repositories outside the public lineage, and — via
+    :func:`_check_forbidden_names` — for denylisted private names anywhere in
+    the tracked tree.
+
+    It does NOT detect non-English prose, though an earlier version of this
+    docstring said it did. The English-only rule (AGENTS.md, template D-37) is
+    real and currently unenforced; claiming otherwise here was worse than
+    silence, because a reader would stop looking.
     """
     public_repos = {"ml-platform", "ml-service-template", "ML-MLOps-Portfolio", "agent-local", "DuqueOM"}
     repo_link = re.compile(r"github\.com/([A-Za-z0-9_-]+)/([A-Za-z0-9_.-]+)")
     scanned = 0
 
+    _check_forbidden_names()
+
     for path in sorted(REPO_ROOT.rglob("*.md")):
         if not _is_scannable(path, exclude={"projects"}):
             continue
         scanned += 1
-        placeholders = {"OWNER", "REPO", "ORG", "USER", "your-org", "your-repo", "<owner>", "<repo>"}
+        # `{owner}/{repo}` are literal placeholders the gh CLI substitutes itself;
+        # they appear verbatim in documented commands.
+        placeholders = {
+            "OWNER",
+            "REPO",
+            "ORG",
+            "USER",
+            "your-org",
+            "your-repo",
+            "<owner>",
+            "<repo>",
+            "{owner}",
+            "{repo}",
+            # Generic stand-ins used when documenting this very check, and by
+            # the gh CLI, which substitutes {owner}/{repo} itself.
+            "owner",
+            "repo",
+        }
         # github.com/<reserved>/... are product URLs, not repository links.
         reserved = {
             "settings",

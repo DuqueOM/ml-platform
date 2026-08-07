@@ -96,10 +96,32 @@ def _content_matches(pattern: str, scope: str) -> bool:
     return False
 
 
+def _is_stub(path: Path) -> bool:
+    """True when a file exists but still carries unfilled placeholders.
+
+    A document whose sections say TODO documents nothing, and counting it as an
+    implementation is the exact failure this script exists to prevent — stated
+    in its own docstring, and then not enforced for detectors that point
+    straight at a file.
+    """
+    if not path.is_file():
+        return True
+    return "TODO" in path.read_text(encoding="utf-8", errors="ignore")
+
+
 def implemented(item: dict[str, Any]) -> bool:
     """True when at least one detector matches a real artifact."""
     for spec in item.get("detect") or []:
-        if spec.startswith("pattern:"):
+        if spec.startswith("filled:"):
+            # `filled:<glob>` — the artifact exists AND is not a stub. For
+            # documents that ARE the deliverable (model cards, ADRs), presence
+            # alone is not evidence; a template with the placeholders still in
+            # it is a promise, not a delivery.
+            pattern = spec.split(":", 1)[1]
+            matches = list(REPO_ROOT.glob(pattern))
+            if matches and not all(_is_stub(match) for match in matches):
+                return True
+        elif spec.startswith("pattern:"):
             _, pattern, scope = spec.split("|")[0], spec.split(":", 1)[1].split("|")[0], spec.split("|")[1]
             if _content_matches(pattern, scope):
                 return True
