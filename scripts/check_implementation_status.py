@@ -18,6 +18,7 @@ coherence filter examining zero files both existed, and both were green.
 from __future__ import annotations
 
 import argparse
+import difflib
 import re
 import subprocess
 import sys
@@ -228,6 +229,20 @@ def main() -> int:
     if args.check:
         if updated != current:
             print("[status] implementation-status.md is STALE")
+            # The diff, not just the verdict. "STALE" alone tells a CI reader
+            # that something differs and nothing about what, which turns a
+            # failure that reproduces only in CI into guesswork — and this
+            # check failed in CI while passing on a clean local checkout.
+            difference = difflib.unified_diff(
+                current.splitlines(),
+                updated.splitlines(),
+                fromfile="committed",
+                tofile="derived from this filesystem",
+                lineterm="",
+                n=1,
+            )
+            for line in difference:
+                print(f"  {line}")
             print("Run: python scripts/check_implementation_status.py --write")
             return 1
         print("[status] OK — implementation status matches the filesystem")
