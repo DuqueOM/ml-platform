@@ -1,0 +1,47 @@
+# One ApplicationSet covering the environment × cloud matrix.
+#
+# A generator, not six Application manifests. Six hand-written ones drift the
+# moment someone edits five of them, and the sixth is discovered in whichever
+# environment nobody looks at — which is production, eventually.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: demand-forecast
+  namespace: argocd
+spec:
+  generators:
+    - matrix:
+        generators:
+          - list:
+              elements:
+                - cloud: gcp
+                - cloud: aws
+          - list:
+              elements:
+                - env: dev
+                  autosync: "true"
+                - env: staging
+                  autosync: "true"
+                # prod does NOT auto-sync. Reconciliation is pull-based, so an
+                # auto-syncing prod applies whatever reaches main, and the
+                # promotion gate stops being a gate.
+                - env: prod
+                  autosync: "false"
+  template:
+    metadata:
+      name: 'demand-forecast-{{.env}}-{{.cloud}}'
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/DuqueOM/ml-platform
+        targetRevision: HEAD
+        path: 'platform/kubernetes/overlays/{{.cloud}}-{{.env}}'
+      destination:
+        name: '{{.cloud}}-{{.env}}'
+        namespace: 'demand-forecast-{{.env}}'
+      syncPolicy:
+        automated:
+          prune: false
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true

@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: demand-forecast
+spec:
+  # minAvailable 1, not maxUnavailable 0: the latter makes a drain block
+  # forever, so a node upgrade hangs instead of failing visibly.
+  minAvailable: 1
+  selector:
+    matchLabels: { app: demand-forecast }

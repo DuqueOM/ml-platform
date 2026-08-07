@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: demand-forecast-staging
+
+resources:
+  - ../../base
+  - ../../../policies
+
+patches:
+  - path: replicas.yaml
+    target: { kind: Deployment, name: demand-forecast }
+
+commonLabels:
+  environment: staging
+  cloud: aws

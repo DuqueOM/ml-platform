@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demand-forecast
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: demand-forecast }
+  template:
+    metadata:
+      labels: { app: demand-forecast }
+    spec:
+      # Pod Security "restricted" is the namespace default, so every field it
+      # requires is set here rather than left to be discovered at admission —
+      # a rejected pod at deploy time reads as an outage, not as a policy.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: serving
+          image: ghcr.io/duqueom/ml-platform/demand-forecast:latest
+          ports:
+            - containerPort: 8000
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { cpu: "1", memory: 1Gi }
+          readinessProbe:
+            httpGet: { path: /health/ready, port: 8000 }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            # Deliberately later and slower than readiness: a liveness probe
+            # that fires during a slow model load restarts the pod forever,
+            # and the symptom looks like a crash loop rather than a timeout.
+            httpGet: { path: /health/live, port: 8000 }
+            initialDelaySeconds: 30
+            periodSeconds: 20

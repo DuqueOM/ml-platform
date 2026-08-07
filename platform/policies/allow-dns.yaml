@@ -1,0 +1,20 @@
+# Without this, every pod in the namespace fails to resolve anything and the
+# symptom is a connection timeout to a name, which reads as the dependency
+# being down rather than as DNS being blocked. It is the first thing a
+# default-deny namespace breaks and the last thing anyone suspects.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }

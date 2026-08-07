@@ -1,0 +1,6 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demand-forecast
+spec:
+  replicas: 2

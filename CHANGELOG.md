@@ -81,6 +81,20 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   the check is a CI gate. The number is uncomfortable and that is its value: at
   this scale "one definition, two clouds" means two adapters agreeing on an
   interface, not a large shared body.
+- **GitOps matrix**: a base plus six overlays (2 clouds x 3 environments),
+  each building to Deployment, Service, PodDisruptionBudget and three
+  NetworkPolicies, driven by ONE ArgoCD ApplicationSet generator rather than
+  six hand-written Applications — six drift the moment someone edits five.
+  Production does not auto-sync and nothing prunes: with prod auto-syncing the
+  promotion gate stops being a gate, and prune deletes what a human added
+  during an incident at the moment it is load-bearing.
+- **Default-deny NetworkPolicies**, with the DNS egress that a default-deny
+  namespace breaks first and that is suspected last.
+- **What local validation cannot prove, tested as such**: kind runs kindnet,
+  which accepts a NetworkPolicy and enforces nothing. Applying one here and
+  watching it succeed is the most convincing false evidence available, because
+  every command reports success — so a test asserts the CNI is still kindnet
+  and will fail when that stops being true.
 - **A density check** — distinct hours against the hours the span implies —
   kept outside the suite because an expectation suite has no vocabulary for a
   shape the rows collectively have.

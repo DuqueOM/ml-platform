@@ -1,0 +1,10 @@
+# Deny everything, then allow what is needed. The order matters: an
+# allow-list added to a permissive namespace changes nothing, because the
+# traffic it "permits" was already flowing.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
