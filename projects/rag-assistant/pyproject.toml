@@ -1,0 +1,15 @@
+[project]
+name = "rag-assistant"
+version = "0.1.0"
+description = "Retrieval-augmented assistant over SEC EDGAR filings, with retrieval gated on beating a lexical baseline."
+requires-python = ">=3.11"
+dependencies = [
+    "llm-core",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rag_assistant"]

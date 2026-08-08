@@ -236,29 +236,21 @@ def test_gate_fails_when_a_lib_imports_a_project(lib_packages: set[str], project
         test_libs_never_import_projects(lib_packages, project_packages)
 
 
-def test_project_to_project_detection_works_on_a_synthetic_pair() -> None:
-    """The rule is currently VACUOUS: only one project exists.
+def test_gate_fails_when_a_project_imports_another_project(project_packages: set[str]) -> None:
+    """Two projects coupled through code rather than through a library.
 
-    A single project cannot import another, so
-    `test_projects_never_import_each_other` passes no matter what the detector
-    does — it is a test that will start meaning something when the second
-    project lands, and means nothing today. Saying so is the point of this
-    test; a rule that cannot be violated yet must not be counted as enforced.
+    This replaces a placeholder that asserted the rule was VACUOUS while only
+    one project existed, and said so in its own failure message. Adding
+    `rag-assistant` made it fire — a test that announced its own expiry date
+    and then honoured it, rather than sitting green and meaning nothing.
 
-    So the DETECTOR is exercised directly against a synthetic package set,
-    which is the part that has to be correct before the second project arrives.
+    Sharing belongs in `libs/`. Two projects importing each other cannot be
+    deployed, versioned or reasoned about separately, and the coupling is
+    invisible in any diff that touches only one of them.
     """
-    # Counted as DIRECTORIES: the project_packages fixture holds name variants
-    # (`demand-forecast` and `demand_forecast`), so its length is not a project
-    # count and asserting on it measures the wrong thing.
-    projects = [path for path in (REPO_ROOT / "projects").iterdir() if (path / "src").is_dir()]
-    assert len(projects) == 1, (
-        f"{len(projects)} projects exist — replace this with a real cross-project injection "
-        "in test_projects_never_import_each_other"
-    )
-
     probe = REPO_ROOT / "projects" / "demand-forecast" / "src" / "demand_forecast" / "_probe.py"
-    with _with_file(probe, "from rag_assistant import retrieval  # noqa: F401\n"):
-        detected = _imported_roots(probe) & {"rag_assistant"}
-
-    assert detected == {"rag_assistant"}, "the import detector missed a cross-project import"
+    with (
+        _with_file(probe, "from rag_assistant import chunking  # noqa: F401\n"),
+        pytest.raises(AssertionError, match="must not import"),
+    ):
+        test_projects_never_import_each_other(project_packages)

@@ -240,7 +240,12 @@ COMPONENTS: list[Component] = [
     # --- Phase 3+: remaining projects ---------------------------------------
     Component("3", "libs/llm-core implementation", ["libs/llm-core/src"]),
     Component("3", "projects/store-assistant", ["projects/store-assistant"]),
-    Component("3", "projects/rag-assistant", ["projects/rag-assistant"]),
+    Component(
+        "3",
+        "projects/rag-assistant",
+        ["projects/rag-assistant"],
+        "uv run pytest projects/rag-assistant -q",
+    ),
     Component("4", "projects/credit-risk", ["projects/credit-risk"]),
     Component("5", "projects/doc-intelligence", ["projects/doc-intelligence"]),
     Component("6", "projects/agent-ops", ["projects/agent-ops"]),

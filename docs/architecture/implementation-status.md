@@ -33,7 +33,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**25 done · 6 partial · 9 absent** — of 40 tracked components.
+**26 done · 6 partial · 8 absent** — of 40 tracked components.
 
 ### Phase 0
 
@@ -89,7 +89,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 | :-: | --- | --- |
 | 🟡 | libs/llm-core implementation | 2 file(s), no verification command |
 | ⬜ | projects/store-assistant | absent |
-| ⬜ | projects/rag-assistant | absent |
+| ✅ | projects/rag-assistant | `uv run pytest projects/rag-assistant -q` passes |
 
 ### Phase 4
 
