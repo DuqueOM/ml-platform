@@ -119,6 +119,16 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   agree — 627 files, `_commit: v0.26.0` either way. Both upstream defects this
   repository reported are fixed there: the `scaffold-update` WORKFLOW is pinned
   and the pre-rename repository name is gone from every generated file.
+- **`libs/llm-core`: retrieval evaluation with a baseline that has to be
+  beaten.** A RAG system is usually judged by reading a few answers and finding
+  them plausible, which measures the reader rather than the retriever — an
+  answer built from documents that lack the fact reads exactly like one built
+  from documents that have it. Recall@k gates and MRR informs, because a
+  retriever that ranks the answer third still answers and one that misses it
+  cannot. `lexical_overlap_baseline` is the seasonal-naive of retrieval: word
+  counting, deterministic, and genuinely hard to beat on short factual text. A
+  vector store that does not clear it by a margin is an index, a latency and a
+  bill bought for a difference inside the noise.
 - **A density check** — distinct hours against the hours the span implies —
   kept outside the suite because an expectation suite has no vocabulary for a
   shape the rows collectively have.

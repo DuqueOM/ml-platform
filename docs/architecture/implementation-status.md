@@ -87,7 +87,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 
 | | Component | Evidence |
 | :-: | --- | --- |
-| 🟡 | libs/llm-core implementation | 1 file(s), no verification command |
+| 🟡 | libs/llm-core implementation | 2 file(s), no verification command |
 | ⬜ | projects/store-assistant | absent |
 | ⬜ | projects/rag-assistant | absent |
 
