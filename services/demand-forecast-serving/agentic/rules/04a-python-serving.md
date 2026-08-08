@@ -36,8 +36,10 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 import asyncio
 
-_inference_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="ml-infer")
-
+_inference_executor = ThreadPoolExecutor(
+    max_workers=4,
+    thread_name_prefix="ml-infer"
+)
 
 def _sync_predict(input_dict: dict, explain: bool) -> dict:
     """CPU-bound — runs in thread pool, does not block event loop."""
@@ -46,11 +48,13 @@ def _sync_predict(input_dict: dict, explain: bool) -> dict:
     # ... build response
     return response
 
-
 @app.post("/predict")
 async def predict(input_data: InputSchema, explain: bool = False):
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(_inference_executor, partial(_sync_predict, input_data.model_dump(), explain))
+    return await loop.run_in_executor(
+        _inference_executor,
+        partial(_sync_predict, input_data.model_dump(), explain)
+    )
 ```
 
 Why this works: sklearn, XGBoost, LightGBM release the GIL during C extensions → real parallelism with threads.
@@ -65,7 +69,6 @@ def predict_proba_wrapper(X_array: np.ndarray) -> np.ndarray:
     """SHAP in ORIGINAL feature space, not transformed space."""
     X_df = pd.DataFrame(X_array, columns=original_feature_names)
     return pipeline.predict_proba(X_df)[:, 1]
-
 
 explainer = shap.KernelExplainer(
     model=predict_proba_wrapper,
@@ -89,10 +92,10 @@ after loading artifacts:
 @asynccontextmanager
 async def lifespan(app):
     load_model_artifacts()
-    warm_up_model()  # dummy predict + dummy SHAP
-    _warmed_up = True  # gate /ready on this flag
+    warm_up_model()      # dummy predict + dummy SHAP
+    _warmed_up = True    # gate /ready on this flag
     yield
-    _warmed_up = False  # drain traffic during shutdown
+    _warmed_up = False   # drain traffic during shutdown
 ```
 
 The warm-up MUST be best-effort — it catches exceptions and reports them
@@ -121,7 +124,6 @@ Size the inference executor to match K8s CPU limits:
 
 ```python
 import os
-
 _CPU_LIMIT = int(os.getenv("INFERENCE_CPU_LIMIT", str(os.cpu_count() or 1)))
 _inference_executor = ThreadPoolExecutor(
     max_workers=min(_CPU_LIMIT, os.cpu_count() or 1),
@@ -165,9 +167,9 @@ uvicorn's timeout to leave SIGKILL headroom).
 ```python
 from prometheus_client import Counter, Histogram, Gauge
 
-predictions_total = Counter("{service}_predictions_total", "...", ["risk_level", "model_version"])
-prediction_latency = Histogram("{service}_request_duration_seconds", "...", ["endpoint"])
-prediction_score_distribution = Histogram("{service}_prediction_score", "...")
+predictions_total = Counter('{service}_predictions_total', '...', ['risk_level', 'model_version'])
+prediction_latency = Histogram('{service}_request_duration_seconds', '...', ['endpoint'])
+prediction_score_distribution = Histogram('{service}_prediction_score', '...')
 ```
 
 ## Type Hints
@@ -175,7 +177,6 @@ prediction_score_distribution = Histogram("{service}_prediction_score", "...")
 Required on all public functions. Use Pydantic for config and API schemas:
 ```python
 from pydantic import BaseModel, Field
-
 
 class PredictionRequest(BaseModel):
     feature_a: float = Field(..., ge=0, le=100, description="Feature A value")

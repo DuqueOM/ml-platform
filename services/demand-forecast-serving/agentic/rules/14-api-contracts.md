@@ -87,7 +87,6 @@ def test_openapi_snapshot_unchanged():
 Run after any intentional schema change. CI refuses the PR unless
 app.version was also bumped (see .github/workflows/ci.yml).
 """
-
 import json
 import pathlib
 

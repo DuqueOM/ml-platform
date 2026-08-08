@@ -421,7 +421,16 @@ def _runnable_copier_commands(text: str) -> list[str]:
     commands = []
     for block in _FENCE.findall(text):
         joined = re.sub(r"\\\n\s*", " ", block)
-        commands += [f"copier {line.split('copier ', 1)[1]}" for line in joined.splitlines() if "copier " in line]
+        commands += [
+            f"copier {line.split('copier ', 1)[1]}"
+            for line in joined.splitlines()
+            # A shell COMMENT inside a fenced block is not a command. The
+            # template's own comment explaining why the pin is needed —
+            # "# --vcs-ref is REQUIRED: a bare `copier update` resolves to..." —
+            # was reported as an unpinned command, which is this check flagging
+            # the documentation that exists because of it.
+            if "copier " in line and not line.lstrip().startswith("#")
+        ]
     return commands
 
 

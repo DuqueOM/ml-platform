@@ -12,7 +12,7 @@
 #
 # Keep it committed. Deleting it strands the service on the template revision
 # it was born from.
-_commit: v0.24.0
+_commit: v0.26.0
 _src_path: /home/duqueom/projects/main_projects/template_MLOps
 gh_org: DuqueOM
 gh_repo: ml-platform

@@ -10,26 +10,35 @@ description: Observability patterns — Prometheus metrics, Grafana dashboards, 
 
 ```python
 # Business metrics (not just infrastructure)
-predictions_total = Counter("{service}_predictions_total", "Total predictions", ["risk_level", "model_version"])
+predictions_total = Counter(
+    '{service}_predictions_total',
+    'Total predictions',
+    ['risk_level', 'model_version']
+)
 
 prediction_latency = Histogram(
-    "{service}_prediction_latency_seconds",
-    "Prediction latency",
-    ["endpoint"],
-    buckets=[0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0],
+    '{service}_prediction_latency_seconds',
+    'Prediction latency',
+    ['endpoint'],
+    buckets=[0.05, 0.1, 0.2, 0.5, 1.0, 2.0, 5.0]
 )
 
 prediction_score_distribution = Histogram(
-    "{service}_prediction_score",
-    "Model output score distribution",
-    buckets=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+    '{service}_prediction_score',
+    'Model output score distribution',
+    buckets=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 )
 
 # Drift metrics (pushed via Pushgateway from CronJob)
-psi_score_per_feature = Gauge("{service}_psi_score", "PSI drift score per feature", ["feature"])
+psi_score_per_feature = Gauge(
+    '{service}_psi_score',
+    'PSI drift score per feature',
+    ['feature']
+)
 
 drift_detection_last_run_timestamp = Gauge(
-    "drift_detection_last_run_timestamp", "Unix timestamp of last successful drift detection run"
+    'drift_detection_last_run_timestamp',
+    'Unix timestamp of last successful drift detection run'
 )
 ```
 

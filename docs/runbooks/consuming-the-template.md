@@ -6,34 +6,42 @@ why every command here carries a version.
 
 ## The rule: `--vcs-ref` is not optional
 
-Copier resolves an unpinned git source to the **highest-sorting tag**. The
-template carries frozen `v1.0.0`–`v1.12.0` audit snapshots alongside its active
-`v0.x` line, so `v1.12.0` sorts above every current release and an unpinned
-command serves a snapshot from April 2026.
+**The trap that made this urgent is closed upstream, and the rule still
+stands.** Both facts belong here, because a rule whose original reason has
+evaporated gets dropped by the next person who reads only the reason.
 
-Nothing errors. The scaffold is complete and plausible — just months stale.
-That is what makes it dangerous, and it is measured, not theorised:
+Until `v0.26.0` the template used git tags for two incompatible purposes:
+release markers (`v0.x`) and frozen audit snapshots (`v1.0.0`–`v1.12.0`).
+Version-resolving tooling takes the highest-sorting tag, so `v1.12.0` won every
+unpinned resolution and served a scaffold from April 2026 — complete,
+plausible, months stale, and erroring nowhere. I hit it, concluded the template
+was broken, and reported a defect that did not exist.
 
-| Command | Files | `.copier-answers.yml` |
+`v0.26.0` renamed the snapshots to `archive/v1.x`. Copier filters tags through
+a PEP 440 check *before* sorting, so a non-version tag is now invisible to
+resolution. Measured against the current template:
+
+| Command | Files | `_commit` recorded |
 | --- | --: | --- |
-| `copier copy <src> Svc` | 435 | **absent** |
-| `copier copy --vcs-ref=v0.24.0 <src> Svc` | 627 | present |
+| `copier copy <src> Svc` | 627 | `v0.26.0` |
+| `copier copy --vcs-ref=v0.26.0 <src> Svc` | 627 | `v0.26.0` |
 
-I hit this myself and concluded the template was broken. It was not; the
-invocation was. The check below exists so the next person does not spend that
-afternoon.
+They agree now. Pin anyway, for the reason that outlives the trap: an unpinned
+command means the scaffold you get depends on **when** you ran it, so two
+services generated a week apart differ with nothing recording why. The pin is
+what makes generation reproducible; closing the namespace collision only
+removed the case where it was also catastrophic.
 
-`copier update` unpinned is worse than `copy` unpinned. `copy` hands you a
-stale scaffold; **update rewrites a service you already have, backwards.** The
-template measured 582 files deleted on a real service, including the answers
-file — the record `update` reads, so once it is gone the service cannot
-recover on its own.
+`copier update` unpinned remains the sharper edge. `copy` hands you a scaffold;
+**update rewrites a service you already have.** Upstream measured 582 files
+deleted on a real service, including the answers file — the record `update`
+reads, so once it is gone the service cannot recover on its own.
 
 ## Generate a service
 
 ```bash
 copier copy --trust \
-  --vcs-ref=v0.24.0 \
+  --vcs-ref=v0.26.0 \
   --data service_slug=demand_forecast_serving \
   --data service_name="Demand Forecast Serving" \
   --data gh_org=DuqueOM --data gh_repo=ml-platform \
@@ -47,7 +55,7 @@ without `.copier-answers.yml` has no upgrade route and is, in ADR-003's words,
 a fork with extra steps:
 
 ```bash
-test -f services/demand-forecast-serving/.copier-answers.yml && grep _commit "$_"
+grep _commit services/demand-forecast-serving/.copier-answers.yml
 ```
 
 ## Update a service
@@ -56,8 +64,8 @@ Never bare. Always to a named release, from inside the service directory:
 
 ```bash
 cd services/demand-forecast-serving
-copier update --trust --vcs-ref=v0.25.0 --pretend   # read the diff first
-copier update --trust --vcs-ref=v0.25.0
+copier update --trust --vcs-ref=v0.27.0 --pretend   # read the diff first
+copier update --trust --vcs-ref=v0.27.0
 ```
 
 `--pretend` is not politeness. `update` performs a three-way merge into your
@@ -89,7 +97,7 @@ switched off for elsewhere in this repository.
 ## Foreign ADR references
 
 A generated service cites the TEMPLATE's ADRs (`template-ADR-027`, and so on). Those
-numbers mean nothing in this repository's index, and check C2 reports 121 of
+numbers mean nothing in this repository's index, and check C2 reports 150 of
 them as dangling. They are not dangling — they are foreign, and ADR-002 already
 defines the `template-ADR-NNN` form for exactly this.
 

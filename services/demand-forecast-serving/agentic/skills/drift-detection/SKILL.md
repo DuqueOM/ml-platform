@@ -122,12 +122,12 @@ For temporal data (e.g., time series, seasonal patterns):
 from prometheus_client import CollectorRegistry, Gauge, push_to_gateway
 
 registry = CollectorRegistry()
-psi_gauge = Gauge("service_psi_score", "PSI per feature", ["feature"], registry=registry)
+psi_gauge = Gauge('service_psi_score', 'PSI per feature', ['feature'], registry=registry)
 
 for feature, psi in results.items():
     psi_gauge.labels(feature=feature).set(psi)
 
-push_to_gateway("pushgateway:9091", job="drift-detection", registry=registry)
+push_to_gateway('pushgateway:9091', job='drift-detection', registry=registry)
 ```
 
 ## Step 6: Verify CronJob Health
