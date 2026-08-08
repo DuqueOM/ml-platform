@@ -128,7 +128,12 @@ COMPONENTS: list[Component] = [
     Component("1", "libs/ml-core implementation", ["libs/ml-core/src"]),
     Component("1", "libs/data-contracts implementation", ["libs/data-contracts/src"]),
     Component("1", "libs/serving-core implementation", ["libs/serving-core/src"]),
-    Component("1", "projects/demand-forecast", ["projects/demand-forecast"]),
+    Component(
+        "1",
+        "projects/demand-forecast",
+        ["projects/demand-forecast"],
+        "uv run pytest projects/demand-forecast -q",
+    ),
     # Two rows, because one row conflated two different things and read as
     # "nothing ingests to Iceberg", which is false. The project DOES; a shared
     # platform module does not, and deliberately: extracting one before a
@@ -193,11 +198,45 @@ COMPONENTS: list[Component] = [
     ),
     Component("1", "Grafana LGTM dashboards", ["platform/observability"]),
     # --- Phase 2: multi-cloud + GitOps --------------------------------------
-    Component("2", "Terraform (GCP)", ["platform/terraform/gcp"]),
-    Component("2", "Terraform (AWS)", ["platform/terraform/aws"]),
-    Component("2", "Kubernetes manifests", ["platform/kubernetes"]),
-    Component("2", "GitOps (ArgoCD)", ["platform/gitops"]),
-    Component("2", "Admission policies", ["platform/policies"]),
+    # These carried "no verification command" while their tests were already
+    # green — the derived document under-reporting what is actually proven,
+    # which is the same dishonesty as over-reporting and easier to miss because
+    # it errs modestly.
+    #
+    # Every command below runs WITHOUT cloud credentials and provisions
+    # nothing: `terraform validate` and `kubectl kustomize` render offline. A
+    # component whose only proof needed an account would stay 🟡, correctly,
+    # until Phase 2 actually starts.
+    Component(
+        "2",
+        "Terraform (GCP)",
+        ["platform/terraform/gcp"],
+        "uv run pytest tests/test_cloud_surface.py -q -k gcp",
+    ),
+    Component(
+        "2",
+        "Terraform (AWS)",
+        ["platform/terraform/aws"],
+        "uv run pytest tests/test_cloud_surface.py -q -k aws",
+    ),
+    Component(
+        "2",
+        "Kubernetes manifests",
+        ["platform/kubernetes"],
+        "uv run pytest tests/test_gitops_manifests.py -q -k overlay",
+    ),
+    Component(
+        "2",
+        "GitOps (ArgoCD)",
+        ["platform/gitops"],
+        "uv run pytest tests/test_gitops_manifests.py -q -k applicationset",
+    ),
+    Component(
+        "2",
+        "Admission policies",
+        ["platform/policies"],
+        "uv run pytest tests/test_gitops_manifests.py -q -k default_deny",
+    ),
     # --- Phase 3+: remaining projects ---------------------------------------
     Component("3", "libs/llm-core implementation", ["libs/llm-core/src"]),
     Component("3", "projects/store-assistant", ["projects/store-assistant"]),

@@ -33,7 +33,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**19 done · 12 partial · 9 absent** — of 40 tracked components.
+**25 done · 6 partial · 9 absent** — of 40 tracked components.
 
 ### Phase 0
 
@@ -59,7 +59,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 | 🟡 | libs/ml-core implementation | 4 file(s), no verification command |
 | 🟡 | libs/data-contracts implementation | 2 file(s), no verification command |
 | 🟡 | libs/serving-core implementation | 1 file(s), no verification command |
-| 🟡 | projects/demand-forecast | 21 file(s), no verification command |
+| ✅ | projects/demand-forecast | `uv run pytest projects/demand-forecast -q` passes |
 | ✅ | Iceberg ingestion (demand-forecast) | `uv run pytest projects/demand-forecast/tests/test_overwrite_scope.py -q` passes |
 | ✅ | Panel-aware temporal splitting | `uv run pytest projects/demand-forecast/tests/test_backtest.py -q` passes |
 | ⬜ | Lakehouse module shared across projects | absent |
@@ -77,11 +77,11 @@ modules, and a coherence filter examining zero files, both stayed green.
 
 | | Component | Evidence |
 | :-: | --- | --- |
-| 🟡 | Terraform (GCP) | 6 file(s), no verification command |
-| 🟡 | Terraform (AWS) | 6 file(s), no verification command |
-| 🟡 | Kubernetes manifests | 24 file(s), no verification command |
-| 🟡 | GitOps (ArgoCD) | 1 file(s), no verification command |
-| 🟡 | Admission policies | 4 file(s), no verification command |
+| ✅ | Terraform (GCP) | `uv run pytest tests/test_cloud_surface.py -q -k gcp` passes |
+| ✅ | Terraform (AWS) | `uv run pytest tests/test_cloud_surface.py -q -k aws` passes |
+| ✅ | Kubernetes manifests | `uv run pytest tests/test_gitops_manifests.py -q -k overlay` passes |
+| ✅ | GitOps (ArgoCD) | `uv run pytest tests/test_gitops_manifests.py -q -k applicationset` passes |
+| ✅ | Admission policies | `uv run pytest tests/test_gitops_manifests.py -q -k default_deny` passes |
 
 ### Phase 3
 
