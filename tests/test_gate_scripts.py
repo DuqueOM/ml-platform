@@ -338,7 +338,12 @@ def test_a_new_unignored_file_is_visible_to_the_status_generator() -> None:
     ✅ that is already ✅ — so the inventory cannot express this property, and
     asserting it there would be a test passing for the wrong reason.
     """
-    newcomer = REPO_ROOT / "platform" / "kubernetes" / "_probe_new" / "extra.yaml"
+    # Aimed at a component that still reports a FILE COUNT. Giving
+    # `platform/kubernetes` a verification command replaced its count with the
+    # command's verdict, so dropping a file there stopped changing the document
+    # and this test began passing vacuously — caught the same afternoon, by the
+    # suite, one commit after the change that caused it.
+    newcomer = REPO_ROOT / "platform" / "local" / "_probe_new" / "extra.yaml"
     newcomer.parent.mkdir(parents=True, exist_ok=True)
     newcomer.write_text("kind: ConfigMap\n", encoding="utf-8")
     try:
