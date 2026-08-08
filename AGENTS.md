@@ -9,11 +9,12 @@ Read this fully before writing code.
 ## Independent audit
 
 ```text
-Last independent audit: 2026-08-06
+Last independent audit: 2026-08-08
 ```
 
-QA-4 ran in a separate session against `f580c4f`, per ADR-005 rule B, and a
-cloud multi-agent review ran against `859f5d7`. Findings and evidence:
+A second QA-4 ran on 2026-08-08 against `943c36a`, in a separate session, and
+a second cloud review ran alongside it. The first pair ran on 2026-08-06
+against `f580c4f`, with a cloud review against `859f5d7`. Findings and evidence:
 `docs/governance/QA-4-independent-audit.md`.
 
 It found 4 P0, 2 P1, 8 P2 and 6 P3, plus a data-loss defect the cloud review
