@@ -60,7 +60,7 @@ states intent and nothing was checking intent against reality.
 
 ---
 
-## Phase 0 — Foundation 🟡
+## Phase 0 — Foundation
 
 Make the monorepo claim enforceable before there is anything to enforce it on.
 This phase produces no ML capability and is the shortest path to preventing the
@@ -94,7 +94,7 @@ knows works.
 
 ---
 
-## Phase 1 — First vertical slice ⬜
+## Phase 1 — First vertical slice
 
 One project, end to end, on **one** cloud. The purpose is to force every
 platform layer into existence against a real workload rather than designing them
@@ -146,7 +146,7 @@ One trace screenshot showing the full span chain, captured as evidence.
 
 ---
 
-## Phase 1b — Local validation ⬜
+## Phase 1b — Local validation
 
 **Constraint S4.** The whole system runs on a local cluster before any cloud
 resource exists. This phase is not a rehearsal for Phase 2; it is where
@@ -192,7 +192,50 @@ has not been validated; it has been remembered.
 
 ---
 
-## Phase 2 — Multi-cloud parity and GitOps ⬜
+## Phase 1c — It actually starts
+
+The phase that was missing, and whose absence let six Kubernetes overlays be
+called done while pointing at an image that does not exist. `Dockerfile` and
+`Airflow` appeared **nowhere** in this plan until now, though the inventory
+declares the latter core.
+
+Rendering a manifest is not running a service. `kubectl kustomize` succeeding
+proves the YAML is well-formed; nothing until this phase proves anything
+starts.
+
+### Deliverables
+
+- A `Dockerfile` per deployable project, building an image that runs the
+  service with no network access at start-up.
+- The image loaded into the local kind cluster with `kind load`, and the
+  overlay applied. A pod reaching Ready is the acceptance, not a green
+  `kustomize build`.
+- The endpoint called from outside the cluster and answering — the first
+  moment anything in this repository serves a prediction.
+- Airflow for business orchestration, which ADR-004 admits as the layer above
+  KFP: ingest → transform → train → validate → promote. KFP authors an ML
+  pipeline; Airflow coordinates the ones that must happen in an order.
+
+### Acceptance
+
+```bash
+docker build -t ml-platform/demand-forecast:local projects/demand-forecast
+kind load docker-image ml-platform/demand-forecast:local --name ml-platform
+kubectl apply -k platform/kubernetes/overlays/gcp-dev
+kubectl wait --for=condition=ready pod -l app=demand-forecast --timeout=120s
+curl -fsS localhost:18080/health/ready
+```
+
+**Preconditions**: Phase 1 and 1b complete, per the derived status document
+rather than per anyone's impression.
+
+**Why before Phase 2**: a service that has never started locally cannot be
+diagnosed when it fails to start in a cloud, and the cloud bill runs while
+you find out.
+
+---
+
+## Phase 2 — Multi-cloud parity and GitOps
 
 ### Deliverables
 
@@ -242,7 +285,7 @@ teardown is proof, and a shared project can never produce that proof.
 
 ---
 
-## Phase 3 — LLM and agent track ⬜
+## Phase 3 — LLM and agent track
 
 ### Deliverables
 
@@ -268,7 +311,7 @@ Phase 4 does not start until they are re-derived.
 
 ---
 
-## Phase 4 — ML depth ⬜
+## Phase 4 — ML depth
 
 The phase that answers "does this person model, or only deploy?"
 
@@ -297,7 +340,7 @@ uv run python -m credit_risk.gates --check          # promotion gates
 
 ---
 
-## Phase 5 — Deep learning and inference optimisation ⬜
+## Phase 5 — Deep learning and inference optimisation
 
 **Project**: `doc-intelligence` — document understanding on public corpora
 (FUNSD / CORD / DocVQA).
@@ -326,7 +369,7 @@ this class of error.
 
 ---
 
-## Phase 6 — Governance, compliance and closed loop ⬜
+## Phase 6 — Governance, compliance and closed loop
 
 ### Deliverables
 
