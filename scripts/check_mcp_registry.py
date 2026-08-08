@@ -32,6 +32,20 @@ notes: list[str] = []
 # supplied by the thing it judges cannot fail on purpose.
 REQUIRED_FIELDS = ("purpose", "risk_mode", "authority", "minimum_scope", "install_mode")
 VALID_RISK_MODES = ("AUTO", "CONSULT", "STOP")
+
+#: How a server may be installed, PER SURFACE — the field is a mapping, one
+#: entry per tool, not a single value.
+#:
+#: The registry's own rule says `user_confirmed` and "never automatic: an MCP
+#: server is remote code". Nothing enforced it. `install_mode` was required to
+#: EXIST and never read, so `automatic` — or a piped shell installer — passed
+#: with exit 0. Prose with no gate behind it, inside the gate a previous audit
+#: had already hardened.
+#:
+#: An allow-list, not a denylist of the one bad word. "Reject `automatic`"
+#: passes `auto`, `silent`, and anything invented next; naming what IS
+#: acceptable fails an unknown value instead of admitting it.
+VALID_INSTALL_MODES = ("documented", "user_confirmed", "vendored", "pinned")
 FORBIDDEN_IN_COMMITTED_CONFIG = ("token", "password", "secret", "api_key", "PAT")
 
 
@@ -67,6 +81,22 @@ def main() -> int:
         for field in required:
             if not entry.get(field):
                 failures.append(f"{name}: missing required field {field!r}")
+        # Each SURFACE carries its own mode, so each is checked. A mapping
+        # validated as a whole would pass whenever any one entry was sane.
+        declared = entry.get("install_mode")
+        if declared is not None and not isinstance(declared, dict):
+            # A scalar here is not "one mode for every surface" — it is a field
+            # that was never read, written by someone who assumed it was not.
+            # Crashing on `.items()` would report a gate defect as a traceback.
+            failures.append(f"{name}: install_mode must be a mapping of surface -> mode, got {type(declared).__name__}")
+            declared = {}
+        for surface, install in (declared or {}).items():
+            if install not in VALID_INSTALL_MODES:
+                failures.append(
+                    f"{name}.{surface}: install_mode {install!r} is not one of "
+                    f"{list(VALID_INSTALL_MODES)} — an automatic or unpinned install is a "
+                    "supply-chain decision taken on someone else's behalf"
+                )
         mode = entry.get("risk_mode")
         if mode and mode not in valid_modes:
             failures.append(f"{name}: risk_mode {mode!r} is not one of {valid_modes}")
