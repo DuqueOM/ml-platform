@@ -129,6 +129,15 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   counting, deterministic, and genuinely hard to beat on short factual text. A
   vector store that does not clear it by a margin is an index, a latency and a
   bill bought for a difference inside the noise.
+- **`projects/rag-assistant`: sentence-aligned chunking.** Chunking is usually
+  treated as a parameter; it is where retrieval quality is decided. A window
+  that cuts "revenue of 4.2 billion dollars" leaves one half stating a quantity
+  with no unit and the other a unit with no subject — both retrieve plausibly
+  and answer nothing, and every metric stays green except recall against a
+  known answer. The sentence boundary deliberately does not split on `.` alone,
+  because `4.2 billion` and `U.S. GAAP` are single sentences. Overlap is by
+  whole sentences, since overlapping by characters reintroduces the mid-sentence
+  cut the split just avoided.
 - **A density check** — distinct hours against the hours the span implies —
   kept outside the suite because an expectation suite has no vocabulary for a
   shape the rows collectively have.
