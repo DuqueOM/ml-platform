@@ -539,6 +539,23 @@ def check_audit_freshness() -> None:
         return
 
     audited = datetime.strptime(marker.group(1), "%Y-%m-%d").date()
+    # Commit drift FIRST. Age is not the risk: a marker dated last week says
+    # nothing about the 31 commits that landed behind it — 60% of this
+    # repository's history, which is exactly what happened.
+    #
+    # The previous commit defined `_commits_since` and never called it. The
+    # helper landed, the call site did not, and the commit message described
+    # the correction in detail. A mechanism that is documented and not wired
+    # is the defect this checker exists to find, committed while fixing it.
+    drift = _commits_since(audited)
+    if drift > AUDIT_GRACE_COMMITS:
+        fail(
+            "C7",
+            f"{drift} commits since the audit on {audited} (grace: {AUDIT_GRACE_COMMITS}). "
+            "Recording an audit resets the counter, not a 90-day silence.",
+        )
+        return
+
     age = (date.today() - audited).days
     if age > AUDIT_MAX_AGE_DAYS:
         fail("C7", f"last independent audit was {age} days ago (limit {AUDIT_MAX_AGE_DAYS}) — run QA-4")

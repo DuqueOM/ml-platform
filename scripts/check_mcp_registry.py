@@ -66,6 +66,12 @@ def main() -> int:
         ("required_fields", REQUIRED_FIELDS),
         ("valid_risk_modes", VALID_RISK_MODES),
         ("forbidden_in_committed_config", FORBIDDEN_IN_COMMITTED_CONFIG),
+        # Added with the constant, not after it. The comment above promises
+        # every declared diagnostic is compared against the code; the previous
+        # commit introduced a fourth constant and left it exempt from that
+        # promise — an allow-list silently short by one, which is the shape
+        # this loop exists to prevent.
+        ("valid_install_modes", VALID_INSTALL_MODES),
     ):
         if key in declared and tuple(declared[key]) != enforced:
             failures.append(
