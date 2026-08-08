@@ -135,6 +135,7 @@ def check_no_dangling_refs(adrs: dict[str, Path]) -> None:
     template_adrs = _template_adr_numbers()
     scanned = 0
     foreign = 0
+    unresolvable = 0
 
     for path in sorted(REPO_ROOT.rglob("*.md")):
         if not _is_scannable(path):
@@ -152,17 +153,39 @@ def check_no_dangling_refs(adrs: dict[str, Path]) -> None:
         # and reaching for a path exclusion is a reflex this repository has
         # already had to correct twice.
         generated = "services" in _rel_parts(path)
-        index = template_adrs if generated else on_disk
 
         for ref in set(_ADR_REF.findall(_read(path))):
-            if ref in index:
-                foreign += generated
+            if generated:
+                # The comment above promised this and the first version did not
+                # do it: with no template checkout — every CI runner — the
+                # index is EMPTY, so every foreign reference failed. A check
+                # whose behaviour differs from its own stated behaviour is the
+                # defect this repository keeps finding, here between a comment
+                # and the code beneath it.
+                if not template_adrs:
+                    unresolvable += 1
+                elif ref not in template_adrs:
+                    fail(
+                        "C2",
+                        f"{path.relative_to(REPO_ROOT)} references ADR-{ref}, absent from "
+                        "the template's index — it resolves against neither repository",
+                    )
+                else:
+                    foreign += 1
                 continue
-            where = "the template's index" if generated else "this repository"
-            fail("C2", f"{path.relative_to(REPO_ROOT)} references ADR-{ref}, absent from {where}")
+
+            if ref not in on_disk:
+                fail("C2", f"{path.relative_to(REPO_ROOT)} references ADR-{ref}, which does not exist")
 
     note = f"{scanned} markdown files scanned for dangling ADR references"
-    ok("C2", f"{note}; {foreign} resolved against the template's index" if foreign else note)
+    if foreign:
+        note += f"; {foreign} resolved against the template's index"
+    if unresolvable:
+        note += (
+            f"; {unresolvable} in generated code NOT checked — no template checkout at "
+            f"{TEMPLATE_CHECKOUT.name}/, so their index is unreachable here"
+        )
+    ok("C2", note)
 
 
 def check_adrs_are_integrated(adrs: dict[str, Path]) -> None:
