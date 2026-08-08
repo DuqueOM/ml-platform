@@ -8,9 +8,27 @@ This document exists to remove the excuse of missing context. It states what
 was asked, what was planned, what was built, what broke, and — most usefully —
 where the author's own confidence is weakest.
 
-**Status at the time of writing:** 20 commits, 131 tests passing, 86% line
-coverage, 44 of 117 committed technologies implemented (37%). CI is green on
-every check except C7, which is the check demanding this audit.
+**There are no status figures in this document, deliberately.**
+
+The first version opened with a row of them — commits, tests, coverage,
+technologies. Thirty-one commits later every one was wrong, and a second
+auditor found them stale in the one document the procedure hands to the next
+auditor. A number restated outside the thing that derives it will diverge from
+it; that is this repository's own rule, and the brief was breaking it.
+
+Read the current state from what produces it:
+
+```bash
+git rev-list --count HEAD                              # commits
+uv run pytest                                          # tests
+uv run pytest --cov=libs --cov-branch                  # coverage
+uv run python scripts/check_technology_inventory.py    # technologies
+uv run python scripts/check_implementation_status.py   # components
+uv run python scripts/check_doc_coherence.py           # which gates are green
+```
+
+Those commands are the answer at the moment you run them. Anything written
+here would be the answer at the moment it was typed.
 
 ---
 
@@ -233,15 +251,20 @@ ranking is itself a claim worth doubting.
    `tests/test_gate_scripts.py` to have covered this — it was written by the
    same author.
 2. **Detectors that match documentation.** The technology inventory claims
-   44 of 117 implemented. Spot-check the ✅ entries: does a real artifact
-   exist, or does a detector match a sentence?
+   whatever fraction it currently claims implemented. Spot-check the ✅
+   entries: does a real artifact exist, or does a detector match a sentence?
+   Two of the four false ✅ found so far rested on a directory NAME.
 3. **Claims of completeness in prose.** `CHANGELOG.md`, `README.md`,
    `technical-plan.md`. The author has already been wrong about the ADR
    count in a document written minutes earlier.
-4. **Test quality, not test count.** 131 tests and 86% coverage say little.
-   Look for tests that assert on their own fixtures, parametrised tests over
-   empty collections, and negative tests that would pass with the feature
-   removed.
+4. **Test quality, not test count.** A test count and a coverage percentage
+   say little — deliberately not quoted here, because quoting them invites
+   reading the number instead of the tests. Look for tests asserting on their
+   own fixtures, parametrised tests over empty collections, and negative tests
+   that would pass with the feature removed. Three have been found here: one
+   mutating `**STOP**` where the value lives as `mode: STOP`, one recomputing a
+   selection instead of calling it, and an overwrite test that held equally
+   when the table was wiped first.
 5. **The AUTO/CONSULT/STOP declarations.** Verify that operations declared
    STOP in `agentic/` are actually gated in code, not merely described.
 6. **`libs/feature-defs`.** Point-in-time correctness and leakage detection.
