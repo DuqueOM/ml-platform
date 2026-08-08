@@ -221,7 +221,15 @@ def check_gate_traceability() -> None:
         fail("C4", f"missing {GATES.relative_to(REPO_ROOT)}")
         return
 
-    rows = [line for line in gates.splitlines() if re.match(r"^\|\s*[PLSMAC]\d+\s*\|", line)]
+    # `[^|]*` after the id, not `\s*`. The previous pattern required the id to
+    # be followed only by whitespace, so every row marked `| L3 ⏳ |` failed to
+    # match and C4 never examined it: 14 rows seen, 15 invisible. The exclusion
+    # I believed the `if "PENDING"` branch was performing was actually done by
+    # accident, by a decorative glyph — and that branch was dead code.
+    #
+    # An independent audit found this. It is the same shape as the findings it
+    # was looking for: the declared mechanism is not the operating one.
+    rows = [line for line in gates.splitlines() if re.match(r"^\|\s*[PLSMAC]\d+[^|]*\|", line)]
     if not rows:
         fail("C4", "no gate rows found — the traceability table is empty")
         return
@@ -488,6 +496,17 @@ def check_copier_commands_are_pinned() -> None:
             f"{len(upstream)} unpinned command(s) INHERITED from the template, not fixable here: "
             + "; ".join(upstream),
         )
+
+
+def _commits_since(when: date) -> int:
+    """Commits authored after a date. The measure C7 needed and did not have."""
+    result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "rev-list", "--count", f"--since={when.isoformat()}", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return int(result.stdout.strip() or 0)
 
 
 def check_audit_freshness() -> None:

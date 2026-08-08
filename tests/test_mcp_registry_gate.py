@@ -90,7 +90,7 @@ def test_widening_valid_risk_modes_cannot_launder_an_invalid_mode() -> None:
     def mutate(document: dict) -> None:  # type: ignore[type-arg]
         document["mcps"]["rogue"] = {
             "purpose": "p", "risk_mode": "YOLO", "authority": "a",
-            "minimum_scope": "s", "install_mode": "i", "required_for": ["x"],
+            "minimum_scope": "s", "install_mode": {"claude": "documented"}, "required_for": ["x"],
         }  # fmt: skip
         document["diagnostics"]["valid_risk_modes"] = ["AUTO", "CONSULT", "STOP", "YOLO"]
 
@@ -105,7 +105,7 @@ def test_a_server_nobody_uses_fails() -> None:
     def mutate(document: dict) -> None:  # type: ignore[type-arg]
         document["mcps"]["orphan"] = {
             "purpose": "p", "risk_mode": "AUTO", "authority": "a",
-            "minimum_scope": "s", "install_mode": "i",
+            "minimum_scope": "s", "install_mode": {"claude": "documented"},
         }  # fmt: skip
 
     with registry_as(mutate) as result:
@@ -152,3 +152,49 @@ def test_each_required_field_is_actually_required(field: str) -> None:
     with registry_as(mutate) as result:
         assert result.returncode == 1
         assert field in result.stdout
+
+
+def test_an_automatic_install_is_rejected() -> None:
+    """The registry's own rule, which had no gate behind it.
+
+    `install_mode` was required to EXIST and never read, so `automatic` — or a
+    piped shell installer — passed with exit 0 while the registry's prose said
+    "never automatic: an MCP server is remote code". An independent audit found
+    it inside the gate a previous audit had already hardened.
+    """
+
+    def mutate(document: dict) -> None:  # type: ignore[type-arg]
+        name = next(iter(document["mcps"]))
+        document["mcps"][name]["install_mode"]["claude"] = "automatic"
+
+    with registry_as(mutate) as result:
+        assert result.returncode == 1
+        assert "automatic" in result.stdout
+
+
+def test_a_piped_shell_installer_is_rejected() -> None:
+    """An allow-list, not a denylist of one bad word.
+
+    "Reject `automatic`" passes `auto`, `silent`, and whatever is invented
+    next. Naming what IS acceptable fails an unknown value rather than
+    admitting it.
+    """
+
+    def mutate(document: dict) -> None:  # type: ignore[type-arg]
+        name = next(iter(document["mcps"]))
+        document["mcps"][name]["install_mode"]["codex"] = "curl | sh"
+
+    with registry_as(mutate) as result:
+        assert result.returncode == 1
+
+
+def test_every_surface_is_checked_not_just_one() -> None:
+    """A mapping validated as a whole passes whenever any entry is sane."""
+
+    def mutate(document: dict) -> None:  # type: ignore[type-arg]
+        name = next(iter(document["mcps"]))
+        document["mcps"][name]["install_mode"]["devin"] = "automatic"
+
+    with registry_as(mutate) as result:
+        assert result.returncode == 1
+        assert "devin" in result.stdout
