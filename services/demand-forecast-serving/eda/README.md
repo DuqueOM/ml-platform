@@ -144,7 +144,6 @@ import yaml
 with open("eda/artifacts/feature_catalog.yaml") as f:
     proposals = yaml.safe_load(f)
 
-
 class FeatureEngineer:
     def transform(self, df):
         # Each proposal below must cite its rationale field (invariant D-16)

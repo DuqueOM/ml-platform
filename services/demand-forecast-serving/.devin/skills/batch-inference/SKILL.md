@@ -98,12 +98,11 @@ from common_utils.input_quality import build_from_env
 from .predictor import predict_batch
 from .schema import InputSchema
 
-
 def main(input_uri: str, output_uri: str) -> int:
     df = read_input(input_uri)
-    InputSchema.validate(df)  # Pandera — same as training
+    InputSchema.validate(df)                    # Pandera — same as training
     quality = build_from_env().check_batch(df)  # optional edge check (C4)
-    scores = predict_batch(df)  # shared predict() — single source
+    scores = predict_batch(df)                   # shared predict() — single source
 
     logger = get_logger()
     for row, score in zip(df.itertuples(), scores):

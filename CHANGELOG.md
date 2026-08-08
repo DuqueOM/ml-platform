@@ -111,6 +111,14 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   builds a sandbox from `git ls-files` alone, with no siblings, and runs the
   gates there. Confirmed to catch the sibling-checkout case by reverting that
   fix and watching it fail.
+- **Adopted ml-service-template v0.26.0**, which closes at the ROOT the trap
+  four previous releases had been pinning around: the frozen `v1.x` audit
+  snapshots are renamed `archive/v1.x`, and copier filters tags through a
+  PEP 440 check before sorting, so a non-version tag is invisible to
+  resolution. Measured against the current template, pinned and unpinned now
+  agree — 627 files, `_commit: v0.26.0` either way. Both upstream defects this
+  repository reported are fixed there: the `scaffold-update` WORKFLOW is pinned
+  and the pre-rename repository name is gone from every generated file.
 - **A density check** — distinct hours against the hours the span implies —
   kept outside the suite because an expectation suite has no vocabulary for a
   shape the rows collectively have.

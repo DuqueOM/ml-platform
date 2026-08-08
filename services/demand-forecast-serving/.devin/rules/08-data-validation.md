@@ -26,15 +26,13 @@ Use Great Expectations when:
 ```python
 import pandera.pandas as pa
 
-
 class ServiceInputSchema(pa.DataFrameModel):
     """One schema per service. Document type, range, nullability."""
-
     feature_name: float = pa.Field(ge=0, le=100, description="Feature description")
     category: str = pa.Field(isin=["A", "B", "C"], description="Category type")
 
     class Config:
-        coerce = True  # Auto-convert types where possible
+        coerce = True   # Auto-convert types where possible
         strict = False  # Allow extra columns
 ```
 
@@ -46,8 +44,6 @@ class ServiceInputSchema(pa.DataFrameModel):
 @pa.check_types
 def validate_training_data(df: pa.typing.DataFrame[ServiceInputSchema]) -> pd.DataFrame:
     return df
-
-
 # Fail fast: training does not start with invalid data
 ```
 

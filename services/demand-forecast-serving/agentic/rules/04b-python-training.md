@@ -23,15 +23,13 @@ Every trainer MUST follow this sequence:
 
 ```python
 def should_promote(new_metrics: dict, current_prod_metrics: dict) -> bool:
-    return all(
-        [
-            new_metrics["primary_metric"] >= current_prod_metrics["primary_metric"] * 0.95,
-            new_metrics["primary_metric"] >= MINIMUM_THRESHOLD,
-            new_metrics["secondary_metric"] >= SECONDARY_THRESHOLD,
-            new_metrics["p95_latency_ms"] <= current_prod_metrics["p95_latency_ms"] * 1.20,
-            new_metrics["dir_attribute"] >= 0.80,  # Fairness
-        ]
-    )
+    return all([
+        new_metrics["primary_metric"] >= current_prod_metrics["primary_metric"] * 0.95,
+        new_metrics["primary_metric"] >= MINIMUM_THRESHOLD,
+        new_metrics["secondary_metric"] >= SECONDARY_THRESHOLD,
+        new_metrics["p95_latency_ms"] <= current_prod_metrics["p95_latency_ms"] * 1.20,
+        new_metrics["dir_attribute"] >= 0.80,  # Fairness
+    ])
 ```
 
 ## Data Leakage Prevention
