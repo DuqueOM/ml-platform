@@ -104,6 +104,13 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   watching it succeed is the most convincing false evidence available, because
   every command reports success — so a test asserts the CNI is still kindnet
   and will fail when that stops being true.
+- **A bare-environment guard** for the gates. Three times this session CI went
+  red on a working copy where everything was green, and every time the cause was
+  the same shape: state my machine had and a runner does not — gitignored
+  provider binaries, unstaged new directories, a sibling checkout. The test
+  builds a sandbox from `git ls-files` alone, with no siblings, and runs the
+  gates there. Confirmed to catch the sibling-checkout case by reverting that
+  fix and watching it fail.
 - **A density check** — distinct hours against the hours the span implies —
   kept outside the suite because an expectation suite has no vocabulary for a
   shape the rows collectively have.
