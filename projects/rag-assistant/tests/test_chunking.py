@@ -94,3 +94,43 @@ def test_a_large_overlap_still_terminates() -> None:
 
     assert 0 < len(chunks) < 20
     assert all(isinstance(chunk, Chunk) for chunk in chunks)
+
+
+@pytest.mark.integration
+@pytest.mark.xfail(
+    reason="measured broken on real filings: 36% of chunks exceed 3x target, largest 1,087,381 chars", strict=True
+)
+def test_chunking_survives_a_real_filing() -> None:
+    """The test that synthetic prose could not have written.
+
+    Run against a downloaded 10-K, the chunker produces a median of 1,588
+    characters against a target of 800, and a single chunk of **1,087,381** —
+    a megabyte in one "sentence". 1,234 of 3,411 chunks exceed three times the
+    target.
+
+    The cause is that a 10-K is not prose. It is SGML headers, XBRL blocks and
+    financial tables, none of which contain a full stop followed by a capital,
+    so `split_sentences` returns the document as ONE sentence — and the rule
+    that a long sentence becomes its own chunk rather than being cut, written
+    to protect a fact from being split, turns a megabyte of table into a single
+    unretrievable unit.
+
+    Marked xfail(strict) rather than deleted or fixed hastily: the defect is
+    measured, the fix needs a second boundary for non-prose text, and a test
+    that silently passes once someone changes the threshold would hide it. When
+    the chunker is fixed this test fails as XPASS and must be un-marked.
+    """
+    from pathlib import Path
+
+    filings = sorted(Path("data/sec-edgar/filings").glob("*.txt"))
+    if not filings:
+        pytest.skip("no filings downloaded; run rag_assistant.ingest.fetch_filings")
+
+    text = filings[0].read_text(encoding="utf-8", errors="ignore")
+    chunks = chunk_document(text, filings[0].stem)
+    oversized = [chunk for chunk in chunks if len(chunk.text) > 3 * 800]
+
+    assert not oversized, (
+        f"{len(oversized)} of {len(chunks)} chunks exceed 3x the target; "
+        f"largest is {max(len(c.text) for c in chunks):,} characters"
+    )
