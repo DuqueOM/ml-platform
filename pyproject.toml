@@ -113,6 +113,22 @@ markers = [
     "integration: crosses a boundary this code does not own; needs the real dependency",
 ]
 
+[tool.coverage.run]
+omit = [
+    # `tests/test_gates_in_a_bare_environment.py` copies the gate scripts into
+    # a temporary sandbox and runs them there. Coverage counted each COPY as a
+    # separate file, so the same 1,508 statements were measured twice: 2,626
+    # total and 58% instead of 75%.
+    #
+    # The first fix here blamed the generated service's own `scripts/`
+    # directory, which was plausible, wrong, and would have left the real
+    # cause in place. The report named the sandbox paths outright — reading it
+    # took a minute and guessing had already taken three.
+    "*/pytest-of-*/*",
+    # Generated from ml-service-template and tested in its own repository.
+    "services/*",
+]
+
 [tool.coverage.report]
 fail_under = 90
 
