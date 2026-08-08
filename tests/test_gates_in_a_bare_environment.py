@@ -113,7 +113,15 @@ def test_the_sandbox_really_lacks_the_sibling_checkout(bare_repo: Path) -> None:
 
     from scripts.check_doc_coherence import TEMPLATE_CHECKOUT
 
-    assert TEMPLATE_CHECKOUT.exists(), "the real checkout is gone, so the contrast this test draws no longer exists"
+    if not TEMPLATE_CHECKOUT.exists():
+        # On a runner there is no sibling checkout anywhere, so "the sandbox
+        # lacks it" is true of the whole machine and this test contrasts
+        # nothing. It is a LOCAL assertion, and asserting it unconditionally
+        # was the very defect this file exists to catch — written inside the
+        # test that catches it, and caught by CI on the commit that added it.
+        pytest.skip("no sibling template checkout on this machine; the contrast is local-only")
+
+    assert TEMPLATE_CHECKOUT.is_dir()
 
 
 def test_the_sandbox_really_lacks_ignored_artifacts(bare_repo: Path) -> None:
