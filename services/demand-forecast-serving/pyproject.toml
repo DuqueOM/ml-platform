@@ -1,0 +1,114 @@
+# pyproject.toml — ML Service Template
+# Modern Python project configuration. Use alongside or instead of requirements.txt.
+#
+# Install: pip install -e ".[dev]"
+# Test:    pytest tests/ -v
+#
+# TODO: Replace demand_forecast_serving, Demand Forecast Serving, and author info.
+
+[build-system]
+requires = ["setuptools >= 68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "demand_forecast_serving"
+# Scaffolded services start at 0.1.0 — the template itself is on the v0.x
+# hardening line until the first real-cluster L4 evidence lands. Adopters
+# bump this independently of the template version.
+version = "0.1.0"
+description = "Demand Forecast Serving — ML prediction service"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">= 3.11"
+authors = [
+    {name = "Your Name", email = "your-email@example.com"},
+]
+
+dependencies = [
+    # ML Core
+    "scikit-learn ~= 1.5.0",
+    "pandas ~= 2.2.0",
+    "numpy ~= 1.26.0",         # numpy 2.x silently corrupts joblib models
+    "scipy ~= 1.14.0",
+    "optuna ~= 4.1.0",
+    "joblib ~= 1.4.0",
+    # Serving
+    "fastapi ~= 0.115.0",
+    "uvicorn ~= 0.32.0",
+    "pydantic ~= 2.10.0",
+    # Data Validation
+    "pandera ~= 0.23.0",
+    "jsonschema ~= 4.23.0",
+    # Explainability
+    "shap ~= 0.46.0",
+    # Monitoring
+    "prometheus-client ~= 0.21.0",
+    "evidently ~= 0.5.0",
+    "pyarrow ~= 18.0.0",
+    "pyyaml ~= 6.0.0",
+    # MLflow
+    "mlflow ~= 2.18.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest ~= 8.3.0",
+    "pytest-cov ~= 6.0.0",
+    "locust ~= 2.32.0",
+    "httpx ~= 0.28.0",
+    "black ~= 25.1.0",
+    "isort ~= 6.0.0",
+    "flake8 ~= 7.1.0",
+    "mypy ~= 1.13.0",
+    "bandit ~= 1.7.10",
+    "pre-commit ~= 3.7.0",
+]
+
+# Optional heavy ML dependencies — uncomment if needed
+# xgboost = ["xgboost ~= 2.1.0"]
+# lightgbm = ["lightgbm ~= 4.5.0"]
+
+# ── Ruff: lint + format, replacing black + isort + flake8 (ADR-044) ──────────
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+exclude = [".git", ".venv", "data", "models", "mlruns", "__pycache__"]
+
+[tool.ruff.lint]
+# Parity scope with the black+isort+flake8 setup this replaces.
+select = ["E", "W", "F", "I"]
+ignore = ["E203"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "common_utils"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# --import-mode=importlib: three sibling test packages are all named `tests`
+# (tests/, eda/tests/, monitoring/tests/); the default `prepend` mode
+# collides in sys.modules when more than one is collected in the same run
+# (AUDIT R8-05 — same fix as the template-repo root pyproject). Verified:
+# no test imports `from tests…`, so importlib is safe here and in
+# scaffolded services.
+addopts = "-v --tb=short --import-mode=importlib"
+pythonpath = [".", "src"]
+markers = [
+    "scaffold_context: needs a scaffolded service (data/ dirs, generated openapi snapshot, trained model); excluded from the template-context CI lane and exercised by the scaffold smoke instead",
+    "locust_parity: imports locust, whose gevent monkey-patch deadlocks anyio TestClient lifespans in the same process; always run in a dedicated pytest invocation",
+]

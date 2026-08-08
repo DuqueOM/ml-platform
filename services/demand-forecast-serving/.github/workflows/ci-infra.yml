@@ -1,0 +1,93 @@
+name: CI — Infrastructure
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "infra/**"
+      - "k8s/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - "k8s/**"
+
+jobs:
+  terraform-validate:
+    name: Terraform — ${{ matrix.cloud }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        cloud: [gcp, aws, cloudflare]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "1.7"
+
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive
+        working-directory: infra/terraform/${{ matrix.cloud }}
+
+      - name: Terraform init
+        run: terraform init -backend=false
+        working-directory: infra/terraform/${{ matrix.cloud }}
+
+      - name: Terraform validate
+        run: terraform validate
+        working-directory: infra/terraform/${{ matrix.cloud }}
+
+      - name: tfsec
+        uses: aquasecurity/tfsec-action@b466648d6e39e7c75324f25d83891162a721f2d6 # v1.0.3
+        with:
+          working_directory: infra/terraform/${{ matrix.cloud }}
+          format: json
+
+      - name: Checkov
+        # Pinned to immutable tag (D-19, ADR-014 §1.1). Dependabot updates
+        # via .github/dependabot.yml. Phase 5 will harden to commit-SHA.
+        uses: bridgecrewio/checkov-action@7b972723c44fb3d256283fac96fae5d7c1894bb7 # v12.3114.0
+        with:
+          directory: infra/terraform/${{ matrix.cloud }}
+          quiet: true
+          framework: terraform
+
+  k8s-validate:
+    name: K8s Manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install kubeconform (PR-R2-5)
+        # Replaces the deprecated kubeval install that used
+        # /releases/latest/download/. Pinned version, direct release
+        # tarball, no `curl | bash`. kubeval was archived upstream;
+        # kubeconform is the maintained successor and is also used
+        # by the top-level validate-templates.yml.
+        run: |
+          set -euo pipefail
+          KCVER=v0.6.7
+          curl -sSL -o /tmp/kubeconform.tgz \
+            "https://github.com/yannh/kubeconform/releases/download/${KCVER}/kubeconform-linux-amd64.tar.gz"
+          tar -xzf /tmp/kubeconform.tgz -C /tmp
+          sudo mv /tmp/kubeconform /usr/local/bin/
+          kubeconform -v
+
+      - name: Validate base manifests
+        run: kubeconform -strict -ignore-missing-schemas k8s/base/*.yaml
+
+      - name: Validate GCP overlays (per environment)
+        run: |
+          for overlay in k8s/overlays/gcp-*; do
+            [ -d "$overlay" ] && kubectl kustomize "$overlay" | kubeconform -strict -ignore-missing-schemas
+          done
+        continue-on-error: true
+
+      - name: Validate AWS overlays (per environment)
+        run: |
+          for overlay in k8s/overlays/aws-*; do
+            [ -d "$overlay" ] && kubectl kustomize "$overlay" | kubeconform -strict -ignore-missing-schemas
+          done
+        continue-on-error: true
