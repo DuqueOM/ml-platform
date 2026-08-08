@@ -138,6 +138,14 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   because `4.2 billion` and `U.S. GAAP` are single sentences. Overlap is by
   whole sentences, since overlapping by characters reintroduces the mid-sentence
   cut the split just avoided.
+- **The retrieval gate, closed end to end.** `evaluate_corpus` chunks a
+  corpus once and scores the candidate and the baseline over the SAME chunks —
+  re-chunking between them would compare two retrievers over two corpora and
+  blame the retriever. The gold set records answers as TEXT, not chunk
+  indices, because indices move the moment anyone tunes the chunker, which is
+  the main reason to run this. An answer found in no chunk is refused (the
+  chunker split a fact) and so is one found in several (overlap made the label
+  ambiguous): both would produce a number measuring the fixture.
 - **A density check** — distinct hours against the hours the span implies —
   kept outside the suite because an expectation suite has no vocabulary for a
   shape the rows collectively have.
