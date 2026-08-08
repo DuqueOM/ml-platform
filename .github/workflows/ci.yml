@@ -194,6 +194,41 @@ jobs:
         # directory nothing checks, and every future project comes from it.
         run: uv run pytest tests/test_project_generator.py -q
 
+  iac-security:
+    name: IaC and Kubernetes security
+    runs-on: ubuntu-latest
+    # The two layers this repository lacked while adding 268 lines of Terraform
+    # and six Kubernetes overlays in a single session. Everything else — bandit,
+    # ruff, dependabot, gitleaks, trivy — covers Python, dependencies, secrets
+    # and images. Nothing looked at the infrastructure that provisions them.
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Checkov — Terraform and Kubernetes misconfiguration
+        # Static only: it reads the definitions, provisions nothing, and needs
+        # no credentials, so it runs while the cloud work is deliberately
+        # paused. soft_fail on the FIRST run only — an unread wall of findings
+        # is a gate people switch off, and the triage is a separate commit.
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: platform/
+          framework: terraform,kubernetes
+          soft_fail: true
+          output_format: cli
+
+      - name: Kubescape — cluster posture against NSA and CIS baselines
+        # Scans the MANIFESTS, not a live cluster. The overlays declare
+        # restricted Pod Security and default-deny NetworkPolicies; this checks
+        # whether the declaration survives contact with a published baseline.
+        continue-on-error: true
+        run: |
+          curl -sSL https://github.com/kubescape/kubescape/releases/latest/download/kubescape-ubuntu-latest -o kubescape
+          chmod +x kubescape
+          for overlay in platform/kubernetes/overlays/*/; do
+            kubectl kustomize "$overlay" > /tmp/rendered.yaml
+            ./kubescape scan framework nsa,cis-v1.10.0 /tmp/rendered.yaml --format pretty-printer || true
+          done
+
   supply-chain:
     name: Supply chain
     runs-on: ubuntu-latest
