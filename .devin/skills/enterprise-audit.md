@@ -98,10 +98,59 @@ Every finding, without exception:
 
 Close with **one sentence**: are the audited claims trustworthy?
 
+## Findings this method has actually produced
+
+Named, with the shape they took. An abstract surface — "configuration that
+appears active" — describes a category; a named instance directs the search.
+The upstream version of this skill carries its own list for the same reason,
+and it is the part that makes an auditor look in the right place first.
+
+**A gate supplied with its own verdict.** Four instances in three weeks, which
+is what makes it the first thing to check:
+
+- The MCP registry gate read `required_fields` and `valid_risk_modes` from the
+  file it validated. One commit could add an unassessed server AND delete the
+  check that would catch it, and the gate reported OK.
+- A warehouse expectation took its bounds from `min()`/`max()` of the column it
+  was validating. Every value lies inside its own range, so it passed on a
+  table containing timestamps stamped 2002.
+- A pipeline gate received `coverage_ok=True` as a literal, so the calibration
+  half could not fail whatever the model did.
+- Check C7 treated the ABSENCE of an independent audit as success,
+  indefinitely.
+
+**A check that examines nothing and passes.** A mypy override written as
+`libs.*` matched zero modules while its CI step stayed green. A coherence
+filter matched ABSOLUTE path components, and because the repository lives under
+a directory called `projects`, it excluded every file.
+
+**A number whose method is not recorded.** A coverage figure of 86% that no
+documented command reproduces. A VRAM measurement taken from a single sample,
+off by more than a gigabyte. A benchmark cited to reject a model, run under a
+flag that presupposed the conclusion.
+
+**A test that passes vacuously.** A negative test mutating `**STOP**` when the
+value lives as `mode: STOP`. A regression test that recomputed a selection
+instead of calling the production code, and so passed with the defect
+deliberately reintroduced. An overwrite test writing one row twice and
+asserting one row remained — which holds equally when the table is wiped first,
+and a table-wiping bug lived underneath it.
+
+**A green local run that CI cannot reproduce.** Four times, always the same
+shape: state the machine had and a runner does not — gitignored provider
+binaries counted by a generator, unstaged files invisible to `git ls-files`, a
+sibling checkout read by a check, and temporary copies counted twice by
+coverage.
+
+**A documented command that is subtly wrong.** `pytest -q` where `addopts`
+already carries `-q`, making `-qq`, which suppresses the counts the command
+exists to show. `gitleaks --no-git`, which scans the working tree in a row
+whose own rationale says the working tree is insufficient.
+
 ## High-yield surfaces
 
-Where findings have actually come from. Extend this list as the audit learns —
-a surface that produced a P0 once will produce another.
+The general categories behind the instances above. Extend both lists as the
+audit learns — a surface that produced a P0 once will produce another.
 
 - "Verified" or "complete" claims in plans and status documents, against reality.
 - Measurements presented without a sampling method.
