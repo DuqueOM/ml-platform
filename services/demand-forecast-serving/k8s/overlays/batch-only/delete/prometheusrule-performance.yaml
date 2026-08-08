@@ -1,0 +1,5 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: "demand-forecast-serving-performance-alerts"
+$patch: delete

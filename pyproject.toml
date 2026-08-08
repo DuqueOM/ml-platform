@@ -34,11 +34,21 @@ serving-core = { workspace = true }
 feature-defs = { workspace = true }
 
 [tool.ruff]
+# `services/` holds code GENERATED from ml-service-template and owned upstream.
+# Linting it here judges another repository's conventions with ours, and the
+# only ways to make it pass are editing a scaffold — a fork with extra steps,
+# which ADR-003 forbids — or loosening our own rules to match. The template's
+# CI lints it; C9 still reports upstream defects found in it by name.
 line-length = 120
 target-version = "py311"
-# Un-rendered generator source: Jinja tokens are not valid Python.
-# Verified by rendering it, not by linting it in place.
-extend-exclude = ["templates/project"]
+extend-exclude = [
+    # Un-rendered generator source: Jinja tokens are not valid Python.
+    # Verified by rendering it, not by linting it in place.
+    "templates/project",
+    # Generated from ml-service-template and owned upstream. See the comment
+    # above [tool.ruff].
+    "services",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "PT", "SIM", "RUF"]

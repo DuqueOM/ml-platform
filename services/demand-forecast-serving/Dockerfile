@@ -1,0 +1,147 @@
+# =============================================================================
+# Multi-stage Dockerfile for Demand Forecast Serving
+# =============================================================================
+# Target image size: ~600MB (Python 3.13 slim + ML deps)
+#
+# Stage 1 (builder): Install system build tools + Python packages in a venv
+# Stage 2 (runtime): Copy only the venv + app code into a clean slim image
+#
+# Key decisions (see ADR):
+#   - Multi-stage reduces final image ~40% vs single-stage
+#   - xgboost/lightgbm installed with --no-deps to avoid nvidia-nccl-cu12 (~290MB)
+#   - Non-root USER for K8s Pod Security Standards compliance
+#   - HEALTHCHECK for Docker Compose; K8s uses its own probes
+#   - Single uvicorn worker — K8s HPA manages horizontal scaling
+#     NEVER use --workers N in K8s (causes CPU thrashing, dilutes HPA signal)
+#   - Model artifacts are NOT baked in — K8s init container downloads them
+#
+# TODO: Update LABEL metadata for your service.
+# TODO: Adjust requirements file name if you split prod vs dev dependencies.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Stage 1: Builder — install dependencies in an isolated venv
+# ---------------------------------------------------------------------------
+FROM python:3.13-slim-bookworm AS builder
+
+LABEL maintainer="your-team@example.com" \
+      version="1.0.0" \
+      description="Demand Forecast Serving — ML prediction API"
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /build
+
+# System build deps (required for scikit-learn, scipy, etc.)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements (change to requirements-prod.txt if you have separate files)
+COPY requirements.txt ./
+
+# Install into a venv for clean multi-stage copy
+# xgboost/lightgbm --no-deps avoids pulling nvidia-nccl-cu12 (~290MB)
+#
+# `set -e` here is load-bearing, not boilerplate: without it, a failing
+# pip install partway through this chain does NOT fail the RUN as long as
+# some later command in the script still exits 0 — Docker reports the
+# layer as built even though the venv is missing dependencies, and the
+# break only surfaces later, at container runtime, as a confusing
+# "executable not found" / ModuleNotFoundError (see ADR / anti-patterns:
+# a masked `; true` sentinel at the end of this exact RUN was the original
+# form of this bug). The cleanup find/rm commands below are safe under
+# set -e because they only ever operate with -f/glob semantics that don't
+# fail on a missing path. `pip check` runs right after install (BEFORE
+# cleanup removes pip's own site-packages, which would break `pip check`
+# itself) as a cheap, dependency-agnostic sanity net that catches an
+# inconsistent/partial venv without needing to hardcode which packages
+# this service actually installs.
+RUN set -e && \
+    python -m venv /opt/venv && \
+    . /opt/venv/bin/activate && \
+    pip install --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir --no-compile -r requirements.txt && \
+    # Uncomment if using xgboost/lightgbm:
+    # pip install --no-cache-dir --no-deps "xgboost>=1.5.0,<3.0" && \
+    # pip install --no-cache-dir --no-deps "lightgbm>=4.0.0,<5.0" && \
+    # narwhals: required transitive dep of lightgbm>=4.7, excluded by --no-deps
+    # (pip check below catches this if omitted):
+    # pip install --no-cache-dir "narwhals>=1.15" && \
+    pip check && \
+    # Clean up to reduce image size
+    find /opt/venv -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null; \
+    find /opt/venv -type d -name 'tests' -not -path '*/numpy/*' -exec rm -rf {} + 2>/dev/null; \
+    find /opt/venv -type f -name '*.pyc' -delete 2>/dev/null; \
+    rm -rf /opt/venv/lib/python*/site-packages/pip 2>/dev/null; \
+    rm -rf /opt/venv/lib/python*/site-packages/setuptools 2>/dev/null
+
+# ---------------------------------------------------------------------------
+# Stage 2: Runtime — minimal final image
+# ---------------------------------------------------------------------------
+FROM python:3.13-slim-bookworm AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app:/app/src \
+    PATH="/opt/venv/bin:$PATH" \
+    MODEL_PATH=models/model.joblib
+
+# Minimal runtime deps (curl for healthcheck, libgomp for lightgbm/xgboost)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl ca-certificates libgomp1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Non-root user — required by K8s Pod Security Standards (baseline)
+RUN groupadd -r appuser --gid=1000 && \
+    useradd -r -g appuser --uid=1000 --home-dir=/app appuser
+
+WORKDIR /app
+
+# Copy venv from builder
+COPY --from=builder --chown=appuser:appuser /opt/venv /opt/venv
+
+# Copy configs first (changes less frequently → better Docker cache)
+COPY --chown=appuser:appuser configs/ ./configs/
+
+# Copy source code (changes more frequently)
+COPY --chown=appuser:appuser src/ ./src/
+COPY --chown=appuser:appuser app/ ./app/
+COPY --chown=appuser:appuser monitoring/ ./monitoring/
+
+# Closed-loop monitoring helpers (D-21, ADR-006). Without this, the service
+# starts but the PredictionLogger silently degrades — production thinks it has
+# closed-loop monitoring while no events are written. The lifespan now
+# fails fast when PREDICTION_LOG_ENABLED=true AND common_utils is missing.
+COPY --chown=appuser:appuser common_utils/ ./common_utils/
+
+# Build-time smoke import (Phase 1.1 / audit closure):
+# Catches a missing/renamed common_utils module at *image build* time
+# instead of letting the runtime image ship and crash on first boot.
+# Each module here is a hard runtime dependency:
+#   - prediction_logger: closed-loop monitoring (D-21)
+#   - input_validation:  Pandera adapters (PR-R2-4)
+#   - secrets:           credential loader (D-17/D-18)
+# If any import fails, `docker build` exits non-zero and the image
+# never reaches the registry — the regression cannot reach production.
+RUN /opt/venv/bin/python -c "import common_utils.prediction_logger, common_utils.input_validation, common_utils.secrets" \
+    && echo "common_utils import smoke OK"
+
+# Create runtime directories (models downloaded by K8s init container)
+RUN mkdir -p logs data/raw data/processed data/reference models results && \
+    chown -R appuser:appuser /app
+
+USER appuser
+
+EXPOSE 8000
+
+# Docker HEALTHCHECK (K8s uses its own liveness/readiness probes)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Single worker — NEVER use --workers N in K8s
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

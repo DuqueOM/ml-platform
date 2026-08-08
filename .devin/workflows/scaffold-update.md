@@ -10,6 +10,13 @@ description: Update an existing scaffolded service with the latest template chan
 
 ## 1. Pre-flight Checks
 
+> **`--vcs-ref` is not optional.** Copier resolves an unpinned source to the
+> highest-sorting tag, and the template carries frozen `v1.x` audit snapshots
+> beside its active `v0.x` line. Unpinned, `copier update` rewrites the service
+> BACKWARDS: upstream measured 582 files deleted on a real service, including
+> `.copier-answers.yml` — the record `update` reads, so it cannot then recover.
+> This text was inherited before that fix and carried the defect with it.
+
 ```bash
 cd "$SERVICE_PATH"
 git status --porcelain          # must be empty
@@ -22,7 +29,7 @@ required for `copier update`.
 ## 2. Dry-run Diff
 
 ```bash
-copier update --dry-run
+copier update --trust --vcs-ref=v0.24.0 --pretend
 ```
 
 Review the diff. Categorize:
@@ -39,7 +46,7 @@ propose a resolution. Wait for approval.
 ## 4. Apply Update
 
 ```bash
-copier update --trust --defaults
+copier update --trust --defaults --vcs-ref=v0.24.0
 ```
 
 Copier re-renders all template files and runs post-gen tasks:

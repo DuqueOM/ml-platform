@@ -1,0 +1,457 @@
+"""Dynamic risk scoring for the Agent Behavior Protocol (ADR-010).
+
+Agents invoke :func:`get_risk_context` at the start of CONSULT/AUTO
+operations to determine whether live system signals warrant ESCALATING
+to a stricter mode (AUTO → CONSULT, CONSULT → STOP). The protocol never
+RELAXES based on risk context: STOP is sticky.
+
+Signal sources (by priority):
+    1. mcp-prometheus — live Prometheus queries (preferred, ADR-010)
+    2. local files ops/incident_state.json, ops/last_drift_report.json
+       (fallback when MCP is unavailable)
+    3. degraded mode — return an UNAVAILABLE context; caller falls back
+       to the static AGENTS.md mapping
+
+Consumers:
+    - agentic/skills/**/SKILL.md invocations
+    - CI jobs that emit the [AGENT MODE: ...] signal
+    - Pre-deploy checks in deploy-common.yml (future enhancement)
+
+Engineering Calibration (ADR-001):
+    - The module is a 200-line helper, not a distributed policy engine.
+    - Dynamic scoring can ONLY escalate; ADR-005 static mapping is the
+      conservative floor.
+    - Escalation thresholds live in code here so they are version-controlled
+      alongside AGENTS.md.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import time
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Literal
+
+logger = logging.getLogger(__name__)
+
+Mode = Literal["AUTO", "CONSULT", "STOP"]
+
+_CACHE_TTL_SECONDS = 60
+_cache: dict[str, tuple[float, "RiskContext"]] = {}
+
+
+@dataclass(frozen=True)
+class RiskContext:
+    """Snapshot of live risk signals.
+
+    Attributes:
+        incident_active: A P1/P2 alert is firing.
+        drift_severe:    Any feature's PSI > 2x its alert threshold.
+        error_budget_exhausted: SLO burn rate says the budget is blown.
+        off_hours: UTC Mon–Fri 18:00–08:00 OR Sat/Sun (business default).
+        recent_rollback: A rollback audit issue was created in the last 6h.
+        available: True if the signal source responded; False = fallback.
+        source: "prometheus" | "file" | "unavailable".
+    """
+
+    incident_active: bool = False
+    drift_severe: bool = False
+    error_budget_exhausted: bool = False
+    off_hours: bool = False
+    recent_rollback: bool = False
+    available: bool = False
+    source: str = "unavailable"
+    raw: dict = field(default_factory=dict)
+
+    @property
+    def signal_count(self) -> int:
+        return sum(
+            [
+                self.incident_active,
+                self.drift_severe,
+                self.error_budget_exhausted,
+                self.off_hours,
+                self.recent_rollback,
+            ]
+        )
+
+    def escalate(self, base_mode: Mode) -> Mode:
+        """Apply the dynamic escalation table from ADR-010.
+
+        Rules:
+            AUTO + any 1 signal    → CONSULT
+            CONSULT + any 1 signal → STOP
+            STOP                   → STOP (always sticky)
+
+        When :attr:`available` is False, returns ``base_mode`` unchanged
+        (fallback — graceful degradation per ADR-010).
+        """
+        if base_mode == "STOP":
+            return "STOP"
+        if not self.available:
+            return base_mode
+        if self.signal_count == 0:
+            return base_mode
+        return "STOP" if base_mode == "CONSULT" else "CONSULT"
+
+
+# ---------------------------------------------------------------------------
+# Signal sources
+# ---------------------------------------------------------------------------
+def _load_file_signals(ops_dir: Path) -> RiskContext:
+    """Fallback signal loader: reads ops/ artifacts written by CronJobs."""
+    raw: dict = {}
+    incident_active = False
+    drift_severe = False
+    recent_rollback = False
+
+    incident_file = ops_dir / "incident_state.json"
+    if incident_file.exists():
+        try:
+            data = json.loads(incident_file.read_text())
+            raw["incident_state"] = data
+            incident_active = bool(data.get("active", False))
+        except Exception as exc:
+            logger.debug("Could not parse incident_state.json: %s", exc)
+
+    drift_file = ops_dir / "last_drift_report.json"
+    if drift_file.exists():
+        try:
+            data = json.loads(drift_file.read_text())
+            raw["drift_report"] = data
+            drift_severe = bool(data.get("any_psi_over_2x_threshold", False))
+        except Exception as exc:
+            logger.debug("Could not parse last_drift_report.json: %s", exc)
+
+    audit_log = ops_dir / "audit.jsonl"
+    if audit_log.exists():
+        try:
+            six_hours_ago = time.time() - 6 * 3600
+            for line in audit_log.read_text().splitlines()[-200:]:
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if entry.get("operation", "").startswith("rollback"):
+                    ts_str = entry.get("timestamp", "")
+                    try:
+                        ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00")).timestamp()
+                        if ts >= six_hours_ago:
+                            recent_rollback = True
+                            raw["recent_rollback_entry"] = entry
+                            break
+                    except ValueError:
+                        continue
+        except Exception as exc:
+            logger.debug("Could not scan audit.jsonl: %s", exc)
+
+    return RiskContext(
+        incident_active=incident_active,
+        drift_severe=drift_severe,
+        recent_rollback=recent_rollback,
+        off_hours=_is_off_hours(),
+        available=True,
+        source="file",
+        raw=raw,
+    )
+
+
+_DEFAULT_ON_HOURS_START = 8
+_DEFAULT_ON_HOURS_END = 18
+
+
+def _parse_on_hours_override(span: str) -> tuple[int, int]:
+    """Parse ``MLOPS_ON_HOURS_UTC`` span into (start_hour, end_hour).
+
+    Validation (red-team F2, docs/agentic/red-team-log.md Entry 5):
+    the red-team log flagged that setting ``MLOPS_ON_HOURS_UTC=00-24``
+    (or any equivalent span covering the full day) silently suppresses
+    the ``off_hours`` signal on weekdays, weakening the AUTO → CONSULT
+    escalation path. This parser rejects spans that cover the full
+    day and falls back to the business default. Weekends remain
+    structurally off-hours regardless of this env var.
+
+    Rejected shapes (fall back to 08-18 and emit a warning):
+
+    - malformed (not two integers separated by ``-``)
+    - out of range (hour < 0 or > 24)
+    - full-day spans (``end - start >= 24``; equals cover all 24 h)
+    - degenerate spans (``start == end``; empty window → off_hours
+      always True which is also suspicious)
+    - reversed spans (``start > end``); we treat these as a config
+      error rather than guessing the operator's intent.
+
+    Accepted shapes: ``08-18``, ``06-20``, ``00-23``.
+    """
+    try:
+        start_s, end_s = span.split("-")
+        start = int(start_s)
+        end = int(end_s)
+    except ValueError:
+        logger.warning(
+            "MLOPS_ON_HOURS_UTC=%r is malformed (expected 'HH-HH'); falling back to 08-18.",
+            span,
+        )
+        return (_DEFAULT_ON_HOURS_START, _DEFAULT_ON_HOURS_END)
+
+    if start < 0 or start > 24 or end < 0 or end > 24:
+        logger.warning(
+            "MLOPS_ON_HOURS_UTC=%r has out-of-range hour; falling back to 08-18.",
+            span,
+        )
+        return (_DEFAULT_ON_HOURS_START, _DEFAULT_ON_HOURS_END)
+
+    if start >= end:
+        # Includes start == end (empty window) and reversed spans.
+        logger.warning(
+            "MLOPS_ON_HOURS_UTC=%r has start >= end; this is a "
+            "configuration error (empty or reversed window); "
+            "falling back to 08-18.",
+            span,
+        )
+        return (_DEFAULT_ON_HOURS_START, _DEFAULT_ON_HOURS_END)
+
+    if (end - start) >= 24:
+        # Red-team F2: full-day spans silently suppress off_hours.
+        logger.warning(
+            "MLOPS_ON_HOURS_UTC=%r covers the full day (>= 24 h); "
+            "this would silently suppress off_hours escalation "
+            "(red-team Entry 5 / F2). Falling back to 08-18.",
+            span,
+        )
+        return (_DEFAULT_ON_HOURS_START, _DEFAULT_ON_HOURS_END)
+
+    return (start, end)
+
+
+def _is_off_hours(now: datetime | None = None) -> bool:
+    """Return True on weekends or weekday evenings/nights (UTC).
+
+    Business default: 18:00–08:00 UTC Mon–Fri counts as off-hours.
+    Weekends are always off-hours. Override via environment variable
+    ``MLOPS_ON_HOURS_UTC`` (format "HH-HH", e.g. "06-20"). Invalid
+    overrides are rejected (see :func:`_parse_on_hours_override`).
+    """
+    now = now or datetime.now(timezone.utc)
+    if now.weekday() >= 5:  # Saturday / Sunday
+        return True
+    span = os.getenv("MLOPS_ON_HOURS_UTC", "08-18")
+    start, end = _parse_on_hours_override(span)
+    return not (start <= now.hour < end)
+
+
+_PROMETHEUS_TIMEOUT_SECONDS = 5.0
+_PROMETHEUS_QUERIES = {
+    # incident_active: any P1/P2 alert currently firing
+    "incident_active": 'sum(ALERTS{severity=~"P1|P2",alertstate="firing"})',
+    # drift_severe: any feature with PSI exceeding 2x its alert threshold
+    "drift_severe": "max((feature_psi_score / on(feature) feature_psi_alert_threshold)) > 2",
+    # error_budget_exhausted: SLO burn rate over 100% on the 30-day window
+    "error_budget_exhausted": "(1 - slo_availability_ratio_rate30d) > slo_error_budget_target",
+}
+
+
+def _query_prometheus_scalar(prom_url: str, query: str, timeout: float) -> bool | None:
+    """Run a single PromQL query and return True/False/None.
+
+    Return contract:
+        True  — query returned a non-empty `vector` or `scalar` with a value
+                that is truthy (interpreted as "the condition is active").
+        False — query succeeded but returned an empty vector or value 0.
+        None  — HTTP, parsing, or auth failure. Caller treats as UNAVAILABLE
+                so the dynamic-risk protocol falls back to the static
+                AGENTS.md mapping. Critically: signal source returning
+                None can ONLY escalate the final mode (per ADR-010), it
+                can NEVER relax it. So a misconfigured Prometheus does
+                not let an attacker downgrade risk.
+
+    Auth + TLS contract (May 2026 audit HIGH-9):
+        * Schemes are restricted to ``http`` (in-cluster, dev only) and
+          ``https`` (staging/production). Anything else → ``None``.
+        * If ``PROMETHEUS_BEARER_TOKEN`` is set, an ``Authorization:
+          Bearer`` header is attached. The token is read from env so it
+          can be wired through the K8s ServiceAccount projected token
+          volume or `common_utils.secrets.get_secret`.
+        * If ``PROMETHEUS_CA_BUNDLE`` is set (path to a PEM bundle), TLS
+          verification uses that bundle (in-cluster CAs typically live at
+          ``/run/secrets/kubernetes.io/serviceaccount/ca.crt``).
+        * If ``PROMETHEUS_INSECURE_SKIP_VERIFY=true``, verification is
+          disabled — explicitly opt-in, refused outside dev/local
+          (``ENVIRONMENT`` env). The opt-in is logged at WARNING.
+
+    Uses stdlib `urllib` + `ssl` only — no new template dependency.
+    Timeout is a hard cap; all signal sources combined must fit within
+    ``_CACHE_TTL_SECONDS`` (60s) so the agent never blocks on signals.
+    """
+    import ssl
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    parsed = urllib.parse.urlparse(prom_url)
+    if parsed.scheme not in ("http", "https"):
+        logger.debug("Refusing Prometheus URL with scheme %r", parsed.scheme)
+        return None
+
+    base = prom_url.rstrip("/")
+    qs = urllib.parse.urlencode({"query": query})
+    url = f"{base}/api/v1/query?{qs}"
+
+    # Build request with optional Bearer auth.
+    req = urllib.request.Request(url)  # noqa: S310, # nosec B310
+    bearer = os.getenv("PROMETHEUS_BEARER_TOKEN", "").strip()
+    if bearer:
+        req.add_header("Authorization", f"Bearer {bearer}")
+
+    # TLS verification — default to system CAs; allow custom bundle; refuse
+    # insecure-skip-verify outside dev unless explicitly enabled.
+    ssl_ctx: ssl.SSLContext | None = None
+    if parsed.scheme == "https":
+        ca_bundle = os.getenv("PROMETHEUS_CA_BUNDLE", "").strip()
+        skip_verify = os.getenv("PROMETHEUS_INSECURE_SKIP_VERIFY", "").lower() == "true"
+        env_label = os.getenv("ENVIRONMENT", "").strip().lower()
+        if skip_verify:
+            if env_label and env_label not in {"dev", "development", "local"}:
+                logger.warning(
+                    "PROMETHEUS_INSECURE_SKIP_VERIFY=true ignored in ENVIRONMENT=%s "
+                    "(refused outside dev/local). Falling back to system CAs.",
+                    env_label,
+                )
+                ssl_ctx = ssl.create_default_context(cafile=ca_bundle or None)
+            else:
+                logger.warning(
+                    "PROMETHEUS_INSECURE_SKIP_VERIFY=true — TLS verification disabled. Acceptable in dev/local only."
+                )
+                # Bandit B323: intentional — gated by BOTH an explicit opt-in env var
+                # (PROMETHEUS_INSECURE_SKIP_VERIFY=true) AND an ENVIRONMENT=dev|local
+                # refusal above. Production env values force the else branch.
+                ssl_ctx = ssl._create_unverified_context()  # type: ignore[attr-defined]  # nosec B323
+        else:
+            ssl_ctx = ssl.create_default_context(cafile=ca_bundle or None)
+
+    try:
+        # Bandit B310: urlopen permitted-schemes audit. URL scheme is
+        # validated above, the URL is built from deployment-supplied
+        # config (never request input), and TLS verification + Bearer
+        # auth are wired through ssl_ctx + Authorization header.
+        with urllib.request.urlopen(req, timeout=timeout, context=ssl_ctx) as resp:  # noqa: S310, # nosec B310
+            payload = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError, ssl.SSLError) as exc:
+        logger.debug("Prometheus query failed (%s): %s", query, exc)
+        return None
+
+    if payload.get("status") != "success":
+        logger.debug("Prometheus returned non-success: %s", payload.get("status"))
+        return None
+
+    data = payload.get("data") or {}
+    result_type = data.get("resultType")
+    result = data.get("result") or []
+
+    # `vector` queries return [{ "value": [ts, "1"] }, ...] — empty = condition off.
+    if result_type == "vector":
+        return len(result) > 0
+    # `scalar` queries return [ts, "value"] — value > 0 means condition is active.
+    if result_type == "scalar":
+        try:
+            return float(result[1]) > 0
+        except (IndexError, ValueError, TypeError):
+            return None
+    # Unknown result type — be conservative.
+    return None
+
+
+def _load_prometheus_signals(prom_url: str) -> RiskContext:
+    """Query Prometheus for the three signals that have a metric source.
+
+    Returns a :class:`RiskContext` with source=``"prometheus"`` when ALL
+    three queries succeed (regardless of outcome); ``available=False`` and
+    source=``"unavailable"`` when ANY query fails so the caller can chain
+    to :func:`_load_file_signals` (ADR-010 graceful degradation).
+
+    Two signals are NOT in Prometheus and are populated separately:
+        * ``off_hours``    — computed locally via :func:`_is_off_hours`
+        * ``recent_rollback`` — read from the file-backed audit log when
+          available (best-effort; ``False`` if log missing).
+    """
+    raw_results: dict[str, bool | None] = {
+        name: _query_prometheus_scalar(prom_url, query, _PROMETHEUS_TIMEOUT_SECONDS)
+        for name, query in _PROMETHEUS_QUERIES.items()
+    }
+
+    # If ANY signal query failed, the source is degraded → fall back.
+    if any(v is None for v in raw_results.values()):
+        return RiskContext(available=False, source="unavailable")
+
+    return RiskContext(
+        incident_active=bool(raw_results["incident_active"]),
+        drift_severe=bool(raw_results["drift_severe"]),
+        error_budget_exhausted=bool(raw_results["error_budget_exhausted"]),
+        off_hours=_is_off_hours(),
+        recent_rollback=False,  # populated by file path when invoked through get_risk_context
+        available=True,
+        source="prometheus",
+        raw={"prometheus_queries": _PROMETHEUS_QUERIES, "results": raw_results},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+def get_risk_context(
+    *,
+    ops_dir: Path | str = "ops",
+    prometheus_url: str | None = None,
+    cache_key: str = "default",
+) -> RiskContext:
+    """Return a :class:`RiskContext` honoring ADR-010 source priority.
+
+    Results are cached for 60 seconds per cache_key so repeated
+    invocations within a single agentic workflow do not amplify load.
+    """
+    now = time.time()
+    if cache_key in _cache:
+        ts, ctx = _cache[cache_key]
+        if now - ts < _CACHE_TTL_SECONDS:
+            return ctx
+
+    prom_url = prometheus_url or os.getenv("PROMETHEUS_URL")
+    if prom_url:
+        ctx = _load_prometheus_signals(prom_url)
+        if not ctx.available:
+            ctx = _load_file_signals(Path(ops_dir))
+        else:
+            # Prometheus has no `recent_rollback` metric — that signal is
+            # backed by the local audit log. Fold it in so the dynamic
+            # protocol does not silently lose it when Prometheus is up.
+            file_ctx = _load_file_signals(Path(ops_dir))
+            if file_ctx.recent_rollback and not ctx.recent_rollback:
+                from dataclasses import replace
+
+                ctx = replace(ctx, recent_rollback=True)
+    else:
+        ctx = _load_file_signals(Path(ops_dir))
+
+    _cache[cache_key] = (now, ctx)
+    return ctx
+
+
+def render_audit_line(base_mode: Mode, final_mode: Mode, ctx: RiskContext) -> str:
+    """Return a one-line human-readable summary for audit logs."""
+    signals = []
+    if ctx.incident_active:
+        signals.append("incident_active")
+    if ctx.drift_severe:
+        signals.append("drift_severe")
+    if ctx.error_budget_exhausted:
+        signals.append("error_budget_exhausted")
+    if ctx.off_hours:
+        signals.append("off_hours")
+    if ctx.recent_rollback:
+        signals.append("recent_rollback")
+    sig_str = ",".join(signals) if signals else "none"
+    return f"mode={base_mode}→{final_mode} source={ctx.source} signals=[{sig_str}]"

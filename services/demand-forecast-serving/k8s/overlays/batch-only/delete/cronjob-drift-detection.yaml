@@ -1,0 +1,5 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: "demand-forecast-serving-drift-detection"
+$patch: delete

@@ -61,6 +61,13 @@ scaffolded service needs to absorb them.
 
 ### Step 1 — Pre-flight checks (AUTO, 30s)
 
+> **`--vcs-ref` is not optional.** Copier resolves an unpinned source to the
+> highest-sorting tag, and the template carries frozen `v1.x` audit snapshots
+> beside its active `v0.x` line. Unpinned, `copier update` rewrites the service
+> BACKWARDS: upstream measured 582 files deleted on a real service, including
+> `.copier-answers.yml` — the record `update` reads, so it cannot then recover.
+> This text was inherited before that fix and carried the defect with it.
+
 ```bash
 cd "$service-path"
 git status --porcelain  # must be empty
@@ -74,7 +81,7 @@ If either check fails → STOP with a clear message.
 Show what would change without applying:
 
 ```bash
-copier update --dry-run
+copier update --trust --vcs-ref=v0.24.0 --pretend
 ```
 
 Categorize the diff:
@@ -96,7 +103,7 @@ Wait for explicit approval before proceeding.
 ### Step 4 — Apply update (CONSULT → approved)
 
 ```bash
-copier update --trust --defaults
+copier update --trust --defaults --vcs-ref=v0.24.0
 ```
 
 Copier will:

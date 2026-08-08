@@ -110,6 +110,21 @@ def check_adr_index(adrs: dict[str, Path]) -> None:
         ok("C1", f"{len(on_disk)} ADRs, index complete")
 
 
+#: Where the template is checked out, when it is. Generated services cite its
+#: ADRs, and resolving them needs its index — absent, the numbers are accepted
+#: rather than reported, because failing on "I cannot reach the upstream index"
+#: would make a network-free checkout look like a defect in the documents.
+TEMPLATE_CHECKOUT = REPO_ROOT.parent / "template_MLOps"
+
+
+def _template_adr_numbers() -> set[str]:
+    """ADR numbers published by ml-service-template, when it is reachable."""
+    decisions = TEMPLATE_CHECKOUT / "docs" / "decisions"
+    if not decisions.is_dir():
+        return set()
+    return {match.group(1) for path in decisions.glob("ADR-*.md") if (match := _ADR_FILE.match(path.name))}
+
+
 def check_no_dangling_refs(adrs: dict[str, Path]) -> None:
     """C2 — no document points at an ADR number that does not exist.
 
@@ -117,15 +132,37 @@ def check_no_dangling_refs(adrs: dict[str, Path]) -> None:
     a reader assumes the decision exists and was considered.
     """
     on_disk = set(adrs)
+    template_adrs = _template_adr_numbers()
     scanned = 0
+    foreign = 0
+
     for path in sorted(REPO_ROOT.rglob("*.md")):
         if not _is_scannable(path):
             continue
         scanned += 1
+
+        # `services/` holds code GENERATED from ml-service-template, and its
+        # ADR numbers index the template's decisions rather than ours. They are
+        # not dangling; they are foreign, and ADR-002 defines `template-ADR-NNN`
+        # for exactly this.
+        #
+        # Resolved against the template's index rather than skipped. A blanket
+        # path exclusion would also silence a reference to one of OUR ADRs
+        # written by hand into a service, which is the case worth catching —
+        # and reaching for a path exclusion is a reflex this repository has
+        # already had to correct twice.
+        generated = "services" in _rel_parts(path)
+        index = template_adrs if generated else on_disk
+
         for ref in set(_ADR_REF.findall(_read(path))):
-            if ref not in on_disk:
-                fail("C2", f"{path.relative_to(REPO_ROOT)} references ADR-{ref}, which does not exist")
-    ok("C2", f"{scanned} markdown files scanned for dangling ADR references")
+            if ref in index:
+                foreign += generated
+                continue
+            where = "the template's index" if generated else "this repository"
+            fail("C2", f"{path.relative_to(REPO_ROOT)} references ADR-{ref}, absent from {where}")
+
+    note = f"{scanned} markdown files scanned for dangling ADR references"
+    ok("C2", f"{note}; {foreign} resolved against the template's index" if foreign else note)
 
 
 def check_adrs_are_integrated(adrs: dict[str, Path]) -> None:
@@ -271,7 +308,23 @@ def check_language_and_privacy() -> None:
     real and currently unenforced; claiming otherwise here was worse than
     silence, because a reader would stop looking.
     """
-    public_repos = {"ml-platform", "ml-service-template", "ML-MLOps-Portfolio", "agent-local", "DuqueOM"}
+    public_repos = {
+        "ml-platform",
+        "ml-service-template",
+        "ML-MLOps-Portfolio",
+        "agent-local",
+        "DuqueOM",
+        # Former name of ml-service-template. Public, and GitHub redirects it,
+        # so a link still resolves — this check is about PRIVACY, and reporting
+        # a redirecting public repo as a private leak sends the reader looking
+        # for a disclosure that is not there.
+        #
+        # It is still a defect, of a different kind: three files in the
+        # template's source carry the pre-rename name, so every generated
+        # service inherits it. That belongs upstream, and C10 tracks it here
+        # rather than letting a wrong label stand in for a real finding.
+        "ML-MLOps-Production-Template",
+    }
     repo_link = re.compile(r"github\.com/([A-Za-z0-9_-]+)/([A-Za-z0-9_.-]+)")
     scanned = 0
 
@@ -321,6 +374,88 @@ def check_language_and_privacy() -> None:
             if repo not in public_repos:
                 fail("C6", f"{path.relative_to(REPO_ROOT)} links to non-public repository {repo!r}")
     ok("C6", f"{scanned} files checked for private references")
+
+
+_COPIER_COMMAND = re.compile(r"copier\s+(?:copy|update)\b(.*)", re.DOTALL)
+_FENCE = re.compile(r"```[a-z]*\n(.*?)```", re.DOTALL)
+
+
+def _runnable_copier_commands(text: str) -> list[str]:
+    """Copier invocations from FENCED blocks, with continuations joined.
+
+    Two refinements the first version needed, both found by running it:
+
+    Only fenced blocks count. Prose naming the subcommand — "scaffolded via
+    `copier copy`" — is not a command anyone pastes, and a grep PATTERN that
+    happens to contain the words is not one either. Flagging those trains the
+    reader to skim past this check.
+
+    Continuations are joined. A pinned command written across several lines
+    with backslashes has its `--vcs-ref` on line two, and a line-at-a-time
+    reading calls the correct command wrong. That false positive was in this
+    repository's own runbook, on the very command the check exists to protect.
+    """
+    commands = []
+    for block in _FENCE.findall(text):
+        joined = re.sub(r"\\\n\s*", " ", block)
+        commands += [f"copier {line.split('copier ', 1)[1]}" for line in joined.splitlines() if "copier " in line]
+    return commands
+
+
+def check_copier_commands_are_pinned() -> None:
+    """C9 — every documented copier command names a template version.
+
+    Copier resolves an unpinned git source to the HIGHEST-SORTING TAG. The
+    template carries frozen v1.x audit snapshots beside its active v0.x line,
+    so an unpinned command serves a scaffold from months earlier — completely,
+    plausibly, and without erroring. Upstream that defect survived the entire
+    life of the v0.x line, because nothing checked the commands themselves.
+
+    `copier update` unpinned is worse. `copy` hands over a stale scaffold;
+    `update` rewrites a service that already exists, backwards. Upstream
+    measured 582 files deleted on a real service, the answers file among them —
+    the record `update` reads, so the service cannot then recover on its own.
+
+    A LOCAL path source is exempt: `copier copy . projects/x` reads the working
+    tree, which no tag can reorder. Requiring a ref there would be asking for a
+    version of something that has none.
+    """
+    checked = 0
+    upstream: list[str] = []
+    for path in sorted(REPO_ROOT.rglob("*.md")):
+        if not _is_scannable(path):
+            continue
+        for command in _runnable_copier_commands(_read(path)):
+            source_is_local = re.search(r"\s(\.|\.\./|/)\S*", command) and "http" not in command
+            if source_is_local:
+                continue
+            checked += 1
+            if "--vcs-ref" in command:
+                continue
+
+            rel = path.relative_to(REPO_ROOT)
+            if "services" in _rel_parts(path):
+                # Generated code. We cannot fix it without editing a scaffold,
+                # which ADR-003 forbids — that is a fork with extra steps. So it
+                # is REPORTED rather than failed, and reported loudly: an
+                # upstream defect that nobody names becomes an upstream defect
+                # nobody fixes.
+                upstream.append(f"{rel}: {command.strip()!r}")
+                continue
+
+            fail(
+                "C9",
+                f"{rel} documents an unpinned copier command: {command.strip()!r} — "
+                "it resolves to the highest-sorting tag, which is a frozen v1.x snapshot",
+            )
+
+    ok("C9", f"{checked} runnable copier command(s) against a versioned source, all pinned")
+    if upstream:
+        ok(
+            "C9",
+            f"{len(upstream)} unpinned command(s) INHERITED from the template, not fixable here: "
+            + "; ".join(upstream),
+        )
 
 
 def check_audit_freshness() -> None:
@@ -442,6 +577,7 @@ def main() -> int:
     check_agentic_surface()
     check_language_and_privacy()
     check_changelog_covers_the_commit_range()
+    check_copier_commands_are_pinned()
     check_audit_freshness()
 
     for note in notes:

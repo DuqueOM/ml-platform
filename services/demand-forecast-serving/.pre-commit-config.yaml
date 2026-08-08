@@ -1,0 +1,65 @@
+# Pre-commit hooks for ML service quality
+# Install: pip install pre-commit && pre-commit install
+# Run all: pre-commit run --all-files
+#
+# Hooks: black (format) → isort (imports) → flake8 (lint) → mypy (types)
+#        → bandit (security) → gitleaks (secrets)
+
+repos:
+  # ── Ruff: lint + format (ADR-044) ────────────────────────────────────────
+  # Replaces black + isort + flake8 with one tool. Config lives in
+  # pyproject.toml [tool.ruff]. Rule scope E,W,F,I is exact parity with
+  # what the three replaced tools enforced.
+  #
+  # Ruff does NOT type-check (mypy stays) and only partially overlaps
+  # bandit (bandit stays).
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.15
+    hooks:
+      - id: ruff-check
+        name: ruff check (lint — replaces flake8 + isort)
+        args: ["--fix"]
+      - id: ruff-format
+        name: ruff format (replaces black)
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        args:
+          - "--python-version=3.11"
+          - "--ignore-missing-imports"
+        # TODO: Update file pattern to match your service directory
+        files: ^(app/|src/|tests/)
+        exclude: >
+          (?x)(
+            ^\.venv/|
+            ^.*\/data\/|
+            ^.*\/models\/|
+            ^.*\/mlruns\/|
+            ^.*\/__pycache__\/|
+            ^.*\.ipynb$
+          )
+
+  # Security linting with bandit
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.10
+    hooks:
+      - id: bandit
+        args: ['-ll', '-i']
+        exclude: ^.*\/tests\/
+
+  # Secret detection with gitleaks
+  #
+  # ⚠️ VERSION INVARIANT — keep at or above the version your CI resolves.
+  # gitleaks < 8.25 silently ignores plural `[[allowlists]]` tables, so an
+  # older local pin applies a different allowlist than CI without either
+  # side reporting a problem.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+        name: gitleaks (secret detection)
+        description: Detect hardcoded secrets in code
+        args: ['--config=.gitleaks.toml']
+        pass_filenames: false

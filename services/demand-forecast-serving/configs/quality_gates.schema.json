@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/DuqueOM/ML-MLOps-Production-Template/quality_gates.schema.json",
+  "title": "QualityGatesConfig",
+  "description": "Promotion thresholds and fairness requirements for a single service. The authoritative source is the Pydantic model `demand_forecast_serving.config.QualityGatesConfig`. This JSON Schema is a tool-agnostic export — used by `scripts/validate_quality_gates.py`, by editors via yaml-language-server, and by CI to fail fast before pip install. It is kept in sync with the Pydantic model by `templates/service/tests/test_quality_gates_schema_sync.py` (PR-B1).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "primary_metric",
+    "primary_threshold",
+    "secondary_metric",
+    "secondary_threshold",
+    "protected_attributes"
+  ],
+  "properties": {
+    "primary_metric": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(.*\\S)?$",
+      "description": "Metric name passed to sklearn cross_val_score (e.g. 'roc_auc', 'f1'). No surrounding whitespace."
+    },
+    "primary_threshold": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Minimum acceptable value of `primary_metric` on the held-out test set."
+    },
+    "secondary_metric": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(.*\\S)?$",
+      "description": "Second metric used as a sanity check (e.g. 'f1' alongside roc_auc). No surrounding whitespace."
+    },
+    "secondary_threshold": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "fairness_threshold": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "default": 0.80,
+      "description": "Disparate Impact Ratio floor; standard four-fifths rule defaults to 0.80."
+    },
+    "latency_sla_ms": {
+      "type": "number",
+      "exclusiveMinimum": 0.0,
+      "default": 100.0,
+      "description": "P95 inference latency SLA. Read by the load-test target."
+    },
+    "protected_attributes": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true,
+      "description": "Feature names whose Disparate Impact Ratio is checked. Empty list means 'fairness was considered and no attribute applies' — combined with a demographic-looking target_column it is rejected at runtime by validate_against_data (heuristic ADR-005)."
+    },
+    "promotion_threshold": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "default": 0.0,
+      "description": "Minimum delta over the current production baseline required to auto-promote. 0.0 disables baseline-comparison promotion."
+    },
+    "require_eda_artifacts": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, training fails closed unless the canonical EDA artifact packet exists. Use false only during explicit legacy migration windows."
+    },
+    "split": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Train/test split policy enforced by Trainer._split_data (PR-B3). Strategy choice is a correctness contract, not a hyperparameter — random split on temporal data leaks information from the future into training (D-13).",
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "enum": ["temporal", "grouped", "random"],
+          "default": "random",
+          "description": "Which split policy to apply. temporal=requires timestamp_column; grouped=requires entity_id_column; random=requires acknowledge_iid:true."
+        },
+        "timestamp_column": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "Column to sort on for temporal split. Required when strategy=temporal."
+        },
+        "entity_id_column": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "Group key for grouped split (GroupShuffleSplit). Required when strategy=grouped."
+        },
+        "test_fraction": {
+          "type": "number",
+          "exclusiveMinimum": 0.0,
+          "exclusiveMaximum": 1.0,
+          "default": 0.2,
+          "description": "Fraction of rows assigned to the test set."
+        },
+        "random_state": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 42,
+          "description": "Used by grouped + random strategies. Recorded in the training manifest."
+        },
+        "acknowledge_iid": {
+          "type": "boolean",
+          "default": false,
+          "description": "Adopter assertion that rows are independent and identically distributed. REQUIRED to be true when strategy=random."
+        }
+      }
+    }
+  }
+}
