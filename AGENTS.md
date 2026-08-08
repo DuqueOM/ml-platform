@@ -6,6 +6,52 @@ and to `agentic/`; they must not duplicate policy.
 
 Read this fully before writing code.
 
+## Before every commit: regenerate the derived documents
+
+Non-negotiable, and the reason is a cost already paid. Hand-maintained status
+markers in `docs/architecture/technical-plan.md` did not move for forty commits
+while the derived status said something different. The lying document was the
+one used to choose what to build next, so work happened out of phase order for
+most of a session — Phase 3 built while Phase 1 read incomplete.
+
+```bash
+git add -A                                              # stage FIRST
+uv run python scripts/check_implementation_status.py --write
+uv run python scripts/check_technology_inventory.py --write
+uv run python scripts/measure_cloud_surface.py --write
+uv run python scripts/check_doc_coherence.py
+git add -A
+```
+
+**Stage before regenerating.** The generators derive from files git knows
+about, so a brand-new directory is invisible until it is staged — regenerating
+first produces a document describing a repository without its newest work, and
+CI then calls it stale. That failed three times before the order was written
+down.
+
+### Where a fact lives
+
+One place, and everything else points at it. A number restated outside the
+thing that derives it will diverge from it — that has now happened in the
+brief, in the plan and in the CHANGELOG.
+
+| Question | Canonical source |
+| --- | --- |
+| What is built, per component | `scripts/check_implementation_status.py` |
+| Which technologies exist | `scripts/check_technology_inventory.py` |
+| What each phase MEANS and must deliver | `docs/architecture/technical-plan.md` |
+| How far along a phase is | the status script — **never the plan** |
+| Which gates are green | `scripts/check_doc_coherence.py` |
+
+The plan is the canonical source for INTENT and carries no progress markers.
+Asking it "are we done with Phase 1" is asking the wrong document, and it will
+answer anyway if someone writes a marker into it.
+
+### When the work changes what a document claims
+
+Run the `doc-coherence` skill rather than editing by hand. It knows which
+documents restate which facts; a hand edit fixes the copy you remembered.
+
 ## Independent audit
 
 ```text
