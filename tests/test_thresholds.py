@@ -115,10 +115,37 @@ def test_a_deliberate_loosening_is_allowed_but_recorded() -> None:
     assert "audit_record" in result.stdout
 
 
-def test_the_tree_is_left_as_it_was_found() -> None:
-    """Every probe above rewrites a real file; none may survive its test."""
-    status = subprocess.run(
+def _probed_files_status() -> str:
+    return subprocess.run(
         ["git", "-C", str(REPO_ROOT), "status", "--porcelain", "pyproject.toml", "scripts/measure_cloud_surface.py"],
         capture_output=True, text=True, check=True,
+    ).stdout  # fmt: skip
+
+
+def test_the_tree_is_left_as_it_was_found() -> None:
+    """Every probe above rewrites a real file; none may survive its test.
+
+    Compared against the CONTENT git records, not against an empty status.
+    The first version demanded a clean tree, which made it fail on any commit
+    that edited `pyproject.toml` — that is, on the commits that change the very
+    numbers this file guards. A check that only passes when nothing is being
+    changed is one that gets disabled the first time it matters.
+    """
+    before = _probed_files_status()
+    hashes = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "hash-object", "pyproject.toml", "scripts/measure_cloud_surface.py"],
+        capture_output=True, text=True, check=True,
+    ).stdout  # fmt: skip
+
+    subprocess.run(
+        [sys.executable, str(REPO_ROOT / "scripts" / "check_thresholds.py"), "--show"],
+        capture_output=True, text=True, cwd=REPO_ROOT, check=True,
     )  # fmt: skip
-    assert not status.stdout.strip(), f"a probe left the tree dirty:\n{status.stdout}"
+
+    after = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "hash-object", "pyproject.toml", "scripts/measure_cloud_surface.py"],
+        capture_output=True, text=True, check=True,
+    ).stdout  # fmt: skip
+
+    assert after == hashes, "a probe changed a file's CONTENT and did not put it back"
+    assert _probed_files_status() == before, "a probe changed a file's git state"

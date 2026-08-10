@@ -227,7 +227,22 @@ curl -fsS localhost:18080/health/ready
 ```
 
 **Preconditions**: Phase 1 and 1b complete, per the derived status document
-rather than per anyone's impression.
+rather than per anyone's impression — **and ADR-008 resolved**.
+
+Reading the scaffold before containerising it found what this phase was added
+to find: the generated service is a binary classifier by construction
+(`predict_proba(...)[:, 1]`, `prediction_score` bounded to `[0, 1]`,
+`risk_level`), and demand-forecast is a regression with a prediction interval.
+There is also no model artifact — `train.py` backtests and persists nothing, so
+`MODEL_PATH` points at a file that was never written. Six overlays deploy an
+image for a service that could not start against this project.
+
+The resolution is a change to `ml-service-template` (ADR-003 §2 keeps it
+authoritative for serving), which is cross-repository and therefore CONSULT.
+ADR-008 records the options and the recommendation.
+
+What is NOT blocked, and comes first: persisting a versioned model artifact
+from training, which every option needs.
 
 **Why before Phase 2**: a service that has never started locally cannot be
 diagnosed when it fails to start in a cloud, and the cloud bill runs while
