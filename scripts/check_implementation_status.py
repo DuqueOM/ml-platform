@@ -125,8 +125,22 @@ COMPONENTS: list[Component] = [
         # `make local-verify` is the assertion that it functions, and it is a
         # human-run command for exactly that reason.
     ),
-    Component("1", "libs/ml-core implementation", ["libs/ml-core/src"]),
-    Component("1", "libs/data-contracts implementation", ["libs/data-contracts/src"]),
+    Component(
+        "1",
+        "libs/ml-core implementation",
+        ["libs/ml-core/src"],
+        "uv run pytest libs/ml-core -q",
+    ),
+    Component(
+        "1",
+        "libs/data-contracts implementation",
+        ["libs/data-contracts/src"],
+        "uv run pytest libs/data-contracts -q",
+    ),
+    # No verification command, and it must stay that way until there is
+    # something to verify: zero modules, zero tests. `pytest` over an empty
+    # package exits 0, so wiring one here would turn "nothing exists" into a
+    # green tick — the exact inversion the status document exists to prevent.
     Component("1", "libs/serving-core implementation", ["libs/serving-core/src"]),
     Component(
         "1",
@@ -152,7 +166,12 @@ COMPONENTS: list[Component] = [
         "uv run pytest projects/demand-forecast/tests/test_backtest.py -q",
     ),
     Component("1", "Lakehouse module shared across projects", ["platform/lakehouse"]),
-    Component("1", "Feature store definitions", ["libs/feature-defs", "projects/demand-forecast/features"]),
+    Component(
+        "1",
+        "Feature store definitions",
+        ["libs/feature-defs", "projects/demand-forecast/features"],
+        "uv run pytest libs/feature-defs -q",
+    ),
     Component(
         "1",
         "Expanding-window backtesting",
