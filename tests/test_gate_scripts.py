@@ -356,3 +356,35 @@ def test_a_new_unignored_file_is_visible_to_the_status_generator() -> None:
         "a new unignored file was invisible to the generator; regenerating before "
         "`git add` would silently produce a stale document"
     )
+
+
+def test_deleting_an_adr_with_its_index_line_is_caught() -> None:
+    """The second checkable STOP that nothing enforced.
+
+    C1 compared disk against the index and passed when BOTH lost an entry, so
+    removing an ADR and its index line in one commit looked like a consistent
+    repository. Renumbering one is that same edit twice.
+
+    An accepted decision records why the system is as it is. Deleting it does
+    not undo the decision — it removes the reasoning, and the next person
+    rediscovers the rejected alternative by shipping it.
+    """
+    adr = next((REPO_ROOT / "docs" / "decisions").glob("ADR-007-*.md"))
+    index = REPO_ROOT / "docs" / "decisions" / "README.md"
+
+    adr_text = adr.read_text(encoding="utf-8")
+    index_text = index.read_text(encoding="utf-8")
+    trimmed = "\n".join(line for line in index_text.splitlines() if "ADR-007" not in line) + "\n"
+    assert trimmed != index_text, "the probe did not apply — ADR-007 is not in the index"
+
+    adr.unlink()
+    index.write_text(trimmed, encoding="utf-8")
+    try:
+        result = _run(GATES["doc-coherence"])
+    finally:
+        adr.write_text(adr_text, encoding="utf-8")
+        index.write_text(index_text, encoding="utf-8")
+
+    assert result.returncode == 1
+    assert "STOP operation" in result.stdout
+    assert "ADR-007" in result.stdout

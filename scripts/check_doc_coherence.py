@@ -91,6 +91,32 @@ def _adr_files() -> dict[str, Path]:
     return found
 
 
+def _adrs_at_head() -> set[str]:
+    """ADR numbers committed at HEAD.
+
+    C1 compared disk against the index and passed when BOTH lost an entry.
+    Deleting an ADR and its index line in one commit therefore looked like a
+    consistent repository — and renumbering one is that same edit twice.
+
+    Git is the witness, for the reason the threshold gate uses it: any
+    in-repository record of "which ADRs should exist" is editable in the same
+    commit as the deletion. An audit named this as the second checkable STOP
+    that nothing enforced.
+    """
+    result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "ls-tree", "--name-only", "HEAD", "docs/decisions/"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    numbers = set()
+    for line in result.stdout.splitlines():
+        match = _ADR_FILE.match(Path(line).name)
+        if match:
+            numbers.add(match.group(1))
+    return numbers
+
+
 def check_adr_index(adrs: dict[str, Path]) -> None:
     """C1 — every ADR on disk appears in the index, and vice versa."""
     index = _read(ADR_INDEX)
@@ -106,8 +132,23 @@ def check_adr_index(adrs: dict[str, Path]) -> None:
     for phantom in sorted(indexed - on_disk):
         fail("C1", f"the index references ADR-{phantom}, which does not exist")
 
+    # An ADR that existed at HEAD and is gone now was DELETED, and deleting or
+    # renumbering one is a STOP operation. Comparing disk against the index
+    # cannot see it: remove both together and the repository looks consistent.
+    #
+    # An accepted decision is a record of why the system is as it is. Removing
+    # one does not undo the decision, it removes the reasoning, and the next
+    # person rediscovers the rejected alternative by shipping it.
+    for vanished in sorted(_adrs_at_head() - on_disk):
+        fail(
+            "C1",
+            f"ADR-{vanished} was committed at HEAD and is absent now. Deleting or renumbering "
+            "an ADR is a STOP operation — supersede it with a new ADR instead, so the "
+            "reasoning survives the decision",
+        )
+
     if on_disk and on_disk == indexed:
-        ok("C1", f"{len(on_disk)} ADRs, index complete")
+        ok("C1", f"{len(on_disk)} ADRs, index complete, none removed since HEAD")
 
 
 #: Where the template is checked out, when it is. Generated services cite its
