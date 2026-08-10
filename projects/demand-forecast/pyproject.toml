@@ -18,6 +18,10 @@ dependencies = [
     # this size, and it is already a transitive dependency, so the forecast
     # costs no new supply-chain surface.
     "scikit-learn~=1.5",
+    # Imported directly by `persist`, so declared directly. It arrives as a
+    # scikit-learn transitive today, and a transitive dependency is one
+    # upstream release away from not arriving at all.
+    "joblib~=1.4",
     "ml-core",
     "data-contracts",
     "serving-core",
