@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**50 of 117 committed technologies implemented (42%)** — plus 16 studied and 10 rejected, which are decisions rather than gaps.
+**44 of 117 committed technologies implemented (37%)** — plus 16 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 | :-: | --- |
@@ -15,7 +15,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | 📓 | Studied: deliberately not wired in (ADR-004) |
 | 🚫 | Rejected, with the reason recorded |
 
-## Python toolchain — 6 built, 0 pending
+## Python toolchain — 5 built, 1 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
@@ -24,7 +24,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ✅ | `ruff` | core | |
 | ✅ | `mypy` | core | |
 | ✅ | `pytest` | core | |
-| ✅ | `coverage` | core | |
+| ⬜ | `coverage` | core | |
 | 🚫 | `black` | rejected | Superseded by ruff format (ADR-004). Keeping both is two formatters disagreeing. |
 | 🚫 | `isort` | rejected | Superseded by ruff's I rules (ADR-004). |
 | 🚫 | `poetry` | rejected | uv chosen (ADR-004); two resolvers is two lockfiles. |
@@ -54,13 +54,13 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | 📓 | `docker-compose` | studied | kind used instead: the local stack must exercise Kubernetes manifests, which compose cannot. |
 | 📓 | `devcontainers` | studied | |
 
-## CI/CD — 8 built, 1 pending
+## CI/CD — 7 built, 2 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
 | ✅ | `github-actions` | core | |
 | ✅ | `codecov` | core | |
-| ✅ | `coverage-gate` | core | |
+| ⬜ | `coverage-gate` | core | |
 | ✅ | `release-on-tag` | core | |
 | ✅ | `openssf-scorecard` | core | |
 | ✅ | `docs-quality-lint` | core | |
@@ -68,7 +68,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `ci-failure-triage` | demonstrated | Inherited CI self-healing; Demonstrated until this repository has enough CI history to classify. |
 | ✅ | `dependabot` | core | |
 
-## Security and supply chain — 4 built, 6 pending
+## Security and supply chain — 3 built, 7 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
@@ -85,16 +85,16 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ✅ | `network-policies` | core | |
 | 📓 | `linkerd` | studied | |
 | 📓 | `istio` | studied | mTLS and traffic policy matter at a service count this repository will not reach. |
-| ✅ | `kyverno` | core | |
+| ⬜ | `kyverno` | core | platform/policies holds NATIVE NetworkPolicies; a directory named policies is not an admission controller. |
 
-## Orchestration and pipelines — 2 built, 4 pending
+## Orchestration and pipelines — 1 built, 5 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
 | ⬜ | `airflow-3` | core | |
 | ✅ | `kfp-v2` | core | |
 | ⬜ | `vertex-ai-pipelines` | core | |
-| ✅ | `sagemaker-pipelines` | core | |
+| ⬜ | `sagemaker-pipelines` | core | |
 | ⬜ | `cloud-composer` | demonstrated | Managed Airflow inside a validation window only; never self-hosted. |
 | ⬜ | `mwaa` | demonstrated | |
 | 📓 | `dagster` | studied | Airflow chosen for market weight (ADR-004); Dagster's asset graph revisited if lineage becomes the constraint. |
@@ -146,7 +146,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `bigquery` | core | |
 | ⬜ | `athena` | core | |
 
-## Data quality — 4 built, 1 pending
+## Data quality — 3 built, 2 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
@@ -154,7 +154,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ✅ | `data-contracts` | core | |
 | ✅ | `leakage-detection` | core | |
 | ✅ | `great-expectations` | demonstrated | |
-| ✅ | `gx-data-docs` | demonstrated | |
+| ⬜ | `gx-data-docs` | demonstrated | |
 
 ## ML serving — 0 built, 3 pending
 
@@ -165,13 +165,13 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `triton` | demonstrated | |
 | ⬜ | `onnx` | demonstrated | |
 
-## ML lifecycle — 1 built, 2 pending
+## ML lifecycle — 0 built, 3 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
 | ⬜ | `mlflow` | core | |
 | ⬜ | `dvc` | core | |
-| ✅ | `ray-tune` | demonstrated | |
+| ⬜ | `ray-tune` | demonstrated | |
 | 🚫 | `katib` | rejected | Ray Tune chosen; Katib requires operating Kubeflow. |
 
 ## Deep learning — 0 built, 2 pending

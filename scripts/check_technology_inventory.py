@@ -99,8 +99,54 @@ def _glob_matches(spec: str) -> bool:
     return _has_substance(REPO_ROOT / spec)
 
 
+#: Lines that are prose rather than code: a comment, or a line inside a
+#: docstring. Excluding `docs/` was never enough — "writing about being
+#: finished" still worked, you just had to write it in a `.py`.
+#:
+#: Three entries reached a green tick this way. `sagemaker-pipelines` matched a
+#: DOCSTRING explaining that the KFP SDK could compile to SageMaker: the
+#: sentence describing an option became the evidence the option was taken.
+_PROSE_LINE = re.compile(r"^\s*(#|\*|//)")
+
+
+def _code_lines(path: Path) -> str:
+    """A file with its comments and docstrings removed.
+
+    Crude on purpose. A real parse would be per-language and this must read
+    Python, YAML and HCL alike; dropping comment lines and everything between
+    triple quotes covers where the false evidence actually lived.
+    """
+    kept: list[str] = []
+    in_docstring = False
+    for line in path.read_text(encoding="utf-8", errors="ignore").splitlines():
+        fences = line.count('"""') + line.count("'''")
+        if in_docstring:
+            in_docstring = fences % 2 == 0
+            continue
+        if fences:
+            in_docstring = fences % 2 == 1
+            continue
+        if not _PROSE_LINE.match(line):
+            kept.append(line)
+    return "\n".join(kept)
+
+
+def _as_word(pattern: str) -> str:
+    """Bound a bare word so it cannot match inside a longer identifier.
+
+    `pattern:ray` matched `NDArray` and `array_split`, so Ray Tune reported
+    implemented on the strength of a numpy import. Substring matching makes
+    every short technology name a false positive waiting for a variable to be
+    named after it.
+
+    Only applied to patterns that ARE a bare word. Anything carrying regex
+    syntax was written deliberately and is left alone.
+    """
+    return rf"\b{pattern}\b" if re.fullmatch(r"[A-Za-z0-9_-]+", pattern) else pattern
+
+
 def _content_matches(pattern: str, scope: str) -> bool:
-    """True when `pattern` appears in a non-documentation file under `scope`."""
+    """True when `pattern` appears in CODE — not prose — under `scope`."""
     root = REPO_ROOT / scope
     if not root.exists():
         return False
@@ -123,7 +169,11 @@ def _content_matches(pattern: str, scope: str) -> bool:
         # `terraform init`, and CI disagreed with every working copy.
         if not _is_tracked(REPO_ROOT / rel):
             continue
-        return True
+        # grep found it somewhere in the file; require it in the CODE. A
+        # substring inside a comment or a docstring is someone DESCRIBING the
+        # technology, which is exactly what this script exists to refuse.
+        if re.search(_as_word(pattern), _code_lines(REPO_ROOT / rel)):
+            return True
     return False
 
 

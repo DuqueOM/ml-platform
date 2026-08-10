@@ -142,3 +142,21 @@ def test_comparing_different_cutoffs_is_refused() -> None:
             RetrievalReport(recall_at_k=0.9, mrr=0.8, k=10, n_queries=10),
             RetrievalReport(recall_at_k=0.8, mrr=0.7, k=5, n_queries=10),
         )
+
+
+def test_k_at_or_above_the_corpus_size_is_refused() -> None:
+    """recall@k is 1.0 by arithmetic once k reaches the corpus size.
+
+    An independent audit found this with an adversarial retriever that ignores
+    the query entirely: against four documents with k>=4 it scored 1.00. The
+    metric gates promotion, so a metric that cannot fall would promote anything.
+
+    Latent rather than live — real filings chunk into far more than five — but
+    it is the exact shape of the self-passing gate this repository keeps
+    finding.
+    """
+    with pytest.raises(ValueError, match="by arithmetic"):
+        evaluate_retrieval(QUERIES[:1], [0], CORPUS, _useless, k=len(CORPUS))
+
+    with pytest.raises(ValueError, match="by arithmetic"):
+        evaluate_retrieval(QUERIES[:1], [0], CORPUS, _useless, k=99)
