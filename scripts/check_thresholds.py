@@ -77,6 +77,8 @@ THRESHOLDS = (
     Threshold(
         "retrieval promotion margin", "libs/llm-core/src/llm_core/retrieval_eval.py", r"margin: float = ([\d.]+)"
     ),
+    Threshold("retrain skill floor", "orchestration/dags/demand_forecast_training.py", r"MIN_SKILL = ([\d.]+)"),
+    Threshold("retrain coverage floor", "orchestration/dags/demand_forecast_training.py", r"MIN_COVERAGE = ([\d.]+)"),
     Threshold(
         "ingest reject ceiling",
         "projects/demand-forecast/src/demand_forecast/ingest.py",

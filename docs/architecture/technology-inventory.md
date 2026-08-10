@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**44 of 117 committed technologies implemented (37%)** — plus 16 studied and 10 rejected, which are decisions rather than gaps.
+**45 of 117 committed technologies implemented (38%)** — plus 16 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 | :-: | --- |
@@ -87,11 +87,11 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | 📓 | `istio` | studied | mTLS and traffic policy matter at a service count this repository will not reach. |
 | ⬜ | `kyverno` | core | platform/policies holds NATIVE NetworkPolicies; a directory named policies is not an admission controller. |
 
-## Orchestration and pipelines — 1 built, 5 pending
+## Orchestration and pipelines — 2 built, 4 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
-| ⬜ | `airflow-3` | core | |
+| ✅ | `airflow-3` | core | |
 | ✅ | `kfp-v2` | core | |
 | ⬜ | `vertex-ai-pipelines` | core | |
 | ⬜ | `sagemaker-pipelines` | core | |
