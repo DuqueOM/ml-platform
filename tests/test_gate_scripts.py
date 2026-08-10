@@ -18,6 +18,7 @@ known-bad input.** A gate that cannot fail is not a gate.
 from __future__ import annotations
 
 import ast
+import hashlib
 import subprocess
 import sys
 from collections.abc import Iterator
@@ -388,3 +389,64 @@ def test_deleting_an_adr_with_its_index_line_is_caught() -> None:
     assert result.returncode == 1
     assert "STOP operation" in result.stdout
     assert "ADR-007" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("spelling", "written_as"),
+    [
+        ("zqx", "zqx"),
+        ("zqx", "The ZQX project."),
+        ("zqx-plat", "zqx-plat"),
+        ("zqx-plat", "the zqx plat repository"),
+        ("zqx-plat", "zqx_plat"),
+    ],
+)
+def test_denylisted_names_are_caught_in_every_spelling(spelling: str, written_as: str) -> None:
+    """C6 must reach short names and space-separated ones.
+
+    The tokenizer required six characters for a bare word, so a shorter name
+    could not be matched at all — and a space was a hard boundary, so a
+    two-word name written in a sentence was invisible. Both were found by
+    audit, and both were floors chosen against nothing: the denylist stores
+    hashes, so this check cannot know how long the names it guards are.
+
+    The probe name is fictional. The real one is never written here, which is
+    the entire reason the denylist holds hashes.
+    """
+    denylist = REPO_ROOT / "docs" / "governance" / "private-names.sha256"
+    probe = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.md"
+
+    entry = hashlib.sha256(spelling.encode()).hexdigest()
+    with (
+        temporarily(denylist, denylist.read_text(encoding="utf-8") + f"{entry}\n"),
+        temporarily(probe, f"# probe\n\n{written_as}\n"),
+    ):
+        result = _run(GATES["doc-coherence"])
+
+    assert result.returncode == 1, f"{written_as!r} was not caught:\n{result.stdout}"
+    assert "_gate_probe.md contains a denylisted private name" in result.stdout
+    assert spelling not in result.stdout, "the gate printed the name it is hiding"
+
+
+def test_copier_check_reads_commands_not_the_word() -> None:
+    """C9 must flag an invocation, and only an invocation.
+
+    Matching the bare word `copier` inside a fenced block turned a directory
+    description in a ```text layout — "copier source for a new project" — into
+    an unpinned command. That is the technology detector's defect a second
+    time: matching a word where a FORM was meant, so prose that names a tool
+    reads as use of it. A gate that fires on prose gets skimmed past, which
+    costs more than the check is worth.
+    """
+    probe = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.md"
+
+    prose = "# probe\n\n```text\ntemplates/   copier source for a new project\n```\n"
+    with temporarily(probe, prose):
+        tolerated = _run(GATES["doc-coherence"])
+    assert "_gate_probe.md documents an unpinned copier command" not in tolerated.stdout
+
+    real = "# probe\n\n```bash\ncopier copy gh:owner/repo projects/new\n```\n"
+    with temporarily(probe, real):
+        caught = _run(GATES["doc-coherence"])
+    assert caught.returncode == 1
+    assert "unpinned copier command" in caught.stdout

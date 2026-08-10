@@ -17,6 +17,7 @@ Exit code 1 on any failure. Run before declaring a round complete.
 from __future__ import annotations
 
 import hashlib
+import itertools
 import re
 import subprocess
 import sys
@@ -318,7 +319,36 @@ def check_agentic_surface() -> None:
 
 
 DENYLIST = REPO_ROOT / "docs" / "governance" / "private-names.sha256"
-_TOKEN = re.compile(r"[a-z][a-z0-9]*(?:[-_][a-z0-9]+)+|[a-z][a-z0-9]{5,}")
+
+#: Words, at their smallest useful size. The previous pattern required six
+#: characters for a bare word, so a shorter name could not be matched at all —
+#: an audit found it, and the flaw is that the floor was chosen against nothing.
+#: The denylist stores HASHES, so the check cannot know how long the names it
+#: guards are; any floor above the shortest plausible name is a guess that
+#: silently exempts something. Two characters is the smallest word that exists.
+_WORD = re.compile(r"[a-z][a-z0-9]+")
+
+
+def _candidates(content: str) -> set[str]:
+    """Every spelling of a name that could appear in ``content``.
+
+    A name is not always written the way it is registered. `some-name` also
+    appears as `some_name`, `somename`, and `some name` in prose — and only the
+    first two were reachable before, because the tokenizer treated a space as a
+    hard boundary. So adjacent words are re-joined with each separator, which
+    costs one pass and closes the form most likely to appear in a sentence.
+
+    Bounded at two words deliberately: longer names would need n-grams that
+    grow with n, and the guarded constraint is a repository name.
+    """
+    words = _WORD.findall(content)
+    tokens = set(words)
+    for first, second in itertools.pairwise(words):
+        tokens.update((f"{first}-{second}", f"{first}_{second}", f"{first}{second}"))
+    # Hyphenated and underscored runs survive as whole tokens too: `_WORD`
+    # splits them, and the re-joining above only restores pairs.
+    tokens.update(re.findall(r"[a-z][a-z0-9]*(?:[-_][a-z0-9]+)+", content))
+    return tokens
 
 
 def _forbidden_hashes() -> set[str]:
@@ -352,7 +382,14 @@ def _check_forbidden_names() -> None:
     if not forbidden:
         return
 
-    tracked = subprocess.run(["git", "-C", str(REPO_ROOT), "ls-files"], capture_output=True, text=True)
+    # `--others --exclude-standard` so a file that exists but has not been
+    # staged yet is scanned too. Plain `ls-files` reads the index, and the one
+    # moment this check matters most is the one before the name is committed.
+    tracked = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "ls-files", "--cached", "--others", "--exclude-standard"],
+        capture_output=True,
+        text=True,
+    )
     for rel in tracked.stdout.splitlines():
         path = REPO_ROOT / rel
         if not path.is_file() or rel == DENYLIST.relative_to(REPO_ROOT).as_posix():
@@ -361,7 +398,7 @@ def _check_forbidden_names() -> None:
             content = path.read_text(encoding="utf-8", errors="ignore").lower()
         except OSError:
             continue
-        for token in set(_TOKEN.findall(content)):
+        for token in _candidates(content):
             if hashlib.sha256(token.encode()).hexdigest() in forbidden:
                 # The name itself is never printed — doing so would commit it
                 # to the CI log, which is public on a public repository.
@@ -448,7 +485,7 @@ def check_language_and_privacy() -> None:
     ok("C6", f"{scanned} files checked for private references")
 
 
-_COPIER_COMMAND = re.compile(r"copier\s+(?:copy|update)\b(.*)", re.DOTALL)
+_COPIER_COMMAND = re.compile(r"copier\s+(?:copy|update|recopy)\b(.*)")
 _FENCE = re.compile(r"```[a-z]*\n(.*?)```", re.DOTALL)
 
 
@@ -470,16 +507,23 @@ def _runnable_copier_commands(text: str) -> list[str]:
     commands = []
     for block in _FENCE.findall(text):
         joined = re.sub(r"\\\n\s*", " ", block)
-        commands += [
-            f"copier {line.split('copier ', 1)[1]}"
-            for line in joined.splitlines()
+        for line in joined.splitlines():
             # A shell COMMENT inside a fenced block is not a command. The
             # template's own comment explaining why the pin is needed —
             # "# --vcs-ref is REQUIRED: a bare `copier update` resolves to..." —
             # was reported as an unpinned command, which is this check flagging
             # the documentation that exists because of it.
-            if "copier " in line and not line.lstrip().startswith("#")
-        ]
+            if line.lstrip().startswith("#"):
+                continue
+            # The SUBCOMMAND is what makes it a command. Matching the bare word
+            # made "copier source for a new project" — a directory description
+            # in a ```text layout block — an unpinned invocation. This is the
+            # same defect the technology detector had: matching a word where a
+            # form was meant, so prose that merely names the tool is read as
+            # use of it.
+            match = _COPIER_COMMAND.search(line)
+            if match:
+                commands.append(match.group(0))
     return commands
 
 

@@ -356,12 +356,24 @@ load-bearing is promoted with a gate, or removed.
 ```text
 libs/            ml-core · data-contracts · feature-defs · llm-core · serving-core
 projects/        one deployable ML system each; uniform structure
+services/        GENERATED from ml-service-template; owned upstream, not edited here
 orchestration/   Airflow DAGs + KFP pipelines
 platform/        terraform · kubernetes · observability · policies
 agentic/         23 rules · 29 skills · 22 workflows  (CANONICAL)
+templates/       copier source for a new project (Jinja; not valid Python in place)
+scripts/         the gates, the dataset fetchers, the derived-document generators
+ops/             audit trail, append-only and hash-chained
 docs/            decisions · architecture · governance · datasets · runbooks
 tests/           repository-level invariants
 ```
+
+`services/` is the one directory NOT written here. It is scaffolded from
+ml-service-template and stays byte-identical to what that template produces, so
+`copier update` keeps working — editing it is a fork with extra steps, which
+ADR-003 forbids. It is therefore excluded from ruff, mypy and coverage, and an
+audit found that omitting it from this list made those exclusions look like
+gaps rather than the consequence of a decision. Upstream defects found in it are
+still reported by name, by C9.
 
 ### Agentic surface and tool parity
 
