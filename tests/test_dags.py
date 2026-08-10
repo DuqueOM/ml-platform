@@ -15,12 +15,31 @@ overwrite, and no heavy import at module level.
 from __future__ import annotations
 
 import ast
+import importlib.util
+import os
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DAG_FOLDER = REPO_ROOT / "orchestration" / "dags"
+
+
+def _airflow_installed() -> bool:
+    return importlib.util.find_spec("airflow") is not None
+
+
+# The skip is a convenience for a laptop that has not installed the extra. In
+# CI it would be a silent hole: `uv sync --all-extras` is supposed to install
+# airflow, and if it ever stops doing so these tests would vanish from a green
+# build without anyone noticing — the exact shape of every defect this
+# repository has found in itself. So in CI, missing airflow is a FAILURE.
+if os.environ.get("CI") and not _airflow_installed():
+    raise RuntimeError(
+        "airflow is not installed in CI. It is an optional extra and CI runs "
+        "`uv sync --all-packages --all-extras`, so this means the sync stopped "
+        "installing it — and these DAG tests would otherwise skip silently."
+    )
 
 airflow = pytest.importorskip(
     "airflow",
