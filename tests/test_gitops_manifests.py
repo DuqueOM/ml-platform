@@ -27,6 +27,13 @@ APPLICATIONSET = REPO_ROOT / "platform" / "gitops" / "applicationset.yaml"
 CLOUDS = ("gcp", "aws")
 ENVIRONMENTS = ("dev", "staging", "prod")
 
+#: Overlays that are deliberately NOT cells of the cloud x environment matrix.
+#: `local` targets a kind cluster: no cloud, no External Secrets, no Kyverno,
+#: and no ArgoCD Application generated for it. Listed by name rather than
+#: filtered by a pattern, so a sixth cloud overlay named `local-something`
+#: cannot slip past the completeness check by looking like an exemption.
+NON_MATRIX_OVERLAYS = frozenset({"local"})
+
 pytestmark = pytest.mark.skipif(shutil.which("kubectl") is None, reason="kubectl not installed")
 
 
@@ -44,7 +51,7 @@ def test_the_matrix_is_complete() -> None:
     likely to go unnoticed and most expensive to discover.
     """
     expected = {f"{cloud}-{env}" for cloud in CLOUDS for env in ENVIRONMENTS}
-    found = {path.name for path in OVERLAYS.iterdir() if path.is_dir()}
+    found = {path.name for path in OVERLAYS.iterdir() if path.is_dir()} - NON_MATRIX_OVERLAYS
     assert found == expected, f"matrix is incomplete: missing {expected - found}, extra {found - expected}"
 
 

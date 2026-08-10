@@ -1,0 +1,9 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: demand-forecast
+spec:
+  # 0, not 1: with a single replica, minAvailable 1 makes a drain block
+  # forever. On a laptop that reads as `kubectl delete node` hanging with no
+  # explanation. The cloud overlays keep 1, where there is more than one pod.
+  minAvailable: 0

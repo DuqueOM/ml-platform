@@ -30,14 +30,30 @@ spec:
           resources:
             requests: { cpu: 250m, memory: 512Mi }
             limits: { cpu: "1", memory: 1Gi }
+          # The paths are the ones the SERVICE serves, which is not what this
+          # file said. It probed `/health/ready` and `/health/live`; the app
+          # exposes `/health` and `/ready`. Both probes 404ed, so a pod could
+          # never become Ready and liveness would restart it forever — across
+          # six overlays that all rendered green, because rendering a manifest
+          # never asks the container whether the route exists. Found by trying
+          # to start it, which is the whole reason Phase 1c exists.
+          #
+          # ADR-003 §2: the template is authoritative for serving, and its own
+          # manifest probes these paths. `tests/test_probe_paths.py` now
+          # compares them against the routes the app declares.
+          startupProbe:
+            # Absorbs the slow start — model load plus warm-up — so liveness
+            # never fires at a pod that is merely still warming up. This is
+            # what the previous "deliberately later and slower" liveness was
+            # approximating, and a startupProbe does it without leaving a real
+            # hang undetected for 30 seconds afterwards.
+            httpGet: { path: /health, port: 8000 }
+            periodSeconds: 5
+            failureThreshold: 24
           readinessProbe:
-            httpGet: { path: /health/ready, port: 8000 }
+            httpGet: { path: /ready, port: 8000 }
             initialDelaySeconds: 5
             periodSeconds: 5
           livenessProbe:
-            # Deliberately later and slower than readiness: a liveness probe
-            # that fires during a slow model load restarts the pod forever,
-            # and the symptom looks like a crash loop rather than a timeout.
-            httpGet: { path: /health/live, port: 8000 }
-            initialDelaySeconds: 30
+            httpGet: { path: /health, port: 8000 }
             periodSeconds: 20

@@ -219,12 +219,33 @@ starts.
 ### Acceptance
 
 ```bash
-docker build -t ml-platform/demand-forecast:local projects/demand-forecast
-kind load docker-image ml-platform/demand-forecast:local --name ml-platform
-kubectl apply -k platform/kubernetes/overlays/gcp-dev
-kubectl wait --for=condition=ready pod -l app=demand-forecast --timeout=120s
-curl -fsS localhost:18080/health/ready
+make local-serve
 ```
+
+which is, without the Makefile:
+
+```bash
+docker build -t ml-platform/demand-forecast:local services/demand-forecast-serving
+kind load docker-image ml-platform/demand-forecast:local --name ml-platform-local
+kubectl --context kind-ml-platform-local apply -k platform/kubernetes/overlays/local
+kubectl --context kind-ml-platform-local -n demand-forecast-local \
+  wait --for=condition=ready pod -l app=demand-forecast --timeout=300s
+kubectl --context kind-ml-platform-local -n demand-forecast-local \
+  port-forward svc/demand-forecast 18080:80 &
+curl -fsS localhost:18080/ready
+```
+
+The build context is `services/`, not `projects/`: the deployable is the
+service scaffolded from ml-service-template, and `projects/demand-forecast/`
+is the library it would import. The earlier version of this block named
+`projects/demand-forecast`, which has no Dockerfile — a command that had never
+been run, in the acceptance criteria of a phase about running things.
+
+The probe path is `/ready`. The manifests probed `/health/ready` and
+`/health/live`, which the service does not serve, so a pod could never have
+reached Ready across any of the six overlays. `tests/test_probe_paths.py`
+compares probe paths against the routes the app declares, on every commit and
+without Docker.
 
 **Preconditions**: Phase 1 and 1b complete, per the derived status document
 rather than per anyone's impression — **and ADR-008 resolved**.
