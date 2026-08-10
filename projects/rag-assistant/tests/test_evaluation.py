@@ -37,8 +37,14 @@ def _oracle(query: str, documents: Sequence[str], k: int) -> list[int]:
 
 
 def test_both_retrievers_score_the_same_chunks() -> None:
-    """Re-chunking between them would attribute a corpus difference to the retriever."""
-    result = evaluate_corpus(FILINGS, QUERIES, _oracle, k=3)
+    """Re-chunking between them would attribute a corpus difference to the retriever.
+
+    k=1, not 3. This fixture chunks into fewer than three units, and recall@k
+    is 1.0 by arithmetic once k reaches the corpus size — so at k=3 both
+    retrievers scored perfectly and the comparison measured nothing. An
+    independent audit found the missing guard; the guard then found this test.
+    """
+    result = evaluate_corpus(FILINGS, QUERIES, _oracle, k=1)
 
     assert result.candidate.n_queries == result.baseline.n_queries == 2
     assert result.candidate.k == result.baseline.k
@@ -88,7 +94,7 @@ def test_promotion_needs_the_baseline_to_actually_be_worse() -> None:
 
 def test_the_baseline_is_not_trivially_beaten() -> None:
     """On filings, word counting is strong — that is why it is the bar."""
-    result = evaluate_corpus(FILINGS, QUERIES, _oracle, k=3)
+    result = evaluate_corpus(FILINGS, QUERIES, _oracle, k=1)
     assert result.baseline.recall_at_k > 0, "the baseline retrieved nothing; the comparison is empty"
 
 

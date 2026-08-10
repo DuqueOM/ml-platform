@@ -70,7 +70,7 @@ categories:
       - {id: network-policies, tier: core, detect: ["pattern:NetworkPolicy|platform"]}
       - {id: linkerd, tier: studied}
       - {id: istio, tier: studied, note: "mTLS and traffic policy matter at a service count this repository will not reach."}
-      - {id: kyverno, tier: core, detect: ["platform/policies"]}
+      - {id: kyverno, tier: core, detect: ["pattern:kyverno.io|platform"], note: "platform/policies holds NATIVE NetworkPolicies; a directory named policies is not an admission controller."}
   - name: Orchestration and pipelines
     items:
       - {id: airflow-3, tier: core, detect: ["orchestration/dags/*.py"]}

@@ -148,6 +148,15 @@ def evaluate_retrieval(
         raise ValueError("no queries to score; an empty run reports 0.0 and looks like a failure")
     if k < 1:
         raise ValueError(f"k must be at least 1, got {k}")
+    if k >= len(documents):
+        # recall@k is 1.0 by arithmetic once k reaches the corpus size: every
+        # document is returned, so every answer is "found" and a retriever that
+        # ignores the query scores perfectly. A metric that cannot fall is not
+        # a metric, and this one gates promotion.
+        raise ValueError(
+            f"k={k} with {len(documents)} documents makes recall@k 1.0 by arithmetic — "
+            "every retriever returns the whole corpus and none can be distinguished"
+        )
 
     hits = 0
     reciprocal_ranks = 0.0

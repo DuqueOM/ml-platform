@@ -140,7 +140,7 @@ Broad shape:
   them. `implementation-status.md` already marked both 🟡; only this prose
   did not.
 - 1 project: `demand-forecast`
-- 28 declared gates; `scripts/` holds the enforcing code
+- the gates C4 resolves; `scripts/` holds the enforcing code
 - `ops/audit.jsonl` — hash-chained append-only operational record
 
 ---
@@ -247,7 +247,7 @@ Ranked by the author's own estimate of where a finding is most likely. This
 ranking is itself a claim worth doubting.
 
 1. **Gates that cannot fail.** Six instances already found. Take each of the
-   28 declared gates, inject a violation, and confirm it fails. Do not trust
+   the gates C4 resolves, inject a violation, and confirm it fails. Do not trust
    `tests/test_gate_scripts.py` to have covered this — it was written by the
    same author.
 2. **Detectors that match documentation.** The technology inventory claims
