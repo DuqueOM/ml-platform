@@ -33,7 +33,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**26 done · 6 partial · 8 absent** — of 40 tracked components.
+**28 done · 4 partial · 8 absent** — of 40 tracked components.
 
 ### Phase 0
 
@@ -41,7 +41,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 | :-: | --- | --- |
 | ✅ | uv workspace + lockfile | `uv lock --check` passes |
 | ✅ | Dependency direction test | `uv run pytest tests/test_dependency_direction.py -q` passes |
-| ✅ | Documentation coherence gate | `uv run python scripts/check_doc_coherence.py` passes |
+| 🟡 | Documentation coherence gate | `uv run python scripts/check_doc_coherence.py` FAILS |
 | ✅ | Agentic canonical store | `uv run python scripts/validate_agentic_surface.py --strict` passes |
 | ✅ | Agentic 4-tool surfaces | `uv run python scripts/sync_agentic_adapters.py --check` passes |
 | ✅ | Agentic surface integrity | `uv run python scripts/validate_agentic_surface.py --strict` passes |
@@ -56,14 +56,14 @@ modules, and a coherence filter examining zero files, both stayed green.
 | :-: | --- | --- |
 | ✅ | Dataset acquisition scripts | `uv run pytest tests/test_dataset_registry.py -q` passes |
 | 🟡 | Local validation stack | 8 file(s), no verification command |
-| 🟡 | libs/ml-core implementation | 4 file(s), no verification command |
-| 🟡 | libs/data-contracts implementation | 2 file(s), no verification command |
+| ✅ | libs/ml-core implementation | `uv run pytest libs/ml-core -q` passes |
+| ✅ | libs/data-contracts implementation | `uv run pytest libs/data-contracts -q` passes |
 | 🟡 | libs/serving-core implementation | 1 file(s), no verification command |
 | ✅ | projects/demand-forecast | `uv run pytest projects/demand-forecast -q` passes |
 | ✅ | Iceberg ingestion (demand-forecast) | `uv run pytest projects/demand-forecast/tests/test_overwrite_scope.py -q` passes |
 | ✅ | Panel-aware temporal splitting | `uv run pytest projects/demand-forecast/tests/test_backtest.py -q` passes |
 | ⬜ | Lakehouse module shared across projects | absent |
-| 🟡 | Feature store definitions | 4 file(s), no verification command |
+| ✅ | Feature store definitions | `uv run pytest libs/feature-defs -q` passes |
 | ✅ | Expanding-window backtesting | `uv run pytest projects/demand-forecast/tests/test_backtest.py -q` passes |
 | ✅ | Feature engineering (backward-only) | `uv run pytest projects/demand-forecast/tests/test_training.py -q -k feature` passes |
 | ✅ | Model training + baseline gate | `uv run pytest projects/demand-forecast/tests/test_training.py -q` passes |
