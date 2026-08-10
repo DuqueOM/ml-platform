@@ -8,6 +8,11 @@ SHELL := /bin/bash
 CLUSTER := ml-platform-local
 CTX := kind-$(CLUSTER)
 LOCAL := platform/local
+# Kept in step with `images:` in platform/kubernetes/overlays/local, which is
+# what the pod actually pulls — and with imagePullPolicy: Never, a tag that
+# does not match here fails as ErrImageNeverPull rather than as a typo.
+SERVICE_IMAGE := ml-platform/demand-forecast:local
+SERVICE_NS := demand-forecast-local
 
 .PHONY: help
 help: ## Show this help
@@ -62,6 +67,23 @@ local-endpoints: ## Print the local stack's URLs
 	@echo "  prometheus http://localhost:19090"
 	@echo "  grafana    http://localhost:13000"
 	@echo ""
+
+.PHONY: local-serve
+local-serve: ## Build the service image, load it into kind, and wait for a Ready pod
+	docker build -t $(SERVICE_IMAGE) services/demand-forecast-serving
+	kind load docker-image $(SERVICE_IMAGE) --name $(CLUSTER)
+	kubectl --context $(CTX) apply -k platform/kubernetes/overlays/local
+	@echo "waiting for a Ready pod — the first claim in this repository that is not about YAML…"
+	kubectl --context $(CTX) -n $(SERVICE_NS) wait --for=condition=ready \
+	  pod -l app=demand-forecast --timeout=300s
+	@echo ""
+	@echo "  port-forward:  kubectl --context $(CTX) -n $(SERVICE_NS) port-forward svc/demand-forecast 18080:80"
+	@echo "  then:          curl -fsS localhost:18080/ready"
+	@echo ""
+
+.PHONY: local-serve-down
+local-serve-down: ## Remove the service, leaving the rest of the local stack up
+	kubectl --context $(CTX) delete -k platform/kubernetes/overlays/local --ignore-not-found
 
 .PHONY: local-verify
 local-verify: ## Assert the local stack actually works (not merely that it started)

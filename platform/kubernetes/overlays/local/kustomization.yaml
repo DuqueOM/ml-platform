@@ -1,0 +1,40 @@
+# The overlay that has to actually run. The six cloud overlays render; this
+# one is applied to a kind cluster and its pod either reaches Ready or does
+# not, which is a different and much harder claim.
+#
+# Two things the cloud overlays carry are deliberately absent:
+#
+#   - `../../base/secrets` and `secret-store.yaml` need the External Secrets
+#     CRDs and a cloud identity. Installing them here would test a mock of the
+#     thing rather than the thing.
+#   - `../../../policies` are Kyverno policies, and kind ships no Kyverno.
+#     Applying them without the controller would report success while enforcing
+#     nothing — the exact shape of defect this repository keeps finding.
+#
+# Both are named here rather than silently omitted, so the difference between
+# "runs locally" and "runs in a cloud" stays legible.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: demand-forecast-local
+
+resources:
+  - namespace.yaml
+  - ../../base
+
+patches:
+  - path: local-runtime.yaml
+    target: { kind: Deployment, name: demand-forecast }
+  # minAvailable 1 against a single replica blocks a drain forever, which on a
+  # laptop reads as `kubectl delete` hanging with no explanation.
+  - path: pdb.yaml
+    target: { kind: PodDisruptionBudget, name: demand-forecast }
+
+images:
+  - name: ghcr.io/duqueom/ml-platform/demand-forecast
+    newName: ml-platform/demand-forecast
+    newTag: local
+
+commonLabels:
+  environment: local
+  cloud: none

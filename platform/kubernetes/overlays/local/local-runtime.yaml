@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demand-forecast
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: serving
+          # Loaded with `kind load docker-image`, so there is nothing to pull
+          # and an attempt would fail with ImagePullBackOff against a registry
+          # that has never seen this tag.
+          imagePullPolicy: Never
+          env:
+            # ADR-008: there is no demand-forecast model artifact the generated
+            # service can load, and its prediction path is a binary classifier
+            # regardless. The service's own escape hatch is used instead, which
+            # it permits ONLY in dev/local and refuses in staging or prod —
+            # verified by reading the guard, not by assuming it.
+            #
+            # So what this overlay proves is bounded, and the bound is the
+            # point: the image builds, the container starts, the probes answer,
+            # the pod reaches Ready. It does NOT prove a forecast is served.
+            - { name: ENVIRONMENT, value: local }
+            - { name: ALLOW_MODELLESS_STARTUP, value: "true" }
+            - { name: PREDICTION_LOG_ENABLED, value: "false" }
+            - { name: SERVICE_METRIC_PREFIX, value: demand_forecast }
+          resources:
+            # A laptop also runs the observability stack. The cloud overlays
+            # keep the base's larger request.
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: "1", memory: 1Gi }
+          volumeMounts:
+            # readOnlyRootFilesystem is on, and Python writes to /tmp. Without
+            # this the container starts and dies on the first write, which
+            # reads as an application bug rather than a filesystem policy.
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: {}

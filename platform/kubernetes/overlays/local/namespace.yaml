@@ -1,0 +1,12 @@
+# Pod Security "restricted" here too. A local namespace that admits what a
+# cloud namespace would reject makes the local run prove less than it appears
+# to: the pod would start here and be refused there, and the difference would
+# surface at deploy time as an outage.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demand-forecast-local
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
