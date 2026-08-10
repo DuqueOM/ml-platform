@@ -33,7 +33,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**28 done · 4 partial · 8 absent** — of 40 tracked components.
+**29 done · 4 partial · 7 absent** — of 40 tracked components.
 
 ### Phase 0
 
@@ -69,7 +69,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 | ✅ | Model training + baseline gate | `uv run pytest projects/demand-forecast/tests/test_training.py -q` passes |
 | ✅ | Warehouse validation (Great Expectations) | `uv run pytest projects/demand-forecast/tests/test_warehouse_checks.py -q` passes |
 | ✅ | Training pipeline (KFP v2) — compiles | `uv run pytest tests/test_pipeline_spec.py -q` passes |
-| ⬜ | Orchestration DAGs (Airflow) | absent |
+| ✅ | Orchestration DAGs (Airflow) | `uv run pytest tests/test_dags.py -q` passes |
 | ✅ | Observability (OTel traces) | `uv run pytest projects/demand-forecast/tests/test_tracing.py -q` passes |
 | ⬜ | Grafana LGTM dashboards | absent |
 

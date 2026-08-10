@@ -205,7 +205,16 @@ COMPONENTS: list[Component] = [
         # must not imply it did.
         "uv run pytest tests/test_pipeline_spec.py -q",
     ),
-    Component("1", "Orchestration DAGs (Airflow)", ["orchestration/dags"]),
+    Component(
+        "1",
+        "Orchestration DAGs (Airflow)",
+        ["orchestration/dags"],
+        # Parses the folder the scheduler's way. A DAG with an import error is
+        # not a broken DAG anyone sees; it is simply absent, and the pipeline
+        # stops while the dashboard stays green. Airflow is an optional extra,
+        # so this SKIPS without it — which is why CI syncs all extras.
+        "uv run pytest tests/test_dags.py -q",
+    ),
     Component(
         "1",
         "Observability (OTel traces)",
