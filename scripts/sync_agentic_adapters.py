@@ -24,6 +24,8 @@ of writing, which is what CI uses.
 from __future__ import annotations
 
 import argparse
+import os
+import re
 import shutil
 import sys
 from dataclasses import dataclass
@@ -97,6 +99,49 @@ python scripts/validate_agentic_surface.py --strict
 """
 
 
+_RELATIVE_LINK = re.compile(r"\]\((\.{1,2}/[^)\s]+)\)")
+
+
+def rewrite_relative_links(body: str, source_dir: Path, target_dir: Path) -> str:
+    """Re-express every relative link for a file that moved to another depth.
+
+    The mirror used to copy the body verbatim, and the bodies live deeper than
+    their mirrors: a skill is `agentic/skills/<id>/SKILL.md` (three levels down)
+    and its mirror is `.devin/skills/<id>.md` (two). So `../../../docs/...`
+    resolved from the canonical file and pointed one level above the repository
+    from the mirror — five broken links, in generated output, that nothing
+    noticed because the coherence gate resolves ADR NUMBERS and never follows
+    an href.
+
+    Resolved and re-expressed rather than counted: computing the depth
+    difference and slicing `../` prefixes gets the common case right and fails
+    on a link that walks back down (`../foo/../bar`). Round-tripping through
+    the repository-relative path cannot.
+
+    Args:
+        body: The canonical markdown.
+        source_dir: Directory the canonical file lives in.
+        target_dir: Directory the mirror will live in.
+
+    Returns:
+        The body with every relative link valid from ``target_dir``.
+    """
+    if source_dir == target_dir:
+        return body
+
+    def _fix(match: re.Match[str]) -> str:
+        link = match.group(1)
+        path, _, anchor = link.partition("#")
+        resolved = (source_dir / path).resolve()
+        try:
+            rewritten = os.path.relpath(resolved, target_dir)
+        except ValueError:  # pragma: no cover — different drives, Windows only
+            return match.group(0)
+        return f"]({rewritten}{'#' + anchor if anchor else ''})"
+
+    return _RELATIVE_LINK.sub(_fix, body)
+
+
 def render_mirror(artifact: Artifact, surface: str) -> str:
     """A full copy, for tools that cannot follow a pointer."""
     rel = artifact.source.relative_to(REPO_ROOT)
@@ -128,6 +173,8 @@ def sync(check_only: bool) -> int:
             path = target_path(artifact, cfg)
             expected.add(path)
             content = renderer(artifact, surface)
+            if cfg["mode"] == "mirror":
+                content = rewrite_relative_links(content, artifact.source.parent, path.parent)
 
             current = path.read_text(encoding="utf-8") if path.is_file() else None
             if current == content:

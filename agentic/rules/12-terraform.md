@@ -5,7 +5,7 @@ description: Terraform IaC patterns for multi-cloud ML infrastructure
 ---
 > **Inherited rule.** Canonical authority for this policy is
 > [`ml-service-template`](https://github.com/DuqueOM/ml-service-template),
-> which owns service-level invariants ([template-ADR-003](../../docs/decisions/template-ADR-003-service-template-consumption.md)).
+> which owns service-level invariants ([template-ADR-003](https://github.com/DuqueOM/ml-service-template/blob/main/docs/decisions/ADR-003-service-template-consumption.md)).
 > Where this file and the template disagree, **the template is correct**.
 > Any `ADR-NNN` cited below refers to the template's numbering, not this
 > repository's. The AUTO / CONSULT / STOP protocol in `AGENTS.md` binds here.

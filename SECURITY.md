@@ -63,23 +63,61 @@ Routing it is our job, not yours.
 
 ## What this repository does about security
 
-Not a list of intentions — every item below is a step in
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) and fails the build.
+The first version of this table said "every item below is a step in
+`.github/workflows/ci.yml` and fails the build". **That was false for four of
+its six rows**, and it was written on the same day as the rest of this policy.
+Checkov runs with `soft_fail`, Kubescape with `continue-on-error`, Bandit was
+configured in `pyproject.toml` and wired to nothing, and tfsec appeared in no
+workflow at all.
 
-| Control | Tool | What it covers |
-| --- | --- | --- |
-| Secret scanning | gitleaks | Full history, on every push. Zero suppressions today; see `.gitleaks.toml` |
-| Dependency vulnerabilities | Trivy, Dependabot | The lockfile and transitive dependencies |
-| IaC misconfiguration | Checkov, tfsec | Terraform and Kubernetes definitions, statically |
-| Cluster posture | Kubescape | Manifests against the NSA and CIS baselines |
-| Python security lint | Bandit | Source, with suppressions declared in `pyproject.toml` and argued there |
-| Supply chain posture | OpenSSF Scorecard | The repository's own configuration |
+A security policy overstating its own controls is the exact defect this
+repository exists to catch, so the table now carries a **Blocking** column and
+`tests/test_security_controls.py` checks every row against the workflows on
+every commit.
 
-Two properties matter more than the list:
+| Control | Tool | Blocking | What it covers |
+| --- | --- | :-: | --- |
+| Secret scanning | gitleaks | **yes** | Full history, on every push. Zero suppressions today; see `.gitleaks.toml` |
+| Dependency and image vulnerabilities | Trivy | **yes** | Filesystem scan for vulnerabilities and secrets, CRITICAL and HIGH |
+| Dependency updates | Dependabot | no — opens PRs | Pinned actions and Python dependencies |
+| Supply chain posture | Scorecard | no — reports | The repository's own configuration |
+| IaC misconfiguration | Checkov | **no — advisory** | Terraform and Kubernetes under `platform/`, statically |
+| Cluster posture | Kubescape | **no — advisory** | Manifests against the NSA and CIS baselines |
+
+### Where the gaps are, stated rather than implied
+
+**Checkov reports and does not block.** It currently finds 114 failures under
+`platform/` — roughly 36 of them a scan-scope artifact, because the overlay
+patches are strategic merges and Checkov reads each raw file as if it were a
+complete Deployment. The rest are real: the Terraform for both clouds lacks
+private nodes, master authorized networks, network policy, binary
+authorization, and EKS secrets encryption. Those are Phase 2 work and are
+tracked there. Turning `soft_fail` off before they are fixed would produce a
+permanently red build, which is how a gate gets deleted.
+
+**Trivy does not scan for IaC misconfiguration.** `scan-type: fs` runs the
+vulnerability and secret scanners; misconfiguration is opt-in and not enabled.
+Enabling it surfaces 56 HIGH findings, mostly read-only-root-filesystem and
+default-security-context on the same manifests Checkov already reports.
+
+**Bandit is configured and does not run.** `[tool.bandit]` in `pyproject.toml`
+carries argued suppressions for a scan that no workflow invokes.
+
+**Kubescape reports and does not block.** Its step carries
+`continue-on-error: true`, so a manifest failing the NSA or CIS baseline is
+printed and the build stays green. It scans the rendered manifests rather than
+a live cluster, which is honest about what it can prove without one — but until
+the suppression comes off it is a report, not a gate.
+
+**tfsec is not wired.** Adding a third IaC scanner while the second one's
+findings are unread would be theatre, so it is deliberately not being added
+until Checkov's are addressed.
+
+### Two properties that do hold
 
 **No credentials are stored.** Cloud access is federated — Workload Identity on
-GCP, IRSA on AWS — so there is no long-lived key to leak. A pull request that
-introduces a static credential fails secret scanning before review.
+GCP, IRSA on AWS — so there is no long-lived key to leak, and a pull request
+introducing a static credential fails secret scanning before review.
 
 **Gates are verified by injection.** A gate is not trusted because it passes;
 it is trusted because someone broke the thing it guards and watched it fail.

@@ -15,7 +15,7 @@ mode: AUTO within its own session; never modifies the repository
 
 # enterprise-audit
 
-Implements [ADR-005](../../../docs/decisions/ADR-005-agentic-governance.md)
+Implements [ADR-005](../../docs/decisions/ADR-005-agentic-governance.md)
 rules B and E–I, and procedure QA-4.
 
 ## Why this runs in a separate session

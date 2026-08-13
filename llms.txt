@@ -1,0 +1,110 @@
+# ml-platform
+
+> Multi-project ML platform monorepo: one shared substrate across tabular, deep
+> learning, LLM and agent projects, multi-cloud.
+> Version: 0.1.0 | License: Apache-2.0 | Author: DuqueOM
+
+## What this is
+
+A monorepo where several ML systems share one substrate — libraries, platform,
+orchestration, gates and agentic surface — and each system is a **vertical**
+under `projects/`. It is consumed by duplicating a vertical with the generator,
+not by forking: see `docs/EXPORTING.md`.
+
+Its distinguishing property is that **most of its rules are executable**. The
+claims in this file are checked by `tests/test_llms_txt.py`, which compares
+every count below against the filesystem — a document about a repository is the
+easiest kind to leave true-sounding and wrong.
+
+**Scope**: the platform layer. Service-level concerns — the serving loop,
+probes, containers, K8s manifests, supply chain — are authoritative in the
+sibling `ml-service-template` and consumed from it (ADR-003). `services/` here
+is generated from it and not edited.
+
+## Start here
+
+- `AGENTS.md` — the operating constitution: invariants, the AUTO/CONSULT/STOP
+  protocol, and the pre-commit cadence
+- `CONTRIBUTING.md` — the cadence in order, and why staging comes before
+  regenerating
+- `docs/architecture/technical-plan.md` — **intent**: phases, deliverables,
+  acceptance commands
+- `docs/architecture/implementation-status.md` — **what exists**, derived from
+  the filesystem. When the two disagree, this one is correct
+- `docs/decisions/` — 9 ADRs. Never deleted or renumbered; a wrong decision is
+  superseded so the reasoning survives
+- `SECURITY.md` — reporting, and which findings belong upstream instead
+
+## Layout
+
+- `libs/` — 5 shared libraries: `ml-core`, `data-contracts`, `feature-defs`,
+  `llm-core`, `serving-core`
+- `projects/` — 2 verticals: `demand-forecast` (tabular regression with
+  conformal intervals), `rag-assistant` (retrieval over SEC filings)
+- `platform/` — terraform, kubernetes, observability, policies, local stack
+- `orchestration/` — Airflow DAGs (business flow) and KFP pipelines (ML compute)
+- `agentic/` — canonical rules, skills and workflows; the per-tool directories
+  are generated pointers
+- `scripts/` — the gates, the dataset fetchers, the derived-document generators
+- `services/` — generated from ml-service-template, owned upstream, not edited
+- `ops/` — append-only, hash-chained audit trail
+
+## Agentic surface
+
+Canonical in `agentic/`: **23 rules, 29 skills, 22 workflows**. Four tool
+surfaces (`.claude/`, `.cursor/`, `.codex/`, `.devin/`) are rendered from it by
+`scripts/sync_agentic_adapters.py`; `--check` enforces parity in CI. Editing a
+generated pointer instead of the canonical source is the mistake it exists to
+catch.
+
+## How a claim is proven
+
+Every row in the status document carries the layer its evidence reaches, and
+the layer is derived from the command that ran — never declared:
+
+- **L1** contract: the test suite passes (CI)
+- **L2** component: the thing itself executes (CI)
+- **L3** cluster: it starts and answers in kind (a machine with Docker)
+- **L4** cloud: a real rollout on GKE or EKS
+
+Nothing generated in CI can display L3 or L4. Higher-layer evidence is named as
+a command and marked *not run here*. L4 is printed at zero on purpose.
+
+## The gates
+
+31 declared gates, each with a command that resolves. The ones worth knowing:
+
+- `scripts/check_doc_coherence.py` — C1–C9: ADR index integrity against git
+  history, dangling references, gate traceability, private-name denylist,
+  independent-audit freshness, copier pinning
+- `scripts/check_implementation_status.py` — derives status; `--check` fails on
+  a stale committed copy
+- `scripts/check_thresholds.py` — 9 gated numbers, compared against git HEAD.
+  They may rise and may not fall
+- `scripts/check_upstream_parity.py` — every artifact ml-service-template has,
+  this repository has decided about
+- `tests/test_project_contract.py` — the 7 requirements every vertical meets
+
+## Invariants that carry the most weight
+
+- **A gate must be verified by injection.** Break what it guards, watch it
+  fail, restore, and record it. A coherence filter here once matched absolute
+  paths, examined zero files, and passed
+- The derived documents are never hand-edited; editing a tick does not make it
+  true and CI notices
+- Lowering a quality-gate threshold, and deleting or renumbering an ADR, are
+  STOP operations with gates behind them
+- A project depends only downward: `libs/` never imports `projects/`, and
+  projects never import each other
+- `~=` for ML pins — `numpy 2.x` corrupts joblib artifacts
+- No static cloud credentials: Workload Identity on GCP, IRSA on AWS
+
+## Current state, honestly
+
+Component totals move on every commit, so they are not repeated here — read
+`docs/architecture/implementation-status.md`, which derives them.
+
+One number is worth stating because it changes only once: **0 at L4**. Nothing
+in this repository has ever run in a cloud. The plan's first sequencing
+constraint says it will not until everything else is finished, and the day that
+stops being true is a milestone, not a routine update.

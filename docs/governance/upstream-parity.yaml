@@ -120,9 +120,9 @@ artifacts:
     reason: >-
       1d: local to dev to staging to prod — where the L1-L4 taxonomy belongs.
   - path: llms.txt
-    status: pending
+    status: adopted
     reason: >-
-      1d: the agent entry point, and the deterministic baseline Phase 1e must beat.
+      Adopted, and gated: tests/test_llms_txt.py compares every count in it against the filesystem, including the layer and component totals which it quotes from the derived status document rather than recounting. It is also the deterministic baseline Phase 1e has to beat, and a stale baseline would make that comparison flattering.
   - path: scripts/check_baselines_expiry.py
     status: pending
     reason: >-
@@ -136,9 +136,9 @@ artifacts:
     reason: >-
       1d: an unpinned scanner action is a supply-chain surface.
   - path: scripts/check_test_clock_isolation.py
-    status: pending
+    status: adopted
     reason: >-
-      1d: written upstream after a wall-clock test failure. This repo shipped the same class of defect in C7 days ago.
+      Adopted, adapted, and extended. Upstream checks that tests do not call a wall-clock API; this version adds a second check that PRODUCTION code never hands git a --since/--until date filter, which is the exact defect C7 shipped here. Exemptions carry an exact count and expire when the call disappears. Verified by four injections, including reverting _commits_since to the broken form.
   - path: scripts/ci_classify_failure.py
     status: pending
     reason: >-
@@ -268,33 +268,33 @@ artifacts:
     reason: >-
       1d: the provisioning half of the devcontainer, and useless without it — they are one artifact split across two files, so they land together.
   - path: .github/CODEOWNERS
-    status: pending
+    status: adopted
     reason: >-
-      1d: who reviews what. A public repository with no ownership map reviews by whoever is around.
+      Adopted. Every rule names one owner because that is the truth; the value is the boundaries it records — services/ upstream-owned, agentic/ canonical against generated adapters, docs/architecture/ derived, and the gates as their own surface.
   - path: .github/markdown-link-check.json
-    status: pending
+    status: adopted
     reason: >-
-      1d: 638 markdown files here and nothing checks that their links resolve.
+      Adopted. 644 markdown files and nothing verified their links; running it found 40 broken, including a generator defect that produced unresolvable links in generated output.
   - path: .github/pull_request_template.md
-    status: pending
+    status: adopted
     reason: >-
-      1d: the prompt that makes a PR carry its evidence, which is the L1-L4 taxonomy at review time.
+      Adopted. Four questions only: what and why, the AUTO/CONSULT/STOP class, the evidence with its L1-L4 layer and where it ran, and — when the change adds a gate — what was broken to prove it can fail.
   - path: .security-baselines/.trivyignore
-    status: pending
+    status: adopted
     reason: >-
-      1d: same, for Trivy CVE suppressions — the ones most likely to be added under pressure and never revisited.
+      Adopted empty, and it records the caveat that the CI step's scan-type: fs covers vulnerabilities and secrets, not IaC misconfiguration — which the step's own comment claimed.
   - path: .security-baselines/README.md
-    status: pending
+    status: adopted
     reason: >-
-      1d: states what a baseline entry must carry, which is what makes check_baselines_expiry.py meaningful.
+      Adopted, with ZERO entries in any of the four files. Trivy over the CI scope reported no findings; Checkov reported 114 under platform/ and they are recorded in SECURITY.md rather than suppressed. The README carries the policy: finding id, reason, named owner and an expiry no more than a quarter out, and an expired entry is a finding in itself.
   - path: .security-baselines/checkov.yml
-    status: pending
+    status: adopted
     reason: >-
-      1d: an accepted IaC finding with no recorded expiry is a permanent exception. This repo runs Checkov and has no baseline file.
+      Adopted empty. Holds only skip-check, unlike upstream which also duplicates framework and severity — those live in the workflow, and a second copy would drift from it.
   - path: .security-baselines/tfsec.yml
-    status: pending
+    status: adopted
     reason: >-
-      1d: an accepted tfsec finding with no recorded expiry becomes a permanent exception. This repo runs tfsec and has nowhere to record why a finding was accepted.
+      Adopted empty. Upstream's three exclusions were checked against this repository and NONE survived: one no longer fires, and the other two would have silenced real gaps here to quiet a false positive that exists only upstream.
   - path: scripts/bootstrap.sh
     status: pending
     reason: >-

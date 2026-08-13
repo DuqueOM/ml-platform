@@ -15,7 +15,7 @@ mode: AUTO
 
 # test-authoring
 
-Implements [ADR-005](../../../docs/decisions/ADR-005-agentic-governance.md)
+Implements [ADR-005](../../docs/decisions/ADR-005-agentic-governance.md)
 rule J and procedure QA-2.
 
 ## The question every test must answer

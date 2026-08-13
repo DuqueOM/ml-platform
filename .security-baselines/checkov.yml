@@ -1,0 +1,47 @@
+# Checkov baseline — ml-platform
+#
+# Holds accepted Checkov findings and nothing else. Scan scope, framework
+# selection and fail behaviour stay in .github/workflows/ci.yml, where they
+# already live; duplicating them here would create a second source of truth
+# that drifts silently the first time one side is edited.
+#
+# Not read automatically. Checkov looks for `.checkov.yml` in the working
+# directory, so this file needs an explicit flag:
+#
+#     checkov -d platform/ --framework terraform kubernetes \
+#         --config-file .security-baselines/checkov.yml
+#
+# ---------------------------------------------------------------------------
+# THIS LIST IS EMPTY AND THAT IS THE POINT.
+# ---------------------------------------------------------------------------
+#
+# A run on 2026-08-13 over the CI scope (`-d platform/`, frameworks terraform
+# and kubernetes, checkov 3.3.10) reported 724 passed and 114 failed: 13
+# Terraform and 101 Kubernetes. Those 114 are OPEN, not accepted. CI currently
+# runs Checkov with `soft_fail: true` precisely so they can be triaged as their
+# own change rather than as a wall of findings blocking unrelated work.
+#
+# Do not bulk-load them here to turn the gate green. Roughly a third are a
+# scan-scope artifact — Checkov reads raw files, so each six-line Kustomize
+# strategic-merge patch under platform/kubernetes/overlays/*/replicas.yaml is
+# judged as if it were a complete Deployment and reports six findings about
+# fields it was never meant to contain. That is fixed by scanning
+# `kustomize build` output, not by suppressing the rules, which would also
+# silence the same rules on the base manifests where they mean something.
+#
+# The rest are real: the platform-level GKE and EKS definitions genuinely lack
+# private nodes, master authorized networks, network policy and secrets
+# encryption. Those need a decision, and a suppression is not one.
+#
+# Before adding an entry, read README.md in this directory. Every entry needs
+# a finding ID, a reason, an owner and an expiry date; an expired entry is
+# itself a finding. Prefer an inline `# checkov:skip=CKV_XXX_NN:reason` at the
+# resource, listed here too, over a repository-wide skip that also covers code
+# written after the decision was made.
+#
+#   skip-check:
+#     # expiry: YYYY-MM-DD  owner: @handle
+#     # reason: <why this cannot be fixed now, and what would make it fixable>
+#     - CKV_XXX_NN
+
+skip-check: []

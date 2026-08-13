@@ -1,0 +1,37 @@
+# Trivy baseline — ml-platform
+#
+# One ID per line, comments after `#`. Accepts vulnerability IDs (CVE-…,
+# GHSA-…) and misconfiguration IDs (AVD-…, KSV-…, GCP-…, AWS-…), so both
+# halves of the Trivy job land here.
+#
+# Not read automatically from this path. Trivy looks for `.trivyignore` in the
+# working directory, so the scan needs `--ignorefile .security-baselines/.trivyignore`
+# — or, in the workflow, `TRIVY_IGNOREFILE`.
+#
+# ---------------------------------------------------------------------------
+# THERE ARE NO ENTRIES BELOW, AND THAT IS THE POINT.
+# ---------------------------------------------------------------------------
+#
+# A run on 2026-08-13 reproducing the CI step exactly (trivy 0.71.0,
+# `fs` over the repository root, default scanners vuln and secret,
+# severity CRITICAL,HIGH) reported ZERO findings: uv.lock clean, no secrets.
+# Every entry that could have been written here would have been suppressing
+# something that does not happen.
+#
+# One thing that measurement does NOT cover, recorded here so it is not
+# mistaken for a clean bill of health: the CI step's comment says it covers
+# "IaC misconfiguration", but `scan-type: fs` runs vuln and secret only —
+# misconfig is opt-in. Enabling it (`--scanners misconfig`) surfaces 56 HIGH
+# findings, dominated by KSV-0014 (26, read-only root filesystem) and KSV-0118
+# (26, default security context), most of them on Kustomize patch fragments
+# scanned as if they were whole manifests. Those are open findings awaiting a
+# decision about scan scope, not accepted ones, so nothing about them is
+# written below.
+#
+# Adding an entry: see README.md in this directory. Finding ID, reason, owner,
+# expiry date — all four. An expired entry is itself a finding; one with no
+# expiry is a decision nobody made on purpose. For a CVE, the reason must name
+# the vendor advisory and why no fixed version can be taken, not just that one
+# does not exist yet.
+#
+#   CVE-YYYY-NNNNN  # expiry: YYYY-MM-DD  owner: @handle  reason: <advisory + why>
