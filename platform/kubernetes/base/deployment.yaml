@@ -9,6 +9,18 @@ spec:
   template:
     metadata:
       labels: { app: demand-forecast }
+      # Without these the pod serves /metrics and nothing collects it. Measured
+      # before adding them: Prometheus had two targets, neither this service,
+      # and zero `demand_forecast_*` series — so an alert rule would never fire
+      # and a dashboard panel would be empty, which reads as "no traffic"
+      # rather than as a missing annotation.
+      #
+      # The template's own manifest carries exactly these three (ADR-003 §2);
+      # this file had none.
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
     spec:
       # Pod Security "restricted" is the namespace default, so every field it
       # requires is set here rather than left to be discovered at admission —

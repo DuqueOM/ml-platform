@@ -1,0 +1,210 @@
+{
+  "uid": "demand-forecast-serving",
+  "title": "demand-forecast \u2014 serving",
+  "tags": [
+    "demand-forecast",
+    "serving"
+  ],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "description": "Every panel here is backed by a series that EXISTS. Verified by tests/local/test_dashboards.py, which runs each expression against the running Prometheus \u2014 a renamed metric turns a panel into a flat line that reads as 'no traffic' rather than as a broken dashboard.",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Predictions served",
+      "type": "timeseries",
+      "description": "From the prediction LOG counter, not from an HTTP counter: a prediction that was served but not logged cannot be joined to ground truth later (D-20), so the number that matters operationally is the logged one.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(demand_forecast_prediction_log_total[5m]))",
+          "legendFormat": "served/s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Prediction-log errors",
+      "type": "timeseries",
+      "description": "Non-zero means predictions are being served and NOT recorded. The service keeps answering, so nothing pages \u2014 and the ground-truth join silently loses rows.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(demand_forecast_prediction_log_errors_total[5m]))",
+          "legendFormat": "errors/s",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Inference concurrency vs executor capacity",
+      "type": "timeseries",
+      "description": "In-flight touching capacity means requests are queueing on the ThreadPoolExecutor. Latency rises with no error and no CPU saturation, which is the hardest version of this to diagnose from the outside.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "demand_forecast_inference_in_flight",
+          "legendFormat": "in flight",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "demand_forecast_inference_executor_capacity",
+          "legendFormat": "capacity",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Prediction score distribution (p50 / p90 / p99)",
+      "type": "timeseries",
+      "description": "The output distribution, which moves before any accuracy metric can: ground truth arrives late, so a shift here is the earliest signal available.",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum(rate(demand_forecast_prediction_score_bucket[5m])) by (le))",
+          "legendFormat": "p50",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.90, sum(rate(demand_forecast_prediction_score_bucket[5m])) by (le))",
+          "legendFormat": "p90",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "refId": "C",
+          "expr": "histogram_quantile(0.99, sum(rate(demand_forecast_prediction_score_bucket[5m])) by (le))",
+          "legendFormat": "p99",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Model version in service",
+      "type": "timeseries",
+      "description": "Two versions visible at once means a rollout is mid-flight or a rollback did not complete. Answering 'what is actually deployed' from a dashboard beats answering it from a deploy log.",
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "demand_forecast_model_info",
+          "legendFormat": "{{version}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ]
+    }
+  ]
+}
