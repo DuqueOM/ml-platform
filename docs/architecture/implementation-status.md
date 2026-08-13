@@ -30,85 +30,118 @@ A component is ✅ only when a command proves it. Existence of files is not
 evidence of function — that is exactly how a mypy override matching zero
 modules, and a coherence filter examining zero files, both stayed green.
 
+## The layer a claim is proven at
+
+✅ used to mean two different things at once: "its unit tests pass" and "it
+works in a cluster". Those are not the same claim and the gap between them is
+where this repository's worst defects lived — six Kubernetes overlays rendered
+green for weeks while their probes pointed at routes the service does not
+serve, so no pod could ever have reached Ready.
+
+So every row also carries the layer its evidence reaches. The taxonomy is
+adapted from the deployment-evidence guide in `ml-service-template`.
+
+| Layer | What it proves | Where it can run |
+| --- | --- | --- |
+| **L1** | Contract: the test suite passes | CI |
+| **L2** | Component: the thing itself executes — a generator renders, a gate runs, a build completes | CI |
+| **L3** | Cluster: it starts and answers in kind | A machine with Docker |
+| **L4** | Cloud: a real rollout on GKE or EKS | A cloud account |
+
+The layer is **derived from the command that ran**, never declared: a `pytest`
+proves the contract, anything else that executes proves the component. Neither
+can reach L3 or L4, because CI has no cluster and no cloud — so **no row here
+can ever display L3 or L4**, whatever anyone believes about it.
+
+Where higher-layer evidence exists, the command that produces it is named and
+marked *not run here*. That is the whole discipline in one line: if the
+evidence does not exist, do not claim it exists; if it exists but was not
+produced here, say which and say so.
+
+L4 is printed at zero on purpose. A taxonomy that hides its empty top row is
+how "we deploy to two clouds" goes unchallenged.
+
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
 **30 done · 4 partial · 6 absent** — of 40 tracked components.
 
+**Proven in CI: 22 at L1 · 8 at L2.** Evidence available but NOT run here: 4 at L3, 0 at L4.
+
 ### Phase 0
 
-| | Component | Evidence |
-| :-: | --- | --- |
-| ✅ | uv workspace + lockfile | `uv lock --check` passes |
-| ✅ | Dependency direction test | `uv run pytest tests/test_dependency_direction.py -q` passes |
-| 🟡 | Documentation coherence gate | `uv run python scripts/check_doc_coherence.py` FAILS |
-| ✅ | Agentic canonical store | `uv run python scripts/validate_agentic_surface.py --strict` passes |
-| ✅ | Agentic 4-tool surfaces | `uv run python scripts/sync_agentic_adapters.py --check` passes |
-| ✅ | Agentic surface integrity | `uv run python scripts/validate_agentic_surface.py --strict` passes |
-| ✅ | pre-commit | `uv run pre-commit validate-config .pre-commit-config.yaml` passes |
-| ✅ | Lint + format | `uv run ruff check . && uv run ruff format --check .` passes |
-| ✅ | Type checking (libs, strict) | `uv run mypy libs/` passes |
-| ✅ | CI workflow | `uv run python scripts/check_ci_references.py` passes |
+| | Layer | Component | Evidence |
+| :-: | :-: | --- | --- |
+| ✅ | L2 | uv workspace + lockfile | `uv lock --check` passes |
+| ✅ | L1 | Dependency direction test | `uv run pytest tests/test_dependency_direction.py -q` passes |
+| 🟡 | — | Documentation coherence gate | `uv run python scripts/check_doc_coherence.py` FAILS |
+| ✅ | L2 | Agentic canonical store | `uv run python scripts/validate_agentic_surface.py --strict` passes |
+| ✅ | L2 | Agentic 4-tool surfaces | `uv run python scripts/sync_agentic_adapters.py --check` passes |
+| ✅ | L2 | Agentic surface integrity | `uv run python scripts/validate_agentic_surface.py --strict` passes |
+| ✅ | L2 | pre-commit | `uv run pre-commit validate-config .pre-commit-config.yaml` passes |
+| ✅ | L2 | Lint + format | `uv run ruff check . && uv run ruff format --check .` passes |
+| ✅ | L2 | Type checking (libs, strict) | `uv run mypy libs/` passes |
+| ✅ | L2 | CI workflow | `uv run python scripts/check_ci_references.py` passes |
 
 ### Phase 1
 
-| | Component | Evidence |
-| :-: | --- | --- |
-| ✅ | Dataset acquisition scripts | `uv run pytest tests/test_dataset_registry.py -q` passes |
-| 🟡 | Local validation stack | 8 file(s), no verification command |
-| ✅ | libs/ml-core implementation | `uv run pytest libs/ml-core -q` passes |
-| ✅ | libs/data-contracts implementation | `uv run pytest libs/data-contracts -q` passes |
-| 🟡 | libs/serving-core implementation | 1 file(s), no verification command |
-| ✅ | projects/demand-forecast | `uv run pytest projects/demand-forecast -q` passes |
-| ✅ | Iceberg ingestion (demand-forecast) | `uv run pytest projects/demand-forecast/tests/test_overwrite_scope.py -q` passes |
-| ✅ | Panel-aware temporal splitting | `uv run pytest projects/demand-forecast/tests/test_backtest.py -q` passes |
-| ⬜ | Lakehouse module shared across projects | absent |
-| ✅ | Feature store definitions | `uv run pytest libs/feature-defs -q` passes |
-| ✅ | Expanding-window backtesting | `uv run pytest projects/demand-forecast/tests/test_backtest.py -q` passes |
-| ✅ | Feature engineering (backward-only) | `uv run pytest projects/demand-forecast/tests/test_training.py -q -k feature` passes |
-| ✅ | Model training + baseline gate | `uv run pytest projects/demand-forecast/tests/test_training.py -q` passes |
-| ✅ | Warehouse validation (Great Expectations) | `uv run pytest projects/demand-forecast/tests/test_warehouse_checks.py -q` passes |
-| ✅ | Training pipeline (KFP v2) — compiles | `uv run pytest tests/test_pipeline_spec.py -q` passes |
-| ✅ | Orchestration DAGs (Airflow) | `uv run pytest tests/test_dags.py -q` passes |
-| ✅ | Observability (OTel traces) | `uv run pytest projects/demand-forecast/tests/test_tracing.py -q` passes |
-| ✅ | Grafana LGTM dashboards | `uv run pytest tests/test_dashboards_structure.py -q` passes |
+| | Layer | Component | Evidence |
+| :-: | :-: | --- | --- |
+| ✅ | L1 | Dataset acquisition scripts | `uv run pytest tests/test_dataset_registry.py -q` passes |
+| 🟡 | — | Local validation stack | 8 file(s), no verification command · L3 evidence, not run here: `make local-up && uv run pytest tests/local/test_local_stack.py -q -m local` |
+| ✅ | L1 | libs/ml-core implementation | `uv run pytest libs/ml-core -q` passes |
+| ✅ | L1 | libs/data-contracts implementation | `uv run pytest libs/data-contracts -q` passes |
+| 🟡 | — | libs/serving-core implementation | 1 file(s), no verification command |
+| ✅ | L1 | projects/demand-forecast | `uv run pytest projects/demand-forecast -q` passes |
+| ✅ | L1 | Iceberg ingestion (demand-forecast) | `uv run pytest projects/demand-forecast/tests/test_overwrite_scope.py -q` passes |
+| ✅ | L1 | Panel-aware temporal splitting | `uv run pytest projects/demand-forecast/tests/test_backtest.py -q` passes |
+| ⬜ | — | Lakehouse module shared across projects | absent |
+| ✅ | L1 | Feature store definitions | `uv run pytest libs/feature-defs -q` passes |
+| ✅ | L1 | Expanding-window backtesting | `uv run pytest projects/demand-forecast/tests/test_backtest.py -q` passes |
+| ✅ | L1 | Feature engineering (backward-only) | `uv run pytest projects/demand-forecast/tests/test_training.py -q -k feature` passes |
+| ✅ | L1 | Model training + baseline gate | `uv run pytest projects/demand-forecast/tests/test_training.py -q` passes |
+| ✅ | L1 | Warehouse validation (Great Expectations) | `uv run pytest projects/demand-forecast/tests/test_warehouse_checks.py -q` passes |
+| ✅ | L1 | Training pipeline (KFP v2) — compiles | `uv run pytest tests/test_pipeline_spec.py -q` passes |
+| ✅ | L1 | Orchestration DAGs (Airflow) | `uv run pytest tests/test_dags.py -q` passes |
+| ✅ | L1 | Observability (OTel traces) | `uv run pytest projects/demand-forecast/tests/test_tracing.py -q` passes · L3 evidence, not run here: `make local-up && uv run pytest tests/local/test_local_stack.py -q -m local` |
+| ✅ | L1 | Grafana LGTM dashboards | `uv run pytest tests/test_dashboards_structure.py -q` passes · L3 evidence, not run here: `make local-dashboards && uv run pytest tests/local/test_dashboards.py -q -m local` |
 
 ### Phase 2
 
-| | Component | Evidence |
-| :-: | --- | --- |
-| ✅ | Terraform (GCP) | `uv run pytest tests/test_cloud_surface.py -q -k gcp` passes |
-| ✅ | Terraform (AWS) | `uv run pytest tests/test_cloud_surface.py -q -k aws` passes |
-| ✅ | Kubernetes manifests | `uv run pytest tests/test_gitops_manifests.py -q -k overlay` passes |
-| ✅ | GitOps (ArgoCD) | `uv run pytest tests/test_gitops_manifests.py -q -k applicationset` passes |
-| ✅ | Admission policies | `uv run pytest tests/test_gitops_manifests.py -q -k default_deny` passes |
+| | Layer | Component | Evidence |
+| :-: | :-: | --- | --- |
+| ✅ | L1 | Terraform (GCP) | `uv run pytest tests/test_cloud_surface.py -q -k gcp` passes |
+| ✅ | L1 | Terraform (AWS) | `uv run pytest tests/test_cloud_surface.py -q -k aws` passes |
+| ✅ | L1 | Kubernetes manifests | `uv run pytest tests/test_gitops_manifests.py -q -k overlay` passes · L3 evidence, not run here: `make local-serve && uv run pytest tests/local/test_service_runs.py -q -m local` |
+| ✅ | L1 | GitOps (ArgoCD) | `uv run pytest tests/test_gitops_manifests.py -q -k applicationset` passes |
+| ✅ | L1 | Admission policies | `uv run pytest tests/test_gitops_manifests.py -q -k default_deny` passes |
 
 ### Phase 3
 
-| | Component | Evidence |
-| :-: | --- | --- |
-| 🟡 | libs/llm-core implementation | 2 file(s), no verification command |
-| ⬜ | projects/store-assistant | absent |
-| ✅ | projects/rag-assistant | `uv run pytest projects/rag-assistant -q` passes |
+| | Layer | Component | Evidence |
+| :-: | :-: | --- | --- |
+| 🟡 | — | libs/llm-core implementation | 2 file(s), no verification command |
+| ⬜ | — | projects/store-assistant | absent |
+| ✅ | L1 | projects/rag-assistant | `uv run pytest projects/rag-assistant -q` passes |
 
 ### Phase 4
 
-| | Component | Evidence |
-| :-: | --- | --- |
-| ⬜ | projects/credit-risk | absent |
+| | Layer | Component | Evidence |
+| :-: | :-: | --- | --- |
+| ⬜ | — | projects/credit-risk | absent |
 
 ### Phase 5
 
-| | Component | Evidence |
-| :-: | --- | --- |
-| ⬜ | projects/doc-intelligence | absent |
+| | Layer | Component | Evidence |
+| :-: | :-: | --- | --- |
+| ⬜ | — | projects/doc-intelligence | absent |
 
 ### Phase 6
 
-| | Component | Evidence |
-| :-: | --- | --- |
-| ⬜ | projects/agent-ops | absent |
-| ⬜ | Compliance mapping | absent |
+| | Layer | Component | Evidence |
+| :-: | :-: | --- | --- |
+| ⬜ | — | projects/agent-ops | absent |
+| ⬜ | — | Compliance mapping | absent |
 
 <!-- END GENERATED -->
 
