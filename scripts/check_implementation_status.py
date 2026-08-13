@@ -254,7 +254,12 @@ COMPONENTS: list[Component] = [
     # where somebody remembered it. Listed as components so the gap is derived
     # from the filesystem rather than from anyone's recollection — which is the
     # whole reason it went unnoticed until it was looked for directly.
-    Component("1d", "Upstream parity gate", ["scripts/check_upstream_parity.py"]),
+    Component(
+        "1d",
+        "Upstream parity gate",
+        ["scripts/check_upstream_parity.py", "docs/governance/upstream-parity.yaml"],
+        "uv run pytest tests/test_upstream_parity.py -q",
+    ),
     Component(
         "1d",
         "Public-repo hygiene",

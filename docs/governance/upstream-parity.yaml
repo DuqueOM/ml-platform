@@ -1,0 +1,329 @@
+# Upstream parity ledger — what ml-service-template has, and what we decided about it.
+#
+# WHY THIS FILE EXISTS
+#
+# copier covers `services/`, not this repository. ADR-003 makes the template
+# authoritative for service-level concerns and the generated service is
+# genuinely generated — but every repository-level artifact was rebuilt by
+# hand here, so it exists only where somebody remembered it. Nothing compared
+# the two surfaces, so the gap was invisible until it was looked for directly.
+#
+# The cost, with a receipt: the template ships check_test_clock_isolation.py,
+# written after a test broke at 20:52 UTC because a helper read the wall clock.
+# This repository then shipped a coherence check that returned a different
+# verdict at 13:33 than at 21:19 — same class of defect, guard already
+# upstream, never carried across.
+#
+# STATUS values:
+#   pending  — decided to adopt, not done yet. Must exist upstream.
+#   adopted  — decided to adopt and DONE. Must exist here, or the gate fails.
+#   rejected — decided not to adopt, with the reason. Must NOT exist here,
+#              or the rejection is stale and the gate fails.
+#
+# Adopting a list closes the gap once. This ledger closes it every time: an
+# artifact present upstream with no entry here fails the gate whenever the
+# template checkout is reachable.
+version: 1
+upstream: ml-service-template
+
+artifacts:
+  - path: .claude_context.md
+    status: pending
+    reason: >-
+      1d: per-tool context; parity is the point of the agentic surface.
+  - path: .codex_context.md
+    status: pending
+    reason: >-
+      1d: per-tool context for Codex. Four-tool parity is the point of the agentic surface, and three of four is not parity.
+  - path: .cursor_context.md
+    status: pending
+    reason: >-
+      1d: per-tool context for Cursor, on the same footing as the other three.
+  - path: .devin_context.md
+    status: pending
+    reason: >-
+      1d: per-tool context for Devin, on the same footing as the other three.
+  - path: .git-blame-ignore-revs
+    status: pending
+    reason: >-
+      1d: the ruff migration is a formatting-only commit that pollutes blame.
+  - path: .github/workflows/pr-evidence-check.yml
+    status: pending
+    reason: >-
+      1d: enforces that a PR carries its evidence, which is the L1-L4 taxonomy applied at review time.
+  - path: .gitleaks.toml
+    status: pending
+    reason: >-
+      1d: CI runs gitleaks-action with default config; without a file, what is ignored is not controlled.
+  - path: .mcp.json.example
+    status: pending
+    reason: >-
+      1d: MCP configuration without committing secrets.
+  - path: AGENT_CONTEXT.md
+    status: pending
+    reason: >-
+      1d: the shared context file the four tool surfaces point at.
+  - path: CODE_OF_CONDUCT.md
+    status: pending
+    reason: >-
+      1d: baseline norms for an open repository.
+  - path: CONTRIBUTING.md
+    status: pending
+    reason: >-
+      1d: how to contribute to a public repository.
+  - path: MIGRATION.md
+    status: pending
+    reason: >-
+      1d: what an adopter does across versions of this platform.
+  - path: NOTICE
+    status: pending
+    reason: >-
+      1d: Apache-2.0 attribution, which is the declared licence here.
+  - path: QUICK_START.md
+    status: pending
+    reason: >-
+      1d: the first ten minutes for someone who just cloned this.
+  - path: RUNBOOK.md
+    status: pending
+    reason: >-
+      1d: operational reference for the platform itself.
+  - path: SECURITY.md
+    status: pending
+    reason: >-
+      1d: a public repository with no channel to report a vulnerability to it.
+  - path: VALIDATION_LOG.md
+    status: pending
+    reason: >-
+      1d: the evidence log the L1-L4 taxonomy feeds.
+  - path: docs/ADOPTION.md
+    status: pending
+    reason: >-
+      1d: how an organisation adopts this platform — the thesis, unwritten.
+  - path: docs/COMPLIANCE_MAPPING.md
+    status: pending
+    reason: >-
+      1d: already tracked as absent; what makes 'enterprise' checkable.
+  - path: docs/PROGRESSION.md
+    status: pending
+    reason: >-
+      1d: the maturity path an adopter walks — which parts to take first, and what each one unlocks. Without it, adoption is all-or-nothing.
+  - path: docs/RELEASING.md
+    status: pending
+    reason: >-
+      1d: this repo has a VERSION and a CHANGELOG and no release discipline.
+  - path: docs/TUTORIAL.md
+    status: pending
+    reason: >-
+      1d: the adopter's first hour, end to end.
+  - path: docs/environment-promotion.md
+    status: pending
+    reason: >-
+      1d: local to dev to staging to prod — where the L1-L4 taxonomy belongs.
+  - path: llms.txt
+    status: pending
+    reason: >-
+      1d: the agent entry point, and the deterministic baseline Phase 1e must beat.
+  - path: scripts/check_baselines_expiry.py
+    status: pending
+    reason: >-
+      1d: baselines expire here too; portable once this repo has baselines to expire.
+  - path: scripts/check_dashboard_inventory.py
+    status: pending
+    reason: >-
+      1d: dashboards now exist here, so an inventory check applies.
+  - path: scripts/check_gitleaks_pin.py
+    status: pending
+    reason: >-
+      1d: an unpinned scanner action is a supply-chain surface.
+  - path: scripts/check_test_clock_isolation.py
+    status: pending
+    reason: >-
+      1d: written upstream after a wall-clock test failure. This repo shipped the same class of defect in C7 days ago.
+  - path: scripts/ci_classify_failure.py
+    status: pending
+    reason: >-
+      1d: CI triage; portable and independent of the template's mechanics.
+  - path: scripts/ci_collect_context.py
+    status: pending
+    reason: >-
+      1d: gathers the context a CI failure needs to be diagnosed without re-running it. Portable, and independent of the template's scaffolding mechanics.
+  - path: scripts/mcp_doctor.py
+    status: pending
+    reason: >-
+      1d: diagnoses MCP configuration, which this repo also uses.
+  - path: scripts/validate_quality_gates.py
+    status: pending
+    reason: >-
+      1d: gates are data here too, and the project contract now requires each to name its check.
+  - path: .github/workflows/ci-examples.yml
+    status: rejected
+    reason: >-
+      The template ships runnable examples/; this repo ships projects/, covered by the main CI lane.
+  - path: .github/workflows/ci-self-healing-shadow.yml
+    status: rejected
+    reason: >-
+      A shadow lane for the template's self-healing experiment. Out of scope here (ADR-000).
+  - path: .github/workflows/golden-path-extended.yml
+    status: rejected
+    reason: >-
+      Exercises the template's scaffold-to-deploy path with the closed loop attached. The equivalent here is `make local-serve` plus tests/local, which is L3 evidence produced on a machine with Docker rather than a CI lane.
+  - path: .github/workflows/golden-path.yml
+    status: rejected
+    reason: >-
+      Exercises the template's scaffold-to-deploy path. The equivalent here is `make local-serve` plus tests/local, which is L3 evidence rather than a CI lane.
+  - path: .github/workflows/kyverno-smoke.yml
+    status: rejected
+    reason: >-
+      Kyverno policies here are rendered and tested offline by tests/test_gitops_manifests.py; a cluster smoke belongs to Phase 2 with a real cluster.
+  - path: .github/workflows/policy-tests.yml
+    status: rejected
+    reason: >-
+      Kyverno policies here are rendered and asserted offline by tests/test_gitops_manifests.py, which runs on every commit. A second lane needing a cluster belongs to Phase 2.
+  - path: .github/workflows/pr-smoke-lane.yml
+    status: rejected
+    reason: >-
+      Smoke-tests a rendered service. tests/test_project_generator.py renders and asserts the contract instead.
+  - path: .github/workflows/template-context-tests.yml
+    status: rejected
+    reason: >-
+      Tests the template's own context files against its scaffolding. Revisit once the per-tool context files land here.
+  - path: .github/workflows/validate-templates.yml
+    status: rejected
+    reason: >-
+      Validates the template's Jinja sources. The equivalent here is tests/test_project_generator.py, which renders templates/project for real.
+  - path: DCO.md
+    status: rejected
+    reason: >-
+      No external contributors yet, and a sign-off requirement nobody enforces is theatre. Revisit when the first outside PR arrives.
+  - path: docker-compose.yml
+    status: rejected
+    reason: >-
+      The local stack here is kind-based (platform/local), which is closer to the deployment target. Two local paths would mean one of them is untested.
+  - path: docs/FASTAPI_TEMPLATE_CONTRACT.md
+    status: rejected
+    reason: >-
+      Equivalent exists: docs/PROJECT_CONTRACT.md states what a VERTICAL must expose. The upstream file states what a generated SERVICE must expose, which is the template's concern under ADR-003.
+  - path: docs/ide-parity-audit.md
+    status: rejected
+    reason: >-
+      Four-tool parity here is enforced by scripts/sync_agentic_adapters.py --check rather than audited in prose.
+  - path: docs/threadpool-sizing.md
+    status: rejected
+    reason: >-
+      Serving executor sizing is a service-level concern, authoritative upstream under ADR-003 section 2. Duplicating the analysis here invites the two to disagree.
+  - path: scripts/check_adopter_scaffold_ref.py
+    status: rejected
+    reason: >-
+      Guards the template's adopter-reference mechanics; this repo has no adopters of that kind.
+  - path: scripts/check_cicd_template_drift.py
+    status: rejected
+    reason: >-
+      Guards drift between the template's own CI and its rendered output. The equivalent here is tests/test_project_generator.py.
+  - path: scripts/check_common_utils_drift.py
+    status: rejected
+    reason: >-
+      Guards the template's vendored common_utils. This repo depends on libs/ by workspace path, so drift is impossible by construction.
+  - path: scripts/check_service_adr_references.py
+    status: rejected
+    reason: >-
+      Check C2 already resolves foreign ADR references against the template's index when it is reachable.
+  - path: scripts/check_vendored_runtime_drift.py
+    status: rejected
+    reason: >-
+      Guards drift in the template's vendored runtime copies. Nothing is vendored here: libs/ is consumed by workspace path, so a divergent copy cannot exist by construction.
+  - path: scripts/ci_verify_targeted.py
+    status: rejected
+    reason: >-
+      Guards the template's path-filtered CI lanes; this repo's filters are derived from the import graph and tested by tests/test_dependency_direction.py.
+  - path: scripts/ci_verify_workflows.py
+    status: rejected
+    reason: >-
+      Equivalent exists: scripts/check_ci_references.py asserts every `run:` script resolves.
+  - path: scripts/ci_verify_yaml.py
+    status: rejected
+    reason: >-
+      Covered by pre-commit's yaml hooks and by kubectl kustomize in tests/test_gitops_manifests.py.
+  - path: scripts/generate_report.py
+    status: rejected
+    reason: >-
+      Produces the template's own audit report format. This repo derives its reports from the filesystem instead.
+  - path: scripts/validate_agentic.py
+    status: rejected
+    reason: >-
+      Equivalent exists: scripts/validate_agentic_surface.py --strict.
+  - path: scripts/validate_agentic_manifest.py
+    status: rejected
+    reason: >-
+      Same equivalent; this repo has no separate manifest file.
+  - path: scripts/verify_enterprise_adoption.py
+    status: rejected
+    reason: >-
+      Verifies adoption of the TEMPLATE by a service. The equivalent question here is the project contract.
+  - path: .devcontainer/devcontainer.json
+    status: pending
+    reason: >-
+      1d: a reproducible environment for someone who just cloned this. Docker was unavailable on this machine for most of a session.
+  - path: .devcontainer/post-create.sh
+    status: pending
+    reason: >-
+      1d: the provisioning half of the devcontainer, and useless without it — they are one artifact split across two files, so they land together.
+  - path: .github/CODEOWNERS
+    status: pending
+    reason: >-
+      1d: who reviews what. A public repository with no ownership map reviews by whoever is around.
+  - path: .github/markdown-link-check.json
+    status: pending
+    reason: >-
+      1d: 638 markdown files here and nothing checks that their links resolve.
+  - path: .github/pull_request_template.md
+    status: pending
+    reason: >-
+      1d: the prompt that makes a PR carry its evidence, which is the L1-L4 taxonomy at review time.
+  - path: .security-baselines/.trivyignore
+    status: pending
+    reason: >-
+      1d: same, for Trivy CVE suppressions — the ones most likely to be added under pressure and never revisited.
+  - path: .security-baselines/README.md
+    status: pending
+    reason: >-
+      1d: states what a baseline entry must carry, which is what makes check_baselines_expiry.py meaningful.
+  - path: .security-baselines/checkov.yml
+    status: pending
+    reason: >-
+      1d: an accepted IaC finding with no recorded expiry is a permanent exception. This repo runs Checkov and has no baseline file.
+  - path: .security-baselines/tfsec.yml
+    status: pending
+    reason: >-
+      1d: an accepted tfsec finding with no recorded expiry becomes a permanent exception. This repo runs tfsec and has nowhere to record why a finding was accepted.
+  - path: scripts/bootstrap.sh
+    status: pending
+    reason: >-
+      1d: first-run setup. QUICK_START.md is documentation of this script, so they land together.
+  - path: scripts/dev-setup.sh
+    status: pending
+    reason: >-
+      1d: developer environment setup, same pairing.
+  - path: .vscode/settings.json
+    status: rejected
+    reason: >-
+      Editor settings are a personal choice, and this repo already enforces what matters through ruff, mypy and pre-commit, which run regardless of editor.
+  - path: scripts/_lib/configure_mcp.sh
+    status: rejected
+    reason: >-
+      Helper for the template's bootstrap. Adopt with bootstrap.sh if that lands and needs it, not before — an unused helper is one nobody maintains.
+  - path: scripts/_lib/detect_os.sh
+    status: rejected
+    reason: >-
+      Helper for the template's bootstrap. This repo installs through uv, which resolves platform wheels itself, so OS detection has no caller here.
+  - path: scripts/_lib/install_deps.sh
+    status: rejected
+    reason: >-
+      Same. This repo installs through uv, which does not need OS detection.
+  - path: scripts/test_kyverno_admission.sh
+    status: rejected
+    reason: >-
+      Requires a cluster with Kyverno installed. That is L3/L4 evidence and belongs with Phase 2, not as a shell script nobody runs.
+  - path: scripts/test_scaffold.sh
+    status: rejected
+    reason: >-
+      Smoke-tests a rendered SERVICE. The equivalent here renders templates/project and asserts the project contract: tests/test_project_generator.py.

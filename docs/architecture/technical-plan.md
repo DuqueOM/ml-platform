@@ -312,9 +312,18 @@ never carried across.
   `MIGRATION.md`, `VALIDATION_LOG.md`, `.mcp.json.example`, the per-tool
   context files, and the `docs/` subdirectories the template carries and this
   one does not (`incidents`, `security`, `observability`, `audit`, `internal`).
-- **Portable guards**: `check_test_clock_isolation.py`, `check_gitleaks_pin.py`,
-  `check_dashboard_inventory.py`, `mcp_doctor.py`, `validate_quality_gates.py`,
-  `ci_classify_failure.py`, `ci_collect_context.py`.
+- **Portable guards**: `scripts/check_test_clock_isolation.py`,
+  `scripts/check_gitleaks_pin.py`, `scripts/check_dashboard_inventory.py`,
+  `scripts/mcp_doctor.py`, `scripts/validate_quality_gates.py`,
+  `scripts/ci_classify_failure.py`, `scripts/ci_collect_context.py`.
+- **What the gate found that a hand comparison did not**: `.security-baselines/`
+  (Trivy, Checkov and tfsec suppressions with recorded expiry — this repository
+  runs all three and has nowhere to record why a finding was accepted),
+  `.github/CODEOWNERS`, `.github/pull_request_template.md`, a devcontainer, and
+  a markdown link checker for 638 documents whose links nothing verifies. The
+  full ledger is `docs/governance/upstream-parity.yaml`; it decides 75
+  artifacts, and 17 of them were ones I had missed by reading directory
+  listings myself.
 
 ### Deliberately not adopted
 
