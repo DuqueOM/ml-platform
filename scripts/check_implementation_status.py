@@ -48,6 +48,16 @@ class Component:
     #: and the committed copy then conflicts with CI's. See the Local
     #: validation stack entry, which is where that happened.
     verify: str | None = None
+    #: A command that proves this at a HIGHER layer than CI can reach — one
+    #: needing the kind cluster (L3) or a real cloud (L4).
+    #:
+    #: Never executed by this generator, and that is the point. Running it
+    #: would make the committed document depend on whether a cluster happened
+    #: to be up, which is the machine-dependence that already made this file
+    #: disagree with itself between a laptop and CI. It is RECORDED so the
+    #: document can say "evidence exists at L3, here is how to produce it"
+    #: instead of either claiming it or hiding it.
+    evidence: str | None = None
     #: Files matching these are scaffolding, not implementation.
     ignore: list[str] = field(default_factory=lambda: ["__init__.py", ".gitkeep", "README.md"])
 
@@ -124,6 +134,7 @@ COMPONENTS: list[Component] = [
         # cannot prove the stack RUNS, only that its manifests exist.
         # `make local-verify` is the assertion that it functions, and it is a
         # human-run command for exactly that reason.
+        evidence="make local-up && uv run pytest tests/local/test_local_stack.py -q -m local",
     ),
     Component(
         "1",
@@ -223,6 +234,7 @@ COMPONENTS: list[Component] = [
         # `local` and deselected here, because a verify command that silently
         # skips is a command that reports success for doing nothing.
         "uv run pytest projects/demand-forecast/tests/test_tracing.py -q",
+        evidence="make local-up && uv run pytest tests/local/test_local_stack.py -q -m local",
     ),
     Component(
         "1",
@@ -234,6 +246,7 @@ COMPONENTS: list[Component] = [
         # tests/local and cannot be a verification command here, because a
         # command that needs a cluster would make this document machine-dependent.
         "uv run pytest tests/test_dashboards_structure.py -q",
+        evidence="make local-dashboards && uv run pytest tests/local/test_dashboards.py -q -m local",
     ),
     # --- Phase 2: multi-cloud + GitOps --------------------------------------
     # These carried "no verification command" while their tests were already
@@ -262,6 +275,7 @@ COMPONENTS: list[Component] = [
         "Kubernetes manifests",
         ["platform/kubernetes"],
         "uv run pytest tests/test_gitops_manifests.py -q -k overlay",
+        evidence="make local-serve && uv run pytest tests/local/test_service_runs.py -q -m local",
     ),
     Component(
         "2",
@@ -351,6 +365,33 @@ def _is_tracked(path: Path) -> bool:
         return False
 
 
+#: Commands that cannot run without a real cloud account. Used to separate L4
+#: evidence from L3, so "needs a cluster" and "needs a bill" never merge.
+_CLOUD_TOOLS = ("gcloud ", "aws ", "eksctl ", "terraform apply")
+
+
+def verified_layer(component: Component, passed: bool) -> str:
+    """The layer a component is proven at BY THE COMMAND THAT RAN.
+
+    Derived, not declared. A declared layer is a claim, and this repository has
+    found four separate cases of a claim outliving the thing it described.
+
+    The rule is stated in the document's legend so a reader can check it:
+    a test suite proves the contract (L1); anything else that runs proves the
+    component itself executes (L2). Neither can reach L3 or L4, because CI has
+    no cluster and no cloud — so no component can ever DISPLAY those here, no
+    matter what anyone believes about it.
+    """
+    if component.verify is None or not passed:
+        return "—"
+    return "L1" if "pytest" in component.verify else "L2"
+
+
+def evidence_layer(command: str) -> str:
+    """The layer an unexecuted evidence command would reach if someone ran it."""
+    return "L4" if any(tool in command for tool in _CLOUD_TOOLS) else "L3"
+
+
 def _verify(command: str) -> bool:
     # shell=True is safe here: every command is a literal defined in
     # COMPONENTS above, never derived from input.
@@ -358,28 +399,48 @@ def _verify(command: str) -> bool:
     return result.returncode == 0
 
 
-def evaluate() -> list[tuple[Component, str, str]]:
-    """Return (component, marker, evidence) for every component."""
-    rows: list[tuple[Component, str, str]] = []
+def evaluate() -> list[tuple[Component, str, str, str]]:
+    """Return (component, marker, layer, detail) for every component."""
+    rows: list[tuple[Component, str, str, str]] = []
     for component in COMPONENTS:
         count = _substantive_files(component)
         if count == 0:
-            rows.append((component, "⬜", "absent"))
+            rows.append((component, "⬜", "—", "absent"))
             continue
         if component.verify is None:
-            rows.append((component, "🟡", f"{count} file(s), no verification command"))
+            # No CI-runnable command, which caps the marker at 🟡 — but the
+            # evidence still gets named. Dropping it here hid the local stack's
+            # L3 command entirely, and under-reporting is the same dishonesty
+            # as over-reporting, just easier to miss because it errs modestly.
+            detail = f"{count} file(s), no verification command"
+            if component.evidence:
+                detail += f" · {evidence_layer(component.evidence)} evidence, not run here: `{component.evidence}`"
+            rows.append((component, "🟡", "—", detail))
             continue
+
         passed = _verify(component.verify)
         marker = "✅" if passed else "🟡"
-        evidence = f"`{component.verify}` {'passes' if passed else 'FAILS'}"
-        rows.append((component, marker, evidence))
+        detail = f"`{component.verify}` {'passes' if passed else 'FAILS'}"
+        if component.evidence:
+            # Listed, never ticked. The layer it would reach is named, and so
+            # is the fact that nothing here ran it.
+            detail += f" · {evidence_layer(component.evidence)} evidence, not run here: `{component.evidence}`"
+        rows.append((component, marker, verified_layer(component, passed), detail))
     return rows
 
 
-def render(rows: list[tuple[Component, str, str]]) -> str:
+def render(rows: list[tuple[Component, str, str, str]]) -> str:
     counts = {"✅": 0, "🟡": 0, "⬜": 0}
-    for _, marker, _ in rows:
+    layers = {"L1": 0, "L2": 0, "—": 0}
+    for _, marker, layer, _ in rows:
         counts[marker] += 1
+        layers[layer] += 1
+
+    # Counted from the components, not from a number anyone maintains. L4 is
+    # printed even at zero, because a taxonomy that hides its empty top row
+    # lets "we deploy to two clouds" go unchallenged.
+    l3 = sum(1 for c, _, _, _ in rows if c.evidence and evidence_layer(c.evidence) == "L3")
+    l4 = sum(1 for c, _, _, _ in rows if c.evidence and evidence_layer(c.evidence) == "L4")
 
     lines = [
         BEGIN,
@@ -388,12 +449,15 @@ def render(rows: list[tuple[Component, str, str]]) -> str:
         f"**{counts['✅']} done · {counts['🟡']} partial · {counts['⬜']} absent** "
         f"— of {len(rows)} tracked components.",
         "",
+        f"**Proven in CI: {layers['L1']} at L1 · {layers['L2']} at L2.** "
+        f"Evidence available but NOT run here: {l3} at L3, {l4} at L4.",
+        "",
     ]
-    for phase in sorted({c.phase for c, _, _ in rows}):
-        lines += [f"### Phase {phase}", "", "| | Component | Evidence |", "| :-: | --- | --- |"]
-        for component, marker, evidence in rows:
+    for phase in sorted({c.phase for c, _, _, _ in rows}):
+        lines += [f"### Phase {phase}", "", "| | Layer | Component | Evidence |", "| :-: | :-: | --- | --- |"]
+        for component, marker, layer, detail in rows:
             if component.phase == phase:
-                lines.append(f"| {marker} | {component.name} | {evidence} |")
+                lines.append(f"| {marker} | {layer} | {component.name} | {detail} |")
         lines.append("")
     lines.append(END)
     return "\n".join(lines)
