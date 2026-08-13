@@ -200,3 +200,74 @@ def test_template_root_is_excluded_from_the_import_graph() -> None:
     source = (REPO_ROOT / "tests" / "test_dependency_direction.py").read_text(encoding="utf-8")
     assert '"templates",' in source, "templates/ is no longer skipped by the dependency-direction test"
     assert TEMPLATE_ROOT.is_dir()
+
+
+# --- the generated project against the project contract ---------------------
+
+
+def _contract(requirement: str, project: Path) -> tuple[bool, str]:
+    """Evaluate one contract requirement, reusing the contract's own logic.
+
+    Imported rather than reimplemented: two copies of "what a vertical must
+    look like" is the divergence the contract exists to prevent, and it would
+    start inside the test suite.
+    """
+    import sys
+
+    sys.path.insert(0, str(REPO_ROOT / "tests"))
+    from test_project_contract import _satisfies
+
+    return _satisfies(project, requirement)
+
+
+@pytest.mark.parametrize("requirement", ["P1", "P2", "P3", "P4", "P5", "P7"])
+def test_a_generated_vertical_satisfies_the_contract(rendered: Path, requirement: str) -> None:
+    """Duplicating a vertical is the consumption model, so it must produce a conforming one.
+
+    This is the claim `docs/EXPORTING.md` makes, checked rather than asserted:
+    generate, then run the contract against the output. A generator whose
+    output fails the contract has moved the problem into every future project.
+    """
+    met, detail = _contract(requirement, rendered)
+    assert met, f"a freshly generated vertical fails {requirement}: {detail}"
+
+
+def test_the_generated_gates_are_deliberately_unfilled(rendered: Path) -> None:
+    """P6 is the ONE requirement a fresh render must NOT satisfy.
+
+    The generator ships `threshold: TODO` on purpose: a threshold copied from
+    an example is an undocumented decision, and the owner has to choose it from
+    the cost of error in their own problem. demand-forecast shows what happens
+    otherwise — it shipped with the TODOs intact while its DAG enforced a
+    different number in code.
+
+    Asserting the TODO is still there makes the homework impossible to forget,
+    and makes it impossible for someone to quietly fill the template with
+    plausible defaults so that new projects look compliant on arrival.
+    """
+    met, detail = _contract("P6", rendered)
+    assert not met, "the generator now ships filled-in thresholds — see the docstring before changing this"
+    assert "TODO" in detail, f"P6 fails for a reason other than the intended TODO: {detail}"
+
+
+def test_the_exporting_document_matches_what_the_generator_produces() -> None:
+    """The table in EXPORTING.md is a claim, so it is checked against the tests.
+
+    Prose describing which requirements arrive satisfied is exactly the kind of
+    statement that stays on the page after the code moves underneath it. The
+    document and the parametrisation above are two halves of one claim.
+
+    Runs without copier, deliberately: a claim about the document should not
+    stop being checked on a machine that cannot render the template.
+    """
+    document = (REPO_ROOT / "docs" / "EXPORTING.md").read_text(encoding="utf-8")
+
+    for requirement in ("P1", "P2", "P3", "P4", "P5", "P7"):
+        row = next((line for line in document.splitlines() if line.startswith(f"| **{requirement}**")), None)
+        assert row is not None, f"EXPORTING.md has no row for {requirement}"
+        assert "✅" in row, f"EXPORTING.md says {requirement} is not satisfied on arrival; the test says it is"
+
+    p6 = next((line for line in document.splitlines() if line.startswith("| **P6**")), None)
+    assert p6 is not None, "EXPORTING.md has no row for P6"
+    assert "❌" in p6, "EXPORTING.md says P6 arrives satisfied; the generator ships TODO thresholds"
+    assert "deliberate" in p6, "EXPORTING.md must record that P6 is unsatisfied ON PURPOSE, not by oversight"
