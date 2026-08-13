@@ -68,6 +68,14 @@ local-endpoints: ## Print the local stack's URLs
 	@echo "  grafana    http://localhost:13000"
 	@echo ""
 
+.PHONY: local-dashboards
+local-dashboards: ## Sync platform/observability/dashboards/ into Grafana
+	kubectl --context $(CTX) -n ml-platform create configmap grafana-dashboards \
+	  --from-file=platform/observability/dashboards/ \
+	  --dry-run=client -o yaml | kubectl --context $(CTX) apply -f -
+	kubectl --context $(CTX) -n ml-platform rollout restart deploy/grafana
+	kubectl --context $(CTX) -n ml-platform rollout status deploy/grafana --timeout=180s
+
 .PHONY: local-serve
 local-serve: ## Build the service image, load it into kind, and wait for a Ready pod
 	docker build -t $(SERVICE_IMAGE) services/demand-forecast-serving

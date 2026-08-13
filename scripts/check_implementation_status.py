@@ -224,7 +224,17 @@ COMPONENTS: list[Component] = [
         # skips is a command that reports success for doing nothing.
         "uv run pytest projects/demand-forecast/tests/test_tracing.py -q",
     ),
-    Component("1", "Grafana LGTM dashboards", ["platform/observability"]),
+    Component(
+        "1",
+        "Grafana LGTM dashboards",
+        ["platform/observability"],
+        # The structural half, which runs without a cluster: every panel must
+        # name a datasource uid that provisioning actually creates. The other
+        # half — each expression run against a live Prometheus — is in
+        # tests/local and cannot be a verification command here, because a
+        # command that needs a cluster would make this document machine-dependent.
+        "uv run pytest tests/test_dashboards_structure.py -q",
+    ),
     # --- Phase 2: multi-cloud + GitOps --------------------------------------
     # These carried "no verification command" while their tests were already
     # green — the derived document under-reporting what is actually proven,

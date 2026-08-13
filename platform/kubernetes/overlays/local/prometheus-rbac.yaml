@@ -1,0 +1,26 @@
+# Prometheus reads pods in THIS namespace to discover the scrape target.
+#
+# Namespace-scoped and read-only, deliberately: the local stack's own comment
+# says a ClusterRole here would teach a permission model the cloud path must
+# not inherit. So the grant lives with the namespace that is being read, and
+# is created and destroyed with it.
+#
+# The subject is the ServiceAccount in `ml-platform`, which is where Prometheus
+# runs — a RoleBinding may name a subject from another namespace, and that is
+# exactly the shape wanted here.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prometheus-discovery
+rules:
+  - apiGroups: [""]
+    resources: [pods, services, endpoints]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prometheus-discovery
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: prometheus-discovery }
+subjects:
+  - { kind: ServiceAccount, name: prometheus, namespace: ml-platform }

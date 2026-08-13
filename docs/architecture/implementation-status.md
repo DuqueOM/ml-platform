@@ -33,7 +33,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**29 done · 4 partial · 7 absent** — of 40 tracked components.
+**31 done · 3 partial · 6 absent** — of 40 tracked components.
 
 ### Phase 0
 
@@ -41,7 +41,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 | :-: | --- | --- |
 | ✅ | uv workspace + lockfile | `uv lock --check` passes |
 | ✅ | Dependency direction test | `uv run pytest tests/test_dependency_direction.py -q` passes |
-| 🟡 | Documentation coherence gate | `uv run python scripts/check_doc_coherence.py` FAILS |
+| ✅ | Documentation coherence gate | `uv run python scripts/check_doc_coherence.py` passes |
 | ✅ | Agentic canonical store | `uv run python scripts/validate_agentic_surface.py --strict` passes |
 | ✅ | Agentic 4-tool surfaces | `uv run python scripts/sync_agentic_adapters.py --check` passes |
 | ✅ | Agentic surface integrity | `uv run python scripts/validate_agentic_surface.py --strict` passes |
@@ -71,7 +71,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 | ✅ | Training pipeline (KFP v2) — compiles | `uv run pytest tests/test_pipeline_spec.py -q` passes |
 | ✅ | Orchestration DAGs (Airflow) | `uv run pytest tests/test_dags.py -q` passes |
 | ✅ | Observability (OTel traces) | `uv run pytest projects/demand-forecast/tests/test_tracing.py -q` passes |
-| ⬜ | Grafana LGTM dashboards | absent |
+| ✅ | Grafana LGTM dashboards | `uv run pytest tests/test_dashboards_structure.py -q` passes |
 
 ### Phase 2
 

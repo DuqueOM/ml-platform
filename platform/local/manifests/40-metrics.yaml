@@ -10,7 +10,12 @@ data:
         static_configs: [{ targets: ["otel-collector:8889"] }]
       # Annotation-driven discovery, matching how the cloud overlays scrape.
       - job_name: kubernetes-pods
-        kubernetes_sd_configs: [{ role: pod, namespaces: { names: [ml-platform] } }]
+        # Both namespaces: the stack runs in `ml-platform`, the service in
+        # `demand-forecast-local`. Discovery scoped to the first one alone
+        # meant the service was annotated for scraping and never scraped —
+        # measured as zero `demand_forecast_*` series with the pod healthy.
+        kubernetes_sd_configs:
+          - { role: pod, namespaces: { names: [ml-platform, demand-forecast-local] } }
         relabel_configs:
           - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
             action: keep
@@ -99,11 +104,32 @@ data:
     datasources:
       - name: Prometheus
         type: prometheus
+        # The uid is PINNED because the dashboards reference it. Left to
+        # Grafana, it is generated per install, and a provisioned dashboard
+        # then points at a datasource that does not exist — every panel renders
+        # empty, which looks exactly like no traffic.
+        uid: prometheus
         url: http://prometheus:9090
         isDefault: true
       - name: Jaeger
         type: jaeger
         url: http://jaeger:16686
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: grafana-dashboard-provider, namespace: ml-platform }
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: ml-platform
+        type: file
+        # Grafana owns the file on disk; edits in the UI are overwritten on the
+        # next sync. That is the intent: a dashboard changed in the browser and
+        # not in git is a dashboard that disappears at the next deploy, and the
+        # person who made it finds out at the worst moment.
+        allowUiUpdates: false
+        options: { path: /var/lib/grafana/dashboards }
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -145,8 +171,18 @@ spec:
           readinessProbe:
             httpGet: { path: /api/health, port: 3000 }
             initialDelaySeconds: 10
-          volumeMounts: [{ name: ds, mountPath: /etc/grafana/provisioning/datasources }]
-      volumes: [{ name: ds, configMap: { name: grafana-datasources } }]
+          volumeMounts:
+            - { name: ds, mountPath: /etc/grafana/provisioning/datasources }
+            - { name: dashboard-provider, mountPath: /etc/grafana/provisioning/dashboards }
+            - { name: dashboards, mountPath: /var/lib/grafana/dashboards }
+      volumes:
+        - { name: ds, configMap: { name: grafana-datasources } }
+        - { name: dashboard-provider, configMap: { name: grafana-dashboard-provider } }
+        # Generated from platform/observability/dashboards/ by `make
+        # local-dashboards`, so the JSON has ONE home. Embedding it in this
+        # manifest would make the file the dashboards are edited in and the
+        # file they are served from two different files.
+        - { name: dashboards, configMap: { name: grafana-dashboards, optional: true } }
 ---
 apiVersion: v1
 kind: Service
