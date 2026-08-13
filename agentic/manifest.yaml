@@ -59,6 +59,27 @@ stores:
     glob: "*.md"
 
 # -----------------------------------------------------------------------------
+# Context files — the orientation an agent needs on attaching, GENERATED like
+# every other surface file.
+#
+# Hand-writing them was the obvious alternative and it is the one upstream
+# took; its `.cursor_context.md` claims 14 rule files where 19 exist and its
+# `.devin_context.md` claims 15 rules, 16 skills and 12 workflows where 19, 27
+# and 20 exist. Nothing caught it, because a hand-written file about a
+# generated tree has no gate that can. Every fact below is derived from this
+# manifest, the stores, and `mcp_registry.yaml`; the only prose stored here is
+# the part that is genuinely tool-specific and therefore not derivable.
+# -----------------------------------------------------------------------------
+context:
+  # Shared, tool-agnostic. Carries the surface inventory and nothing else — it
+  # is not a second constitution, and the four per-tool files point at it so
+  # that the shared half exists once.
+  shared: AGENT_CONTEXT.md
+  # Per-surface MCP facts (config path, which servers need confirmation) are
+  # read from here rather than restated, for the same reason as everything else.
+  mcp_registry: agentic/mcp_registry.yaml
+
+# -----------------------------------------------------------------------------
 # Adapter surfaces. Parity is the point: a rule that binds under one tool binds
 # under all of them. Adding a surface must never require editing a canonical
 # body.
@@ -72,6 +93,14 @@ surfaces:
       skills: skills
       workflows: commands
     extension: .md
+    context:
+      path: .claude_context.md
+      tool: Claude Code
+      discovery:
+        - "`CLAUDE.md` at the root is loaded automatically. It is itself a pointer to `AGENTS.md`, so the authority chain has one root and no tool-specific fork."
+        - "A rule under `.claude/rules/` is not auto-attached by path. Open the rules whose scope covers the files you are touching; the scope is stated in the canonical body, not in the pointer."
+        - "A file under `.claude/skills/` is listed as a skill, but its body is a pointer — read `agentic/skills/<id>/SKILL.md` before running the procedure, because the front-matter that declares the operation's mode lives there."
+        - "A file under `.claude/commands/` backs the `/<name>` slash command; the workflow body it names is canonical under `agentic/workflows/`."
 
   cursor:
     root: .cursor
@@ -81,6 +110,13 @@ surfaces:
       skills: skills
       workflows: commands
     extension: .mdc
+    context:
+      path: .cursor_context.md
+      tool: Cursor
+      discovery:
+        - "`.cursor/rules/*.mdc` are rendered by the same generator as every other surface, so they carry **no `globs:` / `alwaysApply:` front-matter**. Cursor therefore attaches none of them automatically — a rule binds because `AGENTS.md` says it does, not because the editor injected it. Read the ones covering your files yourself."
+        - "A file under `.cursor/commands/` backs the `/<name>` command; a file under `.cursor/skills/` names a procedure. Both are pointers — the body they name under `agentic/` is the thing to read."
+        - "Do not add front-matter to a `.mdc` file to make it auto-attach: it is generated output and the next `sync_agentic_adapters.py` run deletes the edit. Auto-attachment is a renderer change, in `scripts/sync_agentic_adapters.py`."
 
   codex:
     root: .codex
@@ -90,6 +126,13 @@ surfaces:
       skills: skills
       workflows: automations
     extension: .md
+    context:
+      path: .codex_context.md
+      tool: Codex
+      discovery:
+        - "`AGENTS.md` at the repository root is read automatically and is the authority here, so this surface deliberately adds no second contract."
+        - "Workflows land under `.codex/automations/`, not `workflows/` — the same canonical bodies as every other surface, under the name this tool uses. A workflow missing from `agentic/workflows/` is missing here too; the reverse cannot happen, because an orphan is deleted on the next render."
+        - "`.codex/mcp.example.json` is the committed example. The live `.codex/mcp.json` is adopter-owned, gitignored, and never rendered by the generator."
 
   devin:
     # Devin ingests file bodies and cannot follow a pointer, so this surface
@@ -102,6 +145,13 @@ surfaces:
       skills: skills
       workflows: workflows
     extension: .md
+    context:
+      path: .devin_context.md
+      tool: Devin
+      discovery:
+        - "This is the one surface carrying full bodies, because the tool ingests directory contents and cannot follow a path. Everything you read under `.devin/` is a copy; the original is the `agentic/` path named in each file's header."
+        - "A mirrored body sits at a different depth than its source, so the generator rewrites every relative link for the new depth. A link copied out of `.devin/` back into a canonical body will therefore be wrong by one level."
+        - "Because a copy can go stale silently, this surface is the drift-checked one: `validate_agentic_surface.py` V4 re-applies the generator's own transformation and compares, and V3 fails any mirror that has lost a STOP or CONSULT its canonical body declares."
 
 # -----------------------------------------------------------------------------
 # Modes an operation may carry. Ordered by increasing restriction; the

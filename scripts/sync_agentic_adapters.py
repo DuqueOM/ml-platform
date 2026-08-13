@@ -14,6 +14,15 @@ Two render modes (see `agentic/manifest.yaml`):
            ingest contents and cannot follow a path. This CAN drift, which is
            exactly why `validate_agentic_surface.py` checks it byte for byte.
 
+The context files (`AGENT_CONTEXT.md` and one `.<tool>_context.md` per surface)
+are rendered here too, for the reason the rest of this script exists: they
+describe a generated tree — which directory holds what, in which mode, how
+many of each — and a hand-written description of generated output drifts the
+moment the tree changes. Upstream hand-maintains its five and they are already
+wrong about their own file counts. Every derivable fact here is derived; the
+tool-specific prose that is NOT derivable is stored as data in the manifest, so
+it still has exactly one home.
+
 Idempotent: running twice changes nothing. Run with `--check` to fail instead
 of writing, which is what CI uses.
 
@@ -152,6 +161,211 @@ def render_mirror(artifact: Artifact, surface: str) -> str:
 {artifact.body}"""
 
 
+def _counts(artifacts: list[Artifact], kinds: list[str]) -> dict[str, int]:
+    """How many canonical bodies exist per kind, in the manifest's order."""
+    return {kind: sum(1 for a in artifacts if a.kind == kind) for kind in kinds}
+
+
+def _load_registry(manifest: dict[str, Any]) -> dict[str, Any]:
+    """The MCP registry, so per-surface MCP facts are read rather than restated."""
+    rel = manifest["context"].get("mcp_registry")
+    if not rel:
+        return {}
+    path = REPO_ROOT / str(rel)
+    if not path.is_file():
+        sys.exit(f"context declares mcp_registry {rel}, which does not exist")
+    loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return loaded if isinstance(loaded, dict) else {}
+
+
+_MODE_PROSE = {
+    "pointer": (
+        "is rendered in **pointer** mode: each file names its canonical body under `agentic/` and restates none of "
+        "it, so what you read there is an address and never the policy itself. Act on the canonical body, not on "
+        "the pointer"
+    ),
+    "mirror": (
+        "is rendered in **mirror** mode: each file carries the full canonical body, because this tool ingests "
+        "directory contents and cannot follow a path. What you read there is a copy — correct until it is not, "
+        "which is why it is the one surface checked byte for byte"
+    ),
+}
+
+
+def _mcp_lines(surface: str, registry: dict[str, Any]) -> list[str]:
+    """The MCP facts that differ per tool: where its config lives, what it must confirm."""
+    surfaces = registry.get("surfaces") or {}
+    if surface not in surfaces:
+        sys.exit(
+            f"surface {surface!r} has no entry under `surfaces:` in the MCP registry — its config path is undeclared"
+        )
+    entry = surfaces[surface] or {}
+    example = entry.get("committed_example")
+    confirm = sorted(
+        name
+        for name, spec in (registry.get("mcps") or {}).items()
+        if ((spec or {}).get("install_mode") or {}).get(surface) == "user_confirmed"
+    )
+    return [
+        f"- Config path for this surface: `{entry.get('config_path', 'undeclared')}` — never committed.",
+        f"- Committed example: {f'`{example}`' if example else 'none — there is nothing tool-specific to template.'}",
+        "- Servers this surface may not install without an explicit human decision: "
+        + (", ".join(f"`{name}`" for name in confirm) if confirm else "none are marked `user_confirmed` here")
+        + ".",
+        "- Nothing is installed automatically. `agentic/mcp_registry.yaml` declares each server's ceiling risk mode, "
+        "and adding one is a supply-chain decision made on the repository's behalf.",
+    ]
+
+
+def render_shared_context(manifest: dict[str, Any], artifacts: list[Artifact]) -> str:
+    """`AGENT_CONTEXT.md` — the inventory every tool shares, and no policy."""
+    kinds = list(manifest["stores"])
+    counts = _counts(artifacts, kinds)
+    stores = "\n".join(f"| {kind} | `{manifest['stores'][kind]['path']}` | {counts[kind]} |" for kind in kinds)
+    surfaces = "\n".join(
+        f"| `{cfg['root']}/` | {cfg['mode']} | `{cfg['context']['path']}` |" for cfg in manifest["surfaces"].values()
+    )
+    return f"""{GENERATED_MARKER}
+# Agent context
+
+Orientation for an agent that has just attached to this repository: what the
+agentic surface contains, which directory your tool reads, and which parts of
+the tree are generated. It is deliberately **not** policy — [AGENTS.md](AGENTS.md)
+is the authority, and if the two ever disagree, this file is the defect.
+
+Generated from `agentic/manifest.yaml`. Every count below is taken from the
+filesystem at render time, so it cannot quietly become false the way a
+hand-written inventory of a generated tree does.
+
+## Read in this order
+
+- [AGENTS.md](AGENTS.md) — the operating constitution: invariants, the
+  AUTO / CONSULT / STOP protocol, and the pre-commit cadence.
+- [CONTRIBUTING.md](CONTRIBUTING.md) — the cadence in order, why staging comes
+  before regenerating, and how a change is classified.
+- [llms.txt](llms.txt) — what the repository contains, in one page.
+- [docs/architecture/implementation-status.md](docs/architecture/implementation-status.md)
+  — what exists, derived from the filesystem rather than declared.
+
+## The canonical store
+
+Policy text exists in `agentic/` and nowhere else.
+
+| Kind | Canonical path | Count |
+| --- | --- | --- |
+{stores}
+
+## The surfaces rendered from it
+
+| Directory | Mode | Context file |
+| --- | --- | --- |
+{surfaces}
+
+Each surface publishes every canonical body, because a rule that binds under
+one tool has to bind under all of them — parity disappears one file at a time,
+and `validate_agentic_surface.py` exists to notice.
+
+## Commands
+
+```bash
+python scripts/sync_agentic_adapters.py              # render every surface
+python scripts/sync_agentic_adapters.py --check      # fail if stale (CI)
+python scripts/validate_agentic_surface.py --strict   # parity + mode integrity
+```
+
+## What this file is not
+
+- Not policy: modes, invariants and anti-patterns live in `AGENTS.md`.
+- Not a changelog: that is `CHANGELOG.md`.
+- Not a status report: `docs/architecture/implementation-status.md` derives one.
+- Not editable. Change `agentic/manifest.yaml` or the renderer, then re-render.
+"""
+
+
+def render_surface_context(
+    surface: str,
+    cfg: dict[str, Any],
+    manifest: dict[str, Any],
+    artifacts: list[Artifact],
+    registry: dict[str, Any],
+) -> str:
+    """`.<tool>_context.md` — only what differs for one tool."""
+    ctx = cfg["context"]
+    kinds = list(manifest["stores"])
+    counts = _counts(artifacts, kinds)
+    layout = "\n".join(
+        f"| {kind} | `{cfg['root']}/{cfg['layout'][kind]}/*{cfg['extension']}` | {counts[kind]} |" for kind in kinds
+    )
+    discovery = "\n".join(f"- {item}" for item in ctx["discovery"])
+    mcp = "\n".join(_mcp_lines(surface, registry))
+    return f"""{GENERATED_MARKER}
+# {ctx["tool"]} context
+
+Read [AGENT_CONTEXT.md](AGENT_CONTEXT.md) first — it holds what is true for
+every tool — and [AGENTS.md](AGENTS.md) for the authority. This file carries
+only what is specific to {ctx["tool"]} in this repository.
+
+Generated from `agentic/manifest.yaml`; an edit here survives until the next
+render and no longer.
+
+## Your surface
+
+`{cfg["root"]}/` {_MODE_PROSE[cfg["mode"]]}.
+
+| Kind | Where | Files |
+| --- | --- | --- |
+{layout}
+
+## What that means when you work here
+
+{discovery}
+
+## MCP
+
+{mcp}
+
+## The mode contract
+
+Every operation carries AUTO, CONSULT or STOP — the three are defined in
+[CONTRIBUTING.md](CONTRIBUTING.md#auto-consult-stop) and mapped operation by
+operation in [AGENTS.md](AGENTS.md#agent-behavior-protocol). The mode is a
+property of the operation, not of the tool running it and not of your
+confidence in it: the same procedure carries the same mode here as on every
+other surface, and a surface that appears to weaken one has drifted.
+
+## Editing
+
+Never edit a file under `{cfg["root"]}/`, and never edit this file. Edit the
+canonical body under `agentic/`, then:
+
+```bash
+python scripts/sync_agentic_adapters.py
+python scripts/validate_agentic_surface.py --strict
+```
+"""
+
+
+def context_outputs(manifest: dict[str, Any], artifacts: list[Artifact]) -> dict[Path, str]:
+    """Every context file the manifest declares, rendered.
+
+    A surface with no `context:` block is a failure rather than a skip: a tool
+    that reaches this repository with no orientation is the parity hole this
+    whole mechanism exists to close, and skipping it silently is how it opens.
+    """
+    declared = manifest.get("context")
+    if not declared:
+        return {}
+    registry = _load_registry(manifest)
+    outputs = {REPO_ROOT / str(declared["shared"]): render_shared_context(manifest, artifacts)}
+    for surface, cfg in manifest["surfaces"].items():
+        if "context" not in cfg:
+            sys.exit(f"surface {surface!r} declares no context file, but `context:` is configured for the manifest")
+        outputs[REPO_ROOT / str(cfg["context"]["path"])] = render_surface_context(
+            surface, cfg, manifest, artifacts, registry
+        )
+    return outputs
+
+
 def target_path(artifact: Artifact, surface_cfg: dict[str, Any]) -> Path:
     subdir = str(surface_cfg["layout"][artifact.kind])
     ext = str(surface_cfg["extension"])
@@ -201,6 +415,21 @@ def sync(check_only: bool) -> int:
                 else:
                     path.unlink()
                     written += 1
+
+    # Context files last: they REPORT the surface inventory, so rendering them
+    # before the artifacts would describe the tree as it was, not as it is.
+    # This is the wire the renderers were written for and were missing — 212
+    # lines of correct code that emitted nothing, which lints clean and looks
+    # finished.
+    for path, content in context_outputs(manifest, artifacts).items():
+        current = path.read_text(encoding="utf-8") if path.is_file() else None
+        if current == content:
+            continue
+        if check_only:
+            stale.append(f"{'missing' if current is None else 'stale'}: {path.relative_to(REPO_ROOT)}")
+            continue
+        path.write_text(content, encoding="utf-8")
+        written += 1
 
     if check_only:
         if stale:
