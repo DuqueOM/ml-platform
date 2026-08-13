@@ -6,44 +6,83 @@
 # record that a decision was reversed.
 #
 # Lowering any threshold here is STOP (AGENTS.md): it needs a recorded reason
-# and a named decision-maker.
+# and a named decision-maker. The numbers that live in code are additionally
+# watched by scripts/check_thresholds.py against git HEAD.
+#
+# This file shipped with `threshold: TODO` on its primary metric while the
+# retraining DAG enforced a real skill floor in code. The declared gate and the
+# operating gate were different things — the defect this repository keeps
+# rediscovering under new names — and the project contract (P6) now requires
+# every gate to name the check that computes it, so the two cannot separate
+# again.
 version: 1
 project: demand_forecast
 owner: platform-team
 
 gates:
-  - id: primary_metric
-    # TODO: choose from the cost of error, not from convention. If false
-    # positives and false negatives cost differently, an F1 threshold is
-    # already the wrong instrument.
-    metric: TODO
-    threshold: TODO
-    rationale: TODO — why this number, in business units
+  - id: skill_over_seasonal_naive
+    metric: skill
+    threshold: 0.05
+    check: orchestration/dags/demand_forecast_training.py::check_quality_gate
+    rationale: >
+      Skill is 1 - model_mae / baseline_mae against a seasonal-naive baseline,
+      which is "the same hour last week". A model that cannot beat that has not
+      earned the compute, let alone a deployment. The floor is deliberately low:
+      this gate exists to catch a broken pipeline, not to express an ambition,
+      and a demanding number here would be met by tuning the gate rather than
+      the model.
+    blocking: true
+
+  - id: interval_coverage
+    metric: conformal_coverage
+    threshold: 0.85
+    check: orchestration/dags/demand_forecast_training.py::check_quality_gate
+    rationale: >
+      The conformal intervals claim 90% coverage. Below 0.85 they are claiming
+      something false, which is worse than shipping no interval at all — a
+      staffing decision made against a wrong interval is made with false
+      confidence. Measured on held-out folds, never on the calibration window.
     blocking: true
 
   - id: no_temporal_leakage
-    # A leakage test that passes on a naive feature build proves nothing;
-    # it must FAIL on one.
     metric: leakage_test
     threshold: must_fail_on_naive_build
+    check: projects/demand-forecast/tests/test_training.py::test_a_future_change_does_not_alter_a_past_feature
     rationale: >
       Future information reaching a training row inflates validation and
-      collapses in production. The test is the evidence, not the intent.
+      collapses in production. The test mutates the tail of the series and
+      requires every earlier feature row to be byte-identical: a lookahead bug
+      survives shape checks, dtype checks and eyeballing, and does not survive
+      that. The test is the evidence, not the intent.
     blocking: true
 
-  - id: fairness_disparate_impact
-    metric: disparate_impact_ratio
-    threshold: 0.80
+  - id: ingest_reject_rate
+    metric: rejected_rows_fraction
+    threshold: 0.05
+    check: projects/demand-forecast/src/demand_forecast/ingest.py::MAX_REJECT_RATE
     rationale: >
-      The four-fifths rule — a recognised external reference rather than a
-      number chosen here.
+      A ceiling, not a floor: above 5% of rows failing validation, the month's
+      file is not the file the schema was written for, and silently training on
+      the survivors would fit a model to whatever subset happened to parse.
     blocking: true
 
-  - id: calibration
-    metric: expected_calibration_error
-    threshold: TODO
-    rationale: >
-      An uncalibrated probability cannot support a cost-based decision
-      threshold, which makes the primary gate meaningless.
-    blocking: true
-
+# Two gates from the generator's `tabular` block were removed rather than
+# filled in, and this note is the record of that decision:
+#
+#   fairness_disparate_impact — the four-fifths rule compares selection rates
+#   between groups of PEOPLE. This model forecasts taxi trips per zone; there
+#   is no protected attribute and no individual decision, so the ratio has no
+#   denominator. Keeping it with a plausible 0.80 would have been a gate that
+#   passes by being uncomputable.
+#
+#   calibration (expected calibration error) — ECE measures whether predicted
+#   PROBABILITIES match observed frequencies. This model emits a count with a
+#   conformal interval; `interval_coverage` above is the equivalent honesty
+#   check for a regression, and it is enforced.
+#
+# What is genuinely missing and belongs here later: forecast quality sliced BY
+# ZONE. Systematically worse forecasts for low-demand zones would misallocate
+# supply in exactly the places least able to absorb it — a real fairness
+# concern for this problem, unlike disparate impact. It is not declared as a
+# gate because nothing computes it yet, and a gate with no check is a claim.
+# Tracked in docs/architecture/technical-plan.md.
