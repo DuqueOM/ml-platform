@@ -584,14 +584,35 @@ def check_copier_commands_are_pinned() -> None:
 
 
 def _commits_since(when: date) -> int:
-    """Commits authored after a date. The measure C7 needed and did not have."""
+    """Commits dated after ``when``. The measure C7 needed and did not have.
+
+    Counted by walking every commit date, NOT by handing git a bare date.
+    `git rev-list --since=2026-08-08` does not mean midnight: approxidate fills
+    the missing time from the CURRENT CLOCK, so the cutoff is that date at
+    whatever time of day the check happens to run.
+
+    The consequence was measured on this repository, from one commit, with no
+    file changed between the two readings:
+
+        13:33   18 commits since the audit   C7 FAILS
+        21:19   10 commits since the audit   C7 PASSES
+
+    An audit-freshness gate whose verdict depends on the hour is worse than no
+    gate: it is one that will eventually pass on its own, late in the evening,
+    and be believed. `--since="2026-08-08 00:00:00"` fixes the parse, but a
+    string comparison over the dates needs no parsing rules at all and cannot
+    be got subtly wrong by the next person.
+
+    68 commits is a full walk of no consequence.
+    """
     result = subprocess.run(
-        ["git", "-C", str(REPO_ROOT), "rev-list", "--count", f"--since={when.isoformat()}", "HEAD"],
+        ["git", "-C", str(REPO_ROOT), "log", "--format=%cI", "HEAD"],
         capture_output=True,
         text=True,
         check=False,
     )
-    return int(result.stdout.strip() or 0)
+    cutoff = when.isoformat()
+    return sum(1 for line in result.stdout.splitlines() if line.strip() > cutoff)
 
 
 def check_audit_freshness() -> None:
