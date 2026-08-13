@@ -1,0 +1,40 @@
+# Gitleaks configuration — ml-platform
+#
+# Scanned by CI (gitleaks-action) and available locally:
+#
+#     gitleaks detect --no-banner --redact
+#
+# THERE ARE NO SUPPRESSIONS IN THIS FILE, and that is the point. A scan of the
+# full history at the time this was written reported zero findings across 74
+# commits, so every allowlist that could have been written here would have been
+# suppressing something that does not happen — which is how a suppression list
+# becomes a place nobody reads before adding one more.
+#
+# This file exists so there is somewhere to record an ACCEPTED finding, with
+# the reason, instead of the finding being silenced in a workflow argument
+# where no one will ever see it.
+
+title = "ml-platform"
+
+[extend]
+useDefault = true
+
+# ---------------------------------------------------------------------------
+# Before adding an allowlist, read this.
+# ---------------------------------------------------------------------------
+#
+# 1. An accepted finding needs a reason and an expiry, recorded in
+#    `.security-baselines/` alongside the Checkov and tfsec baselines. A
+#    permanent exception is a decision nobody made on purpose.
+#
+# 2. Use the PLURAL `[[allowlists]]` table, never the singular `[allowlist]`.
+#    They cannot coexist: gitleaks >= 8.25 refuses to load a config containing
+#    both, and gitleaks < 8.25 silently IGNORES the plural form. Upstream hit
+#    exactly this — a compatibility shim added for old versions became the
+#    thing blocking the upgrade.
+#
+# 3. Verify with a modern binary. The version on this machine at the time of
+#    writing was 8.21.2, which is below that boundary: an allowlist added here
+#    and tested only locally would appear to do nothing, and an allowlist
+#    tested only in CI would appear to work while doing nothing locally. Check
+#    `gitleaks version` before trusting either result.
