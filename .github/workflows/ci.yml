@@ -111,6 +111,14 @@ jobs:
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         run: uv run python scripts/check_upstream_parity.py
 
+      - name: Clock isolation (tests and git date filters)
+        # Tests must not read the wall clock, and production code must not hand
+        # git a bare --since date: approxidate fills the missing time from the
+        # current clock, so check C7 reported 18 commits at 13:33 and 10 at
+        # 21:19 from one commit — a gate that cleared itself in the evening.
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: uv run python scripts/check_test_clock_isolation.py
+
       - name: CI references resolve
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         # A workflow calling a renamed script silently stops testing what it

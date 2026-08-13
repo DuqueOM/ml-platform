@@ -29,7 +29,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import yaml
+from sync_agentic_adapters import rewrite_relative_links
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MANIFEST = REPO_ROOT / "agentic" / "manifest.yaml"
@@ -162,7 +164,23 @@ def check_no_de_escalation(manifest: dict[str, Any], canonical: dict[str, dict[s
 
 
 def check_mirror_fidelity(manifest: dict[str, Any], canonical: dict[str, dict[str, Path]]) -> None:
-    """V4 — a mirror is byte-identical to its source, modulo the header."""
+    """V4 — a mirror carries its canonical body, transformed only as the generator transforms it.
+
+    This asserted byte-identity until the generator started rewriting relative
+    links: a mirror sits at a different depth than its source, so a body copied
+    verbatim carried `../../../docs/...` from three levels down into a file two
+    levels down, and pointed above the repository root.
+
+    The fix collided with this check, which is the useful part. V4 and the
+    generator were modelling the same relationship independently, so a change
+    to one made the other wrong — two definitions of "what a mirror should
+    contain", which is the drift the whole agentic surface exists to prevent,
+    reproduced inside the checks that guard it.
+
+    So V4 no longer describes the transformation. It APPLIES the generator's
+    own function and compares, which means a future transformation cannot make
+    this check wrong; it can only make it check the new thing.
+    """
     for surface, cfg in manifest["surfaces"].items():
         if cfg["mode"] != "mirror":
             continue
@@ -172,12 +190,12 @@ def check_mirror_fidelity(manifest: dict[str, Any], canonical: dict[str, dict[st
                 target = REPO_ROOT / cfg["root"] / cfg["layout"][kind] / f"{name}{cfg['extension']}"
                 if not target.is_file():
                     continue
-                body = target.read_text(encoding="utf-8")
-                if source.read_text(encoding="utf-8") not in body:
+                expected = rewrite_relative_links(source.read_text(encoding="utf-8"), source.parent, target.parent)
+                if expected not in target.read_text(encoding="utf-8"):
                     fail("V4", f"{surface}: {kind}/{name} body drifted from canonical")
                     drifted += 1
         if not drifted:
-            ok("V4", f"{surface}: all mirrored bodies match canonical")
+            ok("V4", f"{surface}: all mirrored bodies match canonical, links rewritten for depth")
 
 
 def check_pointer_purity(manifest: dict[str, Any]) -> None:

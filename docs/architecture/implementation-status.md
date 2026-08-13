@@ -64,9 +64,9 @@ how "we deploy to two clouds" goes unchallenged.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**34 done · 4 partial · 10 absent** — of 48 tracked components.
+**37 done · 6 partial · 8 absent** — of 51 tracked components.
 
-**Proven in CI: 26 at L1 · 8 at L2.** Evidence available but NOT run here: 4 at L3, 0 at L4.
+**Proven in CI: 29 at L1 · 8 at L2.** Evidence available but NOT run here: 4 at L3, 0 at L4.
 
 ### Phase 0
 
@@ -112,11 +112,14 @@ how "we deploy to two clouds" goes unchallenged.
 | :-: | :-: | --- | --- |
 | ✅ | L1 | Upstream parity gate | `uv run pytest tests/test_upstream_parity.py -q` passes |
 | ✅ | L1 | Public-repo hygiene | `uv run pytest tests/test_public_repo_hygiene.py -q` passes |
-| ⬜ | — | Agent entry point (llms.txt) | absent |
+| ✅ | L1 | Agent entry point (llms.txt) | `uv run pytest tests/test_llms_txt.py -q` passes |
 | ⬜ | — | Enterprise documentation set | absent |
 | ✅ | L1 | Project contract | `uv run pytest tests/test_project_contract.py -q` passes |
 | ✅ | L1 | Exporting a vertical | `uv run pytest tests/test_project_generator.py -q -k exporting` passes |
-| ⬜ | — | Portable guards from upstream | absent |
+| ✅ | L1 | Portable guards from upstream | `uv run pytest tests/test_clock_isolation.py -q` passes |
+| ✅ | L1 | Security control claims | `uv run pytest tests/test_security_controls.py -q` passes |
+| 🟡 | — | Scanner baselines | 4 file(s), no verification command |
+| 🟡 | — | Repository governance (CODEOWNERS, PR template, link check) | 3 file(s), no verification command |
 
 ### Phase 1e
 

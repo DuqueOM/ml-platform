@@ -15,7 +15,7 @@ mode: AUTO to audit; CONSULT to add a gate; STOP to lower a threshold
 
 # quality-metrics
 
-Implements [ADR-005](../../../docs/decisions/ADR-005-agentic-governance.md)
+Implements [ADR-005](../../docs/decisions/ADR-005-agentic-governance.md)
 rule K and procedure QA-3.
 
 ## The rule

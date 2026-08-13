@@ -14,9 +14,9 @@ mode: per procedure — see the table
 
 # qa-procedure
 
-Implements [ADR-005](../../../docs/decisions/ADR-005-agentic-governance.md)
+Implements [ADR-005](../../docs/decisions/ADR-005-agentic-governance.md)
 rule L. Full definitions in
-[docs/governance/qa-procedures.md](../../../docs/governance/qa-procedures.md);
+[docs/governance/qa-procedures.md](../../docs/governance/qa-procedures.md);
 this skill selects and drives them.
 
 Procedures are executable because recall is worst exactly when they matter

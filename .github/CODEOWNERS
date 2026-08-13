@@ -1,0 +1,137 @@
+# CODEOWNERS — who reviews what.
+#
+# GitHub evaluates these lines top-to-bottom and the LAST match wins, so the
+# broad default comes first and every tightening follows it.
+#
+# One maintainer, stated plainly
+# ==============================
+# @DuqueOM is the only maintainer. Every rule below therefore names the same
+# handle, and this file distributes no review today. What it distributes is
+# meaning: it records where the ownership boundaries actually fall, so a
+# second maintainer can be added one boundary at a time — security and ADRs
+# first — instead of all at once by editing a single `*` line.
+#
+# The consequence a fork must know before relying on this: with one owner, a
+# branch-protection rule requiring an approving review from a code owner can
+# only ever be satisfied by the author. Adopters under separation-of-duties
+# obligations (SOC 2, HIPAA, financial services) must replace this file with
+# their own handles before calling the repository reviewed.
+
+# Default owner — everything not matched more specifically below.
+*                               @DuqueOM
+
+# ---------------------------------------------------------------------------
+# Upstream-owned: generated, not authored here
+# ---------------------------------------------------------------------------
+# `services/` is scaffolded from ml-service-template by copier and the template
+# is authoritative for every service-level concern — serving loop, container,
+# probes, K8s manifests, supply chain (ADR-003). A fix made here is a local
+# patch, and a local patch is how a consumer becomes a fork without deciding
+# to. Reviewers: send the change upstream, then `copier update`. The only
+# edits that belong in this tree are the ones copier itself produced.
+/services/                      @DuqueOM
+
+# ---------------------------------------------------------------------------
+# Agentic surface: one canonical store, four generated adapters
+# ---------------------------------------------------------------------------
+# `agentic/` holds the rules, skills and workflows. The per-tool trees below
+# are RENDERED from it by scripts/sync_agentic_adapters.py — pointers, not
+# sources. Editing one of them makes the same policy say two things, and
+# `sync_agentic_adapters.py --check` fails the build when it does. A review
+# that sees a hand-edited adapter should ask for the canonical body instead.
+/agentic/                       @DuqueOM
+/.claude/                       @DuqueOM
+/.cursor/                       @DuqueOM
+/.codex/                        @DuqueOM
+/.devin/                        @DuqueOM
+
+# ---------------------------------------------------------------------------
+# Governance and decisions
+# ---------------------------------------------------------------------------
+# An ADR is never deleted or renumbered — a wrong decision is superseded so
+# the reasoning survives, and the coherence gate checks that against git
+# history rather than the index.
+/AGENTS.md                      @DuqueOM
+/CLAUDE.md                      @DuqueOM
+/CONTRIBUTING.md                @DuqueOM
+/CODE_OF_CONDUCT.md             @DuqueOM
+/SECURITY.md                    @DuqueOM
+/LICENSE                        @DuqueOM
+/NOTICE                         @DuqueOM
+/docs/decisions/                @DuqueOM
+/docs/governance/               @DuqueOM
+/docs/PROJECT_CONTRACT.md       @DuqueOM
+/docs/EXPORTING.md              @DuqueOM
+
+# Derived documents. Review the generator and the inputs, never the diff —
+# these are rewritten from the filesystem by their scripts, and a hand-edited
+# tick in a status table is exactly the defect the generation exists to stop.
+/docs/architecture/             @DuqueOM
+
+# Append-only audit trail. Entries are added by scripts/audit_record.py; a
+# diff that modifies or removes an existing line is the finding.
+/ops/audit.jsonl                @DuqueOM
+
+# ---------------------------------------------------------------------------
+# The gates
+# ---------------------------------------------------------------------------
+# These scripts decide whether anything else can merge, so they are the one
+# place where a silently weakened check is invisible. Thresholds live in
+# scripts/check_thresholds.py and may rise, not fall.
+/scripts/                       @DuqueOM
+/tests/                         @DuqueOM
+/.pre-commit-config.yaml        @DuqueOM
+/.github/                       @DuqueOM
+/.github/workflows/             @DuqueOM
+/.gitleaks.toml                 @DuqueOM
+/codecov.yml                    @DuqueOM
+/Makefile                       @DuqueOM
+
+# ---------------------------------------------------------------------------
+# Shared libraries — the blast radius is every project at once
+# ---------------------------------------------------------------------------
+# A change to a public API in `libs/` crosses a boundary and is at least
+# CONSULT. `serving-core` additionally holds the seam against the template: it
+# may hold what the platform adds *around* a generated service, never the
+# serving loop itself (ADR-003).
+/libs/                          @DuqueOM
+/libs/data-contracts/           @DuqueOM
+/libs/feature-defs/             @DuqueOM
+/libs/llm-core/                 @DuqueOM
+/libs/ml-core/                  @DuqueOM
+/libs/serving-core/             @DuqueOM
+
+# ---------------------------------------------------------------------------
+# Verticals and their generator
+# ---------------------------------------------------------------------------
+# Projects are generated from `templates/project/`, so a change to the
+# template reaches every future vertical while a change under `projects/` is
+# local to one. `docs/PROJECT_CONTRACT.md` states what each must satisfy.
+/projects/                      @DuqueOM
+/templates/project/             @DuqueOM
+/copier.yml                     @DuqueOM
+
+# ---------------------------------------------------------------------------
+# Platform — the paths that touch real infrastructure
+# ---------------------------------------------------------------------------
+# Terraform, cluster manifests and network policy are the changes with a cloud
+# bill and a blast radius outside the repository. Policies are default-deny;
+# widening one is a security review, not a config tweak.
+/platform/terraform/            @DuqueOM
+/platform/kubernetes/           @DuqueOM
+/platform/policies/             @DuqueOM
+/platform/gitops/               @DuqueOM
+/platform/observability/        @DuqueOM
+/platform/local/                @DuqueOM
+
+# Orchestration runs on a schedule, so a defect here surfaces at 03:00 rather
+# than in review.
+/orchestration/                 @DuqueOM
+
+# ---------------------------------------------------------------------------
+# Dependency and release surface
+# ---------------------------------------------------------------------------
+/pyproject.toml                 @DuqueOM
+/uv.lock                        @DuqueOM
+/VERSION                        @DuqueOM
+/CHANGELOG.md                   @DuqueOM

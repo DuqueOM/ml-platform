@@ -1,0 +1,48 @@
+{
+  "ignorePatterns": [
+    {
+      "comment": "The local validation stack (make local-up) publishes these on the developer's own machine. They are unreachable from anywhere else by design, including CI.",
+      "pattern": "^https?://(localhost|127\\.0\\.0\\.1)"
+    },
+    {
+      "comment": "Cluster-internal DNS. These names resolve only inside the cluster the runbook is describing, which is the point of quoting them.",
+      "pattern": "^https?://(prometheus|pushgateway|grafana|jaeger|minio|postgres|alertmanager)[.:]"
+    },
+    {
+      "comment": "Kubernetes service FQDNs, same reason, written out in full.",
+      "pattern": "\\.svc\\.cluster\\.local"
+    },
+    {
+      "comment": "A shell variable the reader is expected to export before running the command. Resolving it is their job, not the link checker's.",
+      "pattern": "\\$\\{"
+    },
+    {
+      "comment": "Braces mean a placeholder here in every dialect the repository uses: copier's {@ token @}, {service}/{namespace} in runbooks, {org}/{repo} in badge URLs, and PromQL label selectors. The percent-encoded forms are matched too, because a link inside an href reaches the checker already encoded — the literal-brace pattern alone silently misses it.",
+      "pattern": "[{}]|%7[BbDd]"
+    },
+    {
+      "comment": "Angle-bracket placeholders, e.g. https://<domain>/predict.",
+      "pattern": "^https?://<"
+    },
+    {
+      "comment": "Reserved by RFC 2606 for documentation and guaranteed never to be a real destination.",
+      "pattern": "^https?://([a-z0-9-]+\\.)*example\\.(com|org|net)"
+    },
+    {
+      "comment": "ORG/REPO stand in for the adopter's own fork in the OIDC and workflow examples.",
+      "pattern": "^https://github\\.com/(ORG|OWNER)/"
+    }
+  ],
+  "httpHeaders": [
+    {
+      "comment": "GitHub answers unauthenticated HEAD requests for the API media type with a rate-limit error long before it answers HTML with one, and most links here point at github.com.",
+      "urls": ["https://github.com/", "https://raw.githubusercontent.com/"],
+      "headers": { "Accept": "text/html" }
+    }
+  ],
+  "timeout": "20s",
+  "retryOn429": true,
+  "retryCount": 3,
+  "fallbackRetryDelay": "30s",
+  "aliveStatusCodes": [200, 206, 301, 302, 307, 308]
+}

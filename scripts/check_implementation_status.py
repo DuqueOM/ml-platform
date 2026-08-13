@@ -268,7 +268,15 @@ COMPONENTS: list[Component] = [
         # worse than none: it makes the question look handled.
         "uv run pytest tests/test_public_repo_hygiene.py -q",
     ),
-    Component("1d", "Agent entry point (llms.txt)", ["llms.txt"]),
+    Component(
+        "1d",
+        "Agent entry point (llms.txt)",
+        ["llms.txt"],
+        # Every count in it is compared against the repository it describes.
+        # A summary is the easiest document to leave true-sounding and wrong,
+        # and it is also the one most likely to be quoted back as fact.
+        "uv run pytest tests/test_llms_txt.py -q",
+    ),
     Component(
         "1d",
         "Enterprise documentation set",
@@ -307,11 +315,36 @@ COMPONENTS: list[Component] = [
             "scripts/mcp_doctor.py",
             "scripts/validate_quality_gates.py",
         ],
+        # Only the clock guard exists so far; the command proves that one and
+        # will keep proving it as the others land beside it.
+        "uv run pytest tests/test_clock_isolation.py -q",
     ),
     # --- Phase 1e: retrieval over this platform's own documentation ---------
     # No verify command until there is something to verify. A gate that passes
     # over an empty index would be the fourth instance of the defect this
     # document exists to report.
+    Component(
+        "1d",
+        "Security control claims",
+        ["SECURITY.md"],
+        # The policy said six controls fail the build. Four of them could not.
+        "uv run pytest tests/test_security_controls.py -q",
+    ),
+    Component(
+        "1d",
+        "Scanner baselines",
+        [
+            ".security-baselines/README.md",
+            ".security-baselines/checkov.yml",
+            ".security-baselines/tfsec.yml",
+            ".security-baselines/.trivyignore",
+        ],
+    ),
+    Component(
+        "1d",
+        "Repository governance (CODEOWNERS, PR template, link check)",
+        [".github/CODEOWNERS", ".github/pull_request_template.md", ".github/markdown-link-check.json"],
+    ),
     Component("1e", "Documentation retrieval index", ["scripts/check_doc_index_freshness.py"]),
     # --- Phase 2: multi-cloud + GitOps --------------------------------------
     # These carried "no verification command" while their tests were already

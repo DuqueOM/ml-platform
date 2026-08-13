@@ -1,0 +1,60 @@
+# tfsec baseline — ml-platform
+#
+# Read this before assuming the file does something.
+#
+# tfsec is NOT part of this repository's CI. `.github/workflows/ci.yml` runs
+# Checkov, Kubescape and Trivy; no job invokes tfsec, and the binary is not a
+# declared dependency. This file exists so the tfsec-lineage checks have a
+# recording place if tfsec is ever wired in, and so the next reader does not
+# have to re-derive what follows.
+#
+# Those checks are already running here under another name. Aqua folded tfsec's
+# rule set into Trivy's misconfiguration scanner, where the IDs are renumbered:
+# tfsec's `google-gke-enable-master-networks` is Trivy's `GCP-0061`,
+# `google-gke-metadata-endpoints-disabled` is `GCP-0048`. So an accepted tfsec
+# finding almost certainly belongs in `.trivyignore` instead — that is the
+# scanner actually reporting it.
+#
+# ---------------------------------------------------------------------------
+# THIS LIST IS EMPTY, AND THE UPSTREAM ONE WAS NOT.
+# ---------------------------------------------------------------------------
+#
+# The ml-service-template baseline this file is adapted from carries three
+# exclusions. Each was checked against this repository on 2026-08-13 rather
+# than inherited, and none of them survived:
+#
+#   google-gke-enforce-pod-security-policy
+#     Does not fire. Trivy no longer ships the check — PodSecurityPolicy was
+#     removed in Kubernetes 1.25. Nothing to suppress.
+#
+#   google-gke-enable-master-networks  (Trivy: GCP-0061)
+#     Fires TWICE, and the two are not the same finding. On
+#     services/demand-forecast-serving/infra/terraform/gcp/compute.tf it is the
+#     upstream false positive: the setting is present as a `dynamic` block that
+#     static analysis does not evaluate. On platform/terraform/gcp/main.tf the
+#     setting is simply absent — a real gap in an 84-line cluster definition.
+#     Inheriting the exclusion would have silenced the real one to quiet the
+#     false one, which is the argument for scoping entries to a path rather
+#     than a rule ID.
+#
+#   google-gke-metadata-endpoints-disabled  (Trivy: GCP-0048)
+#     Fires on platform/terraform/gcp/main.tf. Upstream's rationale was that
+#     `disable-legacy-endpoints` sits on the node pools where tfsec cannot
+#     correlate it back to the cluster. That rationale does not transfer: this
+#     repository uses the same separately-managed-node-pool pattern, but the
+#     metadata attribute is not set on the pool either. Workload Identity is
+#     configured (`workload_metadata_config { mode = "GKE_METADATA" }`,
+#     main.tf:71), which is the primary control and materially reduces the
+#     risk — but the second control upstream relied on is genuinely missing
+#     here, so this is a finding to decide on, not one already answered.
+#
+# Adding an entry: see README.md in this directory. Finding ID, reason, owner,
+# expiry date — all four, or it is not an entry. An expired exclusion is itself
+# a finding, and one with no expiry is a decision nobody made on purpose.
+#
+#   exclude:
+#     # expiry: YYYY-MM-DD  owner: @handle
+#     # reason: <why this cannot be fixed now, and what would make it fixable>
+#     - some-check-id
+
+exclude: []
