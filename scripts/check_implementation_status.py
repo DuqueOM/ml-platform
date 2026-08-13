@@ -264,6 +264,9 @@ COMPONENTS: list[Component] = [
         "1d",
         "Public-repo hygiene",
         ["SECURITY.md", "CONTRIBUTING.md", "CODE_OF_CONDUCT.md", "NOTICE", ".gitleaks.toml"],
+        # Content, not presence. A SECURITY.md with no reporting channel is
+        # worse than none: it makes the question look handled.
+        "uv run pytest tests/test_public_repo_hygiene.py -q",
     ),
     Component("1d", "Agent entry point (llms.txt)", ["llms.txt"]),
     Component(

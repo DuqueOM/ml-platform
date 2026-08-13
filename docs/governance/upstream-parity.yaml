@@ -52,9 +52,9 @@ artifacts:
     reason: >-
       1d: enforces that a PR carries its evidence, which is the L1-L4 taxonomy applied at review time.
   - path: .gitleaks.toml
-    status: pending
+    status: adopted
     reason: >-
-      1d: CI runs gitleaks-action with default config; without a file, what is ignored is not controlled.
+      Adopted with ZERO suppressions: a full-history scan reported no findings, so any allowlist would have been suppressing something that does not happen. The file exists so an accepted finding has somewhere to be recorded with its reason.
   - path: .mcp.json.example
     status: pending
     reason: >-
@@ -64,21 +64,21 @@ artifacts:
     reason: >-
       1d: the shared context file the four tool surfaces point at.
   - path: CODE_OF_CONDUCT.md
-    status: pending
+    status: adopted
     reason: >-
-      1d: baseline norms for an open repository.
+      Adopted. Contributor Covenant 2.1 linked rather than reproduced, so the text cannot drift from what it claims to be.
   - path: CONTRIBUTING.md
-    status: pending
+    status: adopted
     reason: >-
-      1d: how to contribute to a public repository.
+      Adopted, rewritten for this repository: the stage-before-regenerate cadence, the rule that a gate must be verified by breaking what it guards, and the AUTO/CONSULT/STOP classification.
   - path: MIGRATION.md
     status: pending
     reason: >-
       1d: what an adopter does across versions of this platform.
   - path: NOTICE
-    status: pending
+    status: adopted
     reason: >-
-      1d: Apache-2.0 attribution, which is the declared licence here.
+      Adopted. Apache-2.0 attribution, and it names the generated portion of the service layer with a pointer to the ADR that defines the boundary.
   - path: QUICK_START.md
     status: pending
     reason: >-
@@ -88,9 +88,9 @@ artifacts:
     reason: >-
       1d: operational reference for the platform itself.
   - path: SECURITY.md
-    status: pending
+    status: adopted
     reason: >-
-      1d: a public repository with no channel to report a vulnerability to it.
+      Adopted, adapted. The scope section is the part that differs: a serving-loop vulnerability belongs upstream under ADR-003, and routing it here would delay the fix. Also states that a gate passing without checking anything is a security finding, not a bug.
   - path: VALIDATION_LOG.md
     status: pending
     reason: >-

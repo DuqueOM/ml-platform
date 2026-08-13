@@ -125,16 +125,19 @@ def test_the_online_half_degrades_honestly_without_the_checkout(monkeypatch: pyt
     assert any("not reachable" in note for note in parity.notes), "the skipped comparison must be stated, not hidden"
 
 
-def test_the_pending_entries_are_the_ones_the_plan_promises() -> None:
-    """The ledger and Phase 1d must describe the same work.
+def test_the_ledger_and_the_plan_describe_the_same_work() -> None:
+    """Two lists of what to adopt, maintained apart, is how one becomes fiction.
 
-    Two lists of what to adopt, maintained separately, is how one of them
-    quietly becomes fiction. The plan names the categories; the ledger names
-    the files; this asserts the headline items appear in both.
+    The first version asserted these were `pending`, and it broke the moment
+    SECURITY.md was adopted — a test that fails on PROGRESS, which is the
+    opposite of what it was for. What must hold is that each headline item is
+    decided in the ledger and named in the plan, whichever side of the work it
+    is currently on.
     """
     plan = (REPO_ROOT / "docs" / "architecture" / "technical-plan.md").read_text(encoding="utf-8")
-    pending = {e["path"] for e in _entries() if e["status"] == "pending"}
+    decided = {e["path"]: e["status"] for e in _entries()}
 
     for headline in ("SECURITY.md", "llms.txt", "docs/ADOPTION.md", "scripts/check_test_clock_isolation.py"):
-        assert headline in pending, f"{headline} is not pending in the ledger"
-        assert headline in plan, f"{headline} is pending but Phase 1d does not mention it"
+        assert headline in decided, f"{headline} has no entry in the ledger"
+        assert decided[headline] in {"pending", "adopted"}, f"{headline} is {decided[headline]}, not planned work"
+        assert headline in plan, f"{headline} is planned work but Phase 1d does not mention it"
