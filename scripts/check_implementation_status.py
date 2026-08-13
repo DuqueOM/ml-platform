@@ -345,6 +345,15 @@ COMPONENTS: list[Component] = [
         "Repository governance (CODEOWNERS, PR template, link check)",
         [".github/CODEOWNERS", ".github/pull_request_template.md", ".github/markdown-link-check.json"],
     ),
+    Component(
+        "1d",
+        "Per-tool context files",
+        ["AGENT_CONTEXT.md", ".claude_context.md", ".cursor_context.md", ".codex_context.md", ".devin_context.md"],
+        # Generated, so the check that matters is that they are CURRENT — a
+        # hand-written context file about a generated tree drifts silently,
+        # which is exactly what upstream's did.
+        "uv run python scripts/sync_agentic_adapters.py --check",
+    ),
     Component("1e", "Documentation retrieval index", ["scripts/check_doc_index_freshness.py"]),
     # --- Phase 2: multi-cloud + GitOps --------------------------------------
     # These carried "no verification command" while their tests were already

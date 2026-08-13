@@ -28,21 +28,21 @@ upstream: ml-service-template
 
 artifacts:
   - path: .claude_context.md
-    status: pending
+    status: adopted
     reason: >-
-      1d: per-tool context; parity is the point of the agentic surface.
+      Adopted as generated output from agentic/manifest.yaml. Carries only what is specific to Claude Code — surface mode, discovery paths, MCP config — and points at AGENT_CONTEXT.md for the shared half so it exists once.
   - path: .codex_context.md
-    status: pending
+    status: adopted
     reason: >-
-      1d: per-tool context for Codex. Four-tool parity is the point of the agentic surface, and three of four is not parity.
+      Adopted as generated output, same mechanism.
   - path: .cursor_context.md
-    status: pending
+    status: adopted
     reason: >-
-      1d: per-tool context for Cursor, on the same footing as the other three.
+      Adopted as generated output, same mechanism. Its upstream counterpart is the one that claims 14 rule files against 19.
   - path: .devin_context.md
-    status: pending
+    status: adopted
     reason: >-
-      1d: per-tool context for Devin, on the same footing as the other three.
+      Adopted as generated output, same mechanism. Its upstream counterpart claims 15 rules, 16 skills and 12 workflows against 19, 27 and 20.
   - path: .git-blame-ignore-revs
     status: pending
     reason: >-
@@ -60,9 +60,9 @@ artifacts:
     reason: >-
       1d: MCP configuration without committing secrets.
   - path: AGENT_CONTEXT.md
-    status: pending
+    status: adopted
     reason: >-
-      1d: the shared context file the four tool surfaces point at.
+      Adopted as GENERATED output, not a written file. Upstream's hand-written equivalents are the argument: .cursor_context.md claims 14 rule files where 19 exist and .devin_context.md claims 15 rules and 16 skills where there are 19 and 27. A hand-written file describing a generated tree has no gate that can catch it drifting.
   - path: CODE_OF_CONDUCT.md
     status: adopted
     reason: >-
@@ -96,9 +96,9 @@ artifacts:
     reason: >-
       1d: the evidence log the L1-L4 taxonomy feeds.
   - path: docs/ADOPTION.md
-    status: pending
+    status: adopted
     reason: >-
-      1d: how an organisation adopts this platform — the thesis, unwritten.
+      Adopted, rewritten for this repository. Upstream's version is a maturity matrix for adopting a service template; this one answers what arrives working, what is homework and — at length — what the platform does NOT claim: zero components at L4, Checkov advisory with 114 findings, ADR-008 open, and C7 red by design. A platform that hides its gaps costs the adopter the time they spend discovering them.
   - path: docs/COMPLIANCE_MAPPING.md
     status: pending
     reason: >-
