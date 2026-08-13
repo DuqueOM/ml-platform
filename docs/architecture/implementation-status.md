@@ -33,7 +33,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**31 done · 3 partial · 6 absent** — of 40 tracked components.
+**30 done · 4 partial · 6 absent** — of 40 tracked components.
 
 ### Phase 0
 
@@ -41,7 +41,7 @@ modules, and a coherence filter examining zero files, both stayed green.
 | :-: | --- | --- |
 | ✅ | uv workspace + lockfile | `uv lock --check` passes |
 | ✅ | Dependency direction test | `uv run pytest tests/test_dependency_direction.py -q` passes |
-| ✅ | Documentation coherence gate | `uv run python scripts/check_doc_coherence.py` passes |
+| 🟡 | Documentation coherence gate | `uv run python scripts/check_doc_coherence.py` FAILS |
 | ✅ | Agentic canonical store | `uv run python scripts/validate_agentic_surface.py --strict` passes |
 | ✅ | Agentic 4-tool surfaces | `uv run python scripts/sync_agentic_adapters.py --check` passes |
 | ✅ | Agentic surface integrity | `uv run python scripts/validate_agentic_surface.py --strict` passes |
