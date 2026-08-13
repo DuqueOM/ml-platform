@@ -103,6 +103,14 @@ jobs:
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         run: uv run python scripts/check_doc_coherence.py
 
+      - name: Upstream parity ledger (ADR-003)
+        # The offline half only: CI has no sibling template checkout, so the
+        # comparison against upstream is skipped and SAID to be skipped. What
+        # runs here is the half that always can — every `adopted` exists, every
+        # `rejected` is absent, every entry carries an argument.
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: uv run python scripts/check_upstream_parity.py
+
       - name: CI references resolve
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         # A workflow calling a renamed script silently stops testing what it
