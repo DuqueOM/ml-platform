@@ -248,6 +248,63 @@ COMPONENTS: list[Component] = [
         "uv run pytest tests/test_dashboards_structure.py -q",
         evidence="make local-dashboards && uv run pytest tests/local/test_dashboards.py -q -m local",
     ),
+    # --- Phase 1d: upstream parity + the enterprise surface -----------------
+    # These exist because copier covers `services/`, not the repository: every
+    # repo-level artifact was rebuilt by hand here and therefore exists only
+    # where somebody remembered it. Listed as components so the gap is derived
+    # from the filesystem rather than from anyone's recollection — which is the
+    # whole reason it went unnoticed until it was looked for directly.
+    Component("1d", "Upstream parity gate", ["scripts/check_upstream_parity.py"]),
+    Component(
+        "1d",
+        "Public-repo hygiene",
+        ["SECURITY.md", "CONTRIBUTING.md", "CODE_OF_CONDUCT.md", "NOTICE", ".gitleaks.toml"],
+    ),
+    Component("1d", "Agent entry point (llms.txt)", ["llms.txt"]),
+    Component(
+        "1d",
+        "Enterprise documentation set",
+        [
+            "docs/ADOPTION.md",
+            "docs/COMPLIANCE_MAPPING.md",
+            "docs/RELEASING.md",
+            "docs/PROGRESSION.md",
+            "docs/TUTORIAL.md",
+            "docs/environment-promotion.md",
+            "QUICK_START.md",
+            "RUNBOOK.md",
+            "MIGRATION.md",
+            "VALIDATION_LOG.md",
+        ],
+    ),
+    Component(
+        "1d",
+        "Project contract",
+        ["docs/PROJECT_CONTRACT.md"],
+        "uv run pytest tests/test_project_contract.py -q",
+    ),
+    Component(
+        "1d",
+        "Exporting a vertical",
+        ["docs/EXPORTING.md"],
+        "uv run pytest tests/test_project_generator.py -q -k exporting",
+    ),
+    Component(
+        "1d",
+        "Portable guards from upstream",
+        [
+            "scripts/check_test_clock_isolation.py",
+            "scripts/check_gitleaks_pin.py",
+            "scripts/check_dashboard_inventory.py",
+            "scripts/mcp_doctor.py",
+            "scripts/validate_quality_gates.py",
+        ],
+    ),
+    # --- Phase 1e: retrieval over this platform's own documentation ---------
+    # No verify command until there is something to verify. A gate that passes
+    # over an empty index would be the fourth instance of the defect this
+    # document exists to report.
+    Component("1e", "Documentation retrieval index", ["scripts/check_doc_index_freshness.py"]),
     # --- Phase 2: multi-cloud + GitOps --------------------------------------
     # These carried "no verification command" while their tests were already
     # green — the derived document under-reporting what is actually proven,
