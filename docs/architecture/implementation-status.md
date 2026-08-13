@@ -64,9 +64,9 @@ how "we deploy to two clouds" goes unchallenged.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**30 done · 4 partial · 6 absent** — of 40 tracked components.
+**32 done · 4 partial · 12 absent** — of 48 tracked components.
 
-**Proven in CI: 22 at L1 · 8 at L2.** Evidence available but NOT run here: 4 at L3, 0 at L4.
+**Proven in CI: 24 at L1 · 8 at L2.** Evidence available but NOT run here: 4 at L3, 0 at L4.
 
 ### Phase 0
 
@@ -105,6 +105,24 @@ how "we deploy to two clouds" goes unchallenged.
 | ✅ | L1 | Orchestration DAGs (Airflow) | `uv run pytest tests/test_dags.py -q` passes |
 | ✅ | L1 | Observability (OTel traces) | `uv run pytest projects/demand-forecast/tests/test_tracing.py -q` passes · L3 evidence, not run here: `make local-up && uv run pytest tests/local/test_local_stack.py -q -m local` |
 | ✅ | L1 | Grafana LGTM dashboards | `uv run pytest tests/test_dashboards_structure.py -q` passes · L3 evidence, not run here: `make local-dashboards && uv run pytest tests/local/test_dashboards.py -q -m local` |
+
+### Phase 1d
+
+| | Layer | Component | Evidence |
+| :-: | :-: | --- | --- |
+| ⬜ | — | Upstream parity gate | absent |
+| ⬜ | — | Public-repo hygiene | absent |
+| ⬜ | — | Agent entry point (llms.txt) | absent |
+| ⬜ | — | Enterprise documentation set | absent |
+| ✅ | L1 | Project contract | `uv run pytest tests/test_project_contract.py -q` passes |
+| ✅ | L1 | Exporting a vertical | `uv run pytest tests/test_project_generator.py -q -k exporting` passes |
+| ⬜ | — | Portable guards from upstream | absent |
+
+### Phase 1e
+
+| | Layer | Component | Evidence |
+| :-: | :-: | --- | --- |
+| ⬜ | — | Documentation retrieval index | absent |
 
 ### Phase 2
 

@@ -271,6 +271,133 @@ you find out.
 
 ---
 
+## Phase 1d — Upstream parity and the enterprise surface
+
+This phase exists because of a question that should have been asked earlier:
+if this repository consumes `ml-service-template`, why does the template have
+things this one does not?
+
+The answer is that **copier covers `services/`, not the repository**. ADR-003
+makes the template authoritative for service-level concerns, and
+`services/demand-forecast-serving/` is genuinely generated from it. Everything
+at repository level — the governance documents, the public-repo files, the
+portable guard scripts — was rebuilt by hand here, so it exists only where
+somebody remembered it. Nothing compared the two surfaces, which is why the
+gap was invisible until it was looked for directly.
+
+One finding makes the cost concrete. The template ships
+`check_test_clock_isolation.py`, written after a test broke at 20:52 UTC
+because a helper read the wall clock two layers down. This repository then
+shipped a coherence check that returned a different verdict at 13:33 than at
+21:19 — the same class of defect, with the guard already existing upstream and
+never carried across.
+
+### Deliverables
+
+- **The parity gate first.** `scripts/check_upstream_parity.py` lists what
+  exists in the template and not here, and requires an explicit decision per
+  artifact: adopted, or rejected with a reason. Self-cleaning, like the
+  project contract's deviations — a rejection for something since adopted
+  fails the suite. Adopting a list closes the gap once; the gate closes it
+  every time.
+- **Public-repo hygiene.** `SECURITY.md`, `CONTRIBUTING.md`,
+  `CODE_OF_CONDUCT.md`, `NOTICE`, `.gitleaks.toml`. The first of those is the
+  only item in this phase that is a defect rather than a debt: a public
+  repository presenting itself as enterprise, with no channel to report a
+  vulnerability to it, has a hole visible from outside.
+- **The enterprise documentation set**: `llms.txt`, `docs/ADOPTION.md`,
+  `docs/COMPLIANCE_MAPPING.md`, `docs/RELEASING.md`, `docs/PROGRESSION.md`,
+  `docs/TUTORIAL.md`, `docs/environment-promotion.md` — where the L1–L4
+  evidence taxonomy belongs — plus `QUICK_START.md`, `RUNBOOK.md`,
+  `MIGRATION.md`, `VALIDATION_LOG.md`, `.mcp.json.example`, the per-tool
+  context files, and the `docs/` subdirectories the template carries and this
+  one does not (`incidents`, `security`, `observability`, `audit`, `internal`).
+- **Portable guards**: `check_test_clock_isolation.py`, `check_gitleaks_pin.py`,
+  `check_dashboard_inventory.py`, `mcp_doctor.py`, `validate_quality_gates.py`,
+  `ci_classify_failure.py`, `ci_collect_context.py`.
+
+### Deliberately not adopted
+
+Most of the template's remaining scripts and workflows guard the mechanics of
+its own scaffolding — `check_cicd_template_drift`, `check_vendored_runtime_drift`,
+`golden-path*`, `validate-templates`, `pr-smoke-lane`. This repository's
+mechanics are different and its equivalent already exists in
+`tests/test_project_generator.py`. Copying them would import guards for a
+problem we do not have, and an unused guard is one nobody maintains.
+
+The agentic surface needs nothing: 23 rules, 29 skills and 22 workflows here
+against 19, 27 and 20 upstream. That is the one dimension with no debt.
+
+### Acceptance
+
+```bash
+uv run python scripts/check_upstream_parity.py     # every gap decided
+uv run pytest tests/test_upstream_parity.py -q
+uv run python scripts/check_doc_coherence.py       # the new documents are coherent
+```
+
+**Why here**: the parity gate produces the list, so what follows is measured
+rather than remembered. Placed after Phase 1c because it is not a delivery
+dependency — Phase 2 does not wait on it — but before Phase 2 in intent,
+because a repository about to add cloud surface should first stop losing
+governance surface it already decided to have.
+
+---
+
+## Phase 1e — Retrieval over the platform's own documentation
+
+Approved on the condition that parity lands first, and gated on evidence
+rather than on expectation.
+
+The corpus is real: 638 markdown files, roughly 260,000 words. That does not
+fit in a context window, so retrieval genuinely matters at this scale — and
+`grep` is still very good at it whenever the asker already knows the
+vocabulary. The agent that knows to search for `D-38` does not need this. The
+adopter who has never heard of `D-38` does.
+
+### What this must not become
+
+A vector index is the ultimate silently-stale derived artifact: no diff, no
+gate, no visible drift. Every other derived document here is regenerated and
+checked. An index that is not rebuilt in CI with its freshness gated would be
+precisely the mechanism this repository spends its time catching.
+
+Retrieval must also be **authority-aware**. `agentic/` is canonical and the
+per-tool files are pointers; an ADR can be superseded. A retriever that
+returns the pointer instead of the rule, or the superseded decision instead of
+the one that replaced it, is worse than no retriever.
+
+### Deliverables
+
+- `llms.txt` first — it lands in Phase 1d, is deterministic and diffable, and
+  it raises the bar this phase has to clear. That is the point, not an
+  inconvenience.
+- A gold set of questions agents actually ask of this repository.
+- Retrieval evaluated with the instrument this platform already owns:
+  `libs/llm-core/retrieval_eval.py` has `lexical_overlap_baseline` and
+  `beats_baseline(margin=0.05)`.
+- Index freshness gated in CI, on the same footing as every other derived
+  artifact.
+
+### Acceptance
+
+```bash
+uv run pytest libs/llm-core -q -k retrieval
+uv run python scripts/check_doc_index_freshness.py
+```
+
+**The gate is the deliverable.** If semantic retrieval over this corpus cannot
+beat lexical overlap by the 0.05 margin on the gold set, it does not ship, and
+the measurement is published either way. That places it at **Demonstrated**
+tier under ADR-004, not Adopted, until the margin exists.
+
+**Why it is worth doing anyway**: it turns `rag-assistant` from retrieval over
+a borrowed corpus into retrieval over this platform's own documentation,
+evaluated honestly against a baseline that is allowed to win — which is the
+loop `agent-ops` already promises in Phase 6, reached four phases earlier.
+
+---
+
 ## Phase 2 — Multi-cloud parity and GitOps
 
 ### Deliverables
