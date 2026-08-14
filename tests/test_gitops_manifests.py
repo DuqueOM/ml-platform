@@ -329,3 +329,39 @@ def test_the_credential_check_can_actually_fail() -> None:
     flagged = [key for key, value in values.items() if _SECRET_KEY.search(key) and _LOCAL_ONLY not in value]
 
     assert flagged == ["POSTGRES_PASSWORD"], "the pattern misses a real password or flags a username"
+
+
+#: Tags that name a moving target. `latest` is the obvious one; the others are
+#: the aliases people reach for when `latest` has been forbidden, which is how
+#: a ban on one string becomes a ban on one string.
+_MUTABLE_TAGS = frozenset({"latest", "main", "master", "stable", "edge", "dev", "prod", "staging"})
+
+
+@pytest.mark.parametrize("overlay", sorted(p.name for p in OVERLAYS.iterdir() if p.is_dir()), ids=lambda n: n)
+def test_no_overlay_ships_a_mutable_image_tag(overlay: str) -> None:
+    """A mutable tag means the manifest does not say what runs.
+
+    The base carried `:latest` and only the `local` overlay overrode it, so
+    the six cloud overlays inherited it — in a repository whose supply-chain
+    rows argue for digest pinning. Nothing caught it because rendering a
+    manifest never asks what the tag resolves to.
+
+    `local` is exempt and it is the one place a mutable tag is correct: the
+    image is built and `kind load`ed by hand, never pulled, so a digest would
+    be a hash of something that exists only on this machine.
+    """
+    if overlay == "local":
+        return
+
+    for document in _build(OVERLAYS / overlay):
+        containers = document.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+        for container in containers:
+            reference = container.get("image", "")
+            if "@sha256:" in reference:
+                continue
+            tag = reference.rsplit(":", 1)[-1] if ":" in reference else "latest"
+            assert tag not in _MUTABLE_TAGS, (
+                f"{overlay} deploys {reference!r}. A mutable tag means this manifest does not say what "
+                f"runs; pin a digest, or leave the deploy-pipeline placeholder so an accidental apply "
+                f"fails loudly instead of pulling whatever moved."
+            )
