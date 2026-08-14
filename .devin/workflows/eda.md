@@ -87,6 +87,6 @@ dvc push
 ## Related
 
 - Skill: `eda-analysis`
-- Rule: `agentic/rules/11-data-eda.md`
+- Rule: `agentic/rules/19-data-eda.md`
 - Anti-patterns: D-13 (sandbox), D-14 (schema ranges), D-15 (baseline), D-16 (rationale)
 - Next workflow: `/new-service` (if new) or `/retrain` (if refresh)

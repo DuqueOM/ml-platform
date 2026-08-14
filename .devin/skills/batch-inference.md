@@ -209,8 +209,8 @@ Waiting for: Approval from {data-owner}
 
 ## Related
 
-- `agentic/rules/02-kubernetes.md` §CronJob patterns
-- `agentic/rules/13-closed-loop-monitoring.md` — batch MUST log predictions
+- `agentic/rules/11-kubernetes.md` §CronJob patterns
+- `agentic/rules/21-closed-loop-monitoring.md` — batch MUST log predictions
 - `common_utils/input_quality.py` — optional edge check works for batch too
 - template-ADR-006 — prediction logger contract (batch is just another caller)
 - AGENTS.md §Engineering Calibration — CronJob, not Airflow, for 1-3 jobs

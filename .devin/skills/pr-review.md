@@ -70,7 +70,7 @@ Check the diff against, in order:
 1. `AGENTS.md` anti-patterns D-01..D-37 (the same rubric `rule-audit`
    uses, scoped to just the changed lines/files).
 2. The relevant `agentic/rules/*.md` for any touched path (e.g. a
-   changed `app/*.py` file triggers `04a-python-serving.md`).
+   changed `app/*.py` file triggers `13a-python-serving.md`).
 3. Repo-wide conventions: type hints, docstring style, `~=` pinning,
    lint/format (`black`, `isort`, `flake8`, `mypy` — run them if the
    language toolchain is present).

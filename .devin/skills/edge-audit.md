@@ -85,7 +85,7 @@ Confirm:
 
 - `metadata.annotations["edge-protection.mlops-template.io/implementation"]`
   is present and one of `cloud-armor` / `aws-waf` / `cloudflare`. Missing
-  or unrecognized → **FAIL** (rule `17-edge-protection.md`: "the
+  or unrecognized → **FAIL** (rule `24-edge-protection.md`: "the
   annotation is not decorative" — this is the ONLY signal this skill and
   the D-38 policy test trust).
 - The annotation's cloud matches the overlay's cloud (a `gcp-*` overlay
@@ -200,7 +200,7 @@ between verifying and re-running.
 
 ## Related
 
-- `agentic/rules/17-edge-protection.md` — the invariants this skill checks
+- `agentic/rules/24-edge-protection.md` — the invariants this skill checks
 - `agentic/workflows/edge-setup.md` — the CONSULT-mode remediation workflow
 - `docs/decisions/template-ADR-042-native-cloud-edge-protection.md`
 - `agentic/skills/rule-audit/SKILL.md` — the general-invariant precedent

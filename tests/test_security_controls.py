@@ -55,14 +55,19 @@ def _rows() -> list[tuple[str, str, str]]:
     return rows
 
 
-def _steps() -> list[tuple[Path, dict]]:  # type: ignore[type-arg]
-    """Every step in every workflow, with the file it came from."""
+def _steps() -> list[tuple[Path, dict, dict]]:  # type: ignore[type-arg]
+    """Every step, with its file AND its job.
+
+    The job travels with the step because `continue-on-error` is legal at job
+    level too, and one line there disarms every control in the job at once —
+    the worst of the four spellings, and the most plausible in review.
+    """
     found = []
     for path in WORKFLOWS:
         document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         for job in (document.get("jobs") or {}).values():
             for step in job.get("steps") or []:
-                found.append((path, step))
+                found.append((path, step, job))
     return found
 
 
@@ -72,29 +77,48 @@ def _mentions(step: dict, tool: str) -> bool:  # type: ignore[type-arg]
     return tool.lower() in haystack
 
 
-def _blocks(step: dict) -> bool:  # type: ignore[type-arg]
-    """A step blocks unless it is told not to.
+def _blocks(step: dict, job: dict | None = None) -> bool:  # type: ignore[type-arg]
+    """A step blocks unless something, anywhere, tells it not to.
 
-    Both spellings matter and they come from different places:
-    `continue-on-error` is GitHub's, `soft_fail` is the scanner action's own.
-    Checking only one of them is how a step that cannot fail keeps looking like
-    a gate — which is precisely what happened with Checkov.
+    FOUR spellings now, and each was found by someone reading the workflow
+    rather than by this function:
+
+    - `continue-on-error` on the STEP — GitHub's.
+    - `soft_fail` in `with` — the scanner action's own.
+    - `exit-code: "0"` in `with` — Trivy's. Found by an audit while this
+      function knew the first two, so the Trivy row passed the check written
+      specifically to catch a control that claims to block and cannot.
+    - `continue-on-error` on the JOB, `|| true` in the run body, and
+      `if: false` on the step — found by the NEXT audit, after the brief told
+      it to assume the same shape elsewhere. It did, and it was right.
+
+    The job-level one is the worst: a single line, plausible in review, and it
+    disarms every control in the job at once.
+
+    The list is open-ended by nature — a tool suppresses its exit status in its
+    own vocabulary. Treat a new spelling as expected rather than surprising.
     """
     if step.get("continue-on-error") in (True, "true"):
         return False
+    if job is not None and job.get("continue-on-error") in (True, "true"):
+        return False
+
+    # `if: false`, and any literal falsehood. A step that never runs cannot
+    # fail, and reads in the log as skipped rather than as absent.
+    condition = str(step.get("if", "")).strip().lower()
+    if condition in {"false", "${{ false }}"}:
+        return False
+
     with_block = step.get("with") or {}
     if with_block.get("soft_fail") in (True, "true"):
         return False
-    # THREE spellings, and the third was found by an audit reading the workflow
-    # rather than the test: Trivy's own `exit-code: "0"`. SECURITY.md claimed
-    # Trivy blocking, this function knew two suppressions, and the row passed
-    # the check written specifically to catch that class of claim — the
-    # original defect, alive inside its own fix.
-    #
-    # An action that suppresses its exit status does it in the action's own
-    # vocabulary, so the list is open-ended by nature. Anything looking like
-    # "always exit zero" counts.
-    return str(with_block.get("exit-code", "")).strip() not in {"0"}
+    if str(with_block.get("exit-code", "")).strip() == "0":
+        return False
+
+    # `|| true` and `; true` swallow the exit status inside the shell, where no
+    # YAML key records it.
+    body = str(step.get("run", ""))
+    return not re.search(r"\|\|\s*(true|:)\b|;\s*true\s*$", body, re.MULTILINE)
 
 
 def test_the_table_is_parseable_and_not_empty() -> None:
@@ -117,7 +141,7 @@ def test_each_claimed_control_actually_exists(control: str, tool: str, blocking:
         assert configured.is_file(), f"{tool} is claimed and {CONFIGURED_ELSEWHERE[tool]} does not exist"
         return
 
-    matching = [path for path, step in _steps() if _mentions(step, tool)]
+    matching = [path for path, step, _job in _steps() if _mentions(step, tool)]
     assert matching, (
         f"SECURITY.md claims {control!r} via {tool!r}, and no workflow step invokes it. "
         f"Either wire it, or remove the row — a policy naming a control that does not run is read "
@@ -132,12 +156,13 @@ def test_a_control_claimed_blocking_can_actually_fail_the_build(control: str, to
     if not claims_blocking or tool in CONFIGURED_ELSEWHERE:
         return
 
-    steps = [step for _, step in _steps() if _mentions(step, tool)]
+    steps = [(step, job) for _, step, job in _steps() if _mentions(step, tool)]
     assert steps, f"{tool} is claimed blocking and invoked nowhere"
-    assert any(_blocks(step) for step in steps), (
+    assert any(_blocks(step, job) for step, job in steps), (
         f"SECURITY.md claims {control!r} blocks the build, but every step invoking {tool} suppresses its "
-        f'exit status — `continue-on-error`, `soft_fail` or `exit-code: "0"`. Either remove the '
-        f"suppression or change the row to advisory."
+        f"exit status. Six spellings do that: `continue-on-error` on the step OR on the job, "
+        f'`soft_fail`, `exit-code: "0"`, `if: false`, and `|| true` inside the run body. '
+        f"Either remove the suppression or change the row to advisory."
     )
 
 
@@ -163,7 +188,7 @@ def test_no_control_row_claims_a_scanner_covers_what_it_is_not_configured_to_sca
     than trying to model every scanner's coverage, which would be a second
     source of truth that drifts from the workflows.
     """
-    trivy = [step for _, step in _steps() if _mentions(step, "trivy")]
+    trivy = [step for _, step, _job in _steps() if _mentions(step, "trivy")]
     assert trivy, "no Trivy step found"
 
     scanners = " ".join(str((step.get("with") or {}).get("scanners", "")) for step in trivy)

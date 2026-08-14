@@ -64,5 +64,5 @@ Agent drafts the post-mortem issue with timeline, root cause, and controls.
 
 - Skill: `secret-breach-response`
 - Skill: `security-audit` (prevention)
-- Rule: `agentic/rules/12-security-secrets.md`
+- Rule: `agentic/rules/20-security-secrets.md`
 - ADR: `template-ADR-005` (agent behavior + security)

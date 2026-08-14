@@ -64,9 +64,9 @@ how "we deploy to two clouds" goes unchallenged.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**42 done · 5 partial · 7 absent** — of 54 tracked components.
+**43 done · 4 partial · 7 absent** — of 54 tracked components.
 
-**Proven in CI: 32 at L1 · 10 at L2.** Evidence available but NOT run here: 4 at L3, 0 at L4.
+**Proven in CI: 32 at L1 · 11 at L2.** Evidence available but NOT run here: 4 at L3, 0 at L4.
 
 ### Phase 0
 
@@ -74,7 +74,7 @@ how "we deploy to two clouds" goes unchallenged.
 | :-: | :-: | --- | --- |
 | ✅ | L2 | uv workspace + lockfile | `uv lock --check` passes |
 | ✅ | L1 | Dependency direction test | `uv run pytest tests/test_dependency_direction.py -q` passes |
-| 🟡 | — | Documentation coherence gate | `uv run python scripts/check_doc_coherence.py` FAILS |
+| ✅ | L2 | Documentation coherence gate | `uv run python scripts/check_doc_coherence.py` passes |
 | ✅ | L2 | Agentic canonical store | `uv run python scripts/validate_agentic_surface.py --strict` passes |
 | ✅ | L2 | Agentic 4-tool surfaces | `uv run python scripts/sync_agentic_adapters.py --check` passes |
 | ✅ | L2 | Agentic surface integrity | `uv run python scripts/validate_agentic_surface.py --strict` passes |

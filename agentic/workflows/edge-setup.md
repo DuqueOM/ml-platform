@@ -23,7 +23,7 @@ and report — do not re-wire something that already works. This mirrors
 ## 2. Propose the Terraform plan (CONSULT — D-38, template-ADR-042 §2.2)
 
 This is a **hard CONSULT in every environment, including dev** — unlike
-most `terraform apply` calls in this template (`03-terraform.md`'s
+most `terraform apply` calls in this template (`12-terraform.md`'s
 per-environment table), edge-protection resources create public
 exposure and real cost regardless of the environment label. Never
 treat a dev overlay as license to apply this with AUTO.
@@ -84,7 +84,7 @@ should now report PASS for this overlay.
 - Confirm the LB actually terminates through the new Ingress: `curl -I
   https://<domain>/health` should succeed and the response should NOT
   be reachable via any bypassing `LoadBalancer`/`NodePort` Service for
-  the same workload (rule `17-edge-protection.md`).
+  the same workload (rule `24-edge-protection.md`).
 - Confirm the WAF is in "block" or "count" mode as intended — a
   freshly-applied policy in count-only mode looks protected in the
   audit but blocks nothing. Document which mode was chosen and why.
@@ -104,6 +104,6 @@ environment or urgency exception (template-ADR-042 §2.2).
 - `docs/decisions/template-ADR-042-native-cloud-edge-protection.md`
 - `agentic/skills/edge-audit/SKILL.md` — the AUTO-mode audit this
   workflow's step 1 delegates to
-- `agentic/rules/17-edge-protection.md`
+- `agentic/rules/24-edge-protection.md`
 - `agentic/workflows/release.md` §1 — the same "verify before acting"
   opening-step pattern

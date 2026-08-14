@@ -195,5 +195,5 @@ class PredictionRequest(BaseModel):
 ## When NOT to Apply
 
 - Test files (`test_*.py`) — test conventions are different
-- Training scripts — use `04b-python-training` rules instead
+- Training scripts — use `13b-python-training` rules instead
 - One-off scripts, migrations, CLI tools

@@ -122,5 +122,5 @@ fairness-attribute answers instead of the template's bare defaults.
 
 - Skill: `template-onboard` (the infra-wiring counterpart — cloud, registry, MLflow URI)
 - Skill: `new-service` (consumes this spec's answers when scaffolding)
-- Rule: `08-data-validation` (fairness DIR ≥ 0.80 gate this spec feeds)
+- Rule: `17-data-validation` (fairness DIR ≥ 0.80 gate this spec feeds)
 - template-ADR-041 — Agentic skill/domain expansion (why this skill exists)
