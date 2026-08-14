@@ -43,7 +43,7 @@ categories:
     items:
       - {id: docker, tier: core, detect: ["platform/local/kind-cluster.yaml"]}
       - {id: docker-compose, tier: studied, note: "kind used instead: the local stack must exercise Kubernetes manifests, which compose cannot."}
-      - {id: devcontainers, tier: studied}
+      - {id: devcontainers, tier: demonstrated, detect: [".devcontainer/devcontainer.json"]}
   - name: CI/CD
     items:
       - {id: github-actions, tier: core, detect: [".github/workflows/ci.yml"]}

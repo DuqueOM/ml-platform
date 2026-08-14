@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**45 of 117 committed technologies implemented (38%)** — plus 16 studied and 10 rejected, which are decisions rather than gaps.
+**46 of 118 committed technologies implemented (38%)** — plus 15 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 | :-: | --- |
@@ -46,13 +46,13 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | 📓 | `nox` | studied | Single supported Python version; matrix testing has nothing to vary yet. |
 | 🚫 | `tox` | rejected | Superseded by nox if matrix testing is ever needed. |
 
-## Containers — 1 built, 0 pending
+## Containers — 2 built, 0 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
 | ✅ | `docker` | core | |
 | 📓 | `docker-compose` | studied | kind used instead: the local stack must exercise Kubernetes manifests, which compose cannot. |
-| 📓 | `devcontainers` | studied | |
+| ✅ | `devcontainers` | demonstrated | |
 
 ## CI/CD — 7 built, 2 pending
 

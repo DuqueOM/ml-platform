@@ -1,8 +1,11 @@
 # Security baselines
 
-CI runs four scanners over this repository's infrastructure and dependencies
-(`.github/workflows/ci.yml`, jobs `IaC and Kubernetes security` and
-`Supply chain`). Until this directory existed there was nowhere to record that
+CI runs **three** of the four scanners below over this repository's
+infrastructure and dependencies (`.github/workflows/ci.yml`, jobs `IaC and
+Kubernetes security` and `Supply chain`). tfsec is not among them, and the
+table says so — this sentence said "four" until an audit read it against its
+own table, which is the smallest possible version of the defect these files
+exist to prevent. Until this directory existed there was nowhere to record that
 a finding had been looked at and accepted, so the only way to get a scanner to
 stop reporting something was to weaken the scanner — in a workflow argument,
 where the decision is invisible and permanent.

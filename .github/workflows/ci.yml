@@ -264,8 +264,10 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Trivy filesystem scan
-        # Covers what gitleaks and dependabot do not: IaC misconfiguration and
-        # vulnerabilities in transitive dependencies the lockfile pulled in.
+        # Vulnerabilities in dependencies the lockfile pulled in, and secrets.
+        # NOT IaC misconfiguration: `scan-type: fs` runs the vuln and secret
+        # scanners, and misconfig is opt-in. The previous comment claimed it,
+        # which is how SECURITY.md came to claim it too.
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
@@ -273,11 +275,18 @@ jobs:
           format: sarif
           output: trivy.sarif
           severity: CRITICAL,HIGH
-          # Report rather than block, for now: a CRITICAL in a transitive dep
-          # with no available fix would otherwise block every unrelated merge.
-          # Promoted to blocking once the finding volume is known — which is a
-          # measurement, not a guess.
-          exit-code: "0"
+          # BLOCKING. The previous `exit-code: "0"` said "promoted once the
+          # finding volume is known — which is a measurement, not a guess", and
+          # the measurement now exists: a CI-equivalent scan reports zero
+          # CRITICAL or HIGH findings.
+          #
+          # The risk that comment named — a CRITICAL in a transitive dep with no
+          # fix blocking every unrelated merge — is now handled rather than
+          # avoided: `.security-baselines/.trivyignore` is where such a finding
+          # is accepted, with an owner and an expiry, and an expired entry fails
+          # `tests/test_governance_files.py`. That did not exist when this was
+          # written.
+          trivyignores: .security-baselines/.trivyignore
 
       - uses: github/codeql-action/upload-sarif@v4
         with:

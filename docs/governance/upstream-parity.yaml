@@ -260,13 +260,13 @@ artifacts:
     reason: >-
       Verifies adoption of the TEMPLATE by a service. The equivalent question here is the project contract.
   - path: .devcontainer/devcontainer.json
-    status: pending
+    status: adopted
     reason: >-
-      1d: a reproducible environment for someone who just cloned this. Docker was unavailable on this machine for most of a session.
+      Adopted, complete this time. Strict JSON rather than JSONC, because pre-commit's check-json covers the path — proven by writing a JSONC probe and watching the hook fail. The reasoning lives in .devcontainer/README.md since strict JSON has nowhere to put it.
   - path: .devcontainer/post-create.sh
-    status: pending
+    status: adopted
     reason: >-
-      1d: the provisioning half of the devcontainer, and useless without it — they are one artifact split across two files, so they land together.
+      Adopted. Supplies what the devcontainer features do not — shellcheck and a checksum-verified kind — then hands off to bootstrap.sh and dev-setup.sh, so 'works in the devcontainer' and 'works on my machine' are the same claim rather than two.
   - path: .github/CODEOWNERS
     status: adopted
     reason: >-
@@ -296,13 +296,13 @@ artifacts:
     reason: >-
       Adopted empty. Upstream's three exclusions were checked against this repository and NONE survived: one no longer fires, and the other two would have silenced real gaps here to quiet a false positive that exists only upstream.
   - path: scripts/bootstrap.sh
-    status: pending
+    status: adopted
     reason: >-
-      1d: first-run setup. QUICK_START.md is documentation of this script, so they land together.
+      Adopted, and narrower than upstream's. It INSTALLS only uv and a uv-managed interpreter, both under $HOME and both verified by running them; everything else it inspects and reports with the exact command for the detected package manager. A script that sudo-installs on an unknown distro is guessing with root.
   - path: scripts/dev-setup.sh
-    status: pending
+    status: adopted
     reason: >-
-      1d: developer environment setup, same pairing.
+      Adopted, and it installs BOTH hook types. A plain `pre-commit install` leaves conventional-pre-commit unarmed here, because that hook declares stages: [commit-msg] and the config sets no default_install_hook_types — verified, not assumed.
   - path: .vscode/settings.json
     status: rejected
     reason: >-

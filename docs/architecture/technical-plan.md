@@ -353,6 +353,54 @@ governance surface it already decided to have.
 
 ---
 
+### Open findings from the parity work — measured, not yet fixed
+
+Recorded here so they survive the session that found them. Each was verified
+by running the thing, not by reading about it.
+
+**The local gate cannot pass.** `pre-commit run --all-files` is red on a clean
+checkout of HEAD, in four hooks, and a hook set that cannot pass is one people
+bypass with `--no-verify`:
+
+- `check-yaml` parses `templates/project/evals/gates.yaml`, which is Jinja
+  generator source and not valid YAML by design, and
+  `services/.../mkdocs.yml`, which uses a Python-name tag `safe_load` refuses.
+  Both directories are already excluded from ruff and coverage with argued
+  reasons; this hook never got the same treatment.
+- `check-toml` parses `templates/project/pyproject.toml`, unrendered Jinja for
+  the same reason.
+- `detect-private-key` fires on `agentic/skills/secret-breach-response/SKILL.md`
+  and a redaction test fixture — canonical example patterns, which is what a
+  secret-breach skill and a redaction test are made of.
+- `mypy` runs over `^libs/` including its TESTS, while CI and the documented
+  cadence run it over `libs/ scripts/ projects/demand-forecast/src/`. **The
+  pre-commit gate and the CI gate are not the same gate**, which is the defect
+  class this repository is built around, sitting in its own tooling.
+
+**Declared and unwired**, from the compliance mapping:
+
+- `quality-gates.md` rows S4 (image signed and attested) and C1 (provenance
+  attested) carry no PENDING marker and are wired to nothing: no workflow
+  builds an image and `cosign` appears nowhere. Check C4 misses them because it
+  only validates commands that are `scripts/*` paths.
+- Pod Security enforcement ships only to the `local` overlay. The six cloud
+  overlays set `namespace:` and create no Namespace, so no
+  `pod-security.kubernetes.io/enforce` label travels with them.
+- `platform/policies/README.md` describes contents the directory does not have,
+  while citing ADR-005 rule H in its own text.
+- `release-on-tag.yml` has no `needs:` and no status query: it publishes on the
+  tag alone, including from a red commit.
+- `VERSION` and `pyproject.toml` can drift apart. `llms.txt` is gated against
+  the second, the release workflow keys off the first, and nothing compares
+  them.
+- The deployment image is `:latest`, a mutable tag, in a repository that argues
+  for digest pinning elsewhere.
+- No SAST over first-party Python: Bandit is configured and invoked by nothing,
+  and the workflows use `codeql-action/upload-sarif` without ever running the
+  analyse action.
+
+---
+
 ## Phase 1e — Retrieval over the platform's own documentation
 
 Approved on the condition that parity lands first, and gated on evidence

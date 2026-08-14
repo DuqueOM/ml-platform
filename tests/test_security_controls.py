@@ -83,7 +83,18 @@ def _blocks(step: dict) -> bool:  # type: ignore[type-arg]
     if step.get("continue-on-error") in (True, "true"):
         return False
     with_block = step.get("with") or {}
-    return with_block.get("soft_fail") not in (True, "true")
+    if with_block.get("soft_fail") in (True, "true"):
+        return False
+    # THREE spellings, and the third was found by an audit reading the workflow
+    # rather than the test: Trivy's own `exit-code: "0"`. SECURITY.md claimed
+    # Trivy blocking, this function knew two suppressions, and the row passed
+    # the check written specifically to catch that class of claim — the
+    # original defect, alive inside its own fix.
+    #
+    # An action that suppresses its exit status does it in the action's own
+    # vocabulary, so the list is open-ended by nature. Anything looking like
+    # "always exit zero" counts.
+    return str(with_block.get("exit-code", "")).strip() not in {"0"}
 
 
 def test_the_table_is_parseable_and_not_empty() -> None:
@@ -124,8 +135,9 @@ def test_a_control_claimed_blocking_can_actually_fail_the_build(control: str, to
     steps = [step for _, step in _steps() if _mentions(step, tool)]
     assert steps, f"{tool} is claimed blocking and invoked nowhere"
     assert any(_blocks(step) for step in steps), (
-        f"SECURITY.md claims {control!r} blocks the build, but every step invoking {tool} carries "
-        f"`continue-on-error` or `soft_fail`. Either remove the suppression or change the row to advisory."
+        f"SECURITY.md claims {control!r} blocks the build, but every step invoking {tool} suppresses its "
+        f'exit status — `continue-on-error`, `soft_fail` or `exit-code: "0"`. Either remove the '
+        f"suppression or change the row to advisory."
     )
 
 

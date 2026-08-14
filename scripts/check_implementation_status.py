@@ -339,11 +339,13 @@ COMPONENTS: list[Component] = [
             ".security-baselines/tfsec.yml",
             ".security-baselines/.trivyignore",
         ],
+        "uv run pytest tests/test_governance_files.py -q",
     ),
     Component(
         "1d",
         "Repository governance (CODEOWNERS, PR template, link check)",
         [".github/CODEOWNERS", ".github/pull_request_template.md", ".github/markdown-link-check.json"],
+        "uv run pytest tests/test_governance_files.py -q",
     ),
     Component(
         "1d",
@@ -353,6 +355,19 @@ COMPONENTS: list[Component] = [
         # hand-written context file about a generated tree drifts silently,
         # which is exactly what upstream's did.
         "uv run python scripts/sync_agentic_adapters.py --check",
+    ),
+    Component(
+        "1d",
+        "Reproducible dev environment",
+        [
+            ".devcontainer/devcontainer.json",
+            ".devcontainer/post-create.sh",
+            "scripts/bootstrap.sh",
+            "scripts/dev-setup.sh",
+        ],
+        # `--check` is read-only and installs nothing, so it is reproducible on
+        # any machine — which is the requirement for a verify command here.
+        "bash scripts/bootstrap.sh --check",
     ),
     Component("1e", "Documentation retrieval index", ["scripts/check_doc_index_freshness.py"]),
     # --- Phase 2: multi-cloud + GitOps --------------------------------------
