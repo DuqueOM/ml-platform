@@ -138,3 +138,92 @@ def test_the_production_counter_walks_dates(tmp_path: Path) -> None:
 
     assert "--since" not in body, "_commits_since passes a date to git again; git parses it with the current clock"
     assert "%cI" in body, "_commits_since no longer reads commit dates directly"
+
+
+# --- Counting against the audited commit rather than the audited day --------
+#
+# Fixing the clock left a second over-count that only appeared once the first
+# was gone: an audit reviews a TREE, and a date cannot express which one.
+#
+# Round three audited `27bcd0a` and was recorded the same day. Five commits
+# had landed before the auditor started, and all five sort after the string
+# `2026-08-14`, so they were charged against the grace budget as unreviewed
+# work. Ten counted, five real, grace of ten — the marker exhausted its own
+# budget on the day it was written, and CI added an eleventh from the
+# synthetic merge commit GitHub builds for a pull request. That last one is
+# the worst of the three, because it made the gate irreproducible: red on the
+# runner, green on the branch, which is how a red gate gets overridden rather
+# than read.
+
+
+def _repo_with_history(tmp_path: Path, name: str, count: int) -> Path:
+    repo = tmp_path / name
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "probe@example.com")
+    _git(repo, "config", "user.name", "probe")
+    for index in range(count):
+        (repo / f"f{index}").write_text("x", encoding="utf-8")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-q", "-m", f"c{index}", when="2026-08-14T09:00:00+00:00")
+    return repo
+
+
+def _count_since_ref(repo: Path, ref: str) -> int:
+    return int(_git(repo, "rev-list", "--count", "--no-merges", f"{ref}..HEAD").strip() or 0)
+
+
+def test_the_audited_commit_is_not_charged_against_its_own_budget(tmp_path: Path) -> None:
+    """The defect that cost round three its entire grace on the day it landed.
+
+    Every commit here shares one timestamp, so the date-based count reports the
+    whole history and the ref-based count reports only what came after the
+    audited tree. The gap between 4 and 1 is the over-count, reproduced.
+    """
+    repo = _repo_with_history(tmp_path, "audited", 5)
+    audited = _git(repo, "rev-parse", "HEAD~1").strip()
+
+    by_date = len([line for line in _git(repo, "log", "--format=%cI", "HEAD").splitlines() if line > "2026-08-14"])
+    assert by_date == 5, "every commit is dated the day of the audit, which is the situation being reproduced"
+    assert _count_since_ref(repo, audited) == 1, "only the commit after the audited tree is unreviewed"
+
+
+def test_a_merge_commit_is_not_drift(tmp_path: Path) -> None:
+    """CI counted a commit nobody wrote.
+
+    GitHub's PR merge ref carries a synthetic commit dated now. It introduces
+    no change, but it counted, so the runner measured one more than the
+    developer's branch could — the gate fired at N-1 in CI and passed at N
+    locally, with no way to reproduce it.
+    """
+    repo = _repo_with_history(tmp_path, "merging", 2)
+    base = _git(repo, "rev-parse", "HEAD").strip()
+
+    _git(repo, "checkout", "-q", "-b", "side")
+    (repo / "side.txt").write_text("x", encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "side work", when="2026-08-14T10:00:00+00:00")
+    _git(repo, "checkout", "-q", "-")
+    _git(repo, "merge", "-q", "--no-ff", "-m", "Merge side", "side")
+
+    with_merges = int(_git(repo, "rev-list", "--count", f"{base}..HEAD").strip())
+    assert with_merges == 2, "the merge commit is present, which is the condition being guarded"
+    assert _count_since_ref(repo, base) == 1, "only the authored commit is drift; the merge introduced no change"
+
+
+def test_an_unresolvable_ref_falls_back_instead_of_reporting_zero_drift(tmp_path: Path) -> None:
+    """A marker naming a rebased-away commit must not read as "nothing changed".
+
+    This is the failure mode that matters: `rev-list` against a missing ref
+    errors, and an implementation that swallowed the error into 0 would turn
+    C7 into a check that passes because it could not measure — P-09, the exact
+    anti-pattern C7 was rewritten to escape once already.
+    """
+    import sys
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    from check_doc_coherence import _commits_since_ref
+
+    assert _commits_since_ref("0000000000000000000000000000000000000000") is None, (
+        "an unmeasurable ref must return None so the caller falls back, never 0"
+    )

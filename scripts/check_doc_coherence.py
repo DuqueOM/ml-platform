@@ -616,8 +616,58 @@ def check_copier_commands_are_pinned() -> None:
         )
 
 
+def _commits_since_ref(ref: str) -> int | None:
+    """Commits on HEAD that the audited commit does not contain.
+
+    This is the measure C7 actually wants, and the only one that is exact. An
+    audit reviews a TREE, not a calendar day, so the question "what has changed
+    that nobody reviewed" is answered by `<audited>..HEAD` and by nothing else.
+
+    Two defects in the date-based count made this necessary, both of the same
+    shape — a date-only marker compared against full timestamps:
+
+    **The audit's own subject matter was charged against the budget.** Round
+    three audited `27bcd0a` and was recorded the same day. Every commit made
+    earlier that day sorts after the string `2026-08-14`, so the five commits
+    the auditor had actually read counted as unreviewed. Ten charged against a
+    grace of ten, for five commits of real drift.
+
+    **CI counted one more than the developer could.** GitHub builds a synthetic
+    merge commit for the pull request ref, dated now. Nobody wrote it and it
+    carries no change, but it counted, so the gate fired at N-1 on the runner
+    while passing at N on the branch — irreproducible locally, which is the
+    property that makes a red gate get overridden instead of read.
+
+    `--no-merges` is kept for the same reason even here: a merge commit
+    introduces no change of its own, and counting it would charge the budget
+    for the act of integrating rather than for anything to review.
+
+    Returns None when the ref is not resolvable — a shallow clone, or a marker
+    naming a commit that was rebased away — so the caller can fall back rather
+    than treat "cannot measure" as "zero drift".
+    """
+    resolved = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if resolved.returncode != 0:
+        return None
+
+    counted = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "rev-list", "--count", "--no-merges", f"{ref}..HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if counted.returncode != 0:
+        return None
+    return int(counted.stdout.strip() or 0)
+
+
 def _commits_since(when: date) -> int:
-    """Commits dated after ``when``. The measure C7 needed and did not have.
+    """Commits dated after ``when`` — the fallback when the marker names no commit.
 
     Counted by walking every commit date, NOT by handing git a bare date.
     `git rev-list --since=2026-08-08` does not mean midnight: approxidate fills
@@ -636,10 +686,14 @@ def _commits_since(when: date) -> int:
     string comparison over the dates needs no parsing rules at all and cannot
     be got subtly wrong by the next person.
 
+    It still over-counts on the day of the audit, which is why
+    `_commits_since_ref` is preferred whenever the marker names a commit. This
+    path remains only for markers written before that convention existed.
+
     68 commits is a full walk of no consequence.
     """
     result = subprocess.run(
-        ["git", "-C", str(REPO_ROOT), "log", "--format=%cI", "HEAD"],
+        ["git", "-C", str(REPO_ROOT), "log", "--format=%cI", "--no-merges", "HEAD"],
         capture_output=True,
         text=True,
         check=False,
@@ -655,8 +709,11 @@ def check_audit_freshness() -> None:
     with each other and cannot detect a fact its author believed. This check
     exists to make sure the thing that CAN detect that keeps happening.
     """
+    # The commit is optional in the pattern and preferred in the measurement:
+    # a marker naming what was audited can be counted exactly, one carrying
+    # only a date cannot. See `_commits_since_ref`.
     marker = re.search(
-        r"Last independent audit:\s*(\d{4}-\d{2}-\d{2})",
+        r"Last independent audit:\s*(\d{4}-\d{2}-\d{2})(?:\s*\(([0-9a-f]{7,40})\))?",
         _read(REPO_ROOT / "AGENTS.md") + _read(PLAN),
     )
     if not marker:
@@ -686,11 +743,18 @@ def check_audit_freshness() -> None:
     # helper landed, the call site did not, and the commit message described
     # the correction in detail. A mechanism that is documented and not wired
     # is the defect this checker exists to find, committed while fixing it.
-    drift = _commits_since(audited)
+    reviewed = marker.group(2)
+    drift = _commits_since_ref(reviewed) if reviewed else None
+    if drift is None:
+        drift = _commits_since(audited)
+        measured = f"dated after {audited}"
+    else:
+        measured = f"not contained in {reviewed}"
+
     if drift > AUDIT_GRACE_COMMITS:
         fail(
             "C7",
-            f"{drift} commits since the audit on {audited} (grace: {AUDIT_GRACE_COMMITS}). "
+            f"{drift} commits {measured} (grace: {AUDIT_GRACE_COMMITS}). "
             "Recording an audit resets the counter, not a 90-day silence.",
         )
         return
@@ -699,7 +763,10 @@ def check_audit_freshness() -> None:
     if age > AUDIT_MAX_AGE_DAYS:
         fail("C7", f"last independent audit was {age} days ago (limit {AUDIT_MAX_AGE_DAYS}) — run QA-4")
     else:
-        ok("C7", f"last independent audit {age} days ago")
+        # The passing line carries the drift count too. An `ok` that reports
+        # only the age hides how close the budget is to exhausted, and the
+        # first anyone hears of it is a red gate on somebody else's branch.
+        ok("C7", f"last independent audit {age} days ago, {drift}/{AUDIT_GRACE_COMMITS} commits {measured}")
 
 
 def _commit_count() -> int:
