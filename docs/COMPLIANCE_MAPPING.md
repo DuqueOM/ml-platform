@@ -308,8 +308,9 @@ grep -rn "kind: Namespace" platform/
 ## Maintenance
 
 This document goes stale silently — nothing generates it and no gate checks it.
-That is a known weakness, and `quality-gates.md` row C3 reserves
-`scripts/check_compliance_mapping.py` for closing it.
+That is a known weakness, and `quality-gates.md` row C3 reserves the name
+`scripts/check_compliance_mapping.py` — which does not exist yet — for closing
+it.
 
 Until that exists, re-verify this file when any of the following happens:
 
