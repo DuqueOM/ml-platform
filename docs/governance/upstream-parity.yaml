@@ -80,13 +80,13 @@ artifacts:
     reason: >-
       Adopted. Apache-2.0 attribution, and it names the generated portion of the service layer with a pointer to the ADR that defines the boundary.
   - path: QUICK_START.md
-    status: pending
+    status: adopted
     reason: >-
-      1d: the first ten minutes for someone who just cloned this.
+      Adopted, rewritten. Its predecessor's hardcoded 'verified with Docker 29.5.2, kind v0.30.0, kubectl v1.34.1' was false on this machine — kubectl is 1.31.14 and there is no Docker — so it points at `bootstrap.sh --check`, which reads the machine the reader is actually on.
   - path: RUNBOOK.md
-    status: pending
+    status: adopted
     reason: >-
-      1d: operational reference for the platform itself.
+      Adopted, rewritten. Leads with running the gates DIRECTLY rather than through pre-commit or make, because both wrappers currently mislead, and documents the trap that running a gate while the suite runs gives a false stale verdict — tests/test_gate_scripts.py breaks and restores the real tree.
   - path: SECURITY.md
     status: adopted
     reason: >-

@@ -1,0 +1,29 @@
+# The namespace this overlay targets, created BY this overlay.
+#
+# ArgoCD syncs with CreateNamespace=true (platform/gitops/applicationset.yaml),
+# so the namespace has always existed in every environment — created by ArgoCD,
+# and therefore carrying no Pod Security labels at all. Measured before adding
+# this file: `kubectl kustomize` over each of the six cloud overlays rendered
+# eight documents and zero Namespace, while `overlays/local` rendered one. The
+# base Deployment states that "Pod Security restricted is the namespace
+# default" and sets every field that level requires; that default existed only
+# on a laptop. The pod was hardened and nothing enforced that it stay so.
+#
+# dev and staging enforce the same level as prod, not `baseline`. A lower level
+# below prod admits a pod that prod rejects, and the divergence then surfaces
+# at promotion as a failed rollout rather than here as a rejected apply — the
+# reasoning that already raised `overlays/local`. It costs nothing today: the
+# rendered pod satisfies `restricted` in all six overlays, which
+# tests/test_gitops_manifests.py now checks alongside these labels, so the
+# level and the workload cannot drift apart unnoticed.
+#
+# `audit` and `warn` accompany `enforce` because enforce alone rejects without
+# a trace: audit records the violation, warn returns it to whoever applied.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demand-forecast-staging
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

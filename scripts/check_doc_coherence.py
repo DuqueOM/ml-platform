@@ -39,6 +39,12 @@ AUDIT_MAX_AGE_DAYS = 90
 # audit deferred until "there is enough to audit" is one deferred forever.
 AUDIT_GRACE_COMMITS = 10
 
+#: A backticked command inside a gate row.
+_COMMAND = re.compile(r"`([^`]+)`")
+#: Not tools: shell keywords and the invokers whose real subject is the next
+#: word, which the script-path check above already resolves.
+_SHELL_BUILTINS = frozenset({"cd", "make", "uv", "uvx", "python", "python3", "bash", "sh", "npx", "git"})
+
 _ADR_FILE = re.compile(r"^ADR-(\d{3})-[a-z0-9-]+\.md$")
 _ADR_REF = re.compile(r"(?<!template-)\bADR-(\d{3})")
 # Inherited bodies use ml-service-template's numbering, namespaced so a
@@ -282,6 +288,9 @@ def check_gate_traceability() -> None:
     # scripts that were never written — a gate verifying other gates, passing
     # on formatting.
     script_ref = re.compile(r"scripts/[A-Za-z0-9_./-]+\.(?:py|sh)")
+    workflows = " ".join(
+        path.read_text(encoding="utf-8") for path in (REPO_ROOT / ".github" / "workflows").glob("*.yml")
+    )
     for row in rows:
         gate_id = row.split("|")[1].strip()
         if "`" not in row:
@@ -295,6 +304,30 @@ def check_gate_traceability() -> None:
         for referenced in script_ref.findall(row):
             if not (REPO_ROOT / referenced).is_file():
                 fail("C4", f"gate {gate_id} runs {referenced}, which does not exist")
+
+        # A row naming a THIRD-PARTY binary was unchecked: only `scripts/*`
+        # paths were resolved, so rows S4 and C1 declared
+        # `cosign verify-attestation` — with no PENDING marker, presenting
+        # themselves as enforced — while cosign appeared in no workflow and
+        # nothing here builds an image to sign. Found by an audit reading the
+        # table against the workflows.
+        #
+        # Resolved against the WORKFLOWS, never against $PATH. A tool being
+        # installed on the machine running this check says nothing about
+        # whether CI can run it, and would make this document's verdict depend
+        # on where it was generated — the machine-dependence that already made
+        # the status document disagree with itself between a laptop and CI.
+        for command in _COMMAND.findall(row):
+            tool = command.split()[0] if command.split() else ""
+            if not tool or tool in _SHELL_BUILTINS or "/" in tool:
+                continue
+            if tool not in workflows:
+                fail(
+                    "C4",
+                    f"gate {gate_id} runs `{tool}`, which no workflow invokes. Either wire it, or mark "
+                    f"the row PENDING — a gate presenting itself as enforced while nothing can run it "
+                    f"is the decoration ADR-005 rule K names",
+                )
     ok("C4", f"{len(rows)} gates declared with commands that resolve")
 
 
