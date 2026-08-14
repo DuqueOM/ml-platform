@@ -55,8 +55,15 @@ documents restate which facts; a hand edit fixes the copy you remembered.
 ## Independent audit
 
 ```text
-Last independent audit: 2026-08-14
+Last independent audit: 2026-08-14 (27bcd0a)
 ```
+
+The commit in parentheses is the tree the auditor read, and it is what C7
+counts drift against. Without it the check compares a date against commit
+timestamps, so everything committed earlier on the day of the audit — the
+material the auditor actually reviewed — counts as unreviewed. Round three
+measured ten commits of drift for five commits of real change, and exhausted
+its own grace budget the day it was recorded.
 
 A second QA-4 ran on 2026-08-08 against `943c36a`, in a separate session, and
 a second cloud review ran alongside it. The first pair ran on 2026-08-06
@@ -78,8 +85,10 @@ When the audit completes, record it with `scripts/audit_record.py` and add a
 line here:
 
 ```text
-Last independent audit: YYYY-MM-DD
+Last independent audit: YYYY-MM-DD (<short-sha of the commit audited>)
 ```
+
+Record the commit the auditor read, not the commit that writes the line.
 
 ## What this repository is
 

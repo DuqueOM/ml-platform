@@ -19,9 +19,11 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import os
 import re
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -543,13 +545,62 @@ def evidence_layer(command: str) -> str:
 def _verify(command: str) -> bool:
     # shell=True is safe here: every command is a literal defined in
     # COMPONENTS above, never derived from input.
-    result = subprocess.run(command, shell=True, cwd=REPO_ROOT, capture_output=True, text=True)
+    #
+    # `UV_NO_SYNC=1` because these run CONCURRENTLY. Every `uv run` re-syncs
+    # the environment before executing, and several of these commands do that
+    # against the same virtualenv at the same time — a write race whose only
+    # symptom is a command failing for no reason it can explain.
+    #
+    # It was observed exactly once, in a pre-commit run, and did not reproduce
+    # in three sequential attempts. That is the honest state of the evidence:
+    # this removes the one piece of shared mutable state the pool touches,
+    # and `test_the_generated_document_is_deterministic` is what actually
+    # holds the property. Reverting to serial execution would also fix it, at
+    # seventeen minutes per CI run.
+    #
+    # The environment is already synced by the time this script runs — every
+    # caller reaches it through `uv run` itself.
+    environment = {**os.environ, "UV_NO_SYNC": "1"}
+    result = subprocess.run(command, shell=True, cwd=REPO_ROOT, capture_output=True, text=True, env=environment)
     return result.returncode == 0
+
+
+#: Verification commands run concurrently. They are independent subprocesses
+#: that only READ the tree, so the only thing serial execution bought was
+#: seventeen minutes of CI.
+#:
+#: Measured: seven tests invoke this script, each paying ~50s while ~35 verify
+#: commands ran one after another — and most of them are `uv run pytest`, so it
+#: was pytest inside pytest inside pytest. The step took 886 of the job's 1021
+#: seconds.
+#:
+#: Eight, not "as many as there are". Several commands are `uv run pytest`,
+#: which contend on the same virtualenv and `.pytest_cache`; a wider pool
+#: trades wall time for a class of flake that would be blamed on the tests.
+VERIFY_WORKERS = 8
+
+
+def _verify_all(components: list[Component]) -> dict[str, bool]:
+    """Run every verification command at once, keyed by the command itself.
+
+    Keyed by COMMAND rather than by component: several components share one —
+    `validate_agentic_surface.py --strict` backs three — and running it once
+    is both faster and more honest, since a command cannot pass for one
+    component and fail for another in the same instant.
+    """
+    commands = {c.verify for c in components if c.verify}
+    if not commands:
+        return {}
+
+    with ThreadPoolExecutor(max_workers=VERIFY_WORKERS) as pool:
+        futures = {pool.submit(_verify, command): command for command in sorted(commands)}
+        return {futures[future]: future.result() for future in as_completed(futures)}
 
 
 def evaluate() -> list[tuple[Component, str, str, str]]:
     """Return (component, marker, layer, detail) for every component."""
     rows: list[tuple[Component, str, str, str]] = []
+    results = _verify_all(COMPONENTS)
     for component in COMPONENTS:
         count = _substantive_files(component)
         if count == 0:
@@ -566,7 +617,7 @@ def evaluate() -> list[tuple[Component, str, str, str]]:
             rows.append((component, "🟡", "—", detail))
             continue
 
-        passed = _verify(component.verify)
+        passed = results[component.verify]
         marker = "✅" if passed else "🟡"
         detail = f"`{component.verify}` {'passes' if passed else 'FAILS'}"
         if component.evidence:
