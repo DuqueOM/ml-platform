@@ -19,7 +19,22 @@ MODE="${1:---dry-run}"
 # Every required check must be a job that actually exists in a workflow.
 # Requiring a check that never reports leaves a PR permanently unmergeable,
 # which is how required checks get removed wholesale instead of fixed.
-REQUIRED_CHECKS=("Repository invariants" "Secret scan")
+# All FOUR CI jobs, not two. The first version required only the first two,
+# so a red "IaC and Kubernetes security" or "Supply chain" could merge — and an
+# audit read this list as the repository's configuration when in fact the
+# script had never been run. The script is intent; the GitHub setting is the
+# control, and until one of them is applied the other proves nothing.
+#
+# Deliberately NOT required: "markdownlint" is path-filtered to `**/*.md` and
+# "analysis" (Scorecard) runs on its own schedule. A required check that never
+# reports leaves a PR unmergeable forever, which is how required checks get
+# removed wholesale instead of fixed.
+REQUIRED_CHECKS=(
+  "Repository invariants"
+  "IaC and Kubernetes security"
+  "Supply chain"
+  "Secret scan"
+)
 
 payload() {
   cat <<JSON
