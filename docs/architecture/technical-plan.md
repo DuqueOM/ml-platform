@@ -406,8 +406,19 @@ obvious trigger.
   network policy, no binary authorization, no EKS secrets encryption. Fixing
   those is Phase 2 work against a real cluster.
 
-- **Branch protection requires 2 of 4 CI jobs and no approving review.**
-  IaC-security and Supply-chain are not required to merge.
+- **`main` has no branch protection at all.** The third audit reported "2 of
+  4 CI jobs required"; the API says otherwise — no classic protection and no
+  ruleset exist, so nothing blocks a push, including a red one. The finding
+  was right that a gap exists and wrong about its size, in the safe direction
+  for the reader and the unsafe one for the repository. Fixing it is a
+  settings change bound up with the flow question below: with one maintainer,
+  requiring reviews is unsatisfiable, while requiring all four CI jobs is not.
+
+- ~~The vendored service's Pod Security differs from ours~~ — closed:
+  `tests/test_upstream_parity.py` now asserts the platform is never LESS
+  strict than the vendored service. Written as an inequality rather than an
+  equality, so the platform staying stricter — the current and correct state —
+  is not a failure. The original text follows for the record.
 
 - **The vendored service's Pod Security differs from ours.**
   `services/.../k8s/overlays/aws-dev/namespace.yaml` uses `enforce: baseline`

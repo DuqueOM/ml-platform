@@ -141,3 +141,50 @@ def test_the_ledger_and_the_plan_describe_the_same_work() -> None:
         assert headline in decided, f"{headline} has no entry in the ledger"
         assert decided[headline] in {"pending", "adopted"}, f"{headline} is {decided[headline]}, not planned work"
         assert headline in plan, f"{headline} is planned work but Phase 1d does not mention it"
+
+
+#: Pod Security levels, weakest first. Comparing by index rather than by name
+#: is what lets the assertion below say "never LESS strict" instead of
+#: "identical" — identical would forbid the platform from being stricter,
+#: which is the direction nobody needs protecting from.
+_PSS_LEVELS = ("privileged", "baseline", "restricted")
+
+
+def test_the_platform_is_never_less_strict_than_the_vendored_service() -> None:
+    """Two Pod Security policies, in two trees, with nothing comparing them.
+
+    `services/` is generated from ml-service-template and enforces `baseline`
+    in its lower environments; the platform enforces `restricted` in all six.
+    Both are defensible on their own and the pair was never checked, so the
+    divergence could invert without anyone noticing — and the direction that
+    matters is only one: the platform must not admit what the service's own
+    manifests refuse.
+
+    Asserted as an inequality, not an equality. The platform being STRICTER is
+    the current state and a good one; requiring the two to match would forbid
+    that and turn a deliberate hardening into a test failure.
+    """
+    import re
+
+    def _levels(root: Path) -> dict[str, str]:
+        found = {}
+        for namespace in sorted(root.rglob("namespace.yaml")):
+            match = re.search(r"pod-security\.kubernetes\.io/enforce:\s*(\w+)", namespace.read_text(encoding="utf-8"))
+            if match:
+                found[namespace.parent.name] = match.group(1)
+        return found
+
+    platform = _levels(REPO_ROOT / "platform" / "kubernetes" / "overlays")
+    vendored = _levels(REPO_ROOT / "services" / "demand-forecast-serving" / "k8s" / "overlays")
+
+    assert platform, "no Pod Security level found in the platform overlays"
+    assert vendored, "no Pod Security level found in the vendored service — its layout moved"
+
+    weakest_platform = min(_PSS_LEVELS.index(level) for level in platform.values())
+    strictest_vendored = max(_PSS_LEVELS.index(level) for level in vendored.values())
+
+    assert weakest_platform >= strictest_vendored, (
+        f"the platform admits what the vendored service refuses: platform enforces "
+        f"{sorted(set(platform.values()))} and the service enforces {sorted(set(vendored.values()))}. "
+        f"A pod accepted by one and rejected by the other surfaces at deploy time as an outage."
+    )
