@@ -32,7 +32,16 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: serving
-          image: ghcr.io/duqueom/ml-platform/demand-forecast:latest
+          # NOT a deployable reference, and deliberately unresolvable. The
+          # tag was `:latest`, which only the `local` overlay overrode — so
+          # the six cloud overlays inherited a MUTABLE tag, in a repository
+          # that argues for digest pinning everywhere else.
+          #
+          # A deploy pipeline replaces this with an immutable digest
+          # (`@sha256:...`). Until one exists, an accidental apply fails with
+          # ImagePullBackOff on a name that says why, which is strictly better
+          # than silently pulling whatever `latest` happens to be.
+          image: ghcr.io/duqueom/ml-platform/demand-forecast:set-by-deploy-pipeline
           ports:
             - containerPort: 8000
           securityContext:
