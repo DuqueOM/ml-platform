@@ -119,6 +119,14 @@ jobs:
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         run: uv run python scripts/check_test_clock_isolation.py
 
+      - name: Version is consistent across every location
+        # Five places assert the platform version and nothing compared them.
+        # A half-applied bump ships correct release notes with a stale agent
+        # entry point, and the workflow that publishes reads a different file
+        # from the one the gates read.
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        run: uv run python scripts/check_version_consistency.py
+
       - name: CI references resolve
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         # A workflow calling a renamed script silently stops testing what it

@@ -21,6 +21,18 @@ default_language_version:
 
 # Generated surfaces are validated by their own hook below, not linted as
 # hand-written source. Linting a mirror reports the same finding N times.
+# The generated tool surfaces are excluded from every hook: they are rendered
+# from `agentic/` and a fixer editing one would be overwritten on the next sync.
+#
+# That has a consequence worth stating, because it cost a debugging session. A
+# whitespace fixer touching a CANONICAL file under `agentic/` desyncs its
+# mirrors, which the exclusion above protects from being fixed in place — so
+# `agentic-surface-sync` then fails, and so do the two checks behind it. The
+# resolution is not to widen this exclusion but to re-render:
+#
+#     uv run python scripts/sync_agentic_adapters.py
+#
+# Found by a trailing space inside an awk command in one skill body.
 exclude: '^(\.claude|\.cursor|\.codex|\.devin)/'
 
 repos:
@@ -28,15 +40,82 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
+      # services/ holds code GENERATED from ml-service-template and owned
+      # upstream. These two hooks WRITE, so leaving them pointed at a scaffold
+      # does not report a problem — it edits another repository's output in
+      # place, which ADR-003 calls a fork with extra steps. Measured on a
+      # clean checkout of HEAD, the sweep silently rewrote three generated
+      # files: it stripped the two-space markdown HARD LINE BREAKS from
+      # ADR-010 (a rendering change, not whitespace hygiene) and dropped the
+      # trailing newline from .copier-answers.yml, which is the file
+      # `copier update` reads to replay answers — corrupting it strands the
+      # service on its current generator version.
+      #
+      # Same argument, same file set as `services` in [tool.ruff]
+      # extend-exclude and `services/*` in [tool.coverage.run] omit. The
+      # template's own CI applies these hooks at the source.
       - id: trailing-whitespace
+        exclude: '^services/'
       - id: end-of-file-fixer
+        exclude: '^services/'
       - id: check-yaml
         args: [--allow-multiple-documents]
+        # Two scope corrections, both measured on a clean checkout of HEAD.
+        #
+        # templates/project/ is un-rendered generator source. Jinja tokens are
+        # not YAML, so safe_load stops at the first '@' in evals/gates.yaml
+        # (line 11) and .copier-answers.yml (line 8). This is the same file
+        # set and the same argument as the `templates/project` entry in
+        # [tool.ruff] extend-exclude: the template is verified by RENDERING
+        # it, not by parsing the generator source in place.
+        #
+        # mkdocs.yml uses `!!python/name:pymdownx.superfences.fence_code_format`,
+        # a Python-name tag that safe_load refuses to construct by design. The
+        # file is valid for the loader mkdocs actually uses; this hook is
+        # simply the wrong parser for it. Scoped by FILENAME rather than by
+        # directory on purpose, so every other YAML under services/ — k8s
+        # manifests, workflows, DVC config — stays checked.
+        exclude: '^templates/project/|(^|/)mkdocs\.yml$'
       - id: check-toml
+        # templates/project/pyproject.toml is un-rendered generator source:
+        # `{% if project_kind in [...] %}` inside the dependencies array is
+        # not TOML, so the parser fails at line 12 col 2. Identical reasoning
+        # to the check-yaml exclusion above and to [tool.ruff] extend-exclude.
+        # Narrower than the YAML rule because no TOML outside this directory
+        # is generator source.
+        exclude: '^templates/project/'
       - id: check-json
       - id: check-merge-conflict
       - id: check-case-conflict
       - id: detect-private-key
+        # NOT weakened globally — scoped to the two paths where a PEM header
+        # is the SUBJECT MATTER rather than a credential. Everywhere else in
+        # the repo this hook still fails on a key.
+        #
+        # skills/secret-breach-response/SKILL.md (line 56) holds a markdown
+        # table of DETECTION patterns. The row pairs "GCP service account
+        # JSON" with the PEM opening line an engineer greps for to recognise
+        # a leak — the header only, with no key body after it. A
+        # breach-response playbook that cannot name the thing it responds to
+        # is not a playbook. Matched across surfaces because the skill is
+        # mirrored: agentic/ is canonical, the rest are generated from it and
+        # cannot be edited independently.
+        #
+        # tests/test_memory_redaction.py (line 78) feeds a truncated PEM
+        # opening/closing pair to the redactor as INPUT and asserts it comes
+        # back scrubbed. Between the two delimiters sit 16 characters of
+        # base64 filler — not a decodable key. A redaction test with nothing
+        # to redact tests nothing. That line already carries
+        # `# gitleaks:allow` for exactly this reason, so this exclusion
+        # restores agreement between the repo's two secret scanners rather
+        # than granting a new exemption.
+        #
+        # Deliberately paraphrased above: spelling the PEM delimiters out
+        # here would trip this very hook on this very file. It did, once.
+        #
+        # Verified by injection: a private key added anywhere outside these
+        # two paths still fails the hook.
+        exclude: '(^|/)skills/secret-breach-response/SKILL\.md$|(^|/)tests/test_memory_redaction\.py$'
       - id: check-added-large-files
         # Datasets are versioned by reference, never committed
         # (docs/datasets/register.md). This is the backstop for that rule.
@@ -46,23 +125,72 @@ repos:
 
   # --- lint + format -------------------------------------------------------
   # Ruff replaces black + isort + flake8 in one pass (ADR-004, Core tier).
+  #
+  # Both hooks below carry the same exclusion, and it is NOT a duplicate of
+  # [tool.ruff] extend-exclude — it fixes a different failure mode. CI runs
+  # `ruff check .`, so ruff walks the tree itself, honours extend-exclude and
+  # never descends into templates/project. pre-commit instead hands ruff an
+  # explicit file list, and ruff resolves configuration per file by searching
+  # ANCESTOR directories — so it finds templates/project/pyproject.toml and
+  # tries to parse the un-rendered Jinja in it as TOML. That is a config-
+  # discovery error, not a lint finding: it aborts with exit code 2 before any
+  # rule runs. Measured on a clean checkout of HEAD, `ruff check .` passed
+  # while this hook failed — CI and pre-commit disagreeing about the same
+  # code, which is the defect class this repository exists to catch.
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.1
     hooks:
       - id: ruff-check
         args: [--fix, --exit-non-zero-on-fix]
+        exclude: '^templates/project/'
       - id: ruff-format
+        exclude: '^templates/project/'
 
   # --- types ---------------------------------------------------------------
-  # libs/ has the widest blast radius, so it is checked strictly. Kept in
-  # pre-commit despite the cost because a type error in a shared library
-  # reaches every consumer, and finding it at push time is late.
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.18.2
+  # CI IS AUTHORITATIVE FOR THIS GATE. `.github/workflows/ci.yml` ("Types")
+  # runs:
+  #
+  #     uv run mypy libs/ scripts/ projects/demand-forecast/src/
+  #
+  # and the `entry` below must stay character-identical to it. Change the
+  # workflow first, then mirror it here. `docs/governance/quality-gates.md`
+  # (P2) documents the same line, so there are three copies and one source.
+  #
+  # Why pre-commit adopts CI's invocation and not the reverse: the previous
+  # hook checked `^libs/` only. Narrowing CI to match would drop `scripts/`,
+  # which ci.yml documents as deliberate scope — 26 errors sat there while the
+  # type step reported green, and "a gate scoped away from the gates is not a
+  # gate". Matching downward would have re-opened that hole, so the narrow
+  # side moved.
+  #
+  # Why a local `uv run` hook instead of mirrors-mypy: mirrors-mypy installs
+  # mypy into an ISOLATED venv containing only its additional_dependencies, so
+  # the project's own dependencies are absent. Measured on a clean checkout of
+  # HEAD that produced 9 errors CI does not see — 8 "untyped decorator makes
+  # function untyped" because pytest was missing, and 1 no-any-return at
+  # ml_core/decision.py:92 (`return total / y_true.size`) because numpy was
+  # missing. `uv run mypy libs/` over the SAME 17 files passes, which is the
+  # proof that the defect was the environment and not the file scope; simply
+  # excluding tests would have left the decision.py error red.
+  #
+  # It also closes a second drift vector: mirrors-mypy was pinned at rev
+  # v1.18.2 while uv.lock resolves mypy 1.20.2, so the hook and CI were
+  # running different type checkers against the same code. `uv run` takes the
+  # locked version by construction and cannot disagree.
+  #
+  # Cost: 0.32s warm — inside this file's FAST-and-LOCAL rule.
+  - repo: local
     hooks:
       - id: mypy
-        files: ^libs/
-        additional_dependencies: [types-PyYAML]
+        name: types (same invocation as CI)
+        description: >
+          libs/ has the widest blast radius, and scripts/ holds the gates that
+          enforce every other claim in this repository. A type error in either
+          reaches every consumer, and finding it at push time is late.
+        entry: uv run mypy libs/ scripts/ projects/demand-forecast/src/
+        language: system
+        pass_filenames: false
+        files: '^(libs|scripts|projects)/.*\.py$'
 
   # --- secrets -------------------------------------------------------------
   # Scans staged content. The commit-history scan lives in CI: the working tree

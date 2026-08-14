@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: write
+  checks: read     # the CI verdict below is read through the check-runs API
 
 jobs:
   release:
@@ -20,6 +21,154 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0   # notes are generated from the commit range
+
+      # QA-6 names "releasing without verified-green CI" a STOP point, and
+      # docs/RELEASING.md requires all four CI jobs green "on the release
+      # commit, not on an ancestor". Until now that was a human precondition in
+      # a procedure: this workflow had no `needs:` and asked GitHub nothing, so
+      # a tag on a red commit published exactly as fast as a tag on a green one.
+      #
+      # WAIT FOR THE TAG'S OWN RUN, OR REQUIRE A PRIOR ONE? Not a preference —
+      # `ci.yml` triggers on `push: branches: [main]`, `pull_request` and
+      # `workflow_dispatch`. There is no `tags:` filter, and a `branches` filter
+      # excludes tag pushes outright. **CI never runs for a tag here.** Waiting
+      # for it would block until the timeout on every release and then publish
+      # or fail on a coin-flip of who wrote the fallback.
+      #
+      # So the requirement is the stricter and honest one: the tagged commit
+      # must ALREADY carry a successful CI run from its push to main. That is
+      # what QA-6 asks for anyway — you tag a commit that has proven itself,
+      # not one that is about to try. It has a real consequence worth stating:
+      # a commit that was never pushed to main (a local tag, a tag on a PR head
+      # that only ever ran under `pull_request`) has no run under this SHA and
+      # cannot be released. That is the intended behaviour, not a gap.
+      #
+      # The one genuine race is a tag pushed minutes after the branch push,
+      # while the run is still going. That run EXISTS, so it is waited on —
+      # bounded, and a timeout fails. Never publishing on an unknown state is
+      # the whole point: a release gate that resolves ambiguity as "ship" is
+      # worse than none, because it also removes the human's suspicion.
+      - name: The tagged commit must already be green in CI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Resolve the COMMIT the tag points at. Deliberately not `github.sha`:
+          # for an ANNOTATED tag that can be the tag object's SHA, and the
+          # check-runs API keyed on a tag object returns an empty list. This
+          # gate would read that as "no CI" and refuse — correct behaviour, on
+          # every release, for entirely the wrong reason. Every tag here is
+          # annotated (docs/RELEASING.md), so that would be the only behaviour.
+          sha="$(git rev-parse "HEAD^{commit}")"
+          echo "tag ${GITHUB_REF_NAME} -> commit ${sha}"
+
+          # The four jobs docs/RELEASING.md and QA-6 name as the precondition.
+          # Named rather than "everything that ran": a required check that is
+          # ABSENT must fail the release, and only a list can tell absence from
+          # a job that legitimately did not run. Any other check that ran and
+          # went red is caught separately, below, so adding a fifth CI job
+          # cannot silently escape this gate before someone updates the list.
+          REQUIRED=(
+            "Repository invariants"
+            "IaC and Kubernetes security"
+            "Supply chain"
+            "Secret scan"
+          )
+
+          # ~15 min: longer than a full CI run has taken, so a tag pushed on
+          # the heels of its branch push resolves rather than flaps. Past it,
+          # the tag was pushed too early — let CI finish and re-run this
+          # workflow from the Actions UI. It re-reads the state; it does not
+          # need a new tag.
+          wait_seconds=900
+          deadline=$(( SECONDS + wait_seconds ))
+
+          while true; do
+            # The CHECK RUNS API. Not `commits/{sha}/status`: the combined
+            # status API only sees legacy commit statuses, so for a commit
+            # whose four Actions jobs all passed it answers
+            # `"state": "pending"` with an empty list. Green is not expressible
+            # through it, and a gate that can never say yes gets deleted.
+            if ! runs="$(gh api --paginate \
+                  "repos/${GITHUB_REPOSITORY}/commits/${sha}/check-runs?filter=latest&per_page=100" \
+                  --jq '.check_runs[] | [.name, .status, .conclusion // "pending"] | @tsv')"; then
+              echo "::error::cannot read check runs for ${sha}. An unknown CI state is not a green one — not publishing."
+              exit 1
+            fi
+
+            missing=()
+            waiting=()
+            for name in "${REQUIRED[@]}"; do
+              status="$(printf '%s\n' "${runs}" | awk -F'\t' -v n="${name}" '$1 == n { print $2; exit }')"
+              if [ -z "${status}" ]; then
+                missing+=("${name}")
+              elif [ "${status}" != "completed" ]; then
+                waiting+=("${name}")
+              fi
+            done
+
+            # Absent, not slow. Waiting cannot help: CI does not trigger on
+            # tags, so nothing will ever create this run. Fail now with the
+            # reason, rather than after 15 minutes with a timeout that reads
+            # like an infrastructure problem.
+            if [ ${#missing[@]} -gt 0 ]; then
+              echo "::error::${sha} has no CI run for: ${missing[*]}."
+              echo "::error::CI runs on pushes to main, never on tags. Tag a commit that is already green on main."
+              exit 1
+            fi
+
+            if [ ${#waiting[@]} -eq 0 ]; then
+              break
+            fi
+
+            if [ "${SECONDS}" -ge "${deadline}" ]; then
+              echo "::error::still running after ${wait_seconds}s: ${waiting[*]}. Not publishing on an undecided run."
+              echo "::error::Wait for CI to conclude, then re-run this workflow."
+              exit 1
+            fi
+
+            echo "waiting on: ${waiting[*]}"
+            sleep 20
+          done
+
+          failed=0
+          for name in "${REQUIRED[@]}"; do
+            conclusion="$(printf '%s\n' "${runs}" | awk -F'\t' -v n="${name}" '$1 == n { print $3; exit }')"
+            if [ "${conclusion}" != "success" ]; then
+              echo "::error::required check '${name}' concluded '${conclusion}'"
+              failed=1
+            else
+              echo "ok: ${name}"
+            fi
+          done
+
+          # QA-6: "every applicable gate green on the release commit". Anything
+          # else that ran on this commit and went red blocks too — that is what
+          # keeps a newly added CI job from being invisible here until someone
+          # remembers to extend REQUIRED. Only decided-bad conclusions count:
+          # `skipped` and `neutral` are normal for path-filtered jobs
+          # (docs-quality.yml runs only on `**/*.md`), and an optional check
+          # still in flight is not waited on.
+          while IFS=$'\t' read -r name status conclusion; do
+            # Already reported by name above; saying it twice makes the log
+            # read like two problems. Safe as a glob because no required job
+            # name contains `*`, `?` or `[`.
+            case " ${REQUIRED[*]} " in
+              *" ${name} "*) continue ;;
+            esac
+            case "${conclusion}" in
+              failure|cancelled|timed_out|action_required|startup_failure|stale)
+                echo "::error::check '${name}' concluded '${conclusion}' on this commit"
+                failed=1
+                ;;
+            esac
+          done <<< "${runs}"
+
+          if [ "${failed}" -ne 0 ]; then
+            echo "::error::the release commit is not green. Fix it, then tag the fixed commit."
+            exit 1
+          fi
+
+          echo "CI is green on ${sha} — publishing ${GITHUB_REF_NAME}"
 
       - name: Extract the CHANGELOG section for this tag
         id: notes

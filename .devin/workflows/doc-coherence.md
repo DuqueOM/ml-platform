@@ -26,11 +26,28 @@ Exit 0 → done. Exit 1 → note each `[C1..C5]` violation and continue.
 
 For each violation, fix the SSoT first, then propagate to mirrors:
 
-- **C1** version: `VERSION` ⇄ latest dated CHANGELOG heading.
-- **C2** llms.txt: `> Version:` line ⇄ `VERSION`.
-- **C3** anti-patterns: AGENTS.md max `D-NN` → README count, llms.txt range, CLAUDE.md, skills.
-- **C4** surface counts: on-disk `agentic/` counts → CLAUDE.md "N rules + N skills + N workflows".
-- **C5** ADRs: fill numbering gaps with a `Status: Withdrawn` tombstone; reference new ADRs in CHANGELOG.
+These are the checks `scripts/check_doc_coherence.py` performs **in this
+repository**. The list here previously described ml-service-template's
+numbering, carried across unchanged when the workflow was ported: an agent
+following it would have looked for a version check under C1 and a `D-NN`
+count under C3, and found neither. Same identifiers, different meanings,
+which is worse than no list.
+
+- **C1** ADRs on disk ⇄ the index, and none removed since git HEAD.
+- **C2** no document references an ADR number that does not exist.
+- **C3** accepted ADRs are integrated rather than orphaned.
+- **C4** every quality-gate row carries a command that resolves — a script that
+  exists, or a tool some workflow actually invokes.
+- **C5** the agentic surface counts, and every skill has a `SKILL.md`.
+- **C6** no private name appears in any file, matched against hashes.
+- **C7** the independent audit has not gone stale (ADR-005 rule B).
+- **C8** `[Unreleased]` in the CHANGELOG covers the commits since the last tag.
+- **C9** every documented `copier` command names a pinned template version.
+
+Version consistency across `VERSION`, `pyproject.toml`, `llms.txt`, the
+CHANGELOG and the plan header is a SEPARATE gate:
+`scripts/check_version_consistency.py`. It exists because the line above
+claimed C1 did that job and nothing did.
 
 > Prefer the `doc-coherence` skill — it knows the cascade map and the
 > CONSULT/STOP boundaries (never renumber an ADR; never rewrite a released heading).

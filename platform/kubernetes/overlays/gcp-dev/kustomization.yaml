@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: demand-forecast-dev
 
 resources:
+  - namespace.yaml
   - ../../base
   - ../../base/secrets
   - ../../../policies

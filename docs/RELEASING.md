@@ -110,7 +110,7 @@ Four places, and only two of the links between them are gated.
 | File | Holds | Checked by |
 | --- | --- | --- |
 | `VERSION` | `0.1.0` | `tests/test_release_notes.py` — semver shape, and that `CHANGELOG.md` has either `[Unreleased]` or a heading for it |
-| `pyproject.toml` `[project].version` | `0.1.0` | nothing compares it to `VERSION` |
+| `pyproject.toml` `[project].version` | `0.1.0` | `scripts/check_version_consistency.py`, in CI |
 | `llms.txt` line 5 | `Version: 0.1.0` | `tests/test_llms_txt.py::test_the_version_matches_the_package` — must equal the **pyproject** version |
 | `CHANGELOG.md` heading | `## [0.1.0] - 2026-08-07` | check C8, and the release workflow's extraction |
 

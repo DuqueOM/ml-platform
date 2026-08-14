@@ -78,7 +78,7 @@ grep -n "components:" -A 5 k8s/overlays/<overlay>/kustomization.yaml
 
 ```bash
 kubectl kustomize k8s/overlays/<overlay>/ | \
-  awk '/^kind: Ingress$/{f=1} f' 
+  awk '/^kind: Ingress$/{f=1} f'
 ```
 
 Confirm:

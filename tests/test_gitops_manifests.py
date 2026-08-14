@@ -73,6 +73,85 @@ def test_every_overlay_carries_default_deny(cloud: str, env: str) -> None:
     assert "allow-dns" in policies, "a default-deny namespace with no DNS egress breaks every lookup"
 
 
+# --- Pod Security is enforced where the workload runs, not only on a laptop -
+
+#: All three, not just `enforce`. Enforce rejects a violating pod and tells
+#: nobody afterwards; `audit` records it and `warn` returns it to whoever ran
+#: the apply, which is the difference between a diagnosable failure and a
+#: rollout that stops with no explanation.
+_PSS_LABELS = (
+    "pod-security.kubernetes.io/enforce",
+    "pod-security.kubernetes.io/audit",
+    "pod-security.kubernetes.io/warn",
+)
+
+
+@pytest.mark.parametrize("cloud", CLOUDS)
+@pytest.mark.parametrize("env", ENVIRONMENTS)
+def test_every_overlay_creates_its_namespace_at_restricted(cloud: str, env: str) -> None:
+    """The namespace must arrive WITH the overlay, carrying the labels.
+
+    Only `local` created a Namespace. The six cloud overlays set `namespace:`
+    and shipped no Namespace object, so ArgoCD's `CreateNamespace=true` made
+    one with no Pod Security labels at all — while the base Deployment's
+    comment claimed restricted was "the namespace default" and set every field
+    that level requires. The pod was hardened in six environments where
+    nothing enforced that it stay so.
+
+    Removing the three labels from an overlay used to change no test result,
+    which is why this exists. The Namespace's NAME is deliberately not checked:
+    kustomize rewrites it to match `namespace:`, so the assertion could not
+    fail and would only look like coverage.
+    """
+    documents = _build(OVERLAYS / f"{cloud}-{env}")
+    namespaces = [doc for doc in documents if doc["kind"] == "Namespace"]
+
+    assert len(namespaces) == 1, f"{cloud}-{env} renders {len(namespaces)} Namespaces; the labels ride on exactly one"
+
+    labels = namespaces[0]["metadata"].get("labels") or {}
+    assert {label: labels.get(label) for label in _PSS_LABELS} == dict.fromkeys(_PSS_LABELS, "restricted"), (
+        f"{cloud}-{env} namespace does not enforce restricted Pod Security: {labels}"
+    )
+
+
+@pytest.mark.parametrize("cloud", CLOUDS)
+@pytest.mark.parametrize("env", ENVIRONMENTS)
+def test_every_overlay_pod_satisfies_restricted(cloud: str, env: str) -> None:
+    """The other half: a level nothing can satisfy is an outage, not a control.
+
+    `enforce` is checked at admission, so a namespace raised above what its
+    workload meets rejects every pod — and because dev, staging and prod all
+    sit at `restricted` here, that failure would be uniform rather than caught
+    one environment before production. This checks the rendered pod against
+    the fields the level requires, which is also the evidence that enforcing
+    it in dev costs nothing: it is already true there.
+    """
+    documents = _build(OVERLAYS / f"{cloud}-{env}")
+    templates = [doc["spec"]["template"]["spec"] for doc in documents if doc["kind"] == "Deployment"]
+    assert templates, f"{cloud}-{env} renders no pod template — this test would pass vacuously"
+
+    violations: list[str] = []
+    for pod in templates:
+        security = pod.get("securityContext") or {}
+        if not security.get("runAsNonRoot"):
+            violations.append("pod: runAsNonRoot not set")
+        if (security.get("seccompProfile") or {}).get("type") != "RuntimeDefault":
+            violations.append("pod: seccompProfile is not RuntimeDefault")
+        violations += [f"pod: {field} is set" for field in ("hostNetwork", "hostPID", "hostIPC") if pod.get(field)]
+
+        for container in pod["containers"]:
+            context = container.get("securityContext") or {}
+            name = container["name"]
+            if context.get("allowPrivilegeEscalation") is not False:
+                violations.append(f"{name}: allowPrivilegeEscalation is not false")
+            if context.get("privileged"):
+                violations.append(f"{name}: privileged")
+            if "ALL" not in ((context.get("capabilities") or {}).get("drop") or []):
+                violations.append(f"{name}: capabilities ALL not dropped")
+
+    assert not violations, f"{cloud}-{env} would be rejected by its own namespace:\n" + "\n".join(violations)
+
+
 @pytest.mark.parametrize("cloud", CLOUDS)
 def test_production_runs_more_replicas_than_dev(cloud: str) -> None:
     """The overlays must actually differ; identical ones are six copies of one."""

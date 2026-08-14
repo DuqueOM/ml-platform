@@ -65,7 +65,7 @@ worse, because the number invites trust.
 | S1 ⏳ | API contract holds | `uv run schemathesis run "$OPENAPI_URL"` | Zero failures | Generated cases find what hand-written tests assume away · **PENDING — Phase 2** |
 | S2 ⏳ | Latency SLO | `k6 run <project>/tests/load.js` | p99 within the project's stated SLO | The claim is public; the gate makes it accountable · **PENDING — Phase 2** |
 | S3 | Serving invariants | `uv run pytest -k serving_contract` | Zero | Inherited from `ml-service-template` (ADR-003) — every one encodes a past incident |
-| S4 | Image signed and attested | `cosign verify-attestation --type slsaprovenance "$DIGEST"` | Verified | Deploying an unverifiable image forfeits the entire supply chain |
+| S4 ⏳ | Image signed and attested | `cosign verify-attestation --type slsaprovenance "$DIGEST"` | Verified | Deploying an unverifiable image forfeits the entire supply chain · **PENDING — nothing here builds an image yet, so there is nothing to sign. Wired when Phase 2 publishes one** |
 
 ## Model gates
 
@@ -94,7 +94,8 @@ Evaluated before promotion, never after.
 
 | # | Claim | Command | Threshold |
 | --- | --- | --- | --- |
-| C1 | Provenance attested | `cosign verify-attestation --type slsaprovenance` | SLSA L3 |
+| C0 | Version consistent across every location | `uv run python scripts/check_version_consistency.py` | All 5 agree · a half-applied bump ships correct release notes with a stale entry point |
+| C1 ⏳ | Provenance attested | `cosign verify-attestation --type slsaprovenance` | SLSA L3 · **PENDING — same reason as S4: no image, no provenance to attest** |
 | C2 ⏳ | SBOM published per image | `scripts/check_sbom.py` | Present and attested · **PENDING — Phase 3 (needs images to bill of materials)** |
 | C3 ⏳ | Compliance mapping current | `scripts/check_compliance_mapping.py` | Every control mapped · **PENDING — Phase 3** |
 | C4 ⏳ | Model cards current | `scripts/check_model_cards.py` | One per deployed model, matching the deployed version · **PENDING — Phase 2 (needs a trained model)** |

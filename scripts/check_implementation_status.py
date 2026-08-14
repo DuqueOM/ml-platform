@@ -369,6 +369,12 @@ COMPONENTS: list[Component] = [
         # any machine — which is the requirement for a verify command here.
         "bash scripts/bootstrap.sh --check",
     ),
+    Component(
+        "1d",
+        "Version consistency",
+        ["scripts/check_version_consistency.py"],
+        "uv run pytest tests/test_version_consistency.py -q",
+    ),
     Component("1e", "Documentation retrieval index", ["scripts/check_doc_index_freshness.py"]),
     # --- Phase 2: multi-cloud + GitOps --------------------------------------
     # These carried "no verification command" while their tests were already
