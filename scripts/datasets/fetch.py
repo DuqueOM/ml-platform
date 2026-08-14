@@ -51,6 +51,18 @@ USER_AGENT = "ml-platform-research contact@example.invalid"
 SEC_MIN_INTERVAL_S = 0.15
 
 
+def _require_https(url: str) -> None:
+    """Refuse a URL that is not HTTPS.
+
+    `urlopen` honours `file://` and any registered scheme, so a URL arriving
+    from the dataset registry could read local disk while looking like a
+    download. The registry is committed and reviewed, which is a reason to
+    expect https — not a reason to skip checking for it.
+    """
+    if not url.lower().startswith("https://"):
+        raise ValueError(f"refusing to fetch {url!r}: only https is permitted")
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -73,8 +85,9 @@ def _download(url: str, target: Path, throttle: float = 0.0) -> tuple[bool, str]
     partial = target.with_suffix(target.suffix + ".partial")
 
     try:
+        _require_https(url)
         with (
-            urllib.request.urlopen(request, timeout=120) as response,
+            urllib.request.urlopen(request, timeout=120) as response,  # nosec B310
             partial.open("wb") as handle,
         ):
             while chunk := response.read(1 << 20):
