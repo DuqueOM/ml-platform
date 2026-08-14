@@ -356,3 +356,79 @@ reads that line, and CI stays red until it exists.
 **C7 must not be relaxed to make CI green.** A gate that passes because the
 thing it checks for is absent is the anti-pattern this repository was built to
 avoid, and it has already occurred here once.
+
+---
+
+## 11. Since the previous audit (2026-08-08)
+
+Forty-one commits. The counter C7 watches has been red throughout, which is the
+mechanism working rather than a build to fix.
+
+### New gates, and what each one caught on its first run
+
+Every one of these was written because something was found wrong. Attack them
+first: a gate written in a hurry is a gate with a hole, and these were all
+written by the author of the thing they check.
+
+| Gate | Found on arrival |
+| --- | --- |
+| `scripts/check_upstream_parity.py` | 17 artifacts the author's own hand comparison had missed, including a whole `.security-baselines/` directory |
+| `scripts/check_thresholds.py` | nothing yet — 9 numbers watched against git HEAD |
+| `scripts/check_test_clock_isolation.py` | a `date.today()` in the author's own expiry check |
+| `scripts/check_version_consistency.py` | five locations assert the version; nothing compared them |
+| `tests/test_security_controls.py` | four of six rows in `SECURITY.md` claimed to block and could not |
+| `tests/test_probe_paths.py` | six overlays probing routes the service does not serve |
+| `tests/test_project_contract.py` | `threshold: TODO` in the primary gate of the only implemented project |
+| `tests/test_absence_claims.py` | a sentence the author committed saying two files did not exist, hours after writing them |
+| `tests/test_gitops_manifests.py` (extended) | Pod Security unenforced in all six cloud overlays; production rendered with NO label and the suite passed 30/30 |
+
+### The single most instructive failure
+
+`SECURITY.md` claimed Trivy blocks the build. `tests/test_security_controls.py`
+was written specifically to catch a control that claims to block and cannot —
+and the Trivy row **passed it**, because the step used `exit-code: "0"`, a third
+suppression spelling the check did not know. The defect was alive inside its
+own fix, and a cold reader of the workflow found it, not the test.
+
+Assume the same shape elsewhere. Every check in this repository knows a finite
+list of ways to be wrong, and the interesting failures are the ways not on the
+list.
+
+### Where the author's confidence proved wrong this round
+
+Stated plainly because it is the most useful thing here:
+
+- I told a subagent the pre-commit mypy failure was a SCOPE problem. It tested
+  that directly, found the scope was fine, and identified the real cause — an
+  isolated hook environment missing numpy and pytest. **My stated mechanism was
+  false and acting on it would not have produced green.**
+- I claimed the parity gap was 19 root files, 9 docs and 20 scripts. The gate
+  found 17 more.
+- I asserted a `:latest` tag was the finding; only the `local` overlay
+  overrode it, so six cloud overlays inherited it — a bigger blast radius than
+  I described.
+
+### Where to attack now, in order
+
+1. **`agentic/workflows/doc-coherence.md`** described the TEMPLATE's C1–C4
+   numbering for months. It was corrected this round. **Check every other
+   inherited body for the same defect** — a document that is right about the
+   upstream repository and wrong about this one.
+2. **The parity ledger's 32 rejections.** Each carries an argument. Some of
+   those arguments were written in bulk by the author, and the length floor
+   that caught six of them ("Same.") only catches brevity, not weakness.
+3. **`tests/local/`** — 35 tests that need a cluster, so CI never runs them.
+   They are the least-executed code in the repository.
+4. **`.security-baselines/`** holds zero suppressions and a policy for adding
+   one. Nobody has ever added one, so the policy has never been exercised.
+5. **`services/`** is byte-identical to upstream by claim. Nothing verifies
+   that claim.
+
+### Explicitly still open, and not defects to report
+
+Recorded in `docs/architecture/technical-plan.md` under "Findings from the
+parity work": Checkov reports 114 findings and does not block; branch
+protection requires 2 of 4 CI jobs and no approving review; the vendored
+service's Pod Security differs from the platform's with nothing comparing
+them; and `no-commit-to-branch` contradicts a history of direct commits to
+`main`. Those are known. Finding them again is not a finding.
