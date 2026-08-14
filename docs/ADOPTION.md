@@ -131,6 +131,7 @@ uv run pytest tests/test_project_contract.py -q
 `docs/EXPORTING.md` how to duplicate a vertical properly, and
 `docs/PROJECT_CONTRACT.md` what every vertical must expose.
 
-`QUICK_START.md` and `RUNBOOK.md` are Phase 1d work and do not exist yet.
-They are listed in `docs/governance/upstream-parity.yaml` as pending, which is
-where to look for what else is owed rather than guessing from what is here.
+`QUICK_START.md` is the first ten minutes, `RUNBOOK.md` what to do when a gate
+fails. For what is still owed rather than done, read
+`docs/governance/upstream-parity.yaml` — it decides every artifact this
+platform's upstream has, as adopted, pending or rejected with the argument.
