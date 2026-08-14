@@ -203,7 +203,11 @@ def write_demand(demand: pl.DataFrame, catalog: Catalog | None = None, *, overwr
 
     table.refresh()
     snapshot = table.current_snapshot()
-    assert snapshot is not None, "a write always produces a snapshot"
+    if snapshot is None:
+        # Not an assert: `python -O` strips those, and this guards the one
+        # value the caller uses to find the data again. A stripped guard
+        # returns a WriteResult with no snapshot id and no complaint.
+        raise RuntimeError("a write produced no snapshot; the table did not commit")
     return WriteResult(
         snapshot_id=snapshot.snapshot_id, rows=demand.height, mode="overwrite" if overwrite else "append"
     )
@@ -262,6 +266,10 @@ def delete_before(cutoff: datetime, catalog: Catalog | None = None) -> WriteResu
 
     table.refresh()
     snapshot = table.current_snapshot()
-    assert snapshot is not None, "a delete always produces a snapshot"
+    if snapshot is None:
+        # Not an assert: `python -O` strips those, and this guards the one
+        # value the caller uses to find the data again. A stripped guard
+        # returns a WriteResult with no snapshot id and no complaint.
+        raise RuntimeError("a delete produced no snapshot; the table did not commit")
     after = len(table.scan().to_arrow())
     return WriteResult(snapshot_id=snapshot.snapshot_id, rows=before - after, mode="delete")

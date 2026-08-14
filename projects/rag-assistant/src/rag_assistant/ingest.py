@@ -63,6 +63,18 @@ class Filing:
         return f"{self.cik}-{self.filed}-{self.form.replace('/', '-')}.txt"
 
 
+def _require_https(url: str) -> None:
+    """Refuse a URL that is not HTTPS.
+
+    `urllib.request.urlopen` honours `file://` and any registered scheme, so a
+    URL that arrives from configuration or a registry can read local disk while
+    looking like a download. Both call sites here fetch from one known public
+    host; asserting that costs a line.
+    """
+    if not url.lower().startswith("https://"):
+        raise ValueError(f"refusing to fetch {url!r}: only https is permitted")
+
+
 def parse_index(index_path: Path, *, form_type: str = "10-K") -> list[Filing]:
     """Read `form.idx` and return the filings of one type.
 
@@ -106,8 +118,9 @@ def fetch_filings(filings: list[Filing], destination: Path, *, limit: int = 10) 
             written.append(target)
             continue
 
+        _require_https(filing.url)
         request = urllib.request.Request(filing.url, headers={"User-Agent": USER_AGENT})
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with urllib.request.urlopen(request, timeout=60) as response:  # nosec B310
             target.write_bytes(response.read())
         written.append(target)
         time.sleep(REQUEST_INTERVAL_SECONDS)

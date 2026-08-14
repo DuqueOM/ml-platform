@@ -81,6 +81,7 @@ every commit.
 | Dependency and image vulnerabilities | Trivy | **yes** | Filesystem scan for vulnerabilities and secrets, CRITICAL and HIGH |
 | Dependency updates | Dependabot | no — opens PRs | Pinned actions and Python dependencies |
 | Supply chain posture | Scorecard | no — reports | The repository's own configuration |
+| Python security lint | Bandit | **yes** | First-party code at MEDIUM and above; suppressions argued in `pyproject.toml` and inline |
 | IaC misconfiguration | Checkov | **no — advisory** | Terraform and Kubernetes under `platform/`, statically |
 | Cluster posture | Kubescape | **no — advisory** | Manifests against the NSA and CIS baselines |
 
@@ -99,9 +100,6 @@ permanently red build, which is how a gate gets deleted.
 vulnerability and secret scanners; misconfiguration is opt-in and not enabled.
 Enabling it surfaces 56 HIGH findings, mostly read-only-root-filesystem and
 default-security-context on the same manifests Checkov already reports.
-
-**Bandit is configured and does not run.** `[tool.bandit]` in `pyproject.toml`
-carries argued suppressions for a scan that no workflow invokes.
 
 **Kubescape reports and does not block.** Its step carries
 `continue-on-error: true`, so a manifest failing the NSA or CIS baseline is
