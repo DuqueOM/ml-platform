@@ -117,6 +117,17 @@ class Exemption:
 
 #: (repo-relative path, signal) -> Exemption. Reviewed on 2026-08-13.
 ALLOWLIST: dict[tuple[str, str], Exemption] = {
+    ("tests/test_governance_files.py", "date.today"): Exemption(
+        count=1,
+        reason=(
+            "Whether a security suppression has EXPIRED is inherently a question about now, and the "
+            "verdict is meant to change with time: an entry that was accepted yesterday becomes a "
+            "finding tomorrow, which is the whole point of requiring an expiry date. That is the "
+            "opposite of the C7 defect this gate exists for, where the time of DAY moved a verdict "
+            "that should not have moved. Closed by nothing — freezing this clock would disable the "
+            "check rather than stabilise it."
+        ),
+    ),
     ("tests/test_audit_drift_counter.py", "datetime.now"): Exemption(
         count=1,
         reason=(
