@@ -100,17 +100,22 @@ artifacts:
     reason: >-
       Adopted, rewritten for this repository. Upstream's version is a maturity matrix for adopting a service template; this one answers what arrives working, what is homework and — at length — what the platform does NOT claim: zero components at L4, Checkov advisory with 114 findings, ADR-008 open, and C7 red by design. A platform that hides its gaps costs the adopter the time they spend discovering them.
   - path: docs/COMPLIANCE_MAPPING.md
-    status: pending
+    status: adopted
     reason: >-
-      1d: already tracked as absent; what makes 'enterprise' checkable.
+      Adopted, written independently rather than carried across: a NIST CSF 2.0 self-assessment over 22 Categories,
+      which states plainly that no external party reviewed it and reports its gaps as Partial or Not satisfied rather
+      than claiming coverage. It sat in the tree marked `pending` because the ledger only checked for adopted files
+      that were missing, never for pending files that were present.
   - path: docs/PROGRESSION.md
     status: pending
     reason: >-
       1d: the maturity path an adopter walks — which parts to take first, and what each one unlocks. Without it, adoption is all-or-nothing.
   - path: docs/RELEASING.md
-    status: pending
+    status: adopted
     reason: >-
-      1d: this repo has a VERSION and a CHANGELOG and no release discipline.
+      Adopted, adapted to a repository that has never released: it ties VERSION and the CHANGELOG together and states
+      what may not be cut, rather than describing a cadence nothing has exercised yet. Also stood marked `pending`
+      while present, for the same missing check.
   - path: docs/TUTORIAL.md
     status: pending
     reason: >-
