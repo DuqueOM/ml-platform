@@ -154,3 +154,71 @@ def test_the_committed_document_carries_the_layer_column() -> None:
     )
     assert result.returncode == 0, f"the committed status document is stale:\n{result.stdout}"
     assert "| :-: | :-: | --- | --- |" in DOC.read_text(encoding="utf-8"), "the layer column is missing from the file"
+
+
+def test_a_shared_verification_command_runs_once() -> None:
+    """Three components are backed by the same command; it must run once.
+
+    The generator used to call `_verify` per COMPONENT, so
+    `validate_agentic_surface.py --strict` ran three times and every `uv run
+    pytest` paid its interpreter start again. Measured at seventeen minutes of
+    CI, in one step, of which 886 seconds were this.
+
+    Deduplication is not only faster, it is more honest: a command cannot pass
+    for one component and fail for another in the same instant, and running it
+    twice invites exactly that inconsistency into a derived document.
+    """
+    import check_implementation_status as status
+
+    commands = [component.verify for component in status.COMPONENTS if component.verify]
+    distinct = set(commands)
+
+    assert len(commands) > len(distinct), (
+        "no command is shared between components, so this test is guarding nothing — "
+        "check whether the fixture it reasons about still holds"
+    )
+
+    calls: list[str] = []
+    original = status._verify
+    try:
+        status._verify = lambda command: calls.append(command) or True  # type: ignore[assignment,return-value,func-returns-value]
+        status._verify_all(status.COMPONENTS)
+    finally:
+        status._verify = original  # type: ignore[assignment]
+
+    assert sorted(calls) == sorted(distinct), f"{len(calls)} invocations for {len(distinct)} distinct commands"
+
+
+def test_the_generated_document_is_deterministic() -> None:
+    """Three runs, one answer. This is the property parallelism put at risk.
+
+    The verification commands now run concurrently, and concurrency in a
+    generator whose output is COMMITTED and diffed is a correctness question
+    before it is a performance one: a document that differs between runs makes
+    every `--check` failure ambiguous, and this repository has already paid for
+    that once with `preflight` reading host state.
+
+    A flake appeared exactly once — a command reported failing in a pool run
+    and passing in isolation — and did not reproduce. The suspected cause was
+    concurrent `uv run` re-syncing one virtualenv, which `_verify` now
+    disables. This test is what holds the property rather than that reasoning:
+    if the pool ever produces two different documents, it fails here instead of
+    in a confusing `--check` diff on somebody's branch.
+    """
+    outputs = set()
+    for _ in range(3):
+        result = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "scripts" / "check_implementation_status.py")],
+            capture_output=True,
+            text=True,
+            cwd=REPO_ROOT,
+            timeout=300,
+        )
+        assert result.returncode == 0, result.stderr
+        outputs.add(result.stdout)
+
+    assert len(outputs) == 1, (
+        f"the generator produced {len(outputs)} different documents across three runs. "
+        f"A derived file that is not deterministic cannot be diffed, and every stale-check "
+        f"failure it causes will be blamed on the wrong change."
+    )
