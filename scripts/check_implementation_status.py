@@ -292,6 +292,7 @@ COMPONENTS: list[Component] = [
             "MIGRATION.md",
             "VALIDATION_LOG.md",
         ],
+        "uv run pytest tests/test_documentation_set.py -q",
     ),
     Component(
         "1d",
@@ -418,7 +419,14 @@ COMPONENTS: list[Component] = [
         "uv run pytest tests/test_gitops_manifests.py -q -k default_deny",
     ),
     # --- Phase 3+: remaining projects ---------------------------------------
-    Component("3", "libs/llm-core implementation", ["libs/llm-core/src"]),
+    Component(
+        "3",
+        "libs/llm-core implementation",
+        ["libs/llm-core/src"],
+        # It had no verify command and read 🟡 while `test_retrieval_eval.py`
+        # was tracked, collected and passing all along.
+        "uv run pytest libs/llm-core -q",
+    ),
     Component("3", "projects/store-assistant", ["projects/store-assistant"]),
     Component(
         "3",
@@ -429,7 +437,19 @@ COMPONENTS: list[Component] = [
     Component("4", "projects/credit-risk", ["projects/credit-risk"]),
     Component("5", "projects/doc-intelligence", ["projects/doc-intelligence"]),
     Component("6", "projects/agent-ops", ["projects/agent-ops"]),
-    Component("6", "Compliance mapping", ["docs/governance/compliance-mapping.md"]),
+    Component(
+        "1d",
+        "Compliance mapping",
+        # The path was `docs/governance/compliance-mapping.md`, which does not
+        # exist — so this row read ⬜ absent while a 337-line NIST CSF 2.0
+        # self-assessment sat at `docs/COMPLIANCE_MAPPING.md`. Three names for
+        # one artifact: the plan used a third, and gate C3 named a
+        # `check_compliance_mapping.py` nobody wrote. A derived document
+        # asserting absence about something present is the defect it exists to
+        # prevent, and it survived three audits.
+        ["docs/COMPLIANCE_MAPPING.md"],
+        "uv run pytest tests/test_documentation_set.py -q -k compliance",
+    ),
 ]
 
 
