@@ -55,7 +55,7 @@ documents restate which facts; a hand edit fixes the copy you remembered.
 ## Independent audit
 
 ```text
-Last independent audit: 2026-08-08
+Last independent audit: 2026-08-14
 ```
 
 A second QA-4 ran on 2026-08-08 against `943c36a`, in a separate session, and

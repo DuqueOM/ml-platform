@@ -28,6 +28,7 @@ than leaving it in a diff nobody reads.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import subprocess
 from dataclasses import dataclass
@@ -88,10 +89,67 @@ THRESHOLDS = (
 )
 
 
+#: Overrides the baseline, for a workflow that knows the range it is validating
+#: — a pull request should compare against its merge base, not against one
+#: commit. Unset everywhere today; read rather than hardcoded so a PR lane can
+#: set it without touching this file.
+BASELINE_ENV = "THRESHOLD_BASELINE_REF"
+
+
+def _baseline_ref(path: str) -> str:
+    """Which commit to compare against, and it is NOT always HEAD.
+
+    The original always used `HEAD`, and an independent audit found the hole
+    that leaves: **in CI the working tree IS HEAD**, so the gate compared each
+    file against itself and could not fail. Demonstrated by lowering
+    `fail_under` from 90 to 70, committing it, and watching this script report
+    "none loosened against HEAD".
+
+    That is the exact threat its own docstring names — "edited downward in the
+    same commit as the change that made it fail" — passing the check written
+    for it. The gate worked only in the one place nothing invoked it.
+
+    So the baseline depends on where the change lives:
+
+    - **uncommitted** (a local run, pre-commit): the edit is in the working
+      tree and `HEAD` is the state before it. Compare against `HEAD`.
+    - **committed** (CI, or a local run after committing): `HEAD` already
+      contains the edit, so the state before it is `HEAD~1`.
+
+    A workflow that knows better — a pull request validating a range — sets
+    `THRESHOLD_BASELINE_REF` and neither branch applies.
+    """
+    override = os.environ.get(BASELINE_ENV)
+    if override:
+        return override
+
+    dirty = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "status", "--porcelain", "--", path],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if dirty.stdout.strip():
+        return "HEAD"
+
+    # No parent means the initial commit: there is no earlier state to compare
+    # against, and reporting that as "not loosened" is the honest answer.
+    parent = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "rev-parse", "--verify", "HEAD~1"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return "HEAD~1" if parent.returncode == 0 else "HEAD"
+
+
 def _at_head(path: str) -> str | None:
-    """The file as committed. None when it is new in this working tree."""
+    """The file at its baseline commit. None when it is new there."""
     result = subprocess.run(
-        ["git", "-C", str(REPO_ROOT), "show", f"HEAD:{path}"], capture_output=True, text=True, check=False
+        ["git", "-C", str(REPO_ROOT), "show", f"{_baseline_ref(path)}:{path}"],
+        capture_output=True,
+        text=True,
+        check=False,
     )
     return result.stdout if result.returncode == 0 else None
 
@@ -146,7 +204,7 @@ def main() -> int:
 
     weakened = compare()
     if not weakened:
-        print(f"[thresholds] OK — {len(THRESHOLDS)} watched, none loosened against HEAD")
+        print(f"[thresholds] OK — {len(THRESHOLDS)} watched, none loosened against {_baseline_ref('pyproject.toml')}")
         return 0
 
     if args.accept:

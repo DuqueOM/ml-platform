@@ -62,7 +62,7 @@ Verdict: RED — do NOT proceed with {caller-action}.
 
 ## What this workflow is NOT
 
-- Not a CI-fixing workflow — see `agentic/rules/16-doc-coherence.md`/rule
+- Not a CI-fixing workflow — see `agentic/rules/23-doc-coherence.md`/rule
   16 for doc drift, or template-ADR-019's shadow-mode self-healing surface for
   autofix; this workflow only observes and reports.
 - Not a substitute for GitHub's own required-status-checks branch

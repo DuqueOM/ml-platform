@@ -51,7 +51,7 @@ this annotation missing or set to an unrecognized value is treated as
 
 ## Mode assignment is fixed, not environment-scaled (template-ADR-042 §2.2)
 
-Unlike most Terraform applies in this template (`03-terraform.md`),
+Unlike most Terraform applies in this template (`12-terraform.md`),
 edge-protection resources do NOT get a lighter mode in dev:
 
 | Action | Mode | Never downgrade to |
@@ -88,7 +88,7 @@ assumes for you.
 - `docs/decisions/template-ADR-042-native-cloud-edge-protection.md`
 - `agentic/skills/edge-audit/SKILL.md`
 - `agentic/workflows/edge-setup.md`
-- `agentic/rules/03-terraform.md` — the general Terraform rules this
+- `agentic/rules/12-terraform.md` — the general Terraform rules this
   one narrows for edge-protection resources specifically
-- `agentic/rules/02-kubernetes.md` — general K8s rules; this rule adds
+- `agentic/rules/11-kubernetes.md` — general K8s rules; this rule adds
   the edge-specific annotation contract on top

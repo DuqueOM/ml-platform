@@ -204,7 +204,7 @@ Link the post-mortem to any new ADRs and to `SECURITY.md` updates.
 
 ## Related
 
-- Rule: `agentic/rules/12-security-secrets.md` (D-17, D-18, D-19)
+- Rule: `agentic/rules/20-security-secrets.md` (D-17, D-18, D-19)
 - Skill: `security-audit` (detection)
 - Workflow: `/secret-breach` (entry point)
 - ADR: `template-ADR-005` (agent behavior + security)

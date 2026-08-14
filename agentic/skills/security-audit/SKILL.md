@@ -140,7 +140,7 @@ If findings are detected:
 
 ## Related
 
-- Rule: `agentic/rules/12-security-secrets.md` (always_on)
+- Rule: `agentic/rules/20-security-secrets.md` (always_on)
 - Skill: `secret-breach-response` (activated on secret findings)
 - Workflow: `/secret-breach`
 - ADR: `template-ADR-005` (agent behavior & security)

@@ -140,6 +140,6 @@ sign-off must be linked from the audit entry per template-ADR-005.
 
 ## Related
 
-- Rule: `agentic/rules/01-mlops-conventions.md` §FinOps
+- Rule: `agentic/rules/10-mlops-conventions.md` §FinOps
 - Workflow: `agentic/workflows/cost-review.md`
 - Invariants: cost-attribution labels per template-ADR-013

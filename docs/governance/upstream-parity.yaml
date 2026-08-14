@@ -226,7 +226,7 @@ artifacts:
   - path: scripts/check_service_adr_references.py
     status: rejected
     reason: >-
-      Check C2 already resolves foreign ADR references against the template's index when it is reachable.
+      Rejected, with the argument corrected after an audit showed the first one false. It said 'C2 already resolves foreign references against the template's index when reachable' — and in CI that checkout is NEVER present, so C2 reports 151 references NOT checked there. The rejection rested on a mechanism inert exactly where it matters. The true argument is narrower and holds: those 151 references live in services/, which is byte-identical to what ml-service-template generates, so a dangling one among them is a defect in that repository and is caught by its own CI, not ours.
   - path: scripts/check_vendored_runtime_drift.py
     status: rejected
     reason: >-
@@ -240,9 +240,9 @@ artifacts:
     reason: >-
       Equivalent exists: scripts/check_ci_references.py asserts every `run:` script resolves.
   - path: scripts/ci_verify_yaml.py
-    status: rejected
+    status: pending
     reason: >-
-      Covered by pre-commit's yaml hooks and by kubectl kustomize in tests/test_gitops_manifests.py.
+      Moved from rejected to pending, because the rejection cited pre-commit's check-yaml and an audit established that hook runs ONLY locally — no workflow invokes it. YAML that CI genuinely parses is limited to what a test opens: the workflows, the kustomize overlays, the parity ledger. Everything else is unvalidated on a runner. Closing this means a CI step that parses every tracked YAML, or a test that does.
   - path: scripts/generate_report.py
     status: rejected
     reason: >-

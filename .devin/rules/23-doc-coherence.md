@@ -133,7 +133,10 @@ the workflow file's header comment for the full incident and the fix.
 
 - Skill: `doc-coherence` — drives the gate and applies the cascade map
 - Workflow: `agentic/workflows/doc-coherence.md` — `/doc-coherence`
-- Rule: `06-documentation` — per-document standards (complementary)
-- Rule: `15-template-lifecycle` — adapter generation (D-33/D-34)
+- Rule: `15-documentation` — per-document standards (complementary)
+- Rule: `04-doc-governance` — adapter generation. The name here was
+  `15-template-lifecycle`, which is ml-service-template's numbering for a
+  rule this repository does not have: adapter generation lives under
+  doc governance here, and D-33/D-34 are the template's anti-pattern ids.
 - template-ADR-031 — Documentation coherence system
 - template-ADR-027 — Vendor-neutral canonical surface (adapter generation)

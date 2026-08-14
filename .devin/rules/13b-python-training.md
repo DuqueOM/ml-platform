@@ -92,6 +92,6 @@ drift consumers use `common_utils.eda_artifacts`.
 
 ## When NOT to Apply
 
-- Serving code (`app/*.py`) — use `04a-python-serving` rules instead
+- Serving code (`app/*.py`) — use `13a-python-serving` rules instead
 - Test files — conventions differ (synthetic data OK, stubs OK)
 - Notebook/exploration code

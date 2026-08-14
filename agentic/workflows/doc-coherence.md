@@ -69,6 +69,6 @@ end-to-end (decision → ADR → CHANGELOG → release → VERSION).
 
 ## Related
 
-- Rule: `16-doc-coherence` · Skill: `doc-coherence` · template-ADR-031
+- Rule: `23-doc-coherence` · Skill: `doc-coherence` · template-ADR-031
 - Workflow: `release` (downstream — consumes a coherent tree)
 - Workflow: `new-adr` (upstream — produces an ADR that this workflow propagates)
