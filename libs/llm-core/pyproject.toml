@@ -3,7 +3,15 @@ name = "llm-core"
 version = "0.1.0"
 description = "See libs/llm-core/src/llm_core/__init__.py"
 requires-python = ">=3.11"
-dependencies = []
+# scikit-learn and numpy are needed by `semantic_index` only. The instrument
+# — `retrieval_eval` — stays import-free of both on purpose: a measuring
+# device that depends on the thing it measures cannot be trusted to report a
+# loss, and the baseline it compares against must run where the candidate
+# cannot.
+dependencies = [
+    "numpy~=2.4",
+    "scikit-learn~=1.9",
+]
 
 [build-system]
 requires = ["hatchling"]

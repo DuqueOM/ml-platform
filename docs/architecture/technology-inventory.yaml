@@ -143,6 +143,17 @@ categories:
       - {id: ragas, tier: studied}
       - {id: deepeval, tier: studied}
       - {id: langfuse, tier: demonstrated, detect: ["pattern:langfuse|libs/llm-core"]}
+      # Latent semantic analysis, not transformer embeddings — the distinction
+      # is load-bearing and the id says so. Measured against the lexical
+      # baseline in Phase 1e and it did not clear the 0.05 margin (both at
+      # 15.4% recall@5), so it stays Demonstrated and NO index ships. The full
+      # number, the diagnosis and what would change the answer are in
+      # docs/architecture/retrieval-measurement.md.
+      - {id: lsa-retrieval, tier: demonstrated, detect: ["libs/llm-core/src/llm_core/semantic_index.py"],
+         note: "Evaluated, lost to the lexical baseline, published anyway. Promotes only if the margin appears."}
+      # A sentence encoder is not here at any tier, deliberately: it would have
+      # to be downloaded, and a gate that reaches the network cannot be one.
+      # `studied` would overstate it — nothing was evaluated.
       - {id: arize-phoenix, tier: rejected, note: "Langfuse chosen; two LLM tracing backends duplicate instrumentation."}
       - {id: prompt-registry, tier: core, detect: ["pattern:prompt_registry|libs/llm-core"]}
       - {id: semantic-cache, tier: core, detect: ["pattern:semantic_cache|libs/llm-core"]}
