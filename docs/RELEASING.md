@@ -191,10 +191,12 @@ new ADR, a new contract requirement that generated projects already satisfy, a
 new rule or skill. **A change that breaks any bullet above is a MAJOR-class
 change**, and while the line is pre-1.0 it ships as a MINOR carrying the full
 MAJOR obligation: an explicit breaking-changes block in the CHANGELOG section
-with one entry per break mapped to a manual action. `MIGRATION.md` does not exist
-yet — it is listed as pending in `docs/governance/upstream-parity.yaml` — so
-until it does, the CHANGELOG section is the only place that obligation can be
-met, and it must be met there rather than deferred.
+with one entry per break mapped to a manual action, **and** a row in
+`MIGRATION.md` carrying the same break from the consumer's side. Two places, on
+purpose: the CHANGELOG is read by someone deciding whether to upgrade, and
+`MIGRATION.md` is read by someone already halfway through it. Its table is empty
+today because `v0.1.0` is the only release, and the rule is written before it is
+needed rather than invented while somebody's build is red.
 
 ### What 1.0.0 is reserved for
 

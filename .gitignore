@@ -21,6 +21,7 @@ data/
 
 # MCP config carries credentials; only the example is committed.
 .codex/mcp.json
+.mcp.json
 coverage.xml
 
 # Terraform provider plugins and lock metadata from `init -backend=false`,

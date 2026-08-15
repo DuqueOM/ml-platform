@@ -44,21 +44,21 @@ artifacts:
     reason: >-
       Adopted as generated output, same mechanism. Its upstream counterpart claims 15 rules, 16 skills and 12 workflows against 19, 27 and 20.
   - path: .git-blame-ignore-revs
-    status: pending
+    status: rejected
     reason: >-
-      1d: the ruff migration is a formatting-only commit that pollutes blame.
+      Rejected after looking for the commit it would have listed, and finding none. The pending entry assumed this repository had upstream's ruff migration; it never did. ruff is configured in pyproject.toml at the founding commit f6defbd, black, isort and flake8 were never wired here — the technology inventory records black as Rejected, superseded before use — and no formatting-only revision exists across the 88 commits. The black and flake8 strings that do appear live under services/, which is generated from the template where the migration actually happened. Inventing a SHA, or shipping a file whose only content is a comment, would teach the next reader something false about this history. Reverses to adopted the day a mechanical reformat lands, with its own SHA.
   - path: .github/workflows/pr-evidence-check.yml
-    status: pending
+    status: adopted
     reason: >-
-      1d: enforces that a PR carries its evidence, which is the L1-L4 taxonomy applied at review time.
+      Adopted, and re-aimed. Upstream keys evidence to a path allowlist and demands three prose blocks be non-empty; here the subject is the L1-L4 taxonomy that docs/architecture/implementation-status.md already derives, applied at the one moment it is written by hand instead. The rules live in scripts/check_pr_evidence.py rather than in the YAML, so tests can run them against real merged bodies and a contributor can run them before pushing. Verified by injection against pull requests 11 to 14: three pass and 13 fails, because it claims L1/L2 and names no command — which is the finding, not a false positive.
   - path: .gitleaks.toml
     status: adopted
     reason: >-
       Adopted with ZERO suppressions: a full-history scan reported no findings, so any allowlist would have been suppressing something that does not happen. The file exists so an accepted finding has somewhere to be recorded with its reason.
   - path: .mcp.json.example
-    status: pending
+    status: adopted
     reason: >-
-      1d: MCP configuration without committing secrets.
+      Adopted as a RENDERING of agentic/mcp_registry.yaml rather than a second list: the same six assessed servers, each expressing the minimum scope the registry records — kubectl with --read-only, postgres through a read-only DSN, terraform with no apply credentials. Every credential and endpoint is a ${VAR}, and every version reads REPLACE_WITH_PINNED_VERSION rather than upstream's @latest, because a floating tag is an unreviewed upgrade of remote code on somebody else's schedule. tests/test_mcp_example_configs.py fails any example naming a server the registry never assessed, which is the direction that turns a copy-paste into an ungoverned capability.
   - path: AGENT_CONTEXT.md
     status: adopted
     reason: >-
@@ -72,9 +72,9 @@ artifacts:
     reason: >-
       Adopted, rewritten for this repository: the stage-before-regenerate cadence, the rule that a gate must be verified by breaking what it guards, and the AUTO/CONSULT/STOP classification.
   - path: MIGRATION.md
-    status: pending
+    status: adopted
     reason: >-
-      1d: what an adopter does across versions of this platform.
+      Adopted, and almost entirely rewritten: upstream's is thirteen release-to-release transitions, and this repository has one release, so its migration table is EMPTY and says so rather than borrowing rows describing a template's history. What it does carry is what is true here — the two channels a version reaches a consumer through, the pinned copier update with the measured cost of omitting the pin, and a section on what a version number does not promise: nothing at L4, nothing published, five library versions nothing compares. docs/RELEASING.md previously stated this file absent; that sentence is now the rule that a break lands in both places.
   - path: NOTICE
     status: adopted
     reason: >-
@@ -92,9 +92,9 @@ artifacts:
     reason: >-
       Adopted, adapted. The scope section is the part that differs: a serving-loop vulnerability belongs upstream under ADR-003, and routing it here would delay the fix. Also states that a gate passing without checking anything is a security finding, not a bug.
   - path: VALIDATION_LOG.md
-    status: pending
+    status: adopted
     reason: >-
-      1d: the evidence log the L1-L4 taxonomy feeds.
+      Adopted with one seeded entry, containing only commands actually run and their real output. Each carries the layer DERIVED from the command rather than one chosen by the person writing the entry, which is the rule the status document already obeys and the one an evidence log written by hand is most likely to break. tests/test_validation_log.py re-derives every layer in the file with the same function the PR gate uses, so an entry cannot promote itself. L3 and L4 are recorded as not reached, with the reason, so the log cannot read as a list of successes.
   - path: docs/ADOPTION.md
     status: adopted
     reason: >-

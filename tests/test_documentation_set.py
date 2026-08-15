@@ -40,6 +40,19 @@ REQUIRED: dict[str, tuple[str, ...]] = {
     # progression whose stages are not finished by commands is a reading list.
     "docs/PROGRESSION.md": ("Finished when", "make verify", "has ever run in a cloud"),
     "docs/environment-promotion.md": ("None of them deploys anything", "digest", "L4"),
+    # A migration guide is read by someone mid-upgrade. The pin is the one
+    # instruction that, omitted, destroys a service rather than inconveniencing
+    # it — a bare `copier update` rewrote a real service in the sibling
+    # repository backwards, answers file included. The second phrase holds the
+    # document to naming its own limits: a migration guide for a platform that
+    # has never run in a cloud and publishes no artifact has to say so, or the
+    # reader infers guarantees from the fact that a version number exists.
+    "MIGRATION.md": ("--vcs-ref", "not guaranteed"),
+    # An evidence log's only failure mode that matters is quiet optimism. L4
+    # must appear because it is the layer that stays at zero, and an entry has
+    # to record what it did NOT reach — a log of successes is a marketing
+    # document with dates on it.
+    "VALIDATION_LOG.md": ("L4", "not validated"),
 }
 
 

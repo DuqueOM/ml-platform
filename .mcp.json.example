@@ -1,0 +1,51 @@
+{
+  "_comment": "Example only. Copy to .mcp.json (gitignored) and export the variables below. The authoritative list of which servers this platform's agents may use, at what risk mode and with what minimum scope, is agentic/mcp_registry.yaml — this file is the Claude Code project-scoped rendering of it and must not disagree; tests/test_mcp_example_configs.py compares the two. Two things are deliberately NOT filled in. Every version reads REPLACE_WITH_PINNED_VERSION, because an unpinned server is remote code that changes under you between sessions and this repository has audited none of these packages; verify the publisher and choose the version yourself. And every credential and endpoint is a ${VAR}: a literal here is a leak that looks like configuration, which is why check_mcp_registry.py scans this file on every commit.",
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github@REPLACE_WITH_PINNED_VERSION"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+    "kubectl": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "kubectl-mcp-server@REPLACE_WITH_PINNED_VERSION",
+        "--read-only",
+        "--context",
+        "${KUBE_CONTEXT}"
+      ],
+      "env": {
+        "KUBECONFIG": "${KUBECONFIG}"
+      }
+    },
+    "postgres": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres@REPLACE_WITH_PINNED_VERSION",
+        "${POSTGRES_READONLY_DSN}"
+      ]
+    },
+    "terraform": {
+      "command": "npx",
+      "args": ["-y", "terraform-mcp-server@REPLACE_WITH_PINNED_VERSION"]
+    },
+    "prometheus": {
+      "command": "npx",
+      "args": ["-y", "mcp-server-prometheus@REPLACE_WITH_PINNED_VERSION"],
+      "env": {
+        "PROMETHEUS_URL": "${PROMETHEUS_URL}"
+      }
+    },
+    "docker": {
+      "command": "npx",
+      "args": ["-y", "docker-mcp@REPLACE_WITH_PINNED_VERSION"],
+      "env": {
+        "DOCKER_HOST": "${DOCKER_HOST}"
+      }
+    }
+  }
+}

@@ -96,10 +96,13 @@ mcps:
       Docker socket access is effectively root on the host. Local-only, and
       never in an environment that also holds cloud credentials.
 
-# Where each surface expects its MCP configuration. Paths are the tool's, not
-# this repository's — an MCP config committed here would carry credentials.
+# Where each surface expects its MCP configuration, and which committed EXAMPLE
+# renders it. The live config is never committed — it carries credentials — but
+# the example is, because the alternative is every operator reconstructing the
+# server set from prose and quietly granting one this file never assessed.
+# `check_mcp_registry.py` scans each committed example for literal values.
 surfaces:
-  claude: {config_path: "~/.claude.json", committed_example: null}
+  claude: {config_path: ".mcp.json (project scope) or ~/.claude.json (user scope)", committed_example: ".mcp.json.example"}
   cursor: {config_path: "~/.cursor/mcp.json", committed_example: null}
   codex: {config_path: ".codex/mcp.json", committed_example: ".codex/mcp.example.json"}
   devin: {config_path: "~/.codeium/mcp_config.json", committed_example: null}
