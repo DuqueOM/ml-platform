@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**46 of 118 committed technologies implemented (38%)** — plus 15 studied and 10 rejected, which are decisions rather than gaps.
+**47 of 118 committed technologies implemented (39%)** — plus 15 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 | :-: | --- |
@@ -54,7 +54,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | 📓 | `docker-compose` | studied | kind used instead: the local stack must exercise Kubernetes manifests, which compose cannot. |
 | ✅ | `devcontainers` | demonstrated | |
 
-## CI/CD — 7 built, 2 pending
+## CI/CD — 8 built, 1 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
@@ -65,7 +65,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ✅ | `openssf-scorecard` | core | |
 | ✅ | `docs-quality-lint` | core | |
 | ✅ | `branch-protection-as-code` | core | |
-| ⬜ | `ci-failure-triage` | demonstrated | Inherited CI self-healing; Demonstrated until this repository has enough CI history to classify. |
+| ✅ | `ci-failure-triage` | demonstrated | |
 | ✅ | `dependabot` | core | |
 
 ## Security and supply chain — 3 built, 7 pending

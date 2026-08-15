@@ -142,6 +142,28 @@ jobs:
         # claims to test, while still showing up in a green build.
         run: uv run python scripts/check_ci_references.py
 
+      - name: YAML parses across the whole repository
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        # `check-yaml` in .pre-commit-config.yaml looks like it covers this and
+        # does not: pre-commit hands its hooks the STAGED file list, so a
+        # manifest no commit has touched since it was written has never been
+        # parsed, and no workflow invoked the hook at all. This parses all 172
+        # of them, and rejects the duplicate key PyYAML accepts while silently
+        # dropping the first value — in a Kubernetes manifest, the object that
+        # deploys then differs from the file that was reviewed.
+        run: uv run python scripts/ci_verify_yaml.py
+
+      - name: Secret scanner is pinned and consistent
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        # SECURITY.md publishes one claim about secret scanning and two
+        # binaries stand behind it — the pre-commit hook and the one
+        # gitleaks-action installs. gitleaks changed its config dialect at
+        # 8.25, so a mismatch means two scans of the same tree under different
+        # allowlist rules with neither side reporting it. Also fails on a
+        # mutable action tag: a subverted scanner reports no leaks, which is
+        # the same output as a clean tree.
+        run: uv run python scripts/check_gitleaks_pin.py
+
       - name: Technology inventory matches the filesystem
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         # "Is the platform ready?" must not be answerable by an impression.
@@ -340,6 +362,23 @@ jobs:
         with:
           fetch-depth: 0
       - name: gitleaks
-        uses: gitleaks/gitleaks-action@v3
+        # Pinned by commit SHA, not by the `v3` tag it previously used. This
+        # action is third-party JavaScript that reads the full history with a
+        # token, and a tag is a mutable pointer: re-pointing it swaps the
+        # scanner without a commit here. What makes that worse than for any
+        # other action is the failure mode — a subverted secret scanner does
+        # not error, it reports no leaks, which is byte-identical to a pass.
+        # `hashicorp/setup-terraform` above was already pinned this way.
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The version CI actually scans with. Without this the action falls
+          # back to a version hard-coded inside its own source, so the binary
+          # was a property of whichever commit the tag resolved to and could
+          # not be compared against the pre-commit hook's `rev`. gitleaks
+          # changed its config dialect at 8.25 — below it the `[[allowlists]]`
+          # form `.gitleaks.toml` documents is ignored in silence — so two
+          # scanners straddling that boundary apply different rules to the same
+          # tree and neither says so. Kept equal to the hook's rev by
+          # `scripts/check_gitleaks_pin.py`; no `v` prefix, per the action.
+          GITLEAKS_VERSION: "8.30.0"

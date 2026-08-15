@@ -167,21 +167,40 @@ artifacts:
       on: that tree is generated from ml-service-template and byte-identical to it (ADR-003), so a defect
       there is upstream's, and reporting keeps their absence from the local stack a recorded fact.
   - path: scripts/check_gitleaks_pin.py
-    status: pending
+    status: adopted
     reason: >-
-      1d: an unpinned scanner action is a supply-chain surface.
+      Adopted, and it changed shape because this repository's declaration sites are not upstream's three. Upstream
+      compares two pre-commit configs against a `GITLEAKS_VERSION` in its own workflow; here the second site declared
+      NOTHING, so CI scanned with a version hard-coded inside whichever commit the mutable `gitleaks-action@v3` tag
+      resolved to — unknowable from the tree and changeable without a commit. The port keeps upstream's argument (a
+      mismatch across the 8.25 config-dialect boundary applies different allowlist rules on each side and neither
+      reports it) and adds the SHA pin the ledger asked for, because a subverted scanner reports no leaks, which is the
+      same output as a clean tree. It found both defects on its first run and both are now closed in ci.yml.
   - path: scripts/check_test_clock_isolation.py
     status: adopted
     reason: >-
       Adopted, adapted, and extended. Upstream checks that tests do not call a wall-clock API; this version adds a second check that PRODUCTION code never hands git a --since/--until date filter, which is the exact defect C7 shipped here. Exemptions carry an exact count and expire when the call disappears. Verified by four injections, including reverting _commits_since to the broken form.
   - path: scripts/ci_classify_failure.py
-    status: pending
+    status: adopted
     reason: >-
-      1d: CI triage; portable and independent of the template's mechanics.
+      Adopted with its policy moved INTO the code. Upstream reads
+      `config/ci_autofix_policy.yaml` because a scaffolded service overrides it per service; nothing overrides it here,
+      and a single-consumer configuration file is a second place for the policy to disagree with itself. The modes are
+      re-derived from AGENTS.md rather than inherited — AUTO only where the corrected output is COMPUTED (a formatter,
+      a document generator), CONSULT wherever the fix is chosen from alternatives, STOP for everything AGENTS.md
+      already reserves and for anything unrecognised. Blast-radius limits are measured from this repository's own 88
+      commits (median 5 files, p90 25) instead of carried over. It classifies and never acts; upstream's later phases
+      add the agent that acts, and those stay unadopted.
   - path: scripts/ci_collect_context.py
-    status: pending
+    status: adopted
     reason: >-
-      1d: gathers the context a CI failure needs to be diagnosed without re-running it. Portable, and independent of the template's scaffolding mechanics.
+      Adopted with the signature table rewritten, because two thirds of upstream's could not match anything here:
+      `black.format_drift`, `isort.import_drift` and `flake8.lint` name three tools ADR-004 replaced with ruff. What
+      it had no patterns for at all is this repository's own vocabulary of failure — a derived document reported
+      STALE, `FAIL [C7]` from the coherence gate, an agentic surface OUT OF DATE, a threshold loosened against HEAD —
+      which is where CI here actually goes red. Added: the verbatim `FAIL ...` lines, since for a coherence or parity
+      failure the check id IS the diagnosis, plus head sha and branch. Kept read-only and offline, and that is now
+      structurally tested rather than promised in a docstring.
   - path: scripts/mcp_doctor.py
     status: rejected
     reason: >-
@@ -300,9 +319,16 @@ artifacts:
     reason: >-
       Equivalent exists: scripts/check_ci_references.py asserts every `run:` script resolves.
   - path: scripts/ci_verify_yaml.py
-    status: pending
+    status: adopted
     reason: >-
-      Moved from rejected to pending, because the rejection cited pre-commit's check-yaml and an audit established that hook runs ONLY locally — no workflow invokes it. YAML that CI genuinely parses is limited to what a test opens: the workflows, the kustomize overlays, the parity ledger. Everything else is unvalidated on a runner. Closing this means a CI step that parses every tracked YAML, or a test that does.
+      Adopted, and the rejection it reverses was wrong in an instructive way: `check-yaml` is a PRE-COMMIT hook, and
+      pre-commit hands its hooks the staged file list, so it had never parsed a file the commit did not touch. 172 of
+      174 tracked YAML files are now parsed in CI and in a whole-tree pre-commit hook. Two changes beyond a copy — it
+      enumerates from `git ls-files --cached --others --exclude-standard` rather than rglob, so gitignored
+      `.terraform/` binaries cannot make a runner and a laptop disagree; and it rejects duplicate keys, which PyYAML
+      accepts while dropping the first value, so a repeated `resources:` block deploys an object that differs from the
+      manifest that was reviewed. The two excluded files are un-rendered copier source, verified by rendering, and the
+      exclusion is printed rather than applied in silence.
   - path: scripts/generate_report.py
     status: rejected
     reason: >-
