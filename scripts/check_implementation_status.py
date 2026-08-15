@@ -542,6 +542,11 @@ def evidence_layer(command: str) -> str:
     return "L4" if any(tool in command for tool in _CLOUD_TOOLS) else "L3"
 
 
+#: Output of every verification command that failed, keyed by the command.
+#: Populated by `_verify`, reported by `main` when the document is stale.
+_FAILURES: dict[str, str] = {}
+
+
 def _verify(command: str) -> bool:
     # shell=True is safe here: every command is a literal defined in
     # COMPONENTS above, never derived from input.
@@ -562,6 +567,19 @@ def _verify(command: str) -> bool:
     # caller reaches it through `uv run` itself.
     environment = {**os.environ, "UV_NO_SYNC": "1"}
     result = subprocess.run(command, shell=True, cwd=REPO_ROOT, capture_output=True, text=True, env=environment)
+    if result.returncode != 0:
+        # Keep WHY, not just THAT. The document records a failure as
+        # "`<command>` FAILS" and stops there, so a red row costs a full
+        # re-investigation — and the investigation is run from a different
+        # process, at a different moment, often with the failure no longer
+        # reproducible.
+        #
+        # That cost was paid in full once already: a test writing a probe file
+        # into the repository made a CONCURRENT test fail, and the only visible
+        # symptom was a stale document naming a gate on a branch that had not
+        # touched it. Three steps from the cause, with the output that named it
+        # captured and discarded here.
+        _FAILURES[command] = (result.stdout + result.stderr).strip()
     return result.returncode == 0
 
 
@@ -702,7 +720,17 @@ def main() -> int:
             )
             for line in difference:
                 print(f"  {line}")
-            print("Run: python scripts/check_implementation_status.py --write")
+            # And WHY each failing command failed. Without this the reader gets
+            # "`<command>` FAILS" and has to reproduce it in a second process
+            # at a later moment — which is precisely when a concurrency defect
+            # stops reproducing. One such failure cost several rounds of
+            # guessing while its explanation was being captured and thrown away
+            # inside `_verify`.
+            for command, output in sorted(_FAILURES.items()):
+                print(f"\n[status] `{command}` failed with:")
+                for line in output.splitlines()[-25:]:
+                    print(f"  {line}")
+            print("\nRun: python scripts/check_implementation_status.py --write")
             return 1
         print("[status] OK — implementation status matches the filesystem")
         return 0

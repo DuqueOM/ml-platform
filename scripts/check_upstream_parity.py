@@ -37,6 +37,7 @@ online half is what keeps the ledger from going stale as upstream grows.
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 from pathlib import Path
 
@@ -112,12 +113,49 @@ def _ledger() -> list[dict]:  # type: ignore[type-arg]
     return artifacts
 
 
+#: Variables git exports into a hook's environment, and which then follow any
+#: `git` this process runs — INCLUDING one aimed at a different repository
+#: with `-C`. `-C` changes the directory; it does not override an inherited
+#: `GIT_DIR` or `GIT_INDEX_FILE`, which win.
+#:
+#: Measured: run from a `git commit` hook, `git -C ../template_MLOps ls-files`
+#: returned 840 paths against this repository's index instead of the 96
+#: comparable artifacts upstream actually has. The gate then failed six
+#: entries with "pending, but upstream no longer has it" — about a checkout
+#: it had never read.
+#:
+#: The failure only appeared during a real commit. `pre-commit run`, `--all-files`
+#: and every direct invocation set none of these variables and were green,
+#: which sent the investigation toward concurrency: the pool had just been
+#: parallelised, so a defect visible only under the pool looked like a race.
+#: It was not one. It was a gate that reads another repository being handed
+#: this one's index.
+_GIT_ENVIRONMENT = (
+    "GIT_DIR",
+    "GIT_COMMON_DIR",
+    "GIT_INDEX_FILE",
+    "GIT_WORK_TREE",
+    "GIT_PREFIX",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+)
+
+
+def _detached_environment() -> dict[str, str]:
+    """`os.environ` with every inherited git-repository pointer removed."""
+    return {key: value for key, value in os.environ.items() if key not in _GIT_ENVIRONMENT}
+
+
 def _upstream_files() -> set[str] | None:
     """Tracked files upstream, or None when the checkout is not reachable."""
     if not (TEMPLATE_CHECKOUT / ".git").is_dir():
         return None
     result = subprocess.run(
-        ["git", "-C", str(TEMPLATE_CHECKOUT), "ls-files"], capture_output=True, text=True, check=False
+        ["git", "-C", str(TEMPLATE_CHECKOUT), "ls-files"],
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_detached_environment(),
     )
     return {
         line
