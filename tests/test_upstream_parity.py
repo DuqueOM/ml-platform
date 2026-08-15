@@ -60,19 +60,40 @@ def test_every_entry_carries_a_status_and_an_argument() -> None:
 
 
 def test_a_rejected_artifact_that_now_exists_fails() -> None:
-    """The self-cleaning half. A rejection outliving its cause is how a ledger rots."""
-    rejected = next(e["path"] for e in _entries() if e["status"] == "rejected")
-    probe = REPO_ROOT / rejected
+    """The self-cleaning half. A rejection outliving its cause is how a ledger rots.
 
-    probe.parent.mkdir(parents=True, exist_ok=True)
-    probe.write_text("probe\n", encoding="utf-8")
-    try:
-        result = _run()
-    finally:
-        probe.unlink(missing_ok=True)
+    Probed with a FABRICATED entry rather than by writing the rejected file
+    into the repository, which is what this test used to do.
 
-    assert result.returncode == 1
-    assert "rejected, and present" in result.stdout
+    That version created a real file at the rejected artifact's path, ran the
+    gate as a subprocess, and deleted the file in a `finally`. It passed for
+    weeks in a suite that ran one command at a time. The moment the status
+    generator began verifying components concurrently, it failed reliably —
+    and not itself: `test_the_gate_passes_on_the_current_ledger`, running in
+    another process, saw the probe file during its window and correctly
+    reported a rejected artifact present.
+
+    The failure surfaced as a stale `implementation-status.md` naming the
+    parity gate as broken, which is three steps from the cause. A test that
+    mutates the repository it is testing turns every concurrent reader into a
+    coin flip, and the two symptoms — a red gate that is green on its own, a
+    derived document that changes between runs — both point away from it.
+
+    Its neighbour `test_an_adopted_artifact_that_is_absent_fails` had already
+    learned this and said so in its own docstring. The lesson was applied to
+    one test and not the one beside it, which is the ordinary way a known
+    hazard survives.
+
+    An interrupted run also left the probe file behind, in a public repository.
+    """
+    import check_upstream_parity as parity
+
+    entries = [{"path": "AGENTS.md", "status": "rejected", "reason": "x" * 60}]
+    parity.failures.clear()
+    parity.notes.clear()
+    parity.check_offline(entries)
+
+    assert any("rejected, and present" in f for f in parity.failures)
 
 
 def test_an_adopted_artifact_that_is_absent_fails(tmp_path: Path) -> None:
@@ -118,6 +139,47 @@ def test_a_pending_artifact_that_already_exists_fails() -> None:
     parity.check_offline(entries)
 
     assert any("pending, and present" in f for f in parity.failures)
+
+
+def test_the_upstream_read_ignores_an_inherited_git_environment() -> None:
+    """`git -C <other repo>` obeys an inherited GIT_DIR, and a hook exports one.
+
+    `-C` changes the working directory; it does not override `GIT_DIR` or
+    `GIT_INDEX_FILE`, which win. Git exports both into every hook it runs, so
+    a gate that reads a SECOND repository from inside a `git commit` reads the
+    first one instead — silently, with a plausible-looking answer.
+
+    Measured before the fix: from a commit hook,
+    `git -C ../template_MLOps ls-files` returned 840 paths belonging to this
+    repository in place of the 96 comparable artifacts upstream has. The gate
+    then failed six ledger entries with "pending, but upstream no longer has
+    it" about a checkout it had never opened.
+
+    What made it expensive is that it was invisible everywhere else. Direct
+    invocation, `pre-commit run`, and `--all-files` set none of these
+    variables and were all green; only a real commit failed. The verification
+    pool had just been parallelised, so a defect that appeared solely under
+    the pool was read as a race, and several rounds went into looking for
+    shared mutable state that was not there.
+
+    Asserted by simulating the hook environment rather than by committing,
+    because a test that commits to the repository it is testing is the defect
+    two tests above this one.
+    """
+    import check_upstream_parity as parity
+
+    if parity._upstream_files() is None:
+        pytest.skip("no upstream checkout reachable; the online half does not run here")
+
+    truth = parity._upstream_files()
+
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setenv("GIT_DIR", str(REPO_ROOT / ".git"))
+        patched.setenv("GIT_INDEX_FILE", str(REPO_ROOT / ".git" / "index"))
+        assert parity._upstream_files() == truth, (
+            "the upstream file list changes when a git hook's environment is present, "
+            "so the online half of this gate reports on the wrong repository inside a commit"
+        )
 
 
 def test_a_duplicate_path_fails() -> None:

@@ -33,6 +33,13 @@ REQUIRED: dict[str, tuple[str, ...]] = {
     "docs/RELEASING.md": ("VERSION", "CHANGELOG"),
     "QUICK_START.md": ("uv sync", "pytest"),
     "RUNBOOK.md": ("C7", "audit"),
+    # Both of these are useless if they describe a path this repository has
+    # walked, because it has not. The required phrases are the honesty, not
+    # the topic: a promotion document that stops naming the missing deploy
+    # workflow has become a description of something imaginary, and a
+    # progression whose stages are not finished by commands is a reading list.
+    "docs/PROGRESSION.md": ("Finished when", "make verify", "has ever run in a cloud"),
+    "docs/environment-promotion.md": ("None of them deploys anything", "digest", "L4"),
 }
 
 

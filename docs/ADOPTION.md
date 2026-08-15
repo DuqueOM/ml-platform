@@ -96,10 +96,21 @@ meet — recorded in `docs/decisions/ADR-008-serving-a-forecast-from-a-classific
 as Proposed, because the resolution is an upstream change. If your first
 project is a classifier, this does not affect you.
 
-**The independent audit is overdue.** Check C7 fails, by design: an audit must
-run in a session separate from the work, because self-review cannot find a fact
-its author believed. A red C7 is the mechanism working, not a broken build —
-but it is red, and you should know before you rely on the governance claims.
+**The independent audit is a budget, and it runs out.** Check C7 fails once
+too many commits land behind the last audit, because an audit must run in a
+session separate from the work — self-review cannot find a fact its author
+believed. It has been red, and it will be red again; that is the mechanism
+working rather than a broken build. Read the current standing from the check
+itself, which prints the count it is measuring:
+
+```bash
+uv run python scripts/check_doc_coherence.py | grep C7
+```
+
+The marker in `AGENTS.md` names the commit the auditor read, not the day they
+finished. Counting drift from a date charged the audit for the work the
+auditor had already reviewed, and exhausted a ten-commit budget on five
+commits of real change.
 
 ## Whether it is working for you
 
