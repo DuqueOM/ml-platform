@@ -106,6 +106,25 @@ artifacts:
       which states plainly that no external party reviewed it and reports its gaps as Partial or Not satisfied rather
       than claiming coverage. It sat in the tree marked `pending` because the ledger only checked for adopted files
       that were missing, never for pending files that were present.
+  - path: docs/governance/branch-protection.md
+    status: adopted
+    reason: >-
+      Adopted, rewritten around the one fact upstream's version has no reason to state: this repository has a single
+      maintainer, so `required_approving_review_count` stays at 0 deliberately. Raising it to 1 would let the author of
+      a change approve it — a mechanism with the shape of a control and none of the substance, and the shape is the
+      dangerous half because a reader seeing "reviews required: 1" concludes something false. The document says which
+      mechanism carries the weight instead (required checks with enforce_admins) and which supplies the independent
+      review a count cannot (C7). Written because QA-4 round four asked whether that limitation was still stated
+      anywhere a reader would find it, and it was not.
+  - path: docs/governance/cicd-templates-drift.md
+    status: rejected
+    reason: >-
+      Rejected: upstream's gate compares ITS workflow templates against the copies its scaffolder writes into a
+      generated service, because upstream owns both sides. Here `services/` is vendored from the template and
+      byte-identical to it under ADR-003, so drift between those workflows and the template's is upstream's finding to
+      make, not ours — and a second gate reporting it would disagree with the first eventually. What this repository
+      does need is that `services/` has not been edited locally, which tests/test_project_generator.py already asserts.
+      Reverses if this platform ever writes its own workflows into a generated project.
   - path: docs/PROGRESSION.md
     status: adopted
     reason: >-
