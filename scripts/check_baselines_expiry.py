@@ -52,7 +52,33 @@ DEFAULT_DIR = REPO_ROOT / ".security-baselines"
 #: YAML baseline -> the key the scanner reads its suppressions from. Reading the
 #: scanner's own key means "how many entries are there" is answered by the
 #: parser rather than by a pattern that could quietly stop matching.
-YAML_BASELINES = {"checkov.yml": "skip-check", "tfsec.yml": "exclude"}
+#: File -> every key under which that scanner accepts a suppression.
+#:
+#: One key per file was the original shape, and QA-4 round four found what it
+#: cost: Checkov also honours `skip-path`, which silences an entire directory
+#: rather than one rule, and the gate could not see it. An entry there
+#: produced "0 entr(ies) examined" and exit 0 — the gate reporting that it had
+#: nothing to check while a BROADER suppression than any it does check sat one
+#: line away.
+#:
+#: That is worse than an ordinary gap because of what the gate says next:
+#: "armed, not satisfied" is the strongest anti-P-09 language in this
+#: repository, and it was overstating its own coverage.
+YAML_BASELINES: dict[str, tuple[str, ...]] = {
+    "checkov.yml": ("skip-check", "skip-path"),
+    "tfsec.yml": ("exclude",),
+}
+
+#: Checkov's third form: `# checkov:skip=CKV_XXX_NN:reason` at the resource.
+#: `.security-baselines/checkov.yml` RECOMMENDS it in preference to a
+#: repository-wide skip — and nothing read it, so the form the documentation
+#: pushes people toward was the one form with no expiry, no owner and no
+#: review date.
+INLINE_SKIP = re.compile(r"#\s*checkov:skip=(?P<check>CKV[\w]*)(?::(?P<reason>[^\n]*))?")
+
+#: Where an inline skip can legitimately appear. Restricted to infrastructure
+#: so the scan does not read every Python file looking for a comment shape.
+INLINE_SCAN_ROOTS = ("platform", "projects", "services")
 
 #: Trivy takes a plain list: one ID per line, `#` for comments.
 TRIVY_BASELINE = ".trivyignore"
@@ -207,13 +233,14 @@ def check_baselines(directory: Path, today: dt.date) -> None:
 
     examined = 0
     files = 0
-    for name, key in YAML_BASELINES.items():
+    for name, keys in YAML_BASELINES.items():
         path = directory / name
         if not path.is_file():
             fail(f"{name} is declared in the baselines README and is absent, so its findings have nowhere to go")
             continue
         files += 1
-        examined += _scan_yaml(path, key, today)
+        for key in keys:
+            examined += _scan_yaml(path, key, today)
 
     trivy = directory / TRIVY_BASELINE
     if trivy.is_file():
@@ -222,11 +249,53 @@ def check_baselines(directory: Path, today: dt.date) -> None:
     else:
         fail(f"{TRIVY_BASELINE} is declared in the baselines README and is absent")
 
+    inline = _scan_inline_skips(directory.parent)
+    examined += inline
+
     # Stated, never implied. A green tick over an empty directory is the
     # pass-because-absent shape; a printed zero is a fact a reader can act on.
-    ok(f"{files} baseline file(s), {examined} entr(ies) examined as of {today.isoformat()}")
+    ok(f"{files} baseline file(s), {examined} entr(ies) examined as of {today.isoformat()} ({inline} inline)")
     if examined == 0 and not failures:
         ok("no suppressions exist, so none can be expired — this gate is armed, not satisfied")
+
+
+def _scan_inline_skips(repo_root: Path) -> int:
+    """Count `# checkov:skip=` comments, and fail any that carries no reason.
+
+    These cannot expire: the form has nowhere to put a date or an owner. That
+    is precisely why they need reporting rather than ignoring — a suppression
+    with no review date is permanent by construction, and this one is the form
+    `.security-baselines/checkov.yml` tells people to PREFER.
+
+    So the contract enforced here is the strongest the syntax allows: a reason
+    must be present, and every inline skip is counted into the total so the
+    gate's headline number stops implying that the YAML files are the whole
+    suppression surface.
+
+    Requiring an expiry would mean requiring a comment convention Checkov does
+    not parse, which is a defensible next step and a different decision from
+    this one. It is not made here.
+    """
+    found = 0
+    for root in INLINE_SCAN_ROOTS:
+        directory = repo_root / root
+        if not directory.is_dir():
+            continue
+        for path in sorted(directory.rglob("*")):
+            if not path.is_file() or path.suffix not in {".tf", ".yaml", ".yml", ".json"}:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            for match in INLINE_SKIP.finditer(text):
+                found += 1
+                if not (match.group("reason") or "").strip():
+                    fail(
+                        f"{path.relative_to(repo_root)}: inline `{match.group('check')}` skip carries no reason. "
+                        f"An inline skip cannot expire, so the reason is the only thing a reviewer has"
+                    )
+    return found
 
 
 def main(argv: list[str] | None = None) -> int:

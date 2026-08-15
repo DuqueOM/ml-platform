@@ -141,6 +141,52 @@ def test_a_pending_artifact_that_already_exists_fails() -> None:
     assert any("pending, and present" in f for f in parity.failures)
 
 
+def test_every_git_invocation_scrubs_the_inherited_environment() -> None:
+    """The fix was written, argued at length, and applied to one call in three.
+
+    QA-4 round four found it: `_detached_environment()` reached
+    `_upstream_files()` and neither of the two `git ls-files` calls against
+    REPO_ROOT. The commit that introduced it explained inherited `GIT_DIR` in
+    detail and then left two thirds of the surface uncovered — the exact shape
+    that commit was written to condemn, committed while condemning it.
+
+    The two stragglers read THIS repository, where inheriting the environment
+    looks harmless. It is not: during `git commit`, `GIT_INDEX_FILE` points at
+    the index being written, so `ls-files` returns the STAGED set rather than
+    the tracked set. The parity gate would then compare upstream against
+    whatever happened to be staged.
+
+    Asserted over the source rather than by exercising each call, because the
+    property is "no invocation was forgotten" and only the source can answer
+    that. A behavioural test would pass while the next call added goes
+    unscrubbed.
+    """
+    import ast
+
+    source = (REPO_ROOT / "scripts" / "check_upstream_parity.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    unscrubbed = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        target = ast.unparse(node.func)
+        if target != "subprocess.run":
+            continue
+        rendered = ast.unparse(node)
+        if '"git"' not in rendered and "'git'" not in rendered:
+            continue
+        if "_detached_environment" not in rendered:
+            unscrubbed.append(rendered.split("\n")[0][:90])
+
+    assert not unscrubbed, (
+        "git is invoked without env=_detached_environment() at:\n  "
+        + "\n  ".join(unscrubbed)
+        + "\n\nA hook exports GIT_DIR and GIT_INDEX_FILE into this process. Every git call must "
+        "drop them, including the ones aimed at this repository."
+    )
+
+
 def test_the_upstream_read_ignores_an_inherited_git_environment() -> None:
     """`git -C <other repo>` obeys an inherited GIT_DIR, and a hook exports one.
 
