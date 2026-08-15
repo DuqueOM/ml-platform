@@ -86,6 +86,78 @@ def test_the_current_baselines_pass() -> None:
     assert result.returncode == 0, result.stdout
 
 
+def test_a_skip_path_entry_is_examined_like_any_other(tmp_path: Path) -> None:
+    """Checkov honours `skip-path`, and the gate read only `skip-check`.
+
+    Found by QA-4 round four. `skip-path` silences an entire directory rather
+    than one rule — it is BROADER than the key that was being checked — and an
+    expired entry there produced "0 entr(ies) examined" and exit 0.
+
+    That combination is the specific danger: the gate was not merely blind, it
+    was blind while printing "armed, not satisfied", which is the strongest
+    anti-P-09 language in this repository. A control that overstates its own
+    coverage is worse than one that admits it has none, because the second
+    gets fixed.
+    """
+    expired = (
+        "skip-path:\n"
+        "  # expiry: 2020-01-01  owner: @maintainer\n"
+        "  # reason: long past its review date\n"
+        "  - platform/terraform/gcp\n"
+    )
+    directory = _sandbox(tmp_path, checkov=expired)
+    result = _run("--dir", str(directory), "--as-of", AS_OF)
+
+    assert result.returncode == 1, f"an expired skip-path was not examined:\n{result.stdout}"
+    assert "1 entr(ies) examined" in result.stdout, "the entry was found but not counted into the total"
+
+
+def test_an_inline_skip_without_a_reason_fails(tmp_path: Path) -> None:
+    """The form the documentation PREFERS was the one form nothing read.
+
+    `.security-baselines/checkov.yml` tells the reader to prefer an inline
+    `# checkov:skip=CKV_XXX_NN:reason` at the resource over a repository-wide
+    skip. Nothing parsed it, so the recommended path was also the only one
+    with no expiry, no owner and no review date — permanent by construction
+    and invisible to the gate that exists to make suppressions temporary.
+
+    An inline skip still cannot expire; the syntax has nowhere to put a date.
+    So the contract enforced is the strongest the syntax allows — a reason
+    must be there — and the count is surfaced so the headline number stops
+    implying the YAML files are the whole suppression surface.
+    """
+    (tmp_path / "platform").mkdir()
+    (tmp_path / "platform" / "main.tf").write_text(
+        'resource "google_container_cluster" "x" {\n  # checkov:skip=CKV_GCP_21\n}\n',
+        encoding="utf-8",
+    )
+    directory = _sandbox(tmp_path)
+    result = _run("--dir", str(directory), "--as-of", AS_OF)
+
+    assert result.returncode == 1, f"an unreasoned inline skip passed:\n{result.stdout}"
+    assert "carries no reason" in result.stdout
+
+
+def test_an_inline_skip_with_a_reason_is_counted_and_passes(tmp_path: Path) -> None:
+    """Discrimination, not rejection.
+
+    The counterpart to the test above, and the one that makes it mean
+    something: a gate that fails every inline skip would be as useless as one
+    that reads none. The reasoned form passes AND appears in the count, so a
+    reader can see how much suppression exists outside the YAML files.
+    """
+    (tmp_path / "platform").mkdir()
+    (tmp_path / "platform" / "main.tf").write_text(
+        'resource "x" "y" {\n  # checkov:skip=CKV_GCP_21: private nodes land with the VPC rework\n}\n',
+        encoding="utf-8",
+    )
+    directory = _sandbox(tmp_path)
+    result = _run("--dir", str(directory), "--as-of", AS_OF)
+
+    assert result.returncode == 0, result.stdout
+    assert "(1 inline)" in result.stdout, "the reasoned inline skip was not counted"
+
+
 def test_the_empty_state_is_stated_rather_than_implied() -> None:
     """A printed zero can be noticed; a green tick over nothing cannot.
 
