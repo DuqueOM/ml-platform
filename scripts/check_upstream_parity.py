@@ -74,7 +74,16 @@ _UNCOMPARED_PREFIXES = (
     "docs/incidents/",
     "docs/security/",
     "docs/observability/",
-    "docs/governance/",
+    # `docs/governance/` was here and is gone. QA-4 round four found what it
+    # hid: two upstream documents absent from this repository —
+    # branch-protection.md and cicd-templates-drift.md — neither of which the
+    # ledger could report, because the comparison never saw them.
+    #
+    # The exclusions above share one argument: they are scaffolding source or
+    # generated surfaces, where comparing artifact by artifact is noise.
+    # Governance documents are neither. They are decisions, which is the one
+    # category this ledger exists to make sure nobody skips — so excluding
+    # them narrowed the scope of "0 pending" without narrowing the claim.
     "releases/",
     "ops/",
     "k8s/",
