@@ -430,6 +430,29 @@ obvious trigger.
 
 ## Phase 1e — Retrieval over the platform's own documentation
 
+**Status: measured, and it did not clear the bar. No index ships.**
+
+| Retriever | recall@5 | MRR | Margin |
+| --- | --- | --- | --- |
+| Lexical overlap (baseline) | 15.4% | 0.049 | — |
+| TF-IDF → SVD, 192 dims | 15.4% | 0.046 | **+0.000** (required +0.05) |
+
+Measured over 1,205 sections from 121 files against a 26-question gold set.
+`docs/architecture/retrieval-measurement.md` carries the full result, the
+diagnosis — *the right document, the wrong section* — and the four concrete
+changes that would move the answer. Latent-semantic retrieval sits at
+**Demonstrated** under ADR-004.
+
+`scripts/check_doc_index_freshness.py`, listed below as a deliverable, was
+deliberately **not** written: it is conditional on an index existing, and a
+freshness gate over nothing is a mechanism with no substance behind it.
+
+The rest of this section is the specification as approved, kept unedited
+because the bar it set is what makes the result meaningful. Rewriting a
+target after missing it is how a plan stops being one.
+
+---
+
 Approved on the condition that parity lands first, and gated on evidence
 rather than on expectation.
 
