@@ -230,7 +230,11 @@ def check_against_upstream(entries: list[dict]) -> None:  # type: ignore[type-ar
 
     here = set(
         subprocess.run(
-            ["git", "-C", str(REPO_ROOT), "ls-files"], capture_output=True, text=True, check=False
+            ["git", "-C", str(REPO_ROOT), "ls-files"],
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_detached_environment(),
         ).stdout.splitlines()
     )
     decided = {entry.get("path") for entry in entries}
@@ -264,7 +268,11 @@ def main() -> int:
             return 0
         here = set(
             subprocess.run(
-                ["git", "-C", str(REPO_ROOT), "ls-files"], capture_output=True, text=True, check=False
+                ["git", "-C", str(REPO_ROOT), "ls-files"],
+                capture_output=True,
+                text=True,
+                check=False,
+                env=_detached_environment(),
             ).stdout.splitlines()
         )
         undecided = sorted(upstream - here - {e.get("path") for e in entries})
