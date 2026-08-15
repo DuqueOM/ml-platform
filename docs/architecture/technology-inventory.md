@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**47 of 118 committed technologies implemented (39%)** — plus 15 studied and 10 rejected, which are decisions rather than gaps.
+**48 of 119 committed technologies implemented (40%)** — plus 15 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 | :-: | --- |
@@ -182,7 +182,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `layoutlm` | demonstrated | |
 | 📓 | `donut` | studied | |
 
-## LLMOps — 0 built, 6 pending
+## LLMOps — 1 built, 6 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
@@ -191,6 +191,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | 📓 | `ragas` | studied | |
 | 📓 | `deepeval` | studied | |
 | ⬜ | `langfuse` | demonstrated | |
+| ✅ | `lsa-retrieval` | demonstrated | |
 | 🚫 | `arize-phoenix` | rejected | Langfuse chosen; two LLM tracing backends duplicate instrumentation. |
 | ⬜ | `prompt-registry` | core | |
 | ⬜ | `semantic-cache` | core | |
