@@ -159,6 +159,25 @@ def check_offline(entries: list[dict]) -> None:  # type: ignore[type-arg]
                 f"{path}: rejected, and present. The rejection is stale — change it to `adopted` "
                 f"and say why the decision reversed"
             )
+        # The third combination, and the one the gate was missing. It caught
+        # `adopted` without a file and `rejected` with one, then reported "all
+        # decided" over two artifacts that had been WRITTEN and left standing
+        # as debt: `docs/COMPLIANCE_MAPPING.md` (337 lines of NIST CSF 2.0) and
+        # `docs/RELEASING.md`.
+        #
+        # Overstated debt is quieter than overstated progress and costs the
+        # same way: a backlog nobody trusts is a backlog nobody reads, and the
+        # two entries would have been rewritten from upstream by whoever
+        # eventually worked the list. The identical defect — a derived document
+        # calling an existing artifact absent — was found in
+        # `implementation-status.md` one commit earlier, which is the argument
+        # for checking presence in every direction rather than the direction
+        # that embarrassed us most recently.
+        if status == "pending" and exists:
+            fail(
+                f"{path}: pending, and present. The work is done — mark it `adopted` and record what "
+                f"was adapted, or delete the file if it landed by accident"
+            )
 
     counts = {status: sum(1 for e in entries if e.get("status") == status) for status in sorted(VALID_STATUS)}
     ok(f"ledger: {counts['adopted']} adopted, {counts['pending']} pending, {counts['rejected']} rejected")

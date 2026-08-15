@@ -94,6 +94,32 @@ def test_an_adopted_artifact_that_is_absent_fails(tmp_path: Path) -> None:
     assert any("recorded as adopted and absent" in f for f in parity.failures)
 
 
+def test_a_pending_artifact_that_already_exists_fails() -> None:
+    """The third combination, which the gate reported "all decided" without checking.
+
+    It caught `adopted` with no file and `rejected` with one, and passed over
+    two artifacts that had been written and left standing as debt:
+    `docs/COMPLIANCE_MAPPING.md`, a 337-line NIST CSF 2.0 self-assessment, and
+    `docs/RELEASING.md`.
+
+    Overstated debt reads as harmless and is not. A backlog carrying work that
+    is finished is a backlog nobody trusts, and whoever eventually worked the
+    list would have rewritten both files from upstream over the top of better
+    ones. The same defect in the other direction — a derived document calling
+    an existing artifact absent — was found in `implementation-status.md` a
+    commit earlier, which is why this asserts presence in every direction
+    rather than only the one that has already caused an incident.
+    """
+    import check_upstream_parity as parity
+
+    entries = [{"path": "AGENTS.md", "status": "pending", "reason": "x" * 60}]
+    parity.failures.clear()
+    parity.notes.clear()
+    parity.check_offline(entries)
+
+    assert any("pending, and present" in f for f in parity.failures)
+
+
 def test_a_duplicate_path_fails() -> None:
     """Two entries for one artifact means two decisions, and one of them is invisible."""
     import check_upstream_parity as parity
