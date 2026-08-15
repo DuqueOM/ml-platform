@@ -140,6 +140,46 @@ def test_a_pending_artifact_that_already_exists_fails() -> None:
 
     assert any("pending, and present" in f for f in parity.failures)
 
+def test_the_upstream_read_ignores_an_inherited_git_environment() -> None:
+    """`git -C <other repo>` obeys an inherited GIT_DIR, and a hook exports one.
+
+    `-C` changes the working directory; it does not override `GIT_DIR` or
+    `GIT_INDEX_FILE`, which win. Git exports both into every hook it runs, so
+    a gate that reads a SECOND repository from inside a `git commit` reads the
+    first one instead — silently, with a plausible-looking answer.
+
+    Measured before the fix: from a commit hook,
+    `git -C ../template_MLOps ls-files` returned 840 paths belonging to this
+    repository in place of the 96 comparable artifacts upstream has. The gate
+    then failed six ledger entries with "pending, but upstream no longer has
+    it" about a checkout it had never opened.
+
+    What made it expensive is that it was invisible everywhere else. Direct
+    invocation, `pre-commit run`, and `--all-files` set none of these
+    variables and were all green; only a real commit failed. The verification
+    pool had just been parallelised, so a defect that appeared solely under
+    the pool was read as a race, and several rounds went into looking for
+    shared mutable state that was not there.
+
+    Asserted by simulating the hook environment rather than by committing,
+    because a test that commits to the repository it is testing is the defect
+    two tests above this one.
+    """
+    import check_upstream_parity as parity
+
+    if parity._upstream_files() is None:
+        pytest.skip("no upstream checkout reachable; the online half does not run here")
+
+    truth = parity._upstream_files()
+
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setenv("GIT_DIR", str(REPO_ROOT / ".git"))
+        patched.setenv("GIT_INDEX_FILE", str(REPO_ROOT / ".git" / "index"))
+        assert parity._upstream_files() == truth, (
+            "the upstream file list changes when a git hook's environment is present, "
+            "so the online half of this gate reports on the wrong repository inside a commit"
+        )
+
 
 def test_the_upstream_read_ignores_an_inherited_git_environment() -> None:
     """`git -C <other repo>` obeys an inherited GIT_DIR, and a hook exports one.
