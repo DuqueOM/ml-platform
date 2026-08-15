@@ -107,9 +107,12 @@ artifacts:
       than claiming coverage. It sat in the tree marked `pending` because the ledger only checked for adopted files
       that were missing, never for pending files that were present.
   - path: docs/PROGRESSION.md
-    status: pending
+    status: adopted
     reason: >-
-      1d: the maturity path an adopter walks — which parts to take first, and what each one unlocks. Without it, adoption is all-or-nothing.
+      Adopted, written for this repository rather than carried across: six stages, each finished by a COMMAND rather
+      than by having been read. It occupies the gap between ADOPTION.md (what is this) and QUICK_START.md (the first
+      hour) — the order to take the pieces in, and how to tell a stage is done. Stage 5 is cloud, and says plainly
+      that the adopter is ahead of the platform there rather than following it.
   - path: docs/RELEASING.md
     status: adopted
     reason: >-
@@ -117,13 +120,21 @@ artifacts:
       what may not be cut, rather than describing a cadence nothing has exercised yet. Also stood marked `pending`
       while present, for the same missing check.
   - path: docs/TUTORIAL.md
-    status: pending
+    status: rejected
     reason: >-
-      1d: the adopter's first hour, end to end.
+      Rejected: QUICK_START.md is already the adopter's first hour here, and runs further than the upstream
+      counterpart — 303 lines from a green suite to a Ready pod answering in kind, with a section on what that
+      proves and one on when it does not work. Upstream keeps both because its QUICK_START is a ten-minute setup.
+      Two entry documents means the reader picks one, and the one they pick is eventually the stale one. The
+      ordering material a tutorial would otherwise carry is in docs/PROGRESSION.md, which is not a second walkthrough.
   - path: docs/environment-promotion.md
-    status: pending
+    status: adopted
     reason: >-
-      1d: local to dev to staging to prod — where the L1-L4 taxonomy belongs.
+      Adopted, and inverted: it specifies a contract instead of describing a behaviour, because this repository has
+      seven overlays and NO deploy workflow, so no promotion mechanism exists to document. It leads with that, maps
+      L1-L4 onto the four environments, and names the five things that must be built before any of it runs. An
+      environment table with six green rows and no deploy job is how a reader concludes a platform does something
+      it does not.
   - path: llms.txt
     status: adopted
     reason: >-
