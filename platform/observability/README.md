@@ -10,6 +10,25 @@ Dashboards and observability configuration owned by the platform.
   that is deliberate. A panel changed in the UI and not in git disappears at
   the next deploy, and its author finds out at the worst possible moment.
 
+## The register
+
+`make local-dashboards` provisions this directory **wholesale**
+(`--from-file=platform/observability/dashboards/`), so adding a file here is a
+deploy. This table is what makes shipped and registered the same word, and
+`scripts/check_dashboard_inventory.py` fails when the two come apart in either
+direction.
+
+| File | uid | Answers | Read by |
+| --- | --- | --- | --- |
+| `demand-forecast-serving.json` | `demand-forecast-serving` | Is the serving path healthy — request rate, latency percentiles, inference concurrency, and whether requests are queueing on the executor | Whoever is on call for the vertical, and anyone diagnosing a latency report |
+
+Dashboards also exist under `services/demand-forecast-serving/monitoring/grafana/`.
+They are **not** provisioned by anything in this repository and are not editable
+here: that tree is generated from `ml-service-template` and stays byte-identical
+to what the template produces (ADR-003). The inventory check reports them so
+their absence from the local stack is a recorded fact rather than something the
+next reader has to rediscover.
+
 ## How this is verified
 
 Two layers, because the interesting failure is invisible to either alone.

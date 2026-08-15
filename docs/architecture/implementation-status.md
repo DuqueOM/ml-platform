@@ -116,7 +116,7 @@ how "we deploy to two clouds" goes unchallenged.
 | ✅ | L1 | Enterprise documentation set | `uv run pytest tests/test_documentation_set.py -q` passes |
 | ✅ | L1 | Project contract | `uv run pytest tests/test_project_contract.py -q` passes |
 | ✅ | L1 | Exporting a vertical | `uv run pytest tests/test_project_generator.py -q -k exporting` passes |
-| ✅ | L1 | Portable guards from upstream | `uv run pytest tests/test_clock_isolation.py -q` passes |
+| ✅ | L1 | Portable guards from upstream | `uv run pytest tests/test_clock_isolation.py tests/test_dashboard_inventory.py tests/test_quality_gates.py tests/test_baselines_expiry.py -q` passes |
 | ✅ | L1 | Security control claims | `uv run pytest tests/test_security_controls.py -q` passes |
 | ✅ | L1 | Scanner baselines | `uv run pytest tests/test_governance_files.py -q` passes |
 | ✅ | L1 | Repository governance (CODEOWNERS, PR template, link check) | `uv run pytest tests/test_governance_files.py -q` passes |

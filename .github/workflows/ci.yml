@@ -228,6 +228,29 @@ jobs:
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         run: uv run python scripts/check_mcp_registry.py
 
+      - name: Gate declarations are well formed
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        # Check C4 resolves the COMMANDS a gate row names. This resolves the
+        # declarations themselves: unique ids, a threshold, and a recorded
+        # reason for it. `P6` named two rows when this landed, while codecov,
+        # this workflow and the compliance mapping all cite gates by id.
+        run: uv run python scripts/validate_quality_gates.py
+
+      - name: Dashboard inventory
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        # `make local-dashboards` provisions the directory wholesale, so the
+        # invariants that matter are the ones between files — a shared uid
+        # means one dashboard silently replaces another, which no per-file
+        # test can see.
+        run: uv run python scripts/check_dashboard_inventory.py
+
+      - name: Security baselines are dated, owned and in date
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        # Every baseline file is empty today. The step is here so the FIRST
+        # suppression is held to the contract .security-baselines/README.md
+        # states, rather than being the one that arrives before the check does.
+        run: uv run python scripts/check_baselines_expiry.py
+
       - name: Project generator renders a usable project
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         # templates/project/ is excluded from lint and the dependency test

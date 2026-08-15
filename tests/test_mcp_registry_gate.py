@@ -188,6 +188,47 @@ def test_a_piped_shell_installer_is_rejected() -> None:
         assert result.returncode == 1
 
 
+def test_a_server_justified_by_a_skill_that_does_not_exist_fails() -> None:
+    """The one check that ported from ml-service-template's `mcp_doctor.py`.
+
+    `test_a_server_nobody_uses_fails` requires `required_for` to be non-empty,
+    and non-empty was all it required — the negative probes above pass
+    `required_for: ["nothing"]` and get a clean bill on that clause. So renaming
+    or deleting a skill left the server it justified still looking justified,
+    and the capability outlived the reason it was granted. That is the same
+    "granted for no stated reason" failure the clause exists to prevent, one
+    rename later.
+
+    The rest of `mcp_doctor.py` validates a `surface_capabilities.yaml` this
+    repository does not have and renders a portability document nothing reads,
+    which is why the ledger records the script as rejected and this check as the
+    part that transferred.
+    """
+
+    def mutate(document: dict) -> None:  # type: ignore[type-arg]
+        document["mcps"]["github"]["required_for"] = ["a-skill-that-was-renamed"]
+
+    with registry_as(mutate) as result:
+        assert result.returncode == 1
+        assert "a-skill-that-was-renamed" in result.stdout
+        assert "neither a skill nor a workflow" in result.stdout
+
+
+def test_a_workflow_id_is_an_acceptable_justification() -> None:
+    """Workflows are as real a consumer as skills, and both live on disk.
+
+    Written because the obvious implementation reads only `agentic/skills/`, and
+    that version would reject every legitimate workflow reference — a check that
+    fires on correct data gets skimmed past, which costs more than it is worth.
+    """
+
+    def mutate(document: dict) -> None:  # type: ignore[type-arg]
+        document["mcps"]["github"]["required_for"] = ["ci-green"]
+
+    with registry_as(mutate) as result:
+        assert result.returncode == 0, result.stdout
+
+
 def test_every_surface_is_checked_not_just_one() -> None:
     """A mapping validated as a whole passes whenever any entry is sane."""
 

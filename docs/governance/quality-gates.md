@@ -44,7 +44,7 @@ Apply to every commit, regardless of what changed.
 | P7 | IaC misconfiguration | `checkov -d platform/ --framework terraform,kubernetes` | No HIGH findings | Terraform and manifests provision what every other scanner then inspects; nothing was reading them |
 | P8 | Kubernetes posture | `kubescape scan framework nsa,cis-v1.10.0` on rendered overlays | No failed control at HIGH | The overlays DECLARE restricted Pod Security; this checks the declaration against a published baseline |
 | P5 | No committed secrets | `gitleaks detect` over full history | Zero | Scanning the working tree misses what history already published |
-| P6 | Dependencies resolve reproducibly | `uv lock --check` | Lockfile current | An out-of-date lock means CI and local are different systems |
+| P9 | Dependencies resolve reproducibly | `uv lock --check` | Lockfile current | An out-of-date lock means CI and local are different systems |
 
 ## Library gates
 
@@ -97,7 +97,7 @@ Evaluated before promotion, never after.
 | C0 | Version consistent across every location | `uv run python scripts/check_version_consistency.py` | All 5 agree · a half-applied bump ships correct release notes with a stale entry point |
 | C1 ⏳ | Provenance attested | `cosign verify-attestation --type slsaprovenance` | SLSA L3 · **PENDING — same reason as S4: no image, no provenance to attest** |
 | C2 ⏳ | SBOM published per image | `scripts/check_sbom.py` | Present and attested · **PENDING — Phase 3 (needs images to bill of materials)** |
-| C3 ⏳ | Compliance mapping current | `scripts/check_compliance_mapping.py` | Every control mapped · **PENDING — Phase 3** |
+| C3 ⏳ | Compliance mapping current | `scripts/check_compliance_mapping.py` | Every control mapped · a self-assessment nothing regenerates drifts toward optimism, and the drift is invisible because the document keeps reading as coverage · **PENDING — Phase 3** |
 | C4 ⏳ | Model cards current | `scripts/check_model_cards.py` | One per deployed model, matching the deployed version · **PENDING — Phase 2 (needs a trained model)** |
 
 ---
