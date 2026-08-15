@@ -317,6 +317,15 @@ COMPONENTS: list[Component] = [
             "scripts/check_dashboard_inventory.py",
             "scripts/validate_quality_gates.py",
             "scripts/check_baselines_expiry.py",
+            # The CI triage trio. Listed here rather than left untracked:
+            # three scripts with three test files landed and no component
+            # named them, so the derived document could not have reported them
+            # missing, broken or present. An artifact no component claims is
+            # invisible to the one mechanism in this repository whose whole
+            # purpose is to notice what is there.
+            "scripts/ci_verify_yaml.py",
+            "scripts/ci_classify_failure.py",
+            "scripts/ci_collect_context.py",
         ],
         # `scripts/mcp_doctor.py` was here and is gone deliberately: the ledger
         # records it REJECTED, because three of its four checks resolve against
@@ -327,10 +336,13 @@ COMPONENTS: list[Component] = [
         # Listing a path this repository decided against would make the
         # component read as incomplete forever.
         #
-        # check_gitleaks_pin.py is still pending, so this component is honestly
-        # partial; the command proves everything that has landed.
-        "uv run pytest tests/test_clock_isolation.py tests/test_dashboard_inventory.py "
-        "tests/test_quality_gates.py tests/test_baselines_expiry.py -q",
+        # The command names the TEST files rather than the scripts on purpose:
+        # a guard that runs is not the claim, a guard verified to FAIL on the
+        # condition it guards is (P-09).
+        "uv run pytest tests/test_clock_isolation.py tests/test_gitleaks_pin.py "
+        "tests/test_yaml_verification.py tests/test_dashboard_inventory.py "
+        "tests/test_quality_gates.py tests/test_baselines_expiry.py "
+        "tests/test_ci_triage.py -q",
     ),
     # --- Phase 1e: retrieval over this platform's own documentation ---------
     # No verify command until there is something to verify. A gate that passes

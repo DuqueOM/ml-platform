@@ -64,9 +64,9 @@ how "we deploy to two clouds" goes unchallenged.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**45 done · 3 partial · 6 absent** — of 54 tracked components.
+**46 done · 2 partial · 6 absent** — of 54 tracked components.
 
-**Proven in CI: 35 at L1 · 10 at L2.** Evidence available but NOT run here: 4 at L3, 0 at L4.
+**Proven in CI: 35 at L1 · 11 at L2.** Evidence available but NOT run here: 4 at L3, 0 at L4.
 
 ### Phase 0
 
@@ -79,7 +79,7 @@ how "we deploy to two clouds" goes unchallenged.
 | ✅ | L2 | Agentic 4-tool surfaces | `uv run python scripts/sync_agentic_adapters.py --check` passes |
 | ✅ | L2 | Agentic surface integrity | `uv run python scripts/validate_agentic_surface.py --strict` passes |
 | ✅ | L2 | pre-commit | `uv run pre-commit validate-config .pre-commit-config.yaml` passes |
-| 🟡 | — | Lint + format | `uv run ruff check . && uv run ruff format --check .` FAILS |
+| ✅ | L2 | Lint + format | `uv run ruff check . && uv run ruff format --check .` passes |
 | ✅ | L2 | Type checking (libs, strict) | `uv run mypy libs/` passes |
 | ✅ | L2 | CI workflow | `uv run python scripts/check_ci_references.py` passes |
 
@@ -116,7 +116,7 @@ how "we deploy to two clouds" goes unchallenged.
 | ✅ | L1 | Enterprise documentation set | `uv run pytest tests/test_documentation_set.py -q` passes |
 | ✅ | L1 | Project contract | `uv run pytest tests/test_project_contract.py -q` passes |
 | ✅ | L1 | Exporting a vertical | `uv run pytest tests/test_project_generator.py -q -k exporting` passes |
-| ✅ | L1 | Portable guards from upstream | `uv run pytest tests/test_clock_isolation.py tests/test_dashboard_inventory.py tests/test_quality_gates.py tests/test_baselines_expiry.py -q` passes |
+| ✅ | L1 | Portable guards from upstream | `uv run pytest tests/test_clock_isolation.py tests/test_gitleaks_pin.py tests/test_yaml_verification.py tests/test_dashboard_inventory.py tests/test_quality_gates.py tests/test_baselines_expiry.py tests/test_ci_triage.py -q` passes |
 | ✅ | L1 | Security control claims | `uv run pytest tests/test_security_controls.py -q` passes |
 | ✅ | L1 | Scanner baselines | `uv run pytest tests/test_governance_files.py -q` passes |
 | ✅ | L1 | Repository governance (CODEOWNERS, PR template, link check) | `uv run pytest tests/test_governance_files.py -q` passes |
