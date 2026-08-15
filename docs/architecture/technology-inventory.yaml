@@ -53,7 +53,7 @@ categories:
       - {id: openssf-scorecard, tier: core, detect: [".github/workflows/scorecard.yml"]}
       - {id: docs-quality-lint, tier: core, detect: [".github/workflows/docs-quality.yml"], note: "markdownlint over the documentation surface."}
       - {id: branch-protection-as-code, tier: core, detect: ["scripts/setup_branch_protection.sh"]}
-      - {id: ci-failure-triage, tier: demonstrated, detect: ["scripts/ci_classify_failure.py"], note: "Inherited CI self-healing; Demonstrated until this repository has enough CI history to classify."}
+      - {id: ci-failure-triage, tier: demonstrated, detect: ["scripts/ci_classify_failure.py"], note: "Classifies a CI failure as AUTO/CONSULT/STOP against the AGENTS.md protocol; it never acts, and no CI step depends on its verdict. Demonstrated deliberately: upstream's later phases add the agent that acts on the classification, and adopting the boundary before the thing it bounds is the point."}
       - {id: dependabot, tier: core, detect: [".github/dependabot.yml"]}
   - name: Security and supply chain
     items:

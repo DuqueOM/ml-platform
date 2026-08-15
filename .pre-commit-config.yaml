@@ -258,6 +258,18 @@ repos:
         pass_filenames: false
         files: '\.md$'
 
+      - id: yaml-whole-tree
+        name: YAML parses across the repository
+        description: >
+          `check-yaml` above receives the STAGED file list, so it has never
+          examined a file the commit did not touch. This parses every YAML in
+          the repository and rejects duplicate keys, which PyYAML accepts while
+          dropping the first value in silence.
+        entry: uv run python scripts/ci_verify_yaml.py
+        language: system
+        pass_filenames: false
+        files: '\.ya?ml$'
+
       - id: implementation-status
         name: implementation status is derived, not declared
         description: >
