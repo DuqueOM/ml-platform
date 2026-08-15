@@ -21,6 +21,15 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 REGISTRY = REPO_ROOT / "agentic" / "mcp_registry.yaml"
 
+#: The agentic surface, which is what `required_for` / `recommended_for` name.
+#: Read from the FILESYSTEM, for the reason the constants below are not read
+#: from the registry: a list of valid skill ids stored in the document under
+#: test can be widened in the same commit as the reference that needed
+#: widening. The directories are the authority because they are what the tools
+#: actually load.
+SKILLS_DIR = REPO_ROOT / "agentic" / "skills"
+WORKFLOWS_DIR = REPO_ROOT / "agentic" / "workflows"
+
 failures: list[str] = []
 notes: list[str] = []
 
@@ -109,6 +118,44 @@ def main() -> int:
         # A server nobody uses is a capability granted for no reason.
         if not entry.get("required_for") and not entry.get("recommended_for"):
             failures.append(f"{name}: no skill requires or recommends it — remove it or say who needs it")
+
+    # Every `required_for` / `recommended_for` id must name a skill or workflow
+    # that exists.
+    #
+    # Adopted from ml-service-template's `mcp_doctor.py`, which is the one check
+    # in that script this repository did not already have and could not get from
+    # anywhere else. The rest of it validates a `surface_capabilities.yaml` that
+    # does not exist here and renders a portability document nothing reads, so
+    # the ledger records the script itself as rejected and this check as the
+    # part that ported.
+    #
+    # The gap it closes is specific. The rule above requires a server to be
+    # wanted by SOMETHING, and was satisfied by any non-empty list — the
+    # registry's own negative tests pass `required_for: ["nothing"]` and get a
+    # clean bill on that clause. So a skill renamed or deleted leaves the server
+    # it justified looking justified, and the capability outlives its reason.
+    # That is the same "granted for no stated reason" failure the clause exists
+    # to prevent, one rename later.
+    known = {path.name for path in SKILLS_DIR.glob("*") if path.is_dir()}
+    known |= {path.stem for path in WORKFLOWS_DIR.glob("*.md")}
+    if not known:
+        # Never silence the check by finding nothing to check against. An empty
+        # authority would clear every reference at once, which is the
+        # pass-because-absent shape (P-09).
+        failures.append(
+            f"no skills under {SKILLS_DIR.relative_to(REPO_ROOT)} and no workflows under "
+            f"{WORKFLOWS_DIR.relative_to(REPO_ROOT)} — every reference below would resolve vacuously"
+        )
+    else:
+        for name, entry in servers.items():
+            for field in ("required_for", "recommended_for"):
+                for reference in entry.get(field) or []:
+                    if reference not in known:
+                        failures.append(
+                            f"{name}.{field}: names {reference!r}, which is neither a skill nor a workflow. "
+                            f"The server is justified by something that does not exist, so the capability "
+                            f"outlives the reason it was granted"
+                        )
 
     if not failures:
         notes.append(f"{len(servers)} server(s), each with a declared risk mode and minimum scope")

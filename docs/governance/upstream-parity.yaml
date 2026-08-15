@@ -140,13 +140,32 @@ artifacts:
     reason: >-
       Adopted, and gated: tests/test_llms_txt.py compares every count in it against the filesystem, including the layer and component totals which it quotes from the derived status document rather than recounting. It is also the deterministic baseline Phase 1e has to beat, and a stale baseline would make that comparison flattering.
   - path: scripts/check_baselines_expiry.py
-    status: pending
+    status: adopted
     reason: >-
-      1d: baselines expire here too; portable once this repo has baselines to expire.
+      Adopted, and deliberately NOT in the shape that would have passed today. Every file in
+      .security-baselines/ is empty, so upstream's version — which returns 0 when the directory has no
+      entries — would have been green for the same reason it would be green on the day the first
+      suppression lands unannotated. That is P-09 exactly. Instead it enforces the four-part contract
+      README.md already states in prose and nothing checked: finding ID (never a wildcard), reason, owner
+      as a GitHub handle, and an expiry no more than a quarter out. It also prints the entry count rather
+      than implying zero, and reports "armed, not satisfied" when there is nothing to expire. Verified by
+      breaking it seven ways in tests/test_baselines_expiry.py — expired, no expiry, no owner, a team as
+      owner, an expiry five years out, a wildcard ID, and an entry borrowing its neighbour's annotation —
+      one of them planted in the real checkov.yml so a mis-wired default path cannot hide behind sandboxes.
   - path: scripts/check_dashboard_inventory.py
-    status: pending
+    status: adopted
     reason: >-
-      1d: dashboards now exist here, so an inventory check applies.
+      Adopted, retargeted from "is every dashboard in INDEX.md" to the invariants that only exist BETWEEN
+      files, because that is what this repository was missing. tests/test_dashboards_structure.py is
+      parametrised one dashboard at a time: it can assert each HAS a uid and can never assert two have
+      DIFFERENT uids. Grafana keys on uid, so a collision means one file silently replaces the other in
+      ConfigMap enumeration order — no error, no log, and a bookmarked dashboard showing another service's
+      panels. make local-dashboards provisions the directory wholesale with --from-file, which is what
+      makes the directory rather than the file the unit worth checking: anything dropped there is a deploy.
+      The register is platform/observability/README.md, which gained a table naming each dashboard, its uid,
+      what it answers and who reads it. The five dashboards under services/ are REPORTED and never failed
+      on: that tree is generated from ml-service-template and byte-identical to it (ADR-003), so a defect
+      there is upstream's, and reporting keeps their absence from the local stack a recorded fact.
   - path: scripts/check_gitleaks_pin.py
     status: pending
     reason: >-
@@ -164,13 +183,38 @@ artifacts:
     reason: >-
       1d: gathers the context a CI failure needs to be diagnosed without re-running it. Portable, and independent of the template's scaffolding mechanics.
   - path: scripts/mcp_doctor.py
-    status: pending
+    status: rejected
     reason: >-
-      1d: diagnoses MCP configuration, which this repo also uses.
+      Rejected as a script, with its one portable check folded into the gate that already exists. Read
+      against scripts/check_mcp_registry.py, mcp_doctor's `check` mode has four checks and three of them
+      resolve against templates/config/surface_capabilities.yaml, which this repository does not have and
+      has no reason to grow. Its other two modes are a human report and a generator for
+      docs/agentic/mcp-portability.md, a document nothing here reads — landing it would create a second
+      generated surface competing with sync_agentic_adapters.py, and a second MCP gate that can disagree
+      with the first about the same registry. check_mcp_registry.py is also strictly stronger on the half
+      that matters: install-mode allow-listing, credentials in committed examples, and resistance to being
+      disabled from the file it judges. The fourth check DID port and was missing here — every
+      required_for / recommended_for id must name a skill or workflow that exists on disk. The old rule
+      required only a non-empty list, so a renamed skill left the server it justified still looking
+      justified and the capability outlived its reason. Verified by
+      test_a_server_justified_by_a_skill_that_does_not_exist_fails.
   - path: scripts/validate_quality_gates.py
-    status: pending
+    status: adopted
     reason: >-
-      1d: gates are data here too, and the project contract now requires each to name its check.
+      Adopted, rewritten against this repository's two gate notations instead of upstream's one. Upstream
+      validates configs/quality_gates.yaml against a JSON Schema; gates here are declared in
+      docs/governance/quality-gates.md as a markdown table and in projects/*/evals/gates.yaml as data
+      shaped by PROJECT_CONTRACT P6, and a schema reaches neither. It found two live defects on its first
+      run: `P6` was the id of TWO rows, while codecov.yml cites L1, ci.yml cites L1/L2 and
+      COMPLIANCE_MAPPING.md cites S4 and C3 — a citation resolving to two thresholds resolves to neither;
+      and row C3 gave `**PENDING — Phase 3**` where a reason belongs, a schedule standing in for the
+      argument that keeps a threshold from being lowered. Check C4's docstring had claimed to check "a
+      command and a threshold rationale" while never reading the rationale column, and exempted every
+      PENDING row from everything. Command resolution is left to C4 so the two cannot disagree. The YAML
+      half is the complement of tests/test_project_contract.py rather than a copy: that test SKIPS any
+      project in KNOWN_DEVIATIONS, so a malformed gates.yaml inside rag-assistant would be validated by
+      nothing — an exemption from declaring gates as data is not an exemption from the data being well
+      formed. templates/project/evals/gates.yaml is excluded as Jinja source, verified by rendering.
   - path: .github/workflows/ci-examples.yml
     status: rejected
     reason: >-

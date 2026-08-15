@@ -315,12 +315,22 @@ COMPONENTS: list[Component] = [
             "scripts/check_test_clock_isolation.py",
             "scripts/check_gitleaks_pin.py",
             "scripts/check_dashboard_inventory.py",
-            "scripts/mcp_doctor.py",
             "scripts/validate_quality_gates.py",
+            "scripts/check_baselines_expiry.py",
         ],
-        # Only the clock guard exists so far; the command proves that one and
-        # will keep proving it as the others land beside it.
-        "uv run pytest tests/test_clock_isolation.py -q",
+        # `scripts/mcp_doctor.py` was here and is gone deliberately: the ledger
+        # records it REJECTED, because three of its four checks resolve against
+        # a surface_capabilities.yaml this repository does not have and its
+        # other modes would add a second MCP gate able to disagree with
+        # check_mcp_registry.py. Its one portable check — a server justified by
+        # a skill that does not exist — was folded into that gate instead.
+        # Listing a path this repository decided against would make the
+        # component read as incomplete forever.
+        #
+        # check_gitleaks_pin.py is still pending, so this component is honestly
+        # partial; the command proves everything that has landed.
+        "uv run pytest tests/test_clock_isolation.py tests/test_dashboard_inventory.py "
+        "tests/test_quality_gates.py tests/test_baselines_expiry.py -q",
     ),
     # --- Phase 1e: retrieval over this platform's own documentation ---------
     # No verify command until there is something to verify. A gate that passes
