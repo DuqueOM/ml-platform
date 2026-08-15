@@ -86,6 +86,20 @@ THRESHOLDS = (
         r"MAX_REJECT_RATE = ([\d.]+)",
         False,
     ),
+    # A FLOOR: how much justification a gate row must carry before its
+    # threshold counts as reasoned. Lowering it admits rows whose "reason"
+    # restates the threshold, which is the state row C3 was in.
+    Threshold("gate reason floor, in characters", "scripts/validate_quality_gates.py", r"MIN_REASON_CHARS = (\d+)"),
+    # A CEILING: how long a security suppression may run before it is
+    # re-argued. Raising it is how "dated" decays into "permanent, with a
+    # date on it" — the failure .security-baselines/README.md describes and
+    # nothing enforced until the expiry gate landed.
+    Threshold(
+        "baseline acceptance ceiling, in days",
+        "scripts/check_baselines_expiry.py",
+        r"MAX_EXPIRY_DAYS = (\d+)",
+        higher_is_stricter=False,
+    ),
 )
 
 
