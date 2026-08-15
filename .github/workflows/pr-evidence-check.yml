@@ -1,0 +1,67 @@
+name: PR evidence
+
+# The L1-L4 taxonomy, applied at review time.
+#
+# `docs/architecture/implementation-status.md` derives every component's layer
+# from the command that produced it, and a script writes that document, so the
+# rule cannot be bent there. A pull request body is written by hand, and it is
+# where the claim is made, believed and merged. Six Kubernetes overlays were
+# green here for weeks with probes pointing at routes the service does not
+# serve — every check that looked at them ran at L1 while the belief being held
+# was about L3.
+#
+# So this job asks the one question a human reviewer reliably forgets: which
+# command produced the layer you just claimed. It does not read the pasted
+# output, judge prose, or distinguish L1 from L2 — both of those run in CI, and
+# confusing them neither overstates a guarantee nor hides a gap. It fails on the
+# direction that costs something: L3 or L4 asserted with nothing in the body
+# that needs a cluster or a cloud.
+#
+# The rules live in scripts/check_pr_evidence.py, not in this YAML, for two
+# reasons: tests/test_pr_evidence.py can then run them against real merged
+# bodies, and a contributor can run the same check locally before pushing.
+
+on:
+  pull_request:
+    # `edited` is not optional. The body is the artifact under test, and it is
+    # routinely written after the pull request is opened; without this the check
+    # would pass on an empty body and never look again.
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  evidence:
+    name: PR body carries its evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Dependabot writes its own bodies from a changelog and cannot run a
+    # command; ten of this repository's first fourteen pull requests are its.
+    # Demanding evidence from a bot would train everyone to ignore this job's
+    # red. Scoped to the author TYPE rather than a name, so a second bot does
+    # not require editing this file — and narrow enough that a human cannot
+    # take the exemption.
+    if: github.event.pull_request.user.type != 'Bot'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          # The gate uses only the standard library, so there is no workspace to
+          # sync and nothing to resolve. Pinned to the repository's floor rather
+          # than the runner's default, for the same reason ci.yml pins it.
+          python-version-file: .python-version
+
+      - name: PR body carries its evidence
+        env:
+          # Through the environment, never interpolated into the shell. A body
+          # is attacker-controlled text on a public repository, and
+          # `${{ github.event.pull_request.body }}` inside a `run:` block is
+          # arbitrary code execution on the runner with this job's token.
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: python scripts/check_pr_evidence.py
