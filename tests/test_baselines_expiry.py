@@ -338,3 +338,43 @@ def test_the_probe_left_no_suppression_behind() -> None:
     result = _run()
     assert result.returncode == 0, f"the real baselines are not clean:\n{result.stdout}"
     assert "0 entr(ies) examined" in result.stdout
+
+
+def test_the_readme_wiring_table_matches_the_workflows() -> None:
+    """A baseline's wiring is a security fact, and it drifted once already.
+
+    `.security-baselines/README.md` said "none of these files are read
+    automatically" while `.github/workflows/ci.yml` had been wiring
+    `.trivyignore` for some time. QA-4 round four found it.
+
+    The direction is what makes it worth a test. Believing a live suppression
+    is inert is how one gets added without the scrutiny a live suppression
+    deserves — the reader thinks the entry is a note to themselves, and it is
+    actually silencing a scanner in CI.
+
+    So the README now carries a table of which files are wired, and this
+    asserts the table against the workflows rather than against anyone's
+    memory. It fails in both directions: a file wired without the table
+    saying so, and a table claiming a wiring that no workflow performs.
+    """
+    readme = (REPO_ROOT / ".security-baselines" / "README.md").read_text(encoding="utf-8")
+    workflows = "\n".join(
+        path.read_text(encoding="utf-8") for path in sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml"))
+    )
+
+    for filename, flag in (
+        (".trivyignore", "trivyignores:"),
+        ("checkov.yml", "--config-file"),
+        ("tfsec.yml", "--config-file"),
+    ):
+        wired_in_ci = f".security-baselines/{filename}" in workflows and flag in workflows
+        row = next((line for line in readme.splitlines() if line.startswith(f"| `{filename}`")), None)
+
+        assert row is not None, f"{filename} has no row in the README's wiring table"
+        claims_wired = "**yes**" in row
+
+        assert claims_wired == wired_in_ci, (
+            f"the README says {filename} is {'wired' if claims_wired else 'not wired'}, "
+            f"and the workflows say {'wired' if wired_in_ci else 'not wired'}. "
+            f"A reader who believes a live suppression is inert will add one without the scrutiny it needs."
+        )

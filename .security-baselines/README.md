@@ -106,10 +106,25 @@ the exceptions object belongs here, under the same four rules above.
 
 ## Wiring
 
-None of these files are read automatically. Checkov and Trivy look for
-`.checkov.yml` and `.trivyignore` in the working directory, not in
-`.security-baselines/`, so each needs an explicit flag
-(`--config-file`, `--ignorefile`). Until a file holds an entry, not wiring it
-changes nothing — an empty baseline and an unread baseline behave identically.
-Wire it in the same change that adds the first entry, so the flag and the
-entry it exists for are reviewed together.
+These files live outside the working directory Checkov and Trivy search by
+default, so each needs an explicit flag (`--config-file`, `--ignorefile`).
+**One is already wired**, and knowing which is the difference between a
+suppression that takes effect and one that does not:
+
+| File | Wired | Where |
+| --- | --- | --- |
+| `.trivyignore` | **yes** | `.github/workflows/ci.yml` — `trivyignores:` |
+| `checkov.yml` | no | needs `--config-file` |
+| `tfsec.yml` | no | needs `--config-file` |
+
+This paragraph previously said *"none of these files are read
+automatically"*, which was true when it was written and stopped being true
+when Trivy was wired. QA-4 round four found it. The wrong direction is the
+dangerous one: a reader believing a `.trivyignore` entry is inert would add
+one without the scrutiny a live suppression deserves.
+
+For the unwired two, an empty baseline and an unread baseline behave
+identically — so wire each in the same change that adds its first entry, and
+update the table in that change. `scripts/check_baselines_expiry.py` reads
+all three regardless of wiring, because an entry that has not taken effect
+yet still has to carry its owner and its expiry.
