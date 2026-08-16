@@ -341,8 +341,8 @@ artifacts:
     status: adopted
     reason: >-
       Adopted, and the rejection it reverses was wrong in an instructive way: `check-yaml` is a PRE-COMMIT hook, and
-      pre-commit hands its hooks the staged file list, so it had never parsed a file the commit did not touch. 172 of
-      174 tracked YAML files are now parsed in CI and in a whole-tree pre-commit hook. Two changes beyond a copy — it
+      pre-commit hands its hooks the staged file list, so it had never parsed a file the commit did not touch. 173 of
+      175 tracked YAML files are now parsed in CI and in a whole-tree pre-commit hook. Two changes beyond a copy — it
       enumerates from `git ls-files --cached --others --exclude-standard` rather than rglob, so gitignored
       `.terraform/` binaries cannot make a runner and a laptop disagree; and it rejects duplicate keys, which PyYAML
       accepts while dropping the first value, so a repeated `resources:` block deploys an object that differs from the
