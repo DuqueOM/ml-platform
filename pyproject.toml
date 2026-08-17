@@ -146,7 +146,7 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
-    "pre-commit>=4.6.1",
+    "pre-commit>=4.6.2",
 ]
 
 [tool.hatch.build.targets.wheel]
