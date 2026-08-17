@@ -46,8 +46,9 @@ scaffolded service needs to absorb them.
 
 ## Pre-conditions
 
-1. The service was scaffolded via `copier copy` (or the equivalent
-   `new-service.sh` wrapper).
+1. The service was scaffolded via `copier copy`. There is no wrapper script
+   here — that belongs to `ml-service-template`, whose scaffolder is a shell
+   script.
 2. `.copier-answers.yml` exists in the service root (created by the
    initial `copier copy` or a prior `copier update`).
 3. The service working tree is clean (`git status` shows no changes).

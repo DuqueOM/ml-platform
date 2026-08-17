@@ -206,7 +206,7 @@ metadata:
 
 Dev/staging use `enforce=baseline, warn=restricted` to surface
 violations early without blocking builds. See
-`templates/k8s/policies/pod-security-standards.yaml`.
+`templates/k8s/policies/pod-security-standards.yaml` (belongs to ml-service-template; the equivalent here is the PSS labels on each `platform/kubernetes/overlays/*/namespace.yaml`).
 
 ## Kustomize Multi-Cloud (per-environment overlays — template-ADR-011)
 

@@ -154,7 +154,7 @@ The retrain workflow will execute C/C (template-ADR-008) — do not assume promo
 
 ## Step 7: Post-RCA artifact
 
-Always append a short entry to `docs/concept_drift_log.md`:
+Always append a short entry to `docs/concept_drift_log.md` (written by this skill; it does not exist until then):
 
 ```markdown
 ## 2026-04-23 — {service} concept-drift incident

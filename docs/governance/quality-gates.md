@@ -46,6 +46,7 @@ Apply to every commit, regardless of what changed.
 | P5 | No committed secrets | `gitleaks detect` over full history | Zero | Scanning the working tree misses what history already published |
 | P9 | Dependencies resolve reproducibly | `uv lock --check` | Lockfile current | An out-of-date lock means CI and local are different systems |
 | P10 | Third-party actions identify a program | `uv run python scripts/check_action_pins.py` | Every reference a 40-char commit SHA with its tag in a comment | A tag is a mutable pointer to code that runs with the job's token; re-pointing it swaps the program with no commit here, and a subverted scanner reports nothing — the same output as a clean tree |
+| P11 | Shared libraries are reused, not decorated | `uv run python scripts/check_library_reuse.py` | Every declared library imported, every imported library declared | Charter C1 counts libraries a project reuses, so a declaration nobody imports raises the count without reusing anything — found twice in demand-forecast on the gate's first run |
 
 ## Library gates
 

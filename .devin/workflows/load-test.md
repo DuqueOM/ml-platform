@@ -18,7 +18,7 @@ Determine which service and environment to test:
 
 ## 2. Configure Locust
 
-Verify `scripts/load_test_services.py` has the correct endpoints and payloads for the target service.
+Verify `scripts/load_test_services.py` (belongs to ml-service-template; load testing here is gate S2 and still PENDING — nothing builds an image to load-test yet) has the correct endpoints and payloads for the target service.
 
 Before starting load, verify the FastAPI contract with the same auth
 posture production clients use:

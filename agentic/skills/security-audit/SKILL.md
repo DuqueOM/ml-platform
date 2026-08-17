@@ -75,7 +75,7 @@ pipeline if any critical finding is detected.
   ```
 
 - Unsigned images are blocked by Kyverno admission controller in prod namespace
-  (see `templates/k8s/policies/kyverno-image-verification.yaml`).
+  (see `templates/k8s/policies/kyverno-image-verification.yaml` (belongs to ml-service-template; no admission controller runs here, and nothing builds a signed image to verify)).
 - Missing signature → block deploy, chain to CI `sign_image` step.
 - Do NOT use `cosign verify --key <pub-key>` — that pattern requires
   long-lived key material (D-17/D-18 violation) and is not what the

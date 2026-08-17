@@ -81,7 +81,7 @@ that a later reviewer must explicitly confirm.
 ### Step 2 — Write the spec file (AUTO)
 
 Write `<service_slug>_service_spec.local.yaml` following
-`templates/config/service_spec.example.yaml`. Add the file's directory
+`services/demand-forecast-serving/config/service_spec.example.yaml`. Add the file's directory
 pattern to `.gitignore` if not already covered (same convention as
 `*_context.local.yaml`).
 

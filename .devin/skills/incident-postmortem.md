@@ -116,4 +116,4 @@ repo already applies everywhere else (see `doc-coherence`, `ci-green-verify`).
 - Workflow: `/incident` (the response this skill reviews after the fact)
 - Skill: `diagnose-bug` (root-cause technique this skill's five-whys draws on)
 - Skill: `rollback` / `secret-breach-response` (the two other closers this skill can follow)
-- Precedent: `docs/audit/AUDIT_R8_STAFF_LEAD.md` addendum (same-day remediation table format, reused here for action items)
+- Precedent: `docs/audit/AUDIT_R8_STAFF_LEAD.md` (an ml-service-template audit record, cited for its format only; this repository's own records live in `ops/audit.jsonl`) addendum (same-day remediation table format, reused here for action items)

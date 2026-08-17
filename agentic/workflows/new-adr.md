@@ -16,7 +16,7 @@ Next number = last + 1, zero-padded to 3 digits.
 
 ## 2. Create ADR File
 
-Use template at `templates/docs/decisions/adr-template.md`:
+Use template at `services/demand-forecast-serving/docs/decisions/adr-template.md`:
 
 ```bash
 export ADR_NUM="NNN"

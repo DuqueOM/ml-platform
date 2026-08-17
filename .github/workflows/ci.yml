@@ -189,6 +189,13 @@ jobs:
         # eight actions on tags, three of them scanners.
         run: uv run python scripts/check_action_pins.py
 
+      - name: Shared library reuse (charter C1)
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        # Reports the reuse count per project and FAILS on a manifest that
+        # disagrees with the code — a library declared and never imported, or
+        # imported and never declared. It found both on its first run.
+        run: uv run python scripts/check_library_reuse.py
+
       - name: Technology inventory matches the filesystem
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         # "Is the platform ready?" must not be answerable by an impression.

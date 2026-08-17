@@ -79,7 +79,7 @@ decision tree. Do not retrain reactively — confirm the root cause first.
 
 ## 5. Document
 
-Append to `docs/performance_review_log.md`:
+Append to `docs/performance_review_log.md` (written by this skill; it does not exist until then):
 
 ```markdown
 ## YYYY-MM-DD — {service} monthly review

@@ -15,7 +15,7 @@ description: Python ML serving — async inference, SHAP wrappers, Prometheus me
 ## Template Contract (MANDATORY)
 
 The scaffolded FastAPI service is a first-class template contract, not a
-placeholder. Keep `docs/FASTAPI_TEMPLATE_CONTRACT.md` aligned with the
+placeholder. Keep `docs/FASTAPI_TEMPLATE_CONTRACT.md` (belongs to ml-service-template; `services/` here is vendored from it under ADR-003, so the contract is upstream's to keep) aligned with the
 actual code whenever changing the serving surface.
 
 Canonical ownership:
@@ -29,7 +29,7 @@ Canonical ownership:
 - `src/<service>/training/features.py`: reusable `FeatureEngineer`
   used by both training and inference.
 
-Run or update `tests/test_fastapi_template_contract.py` for every
+Run or update `services/demand-forecast-serving/tests/test_fastapi_template_contract.py` for every
 serving-surface change.
 
 ## Async Inference (MANDATORY)

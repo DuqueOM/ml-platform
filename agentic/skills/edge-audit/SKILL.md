@@ -198,11 +198,11 @@ between verifying and re-running.
 
 - `agentic/rules/24-edge-protection.md` — the invariants this skill checks
 - `agentic/workflows/edge-setup.md` — the CONSULT-mode remediation workflow
-- `docs/decisions/template-ADR-042-native-cloud-edge-protection.md`
+- `docs/decisions/template-ADR-042-native-cloud-edge-protection.md` (an ml-service-template ADR; the equivalent decision here is `docs/decisions/ADR-006-edge-protection.md`)
 - `agentic/skills/rule-audit/SKILL.md` — the general-invariant precedent
   this skill's structure follows for one specific domain
 - `agentic/skills/cost-audit/SKILL.md` — the Pushgateway-push pattern
   Step 4b mirrors
-- `templates/service/monitoring/grafana/dashboard-edge.json` — consumes
+- `services/demand-forecast-serving/monitoring/grafana/dashboard-edge.json` — consumes
   the metrics Step 4b pushes
 - `common_utils/agent_context.py::AuditLog` — audit trail integration

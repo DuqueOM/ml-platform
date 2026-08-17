@@ -110,10 +110,10 @@ evidence (file:line or metric) per service.
 
 | ID | Check | Automated? |
 | ---- | ------- | ----------- |
-| D-28 | `tests/contract/openapi.snapshot.json` changed without `app.version` bump in `app/main.py` | `tests/contract/test_openapi_snapshot.py` + CI `Validate API contract` |
+| D-28 | `tests/contract/openapi.snapshot.json` (written by this skill; it does not exist until then) changed without `app.version` bump in `app/main.py` | `services/demand-forecast-serving/tests/contract/test_openapi_snapshot.py` + CI `Validate API contract` |
 | D-29 | Namespace manifest missing `pod-security.kubernetes.io/enforce` label | `rg -n "pod-security.kubernetes.io/enforce" k8s/overlays/*/namespace.yaml` (every overlay must hit) |
 | D-30 | Deploy workflow missing `cosign attest --type cyclonedx` after the SBOM step | `rg -n "cosign attest" .github/workflows/deploy-*.yml` |
-| D-31 | Single IAM identity reused across ci/deploy/runtime/drift/retrain | `tests/test_iam_least_privilege.py` (no wildcard principals, no `Action: "*"`) |
+| D-31 | Single IAM identity reused across ci/deploy/runtime/drift/retrain | `services/demand-forecast-serving/tests/test_iam_least_privilege.py` (no wildcard principals, no `Action: "*"`) |
 | D-32 | K8s manifest references a Python path with kebab placeholder (`src/{service-name}/...`) | `tests/policy/test_anti_patterns.py::test_d32_drift_cronjob_python_path` |
 
 ### Template lifecycle (D-33 → D-34)

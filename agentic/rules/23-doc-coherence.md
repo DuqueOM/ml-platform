@@ -38,7 +38,7 @@ the gate enforces.
 
 | Fact | Canonical owner | Mirrors that MUST track it |
 | ------ | ----------------- | ----------------------------- |
-| Release version | `VERSION` | `CHANGELOG.md` latest released heading, `llms.txt` `> Version:`, README badges, `releases/vX.Y.Z.md` |
+| Release version | `VERSION` | `CHANGELOG.md` latest released heading, `llms.txt` `> Version:`, README badges, `releases/vX.Y.Z.md` (a version placeholder, not a path — the real file is created by the release) |
 | Release publication | `releases/vX.Y.Z.md` | the GitHub Release (title = its H1, body = the file) — published automatically by `.github/workflows/release-on-tag.yml` on tag push, never by hand |
 | Anti-pattern catalogue size | `AGENTS.md` (highest `D-NN` row) | README "N anti-patterns", `llms.txt` `(D-01 to D-NN)`, CLAUDE.md header + skills |
 | Agentic surface counts | `agentic/{rules,skills,workflows}/` on disk | CLAUDE.md "N rules + N skills + N workflows", `llms.txt`, AGENTS.md index |
@@ -72,7 +72,7 @@ decision → ADR-NNN  ⇄  CHANGELOG [Unreleased] entry  ⇄  release vX.Y.Z  �
   numbering is immutable; a withdrawn number gets a `Status: Withdrawn`
   tombstone file, see template-ADR-012).
 - A new **rule / skill / workflow** is registered in
-  `templates/config/agentic_manifest.yaml`, generated into adapters via
+  `services/demand-forecast-serving/config/agentic_manifest.yaml`, generated into adapters via
   `sync_agentic_adapters.py`, indexed in `AGENTS.md`, and counted in CLAUDE.md.
 - Pattern basis (adopt the *pattern*, not a new dependency): Keep a Changelog +
   SemVer (already in use), towncrier/changesets-style "one fragment per change"
