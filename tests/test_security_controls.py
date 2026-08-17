@@ -201,3 +201,33 @@ def test_no_control_row_claims_a_scanner_covers_what_it_is_not_configured_to_sca
     assert claims_misconfig == misconfig_enabled, (
         f"the Trivy row and the Trivy step disagree about misconfiguration scanning. scanners={scanners!r}, row={row!r}"
     )
+
+
+def test_the_lockfile_check_can_actually_fail() -> None:
+    """`uv sync` repairs the lockfile, so a check after it asks a fixed tree.
+
+    CI ran `uv sync --all-packages --all-extras` and then `uv lock --check`.
+    Sync UPDATES `uv.lock` when it disagrees with `pyproject.toml`, so the
+    check examined a file the previous step had just repaired. The gate could
+    not fail, which is P-09 wearing a two-step costume.
+
+    Measured rather than reasoned: Dependabot raised `pre-commit` in
+    `pyproject.toml` and left `uv.lock` alone — its pip ecosystem does not
+    know about uv workspaces. Both pull requests went green and merged, and
+    `main` then failed `uv lock --check` on a clean checkout, while CI kept
+    reporting the lockfile current. It was current, by the time it was asked.
+
+    `--locked` makes sync refuse instead of repair. This asserts the flag is
+    there, because the failure it prevents is invisible: every run is green
+    either way, and the difference only shows up on somebody else's machine.
+    """
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    sync_lines = [line for line in workflow.splitlines() if "uv sync" in line and "run:" in line]
+    assert sync_lines, "no `uv sync` step found in ci.yml — the enumeration is broken, not the workflow"
+
+    for line in sync_lines:
+        assert "--locked" in line or "--frozen" in line, (
+            f"`{line.strip()}` may rewrite uv.lock. Any lockfile check after it is asking a repaired tree, "
+            f"so the gate cannot fail — add --locked."
+        )
