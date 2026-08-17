@@ -105,7 +105,7 @@ environment or urgency exception (template-ADR-042 §2.2).
 
 ## Related
 
-- `docs/decisions/template-ADR-042-native-cloud-edge-protection.md`
+- `docs/decisions/template-ADR-042-native-cloud-edge-protection.md` (an ml-service-template ADR; the equivalent decision here is `docs/decisions/ADR-006-edge-protection.md`)
 - `agentic/skills/edge-audit/SKILL.md` — the AUTO-mode audit this
   workflow's step 1 delegates to
 - `agentic/rules/24-edge-protection.md`

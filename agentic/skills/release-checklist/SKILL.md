@@ -160,7 +160,7 @@ kill %1
 
 For a multi-service / multi-cloud sweep, drive the loop from a
 runbook page or a CI workflow-dispatch — the template does not ship
-a `scripts/smoke_test.py` script (would compete with `deploy-common.yml`
+a `scripts/smoke_test.py` (belongs to ml-service-template; there is no deploy pipeline here to smoke-test) script (would compete with `deploy-common.yml`
 as SSOT).
 
 ## Rollback Plan

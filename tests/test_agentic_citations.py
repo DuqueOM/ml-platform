@@ -47,7 +47,21 @@ _DISCLAIMED = (
     "upstream",
     "ml-service-template",
     "there is no",
+    # A skill's OUTPUT is not a dependency. "Append to `docs/x.md`" names what
+    # the run produces, and demanding it exist beforehand would require every
+    # skill to ship its own results. Four of the thirty were this, which means
+    # the count I published was an overstatement — immediately after
+    # criticising hand-written numbers.
+    "written by this skill",
+    "produced by this skill",
+    "does not exist until",
 )
+
+
+#: Version placeholders. `releases/vX.Y.Z.md` is a naming CONVENTION, not a
+#: path — the same class as the `{@ token @}` forms already skipped. Treating
+#: it as a citation demands a file whose name is deliberately unresolved.
+_PLACEHOLDER = re.compile(r"\bvX\.Y\.Z\b|\bX\.Y\.Z\b|<[^>]+>")
 
 
 def _citations() -> dict[str, set[str]]:
@@ -61,81 +75,56 @@ def _citations() -> dict[str, set[str]]:
             if any(phrase in lowered for phrase in _DISCLAIMED):
                 continue
             for path in _PATH.findall(paragraph):
+                if _PLACEHOLDER.search(path):
+                    continue
                 found.setdefault(path, set()).add(str(body.relative_to(REPO_ROOT)))
     return found
 
 
-DEBT = REPO_ROOT / "docs" / "governance" / "agentic-citation-debt.yaml"
+def test_every_path_the_agentic_surface_cites_exists() -> None:
+    """Zero. Not a baseline, not a debt list — zero.
 
+    The first version of this check recorded thirty broken citations in a
+    `agentic-citation-debt.yaml` and failed only on new ones. That was the
+    wrong answer, and the argument against it is the one that matters for a
+    platform meant to be adopted: **inherited text pointing at files this
+    repository does not have is not debt, it is an untriaged finding.** Each
+    citation was in `ml-service-template` for a reason, so each one is either
+    an artifact we have under a different path, a thing the skill produces,
+    or a capability we genuinely lack — and only the third is a decision.
 
-def _recorded_debt() -> set[str]:
-    import yaml
+    Triaged, the thirty resolved as:
 
-    return set(yaml.safe_load(DEBT.read_text(encoding="utf-8"))["citations"])
+    * **15 repointed.** The artifact exists here, at a different path —
+      almost all of them under `services/demand-forecast-serving/`, because
+      these bodies were written for upstream's layout where the same files
+      sit at the repository root.
+    * **4 were never citations.** "Append to `docs/concept_drift_log.md`"
+      names what the run PRODUCES. Demanding it exist beforehand would make
+      every skill ship its own results. That also means the "thirty" first
+      published was an overstatement, arrived at immediately after
+      criticising hand-written numbers.
+    * **1 was a placeholder.** `releases/vX.Y.Z.md` is a naming convention.
+    * **10 named capabilities this platform does not have**, and each now
+      says whose file it is and what stands in its place — the Kyverno policy
+      against the PSS labels on each overlay namespace, upstream's CI drift
+      gate against the ledger entry that REJECTED it, the load-test script
+      against gate S2, still pending because nothing here builds an image.
 
-
-def test_no_new_broken_citation_appears() -> None:
-    """The list may shrink and never grow.
-
-    Thirty citations point at files this repository does not have — every one
-    inherited text, because these bodies were ported from
-    `ml-service-template` where each path is real. Failing on all thirty
-    would make `main` red for debt nobody can clear in one sitting, and a red
-    gate gets disabled rather than satisfied. So the debt is recorded as data
-    in `docs/governance/agentic-citation-debt.yaml` and this fails on
-    anything NEW.
-
-    The executable ones were fixed rather than recorded, in the commit that
-    added this test: `agentic/workflows/new-service.md` told an agent to run
-    `bash templates/scripts/new-service.sh`, which belongs to upstream's
-    shell scaffolder and has never been in this tree. A skill is executed,
-    not read, so a missing path there is an instruction that fails at the
-    moment somebody trusts it.
-
-    QA-4 round five found seven of these through the parity ledger's
-    exclusions, and called that the objective test for which exclusions still
-    matter. It was a better test than the one being applied — exclusions were
-    judged by whether a directory looked like scaffolding, which is an
-    opinion about a path rather than a fact about a reader. Replacing the
-    opinion with the fact found thirty.
+    A debt file would have hidden all four of those distinctions behind one
+    number.
     """
     broken = {
-        path
-        for path, _ in _citations().items()
+        path: sorted(sources)
+        for path, sources in _citations().items()
         if not any(character in path for character in "{}@ ") and not (REPO_ROOT / path).exists()
     }
-    recorded = _recorded_debt()
 
-    new = broken - recorded
-    assert not new, (
-        "the agentic surface cites paths this repository does not have, and they are not in the recorded debt:\n  "
-        + "\n  ".join(sorted(new))
-        + "\n\nPoint at the artifact that exists here, or say in the same paragraph that the path belongs to "
-        "ml-service-template — this check reads that disclaimer. Do NOT add it to the debt file: that list "
-        "records what was inherited, not what is still being written."
-    )
-
-
-def test_the_recorded_debt_is_still_real() -> None:
-    """An entry that has been fixed must leave the list.
-
-    Otherwise the file becomes a place where a citation can be quietly
-    resurrected without the gate noticing — the shape a stale suppression
-    always takes, and the one `.security-baselines/` exists to prevent for
-    security findings.
-    """
-    broken = {
-        path
-        for path, _ in _citations().items()
-        if not any(character in path for character in "{}@ ") and not (REPO_ROOT / path).exists()
-    }
-    stale = _recorded_debt() - broken
-
-    assert not stale, (
-        "these citations are recorded as debt and are no longer broken:\n  "
-        + "\n  ".join(sorted(stale))
-        + "\n\nRemove them from docs/governance/agentic-citation-debt.yaml. A debt list that keeps closed "
-        "entries lets a defect return without the gate reporting it."
+    assert not broken, (
+        "the agentic surface cites paths this repository does not have:\n"
+        + "\n".join(f"  {path}\n      cited by: {', '.join(sources)}" for path, sources in sorted(broken.items()))
+        + "\n\nTriage it, do not record it. Repoint at the artifact that exists here; mark it as something the "
+        "skill WRITES; or say in the same paragraph whose file it is and what stands in its place."
     )
 
 

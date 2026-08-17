@@ -141,7 +141,7 @@ grep -r "{@ service_name @}\|{@ service_slug @}\|{@ SERVICE_NAME @}" $service-na
 4. Keep `FeatureEngineer.transform_inference()` aligned with training
 5. Define `predict_proba_wrapper` for SHAP in original feature space
 6. Write API tests with TestClient and keep
-   `tests/test_fastapi_template_contract.py` passing
+   `services/demand-forecast-serving/tests/test_fastapi_template_contract.py` passing
 
 **Success criteria**: `pytest tests/test_fastapi_template_contract.py tests/test_api.py -v` passes. `curl localhost:8000/health` returns healthy and `/ready` returns 200 only after the model is loaded and warmed.
 
@@ -161,9 +161,9 @@ grep -r "{@ service_name @}\|{@ service_slug @}\|{@ SERVICE_NAME @}" $service-na
 
 ### 7. Kubernetes (Agent-K8sBuilder)
 
-1. Create deployment from `templates/k8s/deployment.yaml`
-2. Create HPA (CPU-only, 50-70% target) from `templates/k8s/hpa.yaml`
-3. Create Service from `templates/k8s/service.yaml`
+1. Create deployment from `platform/kubernetes/base/deployment.yaml`
+2. Create HPA (CPU-only, 50-70% target) from `services/demand-forecast-serving/k8s/base/hpa.yaml`
+3. Create Service from `platform/kubernetes/base/service.yaml`
 4. Create Kustomize overlays for GCP and AWS
 5. Init container configured for model download
 
@@ -189,7 +189,7 @@ grep -r "{@ service_name @}\|{@ service_slug @}\|{@ SERVICE_NAME @}" $service-na
 ### 10. Monitoring (Agent-MonitoringSetup)
 
 1. Verify `/metrics` exports `{@ service_slug @}_requests_total`, `{@ service_slug @}_request_duration_seconds`
-2. Create Grafana dashboard from `templates/monitoring/grafana-dashboard.json`
+2. Create Grafana dashboard from `platform/observability/dashboards/demand-forecast-serving.json`
 3. Configure P1-P4 alerts in AlertManager
 4. Verify Pushgateway connectivity for drift metrics
 
