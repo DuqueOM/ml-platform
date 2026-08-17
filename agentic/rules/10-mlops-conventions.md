@@ -68,7 +68,7 @@ Match complexity to scale: CronJob not Airflow, Pandera not GE, PSI not feature 
 
 ## When to Load Skills
 
-- Creating a new service? → `new-service` (uses `templates/scripts/new-service.sh`)
+- Creating a new service? → `new-service` (generates from `templates/project/` with copier)
 - Debugging inference? → `debug-ml-inference`
 - Drift alert fired? → `drift-detection` → `model-retrain`
 - Deploying? → `deploy-gke` or `deploy-aws`

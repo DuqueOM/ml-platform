@@ -16,24 +16,25 @@ Before creating any files, determine:
 - **Explainability needed**: yes / no
 - **Latency SLA**: p95 target in ms
 
-## 2. Scaffold from Template
+## 2. Generate from the template
 
 ```bash
-# Automated scaffolding (recommended)
-bash templates/scripts/new-service.sh "${SVC_NAME}" "${SVC_SLUG}"
+uvx copier copy --vcs-ref HEAD --trust templates/project projects/"${SVC_SLUG}"
 
-# Verify: no remaining placeholders
-grep -r "{@ service_name @}\|{@ service_slug @}\|{@ SERVICE_NAME @}" ${SVC_NAME}/ --include="*.py" --include="*.yaml" | head -10
+# Verify: no unrendered tokens survived
+grep -rn "{@ .* @}" projects/"${SVC_SLUG}" --include="*.py" --include="*.yaml" | head
 ```
 
-If `new-service.sh` is unavailable, manual fallback:
+`--vcs-ref` is not optional. A bare `copier update` against an unpinned
+source rewrote a real service in the sibling repository backwards, answers
+file included.
 
-```bash
-cp -r templates/service/ ${SVC_NAME}/
-find ${SVC_NAME}/ -type f -exec sed -i "s/{@ service_name @}/${SVC_NAME}/g" {} +
-find ${SVC_NAME}/ -type f -exec sed -i "s/{@ service_slug @}/${SVC_SLUG}/g" {} +
-mv ${SVC_NAME}/src/\{service\} ${SVC_NAME}/src/${SVC_SLUG}
-```
+There is no manual fallback and no `new-service.sh` wrapper. Both were
+inherited from `ml-service-template`, whose scaffolder is a shell script;
+this platform generates with copier, and the `.copier-answers.yml` that
+`copier copy` writes is what makes a later `copier update` possible at all.
+Copying the directory instead produces a fork with extra steps —
+`docs/EXPORTING.md` says so at length.
 
 ## 3. Data Validation
 

@@ -51,7 +51,10 @@ drift detection running, and documentation complete.
 
 ## Pre-conditions
 
-- `templates/scripts/new-service.sh` exists and is executable
+- `templates/project/` exists — this platform generates with **copier**, not
+  with a shell script. The `templates/scripts/new-service.sh` this skill used
+  to name belongs to `ml-service-template` and has never existed here; an
+  agent following the old text ran a file that is not in the tree.
 - The caller has specified ServiceName (PascalCase) and service_slug (snake_case)
 - Cloud target is known (gcp, aws, or both)
 
@@ -69,11 +72,15 @@ Answer these questions:
 4. **Scale**: Expected request volume, latency requirements
 5. **Explainability**: Is SHAP required? (High-stakes decisions = yes)
 
-### 2. Run Scaffolding Script
+### 2. Generate the project
 
 ```bash
-bash templates/scripts/new-service.sh "$service-name" "$service-slug"
+uvx copier copy --vcs-ref HEAD --trust templates/project projects/"$service_slug"
 ```
+
+`--vcs-ref` is not optional. A bare `copier update` later, against an
+unpinned source, rewrote a real service in the sibling repository backwards —
+answers file included.
 
 Verify no remaining placeholders:
 
