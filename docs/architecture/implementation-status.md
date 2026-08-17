@@ -112,7 +112,7 @@ how "we deploy to two clouds" goes unchallenged.
 | :-: | :-: | --- | --- |
 | ✅ | L1 | Upstream parity gate | `uv run pytest tests/test_upstream_parity.py -q` passes |
 | ✅ | L1 | Public-repo hygiene | `uv run pytest tests/test_public_repo_hygiene.py -q` passes |
-| 🟡 | — | Agent entry point (llms.txt) | `uv run pytest tests/test_llms_txt.py -q` FAILS |
+| ✅ | L1 | Agent entry point (llms.txt) | `uv run pytest tests/test_llms_txt.py -q` passes |
 | ✅ | L1 | Enterprise documentation set | `uv run pytest tests/test_documentation_set.py -q` passes |
 | ✅ | L1 | Project contract | `uv run pytest tests/test_project_contract.py -q` passes |
 | ✅ | L1 | Exporting a vertical | `uv run pytest tests/test_project_generator.py -q -k exporting` passes |
@@ -122,7 +122,7 @@ how "we deploy to two clouds" goes unchallenged.
 | ✅ | L1 | Repository governance (CODEOWNERS, PR template, link check) | `uv run pytest tests/test_governance_files.py -q` passes |
 | ✅ | L2 | Per-tool context files | `uv run python scripts/sync_agentic_adapters.py --check` passes |
 | ✅ | L2 | Reproducible dev environment | `bash scripts/bootstrap.sh --check` passes |
-| ✅ | L1 | Version consistency | `uv run pytest tests/test_version_consistency.py -q` passes |
+| 🟡 | — | Version consistency | `uv run pytest tests/test_version_consistency.py -q` FAILS |
 | ✅ | L1 | Compliance mapping | `uv run pytest tests/test_documentation_set.py -q -k compliance` passes |
 
 ### Phase 1e

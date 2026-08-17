@@ -362,12 +362,25 @@ def test_the_readme_wiring_table_matches_the_workflows() -> None:
         path.read_text(encoding="utf-8") for path in sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml"))
     )
 
-    for filename, flag in (
-        (".trivyignore", "trivyignores:"),
-        ("checkov.yml", "--config-file"),
-        ("tfsec.yml", "--config-file"),
+    # EVERY spelling that wires a baseline, because a scanner can be invoked
+    # two ways and this test only knew one.
+    #
+    # QA-4 round five: the check looked for the CLI flag `--config-file`, and
+    # this repository invokes Checkov through `bridgecrewio/checkov-action`,
+    # whose input is `config_file:`. The auditor wired checkov for real, left
+    # the README saying "no", and the test PASSED — so it caught the harmless
+    # direction (claiming a wiring that does not exist) and missed the
+    # dangerous one (a live suppression a reader believes is inert), which is
+    # the direction its own docstring names as the reason it exists.
+    #
+    # That is P-09 with a narrow detector rather than an absent one, and the
+    # narrowness was invisible because the tree happened to satisfy it.
+    for filename, spellings in (
+        (".trivyignore", ("trivyignores:", "--ignorefile")),
+        ("checkov.yml", ("config_file:", "--config-file")),
+        ("tfsec.yml", ("config_file:", "--config-file", "--config")),
     ):
-        wired_in_ci = f".security-baselines/{filename}" in workflows and flag in workflows
+        wired_in_ci = f".security-baselines/{filename}" in workflows and any(s in workflows for s in spellings)
         row = next((line for line in readme.splitlines() if line.startswith(f"| `{filename}`")), None)
 
         assert row is not None, f"{filename} has no row in the README's wiring table"

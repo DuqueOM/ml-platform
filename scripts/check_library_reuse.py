@@ -25,9 +25,20 @@ matter of progress:
 It REPORTS the reuse count per project without failing on it. A project part
 way through its phase has a low count legitimately, and a gate that goes red
 for unfinished work gets disabled rather than satisfied. The number is
-printed so the plan's precondition can be checked by reading, and
-`tests/test_library_reuse.py` holds the count against the plan's threshold at
-the moment a project claims its phase is done.
+printed so the plan's precondition can be checked by reading.
+
+**Nothing enforces the threshold, and this paragraph used to say otherwise.**
+It claimed `tests/test_library_reuse.py` held the count against the plan's
+threshold "at the moment a project claims its phase is done" — a moment no
+code recognises, in a mechanism that does not exist. QA-4 round five found
+it: a docstring promising enforcement is the same defect as a gate that
+cannot fail, arriving one layer earlier, and this one shipped in the commit
+that introduced a gate against exactly that.
+
+What the test actually does is assert the plan still STATES the threshold, so
+the number printed here has something to be read against. Enforcing it needs
+a signal that a phase is complete, and this repository has none — inventing
+one to close a docstring would be worse than the gap.
 
     python scripts/check_library_reuse.py
     python scripts/check_library_reuse.py --json   # for the status document
