@@ -21,6 +21,7 @@ also an exemption from "the data must be well formed".
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from collections.abc import Iterator
@@ -70,9 +71,43 @@ def test_it_reports_how_many_rows_it_examined() -> None:
 
     Two gates here have already passed while examining zero files (P-20), so a
     green tick alone is not evidence that anything was read.
+
+    **The expected count is DERIVED, not written here.** It used to be the
+    literal `32`, and adding one gate row broke this test — the third
+    hand-written count that a single new gate invalidated in one afternoon,
+    after `llms.txt` and the traceability table itself.
+
+    A literal turns "the count is reported" into "the count is 32", which is a
+    different and much less useful assertion: it fails on every legitimate
+    change and says nothing when the parser silently stops matching. Counting
+    the rows here and comparing keeps the property — a number is printed, and
+    it is the right number — while surviving the next gate anyone adds.
     """
     result = _run()
-    assert "32 gate rows examined" in result.stdout, result.stdout
+    reported = re.search(r"(\d+) gate rows examined", result.stdout)
+    assert reported, f"no count reported at all:\n{result.stdout}"
+
+    count = int(reported.group(1))
+    assert count > 20, f"only {count} gate rows examined — the row filter stopped matching, not the table"
+
+    # Cross-checked against C4, which counts the same declarations by walking
+    # the documents independently. Two counters agreeing is a stronger claim
+    # than either literal, and it is what catches a filter that quietly
+    # narrows: a hardcoded number would have to be edited to hide that, while
+    # this fails.
+    coherence = subprocess.run(
+        [sys.executable, str(REPO_ROOT / "scripts" / "check_doc_coherence.py")],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+        timeout=300,
+    )
+    c4 = re.search(r"\[C4\] (\d+) gates declared", coherence.stdout)
+    assert c4, f"C4 reported no gate count:\n{coherence.stdout}"
+    assert int(c4.group(1)) == count, (
+        f"validate_quality_gates counts {count} rows and C4 counts {c4.group(1)}. "
+        f"Two counters over the same declarations disagreeing means one of them narrowed."
+    )
     assert "4 gate(s) across 1 file(s)" in result.stdout, result.stdout
 
 

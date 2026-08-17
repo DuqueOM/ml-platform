@@ -45,6 +45,7 @@ Apply to every commit, regardless of what changed.
 | P8 | Kubernetes posture | `kubescape scan framework nsa,cis-v1.10.0` on rendered overlays | No failed control at HIGH | The overlays DECLARE restricted Pod Security; this checks the declaration against a published baseline |
 | P5 | No committed secrets | `gitleaks detect` over full history | Zero | Scanning the working tree misses what history already published |
 | P9 | Dependencies resolve reproducibly | `uv lock --check` | Lockfile current | An out-of-date lock means CI and local are different systems |
+| P10 | Third-party actions identify a program | `uv run python scripts/check_action_pins.py` | Every reference a 40-char commit SHA with its tag in a comment | A tag is a mutable pointer to code that runs with the job's token; re-pointing it swaps the program with no commit here, and a subverted scanner reports nothing — the same output as a clean tree |
 
 ## Library gates
 
