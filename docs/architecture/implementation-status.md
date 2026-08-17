@@ -64,9 +64,9 @@ how "we deploy to two clouds" goes unchallenged.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**45 done · 3 partial · 6 absent** — of 54 tracked components.
+**46 done · 2 partial · 6 absent** — of 54 tracked components.
 
-**Proven in CI: 34 at L1 · 11 at L2.** Evidence available but NOT run here: 4 at L3, 0 at L4.
+**Proven in CI: 35 at L1 · 11 at L2.** Evidence available but NOT run here: 4 at L3, 0 at L4.
 
 ### Phase 0
 
@@ -122,7 +122,7 @@ how "we deploy to two clouds" goes unchallenged.
 | ✅ | L1 | Repository governance (CODEOWNERS, PR template, link check) | `uv run pytest tests/test_governance_files.py -q` passes |
 | ✅ | L2 | Per-tool context files | `uv run python scripts/sync_agentic_adapters.py --check` passes |
 | ✅ | L2 | Reproducible dev environment | `bash scripts/bootstrap.sh --check` passes |
-| 🟡 | — | Version consistency | `uv run pytest tests/test_version_consistency.py -q` FAILS |
+| ✅ | L1 | Version consistency | `uv run pytest tests/test_version_consistency.py -q` passes |
 | ✅ | L1 | Compliance mapping | `uv run pytest tests/test_documentation_set.py -q -k compliance` passes |
 
 ### Phase 1e
