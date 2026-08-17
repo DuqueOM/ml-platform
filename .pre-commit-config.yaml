@@ -270,6 +270,19 @@ repos:
         pass_filenames: false
         files: '\.ya?ml$'
 
+      - id: action-pins
+        name: third-party actions are pinned to a commit
+        description: >
+          A tag is a mutable pointer to code that runs on the runner with the
+          job's token, so re-pointing it swaps the program with no commit
+          here. Caught locally rather than in CI because the fix — resolving
+          a digest — needs the network, and finding out at review time costs
+          a round trip.
+        entry: uv run python scripts/check_action_pins.py
+        language: system
+        pass_filenames: false
+        files: '^\.github/workflows/.*\.ya?ml$'
+
       - id: implementation-status
         name: implementation status is derived, not declared
         description: >
