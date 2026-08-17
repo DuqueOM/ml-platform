@@ -16,7 +16,7 @@ dependencies = [
 # orchestrator whose DAGs are never parsed in CI is a directory of files that
 # look like DAGs.
 orchestration = [
-    "apache-airflow~=3.0",
+    "apache-airflow~=3.3",
 ]
 dev = [
     "pytest~=8.3",
