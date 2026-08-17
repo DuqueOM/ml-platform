@@ -72,7 +72,7 @@ a command and marked *not run here*. L4 is printed at zero on purpose.
 
 ## The gates
 
-32 declared gates, each with a command that resolves. The ones worth knowing:
+33 declared gates, each with a command that resolves. The ones worth knowing:
 
 - `scripts/check_doc_coherence.py` — C1–C9: ADR index integrity against git
   history, dangling references, gate traceability, private-name denylist,

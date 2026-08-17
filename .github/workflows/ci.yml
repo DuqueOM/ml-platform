@@ -22,14 +22,14 @@ jobs:
     name: Repository invariants
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Secret scanning must see history: the working tree cannot show
           # what a previous commit already published.
           fetch-depth: 0
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
         # The interpreter is pinned by .python-version, not left to whatever
         # the runner image ships. Unpinned, CI resolved 3.12 while local
         # resolved 3.11, and mypy — told to parse as 3.11 — choked on numpy
@@ -181,6 +181,14 @@ jobs:
         # the same output as a clean tree.
         run: uv run python scripts/check_gitleaks_pin.py
 
+      - name: Every third-party action is pinned to a commit
+        if: ${{ !cancelled() }}
+        # The generalisation of the step above. That argument — a mutable tag
+        # is a moving reference to code that runs with the job's token — was
+        # never specific to gitleaks, and when this landed the repository ran
+        # eight actions on tags, three of them scanners.
+        run: uv run python scripts/check_action_pins.py
+
       - name: Technology inventory matches the filesystem
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         # "Is the platform ready?" must not be answerable by an impression.
@@ -229,7 +237,7 @@ jobs:
             --cov-fail-under=74
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@a99c28d3f0da835de33ff2feb2e15691c7b9641f # v7
         with:
           files: ./coverage.xml
           fail_ci_if_error: false   # a Codecov outage must not block a merge
@@ -306,14 +314,14 @@ jobs:
     # ruff, dependabot, gitleaks, trivy — covers Python, dependencies, secrets
     # and images. Nothing looked at the infrastructure that provisions them.
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Checkov — Terraform and Kubernetes misconfiguration
         # Static only: it reads the definitions, provisions nothing, and needs
         # no credentials, so it runs while the cloud work is deliberately
         # paused. soft_fail on the FIRST run only — an unread wall of findings
         # is a gate people switch off, and the triage is a separate commit.
-        uses: bridgecrewio/checkov-action@v12
+        uses: bridgecrewio/checkov-action@1246d92f57abae29d5db5f9aeeed2a9813e52d7d # v12
         with:
           directory: platform/
           framework: terraform,kubernetes
@@ -340,14 +348,14 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Trivy filesystem scan
         # Vulnerabilities in dependencies the lockfile pulled in, and secrets.
         # NOT IaC misconfiguration: `scan-type: fs` runs the vuln and secret
         # scanners, and misconfig is opt-in. The previous comment claimed it,
         # which is how SECURITY.md came to claim it too.
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -367,7 +375,7 @@ jobs:
           # written.
           trivyignores: .security-baselines/.trivyignore
 
-      - uses: github/codeql-action/upload-sarif@v4
+      - uses: github/codeql-action/upload-sarif@988661ebb5e81487b3fb31b2185d2856c0a10679 # v4
         with:
           sarif_file: trivy.sarif
 
@@ -375,7 +383,7 @@ jobs:
     name: Secret scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
       - name: gitleaks
