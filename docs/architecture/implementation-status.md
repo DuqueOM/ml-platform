@@ -64,9 +64,9 @@ how "we deploy to two clouds" goes unchallenged.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**46 done · 2 partial · 6 absent** — of 54 tracked components.
+**45 done · 3 partial · 6 absent** — of 54 tracked components.
 
-**Proven in CI: 35 at L1 · 11 at L2.** Evidence available but NOT run here: 4 at L3, 0 at L4.
+**Proven in CI: 34 at L1 · 11 at L2.** Evidence available but NOT run here: 4 at L3, 0 at L4.
 
 ### Phase 0
 
@@ -112,7 +112,7 @@ how "we deploy to two clouds" goes unchallenged.
 | :-: | :-: | --- | --- |
 | ✅ | L1 | Upstream parity gate | `uv run pytest tests/test_upstream_parity.py -q` passes |
 | ✅ | L1 | Public-repo hygiene | `uv run pytest tests/test_public_repo_hygiene.py -q` passes |
-| ✅ | L1 | Agent entry point (llms.txt) | `uv run pytest tests/test_llms_txt.py -q` passes |
+| 🟡 | — | Agent entry point (llms.txt) | `uv run pytest tests/test_llms_txt.py -q` FAILS |
 | ✅ | L1 | Enterprise documentation set | `uv run pytest tests/test_documentation_set.py -q` passes |
 | ✅ | L1 | Project contract | `uv run pytest tests/test_project_contract.py -q` passes |
 | ✅ | L1 | Exporting a vertical | `uv run pytest tests/test_project_generator.py -q -k exporting` passes |
