@@ -63,9 +63,26 @@ jobs:
         # This diverged for several commits because the local command was
         # changed and the workflow was not — the exact class of drift this
         # repository keeps finding, in the file that verifies everything else.
-        run: uv sync --all-packages --all-extras
+        #
+        # `--locked` is what makes the step below able to fail. Without it,
+        # `uv sync` UPDATES the lockfile when it does not match
+        # `pyproject.toml`, and the next step then checks a file the previous
+        # step had just repaired — a gate that cannot fail, which is P-09
+        # wearing a two-step costume.
+        #
+        # Measured: Dependabot raised `pre-commit` in `pyproject.toml` and left
+        # `uv.lock` untouched (its pip ecosystem does not know about uv
+        # workspaces). Both pull requests went green and merged, and `main`
+        # then failed `uv lock --check` on a clean checkout — while CI kept
+        # reporting the lockfile current, because it was, by the time it was
+        # asked.
+        run: uv sync --all-packages --all-extras --locked
 
       - name: Lockfile is current
+        # Kept even though `--locked` above now enforces it, because the two
+        # fail differently: sync fails at setup with a resolver error, this
+        # names the invariant. Deleting it would leave the guarantee resting
+        # on a flag nobody reads as a check.
         run: uv lock --check
 
       - name: Dependency direction (ADR-001)
