@@ -223,7 +223,7 @@ The skill is complete when ALL of the following hold:
       action: `monitor`, `retrain`, or `investigate` — never silent
 - [ ] `drift_detection_last_run_timestamp` pushed to Prometheus Pushgateway
       (heartbeat — gap absence is itself an alert per template-ADR-009)
-- [ ] `ops/last_drift_report.json` updated so `risk_context.py` can read it
+- [ ] `ops/last_drift_report.json` (written by this skill; it does not exist until then) updated so `risk_context.py` can read it
       on the next agent decision
 - [ ] If `psi_over_2x_threshold` fired: agent emitted `[AGENT MODE: STOP]`
       and did NOT proceed to retrain or alert silencing

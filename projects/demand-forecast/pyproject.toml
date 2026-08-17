@@ -24,8 +24,19 @@ dependencies = [
     "joblib~=1.4",
     "ml-core",
     "data-contracts",
-    "serving-core",
-    "feature-defs",
+    # `serving-core` and `feature-defs` were declared here and imported by
+    # nothing. Found by scripts/check_library_reuse.py on its first run, which
+    # is the whole reason that script exists: charter criterion C1 counts
+    # shared libraries a project reuses, and a declaration nobody imports
+    # raises the count without reusing anything.
+    #
+    # `serving-core` holds nine lines and is deliberately empty until a second
+    # consumer justifies extracting it. `feature-defs` holds the point-in-time
+    # join, which this project does not perform — it aggregates hourly demand
+    # and joins no features as-of anything. Both names appear in docstrings
+    # here as a comparison, and a mention is not a dependency.
+    #
+    # Each returns the day an import does.
 ]
 
 [build-system]

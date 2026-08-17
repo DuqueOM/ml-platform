@@ -64,7 +64,7 @@ TOTAL:                                 $___/mo
 `<service>_monthly_cloud_cost_usd` from Prometheus — this step is what
 populates it. Monthly cadence, matching this skill's own review cycle
 (intentionally NOT a real-time cost exporter — see
-`docs/observability/business-kpis.md` for why that would be
+`docs/observability/business-kpis.md` (belongs to ml-service-template; nothing here defines business KPIs yet) for why that would be
 over-engineering at this template's scale).
 
 ```bash

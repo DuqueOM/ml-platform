@@ -18,8 +18,6 @@ would make the comparison flattering.
 from __future__ import annotations
 
 import re
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -115,20 +113,38 @@ def test_it_states_that_nothing_has_run_in_a_cloud(text: str) -> None:
         )
 
 
-def test_the_declared_gate_count_matches_the_coherence_check(text: str) -> None:
-    """Run the gate and read its own number, rather than parsing the table twice."""
-    result = subprocess.run(
-        [sys.executable, str(REPO_ROOT / "scripts" / "check_doc_coherence.py")],
-        capture_output=True,
-        text=True,
-        cwd=REPO_ROOT,
-        timeout=180,
-    )
-    reported = re.search(r"(\d+) gates declared", result.stdout)
-    assert reported, f"C4 did not report a gate count:\n{result.stdout}"
+def test_it_quotes_no_gate_count_at_all(text: str) -> None:
+    """A hand-written file must not carry a number that a commit can invalidate.
 
-    assert f"{reported.group(1)} declared gates" in text, (
-        f"llms.txt does not say {reported.group(1)} declared gates, which is what C4 counts"
+    This test used to assert llms.txt agreed with C4's count, and it worked —
+    it caught the disagreement the moment one appeared. But it caught the same
+    disagreement twice, for the same reason both times: a gate was added and
+    the literal here was not updated.
+
+    QA-4 round five found it red on a clean checkout at `7c36f58`, one commit
+    after a briefing that predicted this exact regression. The auditor's
+    verdict is the one worth keeping: *the guard is well built, the defect is
+    the literal.*
+
+    So the literal is gone and the guard now enforces its absence. That is a
+    stronger property than agreement: agreement has to be re-established after
+    every change, and absence cannot drift. The count and the table live in
+    `docs/governance/quality-gates.md`, where a reader can check a number
+    against the thing it counts.
+
+    This repository already made this call once, for the component totals this
+    file used to quote — replaced with a pointer to the derived document after
+    they failed on the next commit.
+    """
+    offenders = [
+        line.strip() for line in text.splitlines() if re.search(r"\b\d+\s+(declared\s+)?gates?\b", line, re.IGNORECASE)
+    ]
+
+    assert not offenders, (
+        "llms.txt quotes a gate count:\n  "
+        + "\n  ".join(offenders)
+        + "\n\nThis file is hand-written, so the number drifts the first time a gate is added — twice now. "
+        "Point at docs/governance/quality-gates.md instead."
     )
 
 
