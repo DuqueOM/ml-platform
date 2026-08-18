@@ -7,12 +7,18 @@ requires-python = ">=3.11"
 # project — shared code moves down, never sideways (ADR-001 rule 2), and
 # tests/test_dependency_direction.py enforces it.
 dependencies = [
-    "ml-core",
+    # Declared because `contracts/__init__.py` imports it. Nothing else is
+    # declared here: a generated project used to name two or three shared
+    # libraries and import none, so every new project began by failing
+    # `scripts/check_library_reuse.py` — the dishonesty charter criterion C1
+    # forbids, shipped by the generator.
+    #
+    # `serving-core` is not declared: it holds seven lines and is deliberately
+    # empty until a second consumer justifies extracting it (ADR-001, ADR-008).
+    # `ml-core` and `llm-core` return the moment the generated code imports
+    # them — add the dependency in the commit that adds the import, never before.
     "data-contracts",
-{% if project_kind in ["tabular", "deep-learning"] %}    "serving-core",
-{% endif %}{% if project_kind in ["llm", "agent"] %}    "llm-core",
-    "serving-core",
-{% endif %}]
+]
 
 [build-system]
 requires = ["hatchling"]
