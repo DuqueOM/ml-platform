@@ -227,3 +227,63 @@ def test_an_unresolvable_ref_falls_back_instead_of_reporting_zero_drift(tmp_path
     assert _commits_since_ref("0000000000000000000000000000000000000000") is None, (
         "an unmeasurable ref must return None so the caller falls back, never 0"
     )
+
+
+def test_a_marker_outside_the_history_is_refused_rather_than_counted(tmp_path: Path) -> None:
+    """A squash merge orphans the audited commit, and C7 kept counting anyway.
+
+    Round five was recorded against the tip of a branch. This repository
+    allows squash merges only, so landing that branch replaced its commits
+    with a new one — and the audited tree stopped being an ancestor of `main`
+    while its object survived in the local store.
+
+    C7 then printed a confident `1/10` against a commit on no branch.
+    Measured: `git merge-base --is-ancestor 7c36f58 HEAD` returned non-zero
+    at the same moment the gate reported success.
+
+    A plausible wrong number is worse than an error, and this one degrades
+    further: on a fresh clone the object was never fetched, `rev-parse` fails,
+    and the counter falls back to comparing DATES — the measure C7 was
+    rewritten to escape two days earlier, restored silently by a merge
+    strategy.
+
+    The auditor predicted it in the round-five report, in those words. It
+    happened ten minutes after the merge.
+    """
+    import sys
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    from check_doc_coherence import UNREACHABLE, _commits_since_ref
+
+    # A real commit, in this repository's object store, on no branch reachable
+    # from HEAD — exactly the post-squash situation, built rather than assumed.
+    # Identity passed explicitly: `commit-tree` refuses without a committer,
+    # and a CI runner has no global git config. The first version of this test
+    # passed locally and failed on the runner for exactly that reason — the
+    # "works on my machine" shape this repository spends its time catching,
+    # produced while fixing a gate about verifiable history.
+    identity = {
+        "GIT_AUTHOR_NAME": "probe",
+        "GIT_AUTHOR_EMAIL": "probe@example.com",
+        "GIT_COMMITTER_NAME": "probe",
+        "GIT_COMMITTER_EMAIL": "probe@example.com",
+    }
+    tree = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD^{tree}"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    orphan = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "commit-tree", "-m", "orphan", tree],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={**os.environ, **identity},
+    ).stdout.strip()
+
+    assert _commits_since_ref(orphan) == UNREACHABLE, (
+        "an orphaned marker was counted rather than refused; C7 would report drift against a commit "
+        "that is not in this history"
+    )
+    assert _commits_since_ref("HEAD") == 0, "a reachable marker must still measure, or the check cannot pass at all"

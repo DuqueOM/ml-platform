@@ -616,6 +616,11 @@ def check_copier_commands_are_pinned() -> None:
         )
 
 
+#: `_commits_since_ref` returning "the marker is not in this history". Distinct
+#: from None, which means "cannot measure at all".
+UNREACHABLE = -1
+
+
 def _commits_since_ref(ref: str) -> int | None:
     """Commits on HEAD that the audited commit does not contain.
 
@@ -654,6 +659,38 @@ def _commits_since_ref(ref: str) -> int | None:
     )
     if resolved.returncode != 0:
         return None
+
+    # Resolvable is not enough: the ref must be REACHABLE from HEAD.
+    #
+    # A squash merge replaces a branch's commits with a new one, so the tree
+    # an auditor read stops being part of the history while its object
+    # survives locally. `<ref>..HEAD` then still answers — with a number
+    # counted against a commit on no branch. Measured immediately after
+    # round five landed: C7 printed a confident `1/10` against `7c36f58`,
+    # which `git merge-base --is-ancestor` says is not in `main` at all.
+    #
+    # A plausible wrong number is worse than an error, and this one degrades
+    # further on a fresh clone: the object was never fetched there, so
+    # `rev-parse` fails, this returns None, and the caller silently falls back
+    # to counting by DATE — the freshness gate quietly reverting to the
+    # measure it was rewritten to escape.
+    #
+    # The auditor predicted exactly this: "if it's abandoned or rebased, the
+    # marker has to be re-pointed at whatever actually lands, or C7 will be
+    # counting against a commit that no longer exists in the history."
+    reachable = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "merge-base", "--is-ancestor", ref, "HEAD"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if reachable.returncode != 0:
+        # UNREACHABLE, not None: None means "cannot measure, fall back to
+        # dates", and falling back here would answer a question nobody asked.
+        # The caller decides, so this reports one verdict rather than an `ok`
+        # and a `FAIL` about the same marker — which is what the first version
+        # of this fix did.
+        return UNREACHABLE
 
     counted = subprocess.run(
         ["git", "-C", str(REPO_ROOT), "rev-list", "--count", "--no-merges", f"{ref}..HEAD"],
@@ -745,6 +782,15 @@ def check_audit_freshness() -> None:
     # is the defect this checker exists to find, committed while fixing it.
     reviewed = marker.group(2)
     drift = _commits_since_ref(reviewed) if reviewed else None
+
+    if drift == UNREACHABLE:
+        fail(
+            "C7",
+            f"the audit marker names {reviewed}, which is not an ancestor of HEAD. It was squashed, rebased or "
+            f"abandoned, so any drift counted against it is meaningless — re-point the marker at the commit "
+            f"that actually landed.",
+        )
+        return
     if drift is None:
         drift = _commits_since(audited)
         measured = f"dated after {audited}"
