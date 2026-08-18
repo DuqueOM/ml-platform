@@ -43,7 +43,7 @@ that somebody else's tests pass.
 **Take:** the copier generator.
 
 ```bash
-uvx copier copy --vcs-ref HEAD --trust templates/project projects/my-project
+uvx copier copy --vcs-ref HEAD --trust . projects/my-project
 uv run pytest tests/test_project_contract.py -q
 ```
 

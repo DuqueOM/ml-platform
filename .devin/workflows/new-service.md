@@ -23,7 +23,7 @@ Before creating any files, determine:
 ## 2. Generate from the template
 
 ```bash
-uvx copier copy --vcs-ref HEAD --trust templates/project projects/"${SVC_SLUG}"
+uvx copier copy --vcs-ref HEAD --trust . projects/"${SVC_SLUG}"
 
 # Verify: no unrendered tokens survived
 grep -rn "{@ .* @}" projects/"${SVC_SLUG}" --include="*.py" --include="*.yaml" | head

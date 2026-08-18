@@ -134,7 +134,7 @@ adopting this as much as to building it.
 ```bash
 uv sync --all-packages --all-extras
 uv run pytest -q
-uvx copier copy --vcs-ref HEAD --trust templates/project projects/my-project
+uvx copier copy --vcs-ref HEAD --trust . projects/my-project
 uv run pytest tests/test_project_contract.py -q
 ```
 
