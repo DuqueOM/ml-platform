@@ -22,6 +22,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = REPO_ROOT / "scripts" / "check_library_reuse.py"
 
@@ -160,3 +162,78 @@ def test_the_plan_s_c1_threshold_is_recorded_where_it_can_be_checked() -> None:
     assert "reuse ≥3 shared libraries" in plan or "reuse >=3 shared libraries" in plan, (
         "the plan no longer states C1's threshold, so the measurement has nothing to be checked against"
     )
+
+
+def test_a_freshly_generated_project_satisfies_this_gate(tmp_path: Path) -> None:
+    """The generator must not ship the defect this gate exists to catch.
+
+    `check_library_reuse.py` scans `projects/`, so it could not see
+    `templates/project/` — and the generator declared `serving-core` for every
+    tabular and deep-learning project, `llm-core` and `serving-core` for every
+    LLM and agent one, while the template imported NONE of them.
+
+    Every project this platform generated therefore began life failing charter
+    criterion C1, in the exact way the gate was written to forbid: a
+    declaration that raises a reuse count without reusing anything. The gate
+    caught it in `demand-forecast` and could not reach the thing that put it
+    there.
+
+    Fixed by honouring the declaration rather than dropping it. The generated
+    `contracts/__init__.py` now imports `data_contracts` and builds a real
+    two-column `DataContract` — so a scaffolded project arrives USING the
+    platform, which is what a template for adoption owes its reader.
+    `serving-core` is no longer declared: seven lines, deliberately empty until
+    a second consumer justifies extracting it.
+    """
+    import shutil
+    import subprocess
+    import sys
+
+    if not (shutil.which("copier") or shutil.which("uvx")):
+        pytest.skip("copier unavailable")
+
+    destination = tmp_path / "probe"
+    result = subprocess.run(
+        [
+            "uvx",
+            "copier",
+            "copy",
+            "--vcs-ref",
+            "HEAD",
+            "--trust",
+            "--defaults",
+            "-d",
+            "project_name=Probe",
+            "-d",
+            "project_slug=probe",
+            "-d",
+            "project_kind=tabular",
+            "-d",
+            "dataset_key=nyc-tlc",
+            "-d",
+            "owner=platform-team",
+            str(REPO_ROOT),
+            str(destination),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    if result.returncode != 0:
+        pytest.fail(f"copier failed:\n{result.stdout}\n{result.stderr}")
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    import check_library_reuse as reuse
+
+    original = reuse.PROJECTS
+    reuse.PROJECTS = tmp_path
+    reuse.failures.clear()
+    try:
+        report = reuse.measure()
+    finally:
+        reuse.PROJECTS = original
+
+    assert not reuse.failures, "a freshly generated project fails the library-reuse gate:\n  " + "\n  ".join(
+        reuse.failures
+    )
+    assert report["probe"]["imported"], "the generated project imports no shared library, so it demonstrates nothing"

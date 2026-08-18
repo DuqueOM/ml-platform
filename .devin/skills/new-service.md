@@ -79,7 +79,7 @@ Answer these questions:
 ### 2. Generate the project
 
 ```bash
-uvx copier copy --vcs-ref HEAD --trust templates/project projects/"$service_slug"
+uvx copier copy --vcs-ref HEAD --trust . projects/"$service_slug"
 ```
 
 `--vcs-ref` is not optional. A bare `copier update` later, against an

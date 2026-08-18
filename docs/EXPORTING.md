@@ -20,7 +20,7 @@ gets everything else by living in the monorepo.
 ## Duplicate one
 
 ```bash
-uvx copier copy --vcs-ref HEAD --trust templates/project projects/my-project
+uvx copier copy --vcs-ref HEAD --trust . projects/my-project
 ```
 
 Answer the prompts — `project_slug`, `project_kebab`, `project_name`,

@@ -101,7 +101,20 @@ def imported(project: Path) -> set[str]:
     by_module = {module: name for name, module in shared_libraries().items()}
     found: set[str] = set()
 
-    for path in sorted((project / "src").rglob("*.py")):
+    for path in sorted(project.rglob("*.py")):
+        # `src/` was the only directory scanned, and a generated project keeps
+        # its schema contracts at the project root — so the gate reported that
+        # a project importing `data_contracts` in `contracts/__init__.py`
+        # imported nothing. Found by the test that generates a project and
+        # runs this against it, which is the only reader that exercises a
+        # layout other than the two projects already in the tree.
+        #
+        # `tests/` stays out: a library imported only by a test is not product
+        # reuse, and counting it would let a project satisfy charter criterion
+        # C1 without shipping anything that uses the platform. QA-4 round five
+        # confirmed that reading.
+        if "tests" in path.relative_to(project).parts:
+            continue
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"))
         except SyntaxError:
