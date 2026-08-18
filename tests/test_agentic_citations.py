@@ -44,7 +44,16 @@ _DISCLAIMED = (
     "has never existed here",
     "does not exist here",
     "not in the tree",
-    "upstream",
+    # NOT the bare word "upstream". It appears in ordinary prose all over
+    # these bodies, so exempting any paragraph containing it would let a real
+    # broken citation hide behind a passing mention — the mirror image of the
+    # too-NARROW detector QA-4 round five found in the baselines wiring test,
+    # and harder to notice because an over-broad exemption shows up as green.
+    #
+    # Measured before removing it: zero citations were exempted by that word
+    # alone, so the gate loses nothing today and stops being able to lose
+    # something tomorrow.
+    "belongs to ml-service-template",
     "ml-service-template",
     "there is no",
     # A skill's OUTPUT is not a dependency. "Append to `docs/x.md`" names what
