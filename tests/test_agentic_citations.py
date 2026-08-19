@@ -55,7 +55,15 @@ _DISCLAIMED = (
     # something tomorrow.
     "belongs to ml-service-template",
     "ml-service-template",
-    "there is no",
+    # NOT the bare phrase "there is no". QA-4 round six found it in ordinary
+    # prose — `agentic/workflows/release.md` says "there is no urgency
+    # exception" — so any paragraph carrying that sentence exempted every path
+    # in it. Same shape as the bare word "upstream" removed one round earlier,
+    # and the same measurement before removing: it exempted exactly one path
+    # today, `scripts/audit_record.py`, which exists. Nothing lost, one way to
+    # hide a finding closed.
+    "there is no such file",
+    "there is no wrapper",
     # A skill's OUTPUT is not a dependency. "Append to `docs/x.md`" names what
     # the run produces, and demanding it exist beforehand would require every
     # skill to ship its own results. Four of the thirty were this, which means

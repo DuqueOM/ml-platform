@@ -322,3 +322,98 @@ stay together.
 | normal `overwrite` deletes the table | Fixed — the predicate is scoped to the months present, non-contiguous months do not delete the gap, and an empty frame is refused. Six unit tests, deliberately not `integration`, so they run in CI |
 | dead `pytestmark`, naive `datetime` | Fixed |
 | `release-on-tag` publishes the cadence note | Fixed — the section boundary now stops at any H2, not only the next VERSION heading, and `\|\| true` no longer swallows an awk failure. `tests/test_release_notes.py` runs the workflow's own extraction against the real CHANGELOG; both regression tests were confirmed failing with the old boundary. Also found while fixing it: the ported `release.md` workflow instructed the agent to confirm a `releases/` directory that does not exist here, citing a check ("C6") that means something else in this repository |
+
+---
+
+# QA-4 Round Six — Independent Audit
+
+**Date**: 2026-08-19 · **Commit**: `5c02411` (4 commits audited) · **Session**: independent  
+**Delta from**: 2026-08-17 (`69e4c61`) — 4 commits following it  
+**Procedure**: `docs/governance/qa-procedures.md` QA-4  
+**Context**: Commits are fixes to findings the previous round raised; audit verifies fixes resolve without introducing new defects  
+
+## Scope
+
+Audited the four commits in the delta:
+- 2bdc4d7 `fix(coherence): C7 counted drift against a commit on no branch (#31)`
+- cd04dcd `fix(tests): the citation gate exempted any paragraph containing "upstream" (#32)`
+- 4544a70 `fix(scaffolding): the documented copier command produced an unrendered project (#33)`
+- 5c02411 `fix(libs): two package docstrings described libraries that do not exist (#34)`
+
+The previous round reported 6 findings, 4 of which this commit identifies as false positives (wrong source/misreading). Verified: all four misidentifications confirmed.
+
+## Verified correct
+
+| Surface | Result |
+| --- | --- |
+| Numeric counts (9 ADRs, 23 rules, 29 skills, 22 workflows) | Verified from filesystem |
+| C7 reachability fix for orphaned commits | Works; test passes; HEAD case confirmed |
+| Citation gate — removed "upstream" exemption | Confirmed zero citations exempted; replacement phrase tested |
+| Copier scaffolding — documented command corrected | Command now renders correctly; test catches regressions |
+| Library docstrings — serving-core and llm-core corrected | Docstrings now match implementation |
+| Empty libraries gate | Test covers the three implemented cases; no false negatives in current repo |
+| Test suite on all four commits | 19 critical tests pass (8 C7, 3 copier, 6 empty-libs, 2 citations) |
+
+## Findings
+
+### [P2] Citation exemption phrase "there is no" is overly broad
+
+```text
+tests/test_agentic_citations.py:58
+```
+
+Current exemptions include "there is no" to discount broken-citation mentions when the file is acknowledged to not exist. However, the phrase appears in at least one context of ordinary prose:
+
+```text
+agentic/workflows/release.md: "release will feel safe or not; there is no urgency exception"
+```
+
+This paragraph mentions neither files nor broken citations. The exemption applies indiscriminately to any paragraph containing the phrase. While it exempts zero citations today (measured pattern from commit #32), it creates a vector for future broken citations to hide.
+
+**Fix**: Remove or narrow to "there is no [path-like-thing]" with explicit path pattern following.
+
+### [P2] Copier parser does not handle quoted destinations with spaces
+
+```text
+tests/test_documented_scaffolding.py:74
+```
+
+The `_positional()` function splits on whitespace without respecting quotes. An invocation like:
+
+```text
+copier copy . "projects/my project"
+```
+
+Is parsed as `['.', '"projects/my', 'project"']`, producing wrong output. The test does not probe this edge case, and no current documentation uses quoted paths, so it is not a present-day defect. However, the gate should be robust to forms it documents it can accept.
+
+**Fix**: Update parser to respect shell quoting, or document that quoted paths are not supported.
+
+### [P3] C7 test coverage gap: lightweight tags and shallow clones untested
+
+```text
+tests/test_audit_drift_counter.py:232-289
+```
+
+The reachability check tests orphaned commits and HEAD but does not explicitly test:
+- Lightweight tags (git tag without -a): Likely work (code uses `ref^{commit}` dereferencing) but untested
+- Shallow clones: Mentioned in comments, not tested
+
+These are edge cases; core functionality (unreachable markers, reachable markers) is well covered.
+
+**Fix**: Add explicit tests for both cases to complete coverage.
+
+## Disposition
+
+| Finding | Action |
+| --- | --- |
+| P2 "there is no" exemption | Recommend removal or narrowing; no blocker, can address in follow-up |
+| P2 copier parser quoting | Edge case; document constraint or extend parser; no blocker |
+| P3 C7 tag/shallow tests | Coverage gap; low risk; backlog acceptable |
+
+## Closing verdict
+
+The delta successfully resolved the defects from the previous round. No P0 or P1 defects introduced.
+
+The previous round's 4-of-6 false positives are confirmed as instruction errors (wrong repo, misread count interpretation, incorrect file checks) rather than code errors. This audit finds 2 P2 substantive gaps and 1 P3 coverage gap in the fixes themselves — all fixable, none blocking use.
+
+**The audited code is ready.**

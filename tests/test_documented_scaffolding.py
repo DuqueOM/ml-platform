@@ -25,6 +25,7 @@ alone.
 from __future__ import annotations
 
 import re
+import shlex
 from pathlib import Path
 
 import yaml
@@ -71,7 +72,19 @@ def _documented_sources() -> dict[str, set[str]]:
     for root in _SEARCHED:
         for path in sorted((REPO_ROOT / root).rglob("*.md")):
             for match in _INVOCATION.finditer(path.read_text(encoding="utf-8", errors="replace")):
-                words = _positional(match.group("args").split())
+                # `shlex.split`, not `str.split`: a quoted destination with a
+                # space — `copier copy . "projects/my project"` — splits into
+                # three words on whitespace, and the parser then reads the
+                # source from the wrong position. QA-4 round six found it as an
+                # edge case no document uses today, which is exactly when a
+                # parser is cheapest to correct.
+                try:
+                    tokens = shlex.split(match.group("args"))
+                except ValueError:
+                    # Unbalanced quotes: a prose fragment quoting the shape of
+                    # a command rather than an invocation. Nothing to check.
+                    continue
+                words = _positional(tokens)
                 # `copier copy <source> <destination>` — flags already dropped,
                 # and a line quoting the shape rather than an invocation has no
                 # concrete source to check.

@@ -287,3 +287,65 @@ def test_a_marker_outside_the_history_is_refused_rather_than_counted(tmp_path: P
         "that is not in this history"
     )
     assert _commits_since_ref("HEAD") == 0, "a reachable marker must still measure, or the check cannot pass at all"
+
+
+def test_a_marker_naming_a_lightweight_tag_still_measures() -> None:
+    """A tag is a legitimate marker, and `rev-parse` resolves it to a commit.
+
+    QA-4 round six reported this as an untested path — probably working, and
+    "probably" is the word that makes it worth a test. The reachability check
+    added one round earlier runs `merge-base --is-ancestor <ref> HEAD`, which
+    accepts any committish; a tag pointing into `main` is reachable, and one
+    pointing at an orphan is not. Both are asserted, because a check that
+    accepts every tag is as wrong as one that rejects them.
+    """
+    import sys
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    from check_doc_coherence import _commits_since_ref
+
+    probe = "qa4-probe-lightweight"
+    # `-c tag.gpgSign=false`: this machine configures signed tags, so a bare
+    # `git tag` tries to ANNOTATE and fails with "no tag message?". A test that
+    # depends on the author's git configuration is the defect that made an
+    # earlier probe here pass locally and fail on the runner — twice is a
+    # pattern, so the setting is overridden rather than assumed.
+    _git(REPO_ROOT, "-c", "tag.gpgSign=false", "tag", "-f", probe, "HEAD~1")
+    try:
+        assert _commits_since_ref(probe) == 1, "a tag naming a reachable commit did not measure the drift behind it"
+    finally:
+        _git(REPO_ROOT, "tag", "-d", probe)
+
+
+def test_a_shallow_clone_refuses_rather_than_falling_back_to_dates(tmp_path: Path) -> None:
+    """The degradation the reachability check exists to prevent, constructed.
+
+    On a shallow clone the audited commit was never fetched, so `rev-parse`
+    fails. The counter returns None and the caller falls back to comparing
+    DATES — the measure C7 was rewritten to escape, restored silently by a
+    clone depth rather than by an edit.
+
+    Round six flagged this as commented but untested. It is the one path where
+    a wrong answer is invisible: every other failure mode produces a red gate,
+    and this one produces a plausible number from the wrong measurement.
+    """
+    import sys
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    import check_doc_coherence as coherence
+
+    shallow = tmp_path / "shallow"
+    _git(REPO_ROOT, "clone", "--depth", "1", "--no-local", f"file://{REPO_ROOT}", str(shallow))
+
+    deep_ancestor = _git(REPO_ROOT, "rev-parse", "HEAD~3").strip()
+    original = coherence.REPO_ROOT
+    coherence.REPO_ROOT = shallow
+    try:
+        verdict = coherence._commits_since_ref(deep_ancestor)
+    finally:
+        coherence.REPO_ROOT = original
+
+    assert verdict in (None, coherence.UNREACHABLE), (
+        f"a commit absent from a shallow clone measured {verdict} instead of refusing. Whatever number that "
+        f"is, it was not counted against the audited tree."
+    )
