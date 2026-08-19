@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -237,3 +238,33 @@ def test_a_freshly_generated_project_satisfies_this_gate(tmp_path: Path) -> None
         reuse.failures
     )
     assert report["probe"]["imported"], "the generated project imports no shared library, so it demonstrates nothing"
+
+    # And the gates a generated project must satisfy beyond reuse. An external
+    # audit filed this as critical: generation was exercised in CI, but the
+    # OUTPUT was only ever checked against one gate, so "it generated" stood
+    # in for "it generated something valid".
+    #
+    # Kept to checks that need no workspace install — the probe lives outside
+    # the uv workspace, so `mypy` and the import-time suites cannot run
+    # against it without a resolution this test has no business performing.
+    for python_file in sorted(destination.rglob("*.py")):
+        source = python_file.read_text(encoding="utf-8")
+        try:
+            compile(source, str(python_file), "exec")
+        except SyntaxError as error:  # pragma: no cover — the assertion carries the message
+            pytest.fail(f"the generated {python_file.relative_to(destination)} is not valid Python: {error}")
+
+    leaked = [
+        str(path.relative_to(destination))
+        for path in sorted(destination.rglob("*"))
+        if path.is_file() and ("{@" in path.name or "{%" in path.read_text(encoding="utf-8", errors="ignore"))
+    ]
+    assert not leaked, (
+        "unrendered template tokens survived into the generated project:\n  "
+        + "\n  ".join(leaked)
+        + "\n\nThis is what passing copier the wrong source produces, and it exits 0 while doing it."
+    )
+
+    manifest = tomllib.loads((destination / "pyproject.toml").read_text(encoding="utf-8"))
+    assert manifest["project"]["name"], "the generated pyproject declares no project name"
+    assert "{@" not in str(manifest), "the generated pyproject carries an unrendered token"
