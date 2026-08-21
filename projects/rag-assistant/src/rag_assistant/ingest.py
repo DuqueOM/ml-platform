@@ -18,6 +18,10 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+import polars as pl
+
+from rag_assistant.contracts import FILING_INDEX
+
 EDGAR = "https://www.sec.gov"
 
 #: SEC requires a contact address. A generic string is a blocked IP.
@@ -83,16 +87,26 @@ def parse_index(index_path: Path, *, form_type: str = "10-K") -> list[Filing]:
     between quarters, and a hardcoded slice silently mis-parses instead of
     failing.
     """
-    filings = []
+    rows = []
     for line in index_path.read_text(encoding="utf-8", errors="ignore").splitlines():
         parts = [field.strip() for field in line.split("  ") if field.strip()]
         if len(parts) != 5 or parts[0] != form_type:
             continue
         form, company, cik, filed, path = parts
-        if not cik.isdigit():
-            continue
-        filings.append(Filing(form=form, company=company, cik=cik, filed=filed, path=path))
-    return filings
+        rows.append({"form": form, "company": company, "cik": cik, "filed": filed, "path": path})
+
+    if not rows:
+        return []
+
+    # The contract replaces the inline `cik.isdigit()` check, and does one
+    # thing that check could not: it REPORTS. A row that fails is returned as
+    # a violation with the rule it broke, so a quarter whose fixed-width
+    # layout changed produces a finding rather than a shorter list.
+    frame = pl.DataFrame(rows)
+    FILING_INDEX.validate(frame)
+
+    digits = frame.filter(pl.col("cik").str.contains(r"^\d+$"))
+    return [Filing(**row) for row in digits.iter_rows(named=True)]
 
 
 def fetch_filings(filings: list[Filing], destination: Path, *, limit: int = 10) -> list[Path]:

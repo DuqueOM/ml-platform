@@ -3863,11 +3863,17 @@ name = "rag-assistant"
 version = "0.1.0"
 source = { editable = "projects/rag-assistant" }
 dependencies = [
+    { name = "data-contracts" },
     { name = "llm-core" },
+    { name = "polars" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "llm-core", editable = "libs/llm-core" }]
+requires-dist = [
+    { name = "data-contracts", editable = "libs/data-contracts" },
+    { name = "llm-core", editable = "libs/llm-core" },
+    { name = "polars", specifier = "~=1.20" },
+]
 
 [[package]]
 name = "referencing"
