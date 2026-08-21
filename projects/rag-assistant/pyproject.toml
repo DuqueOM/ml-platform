@@ -5,6 +5,10 @@ description = "Retrieval-augmented assistant over SEC EDGAR filings, with retrie
 requires-python = ">=3.11"
 dependencies = [
     "llm-core",
+    # Declared because `contracts.py` imports it: `parse_index` used to
+    # validate EDGAR's index inline and skip bad rows without recording why.
+    "data-contracts",
+    "polars~=1.20",
 ]
 
 [build-system]
