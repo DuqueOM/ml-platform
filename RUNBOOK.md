@@ -69,9 +69,13 @@ The hooks are installed by `bash scripts/dev-setup.sh` and verified by
 That much is worth having: the conventional-commit check and the formatters
 catch cheap mistakes at the cheapest moment.
 
-`pre-commit run --all-files` is **red on a clean checkout**, in four hooks, and
-`no-commit-to-branch` blocks the branch this repository's own history is
-written on. Both are recorded as open findings, with each hook named and its
+`pre-commit run --all-files` is **red on a clean checkout**, and the count is
+not the point — the composition is. Measured on `main`, three hooks fail for a
+scope defect and one fails correctly: `no-commit-to-branch` blocks `main`,
+which is the hook working, not a finding. Confusing the two is how a correct
+hook gets disabled alongside a broken one.
+
+The three scope defects are recorded as open findings, each hook named and its
 cause diagnosed, in
 [`docs/architecture/technical-plan.md`](docs/architecture/technical-plan.md#open-findings-from-the-parity-work--measured-not-yet-fixed).
 The common shape: the hook's file scope was never given the exclusions that
@@ -86,6 +90,45 @@ and the routes around it are worse than the hooks: skipping verification
 wholesale to get past a check that was never about your change. So this
 document does not print one. If a hook disagrees with the gate it shadows, run
 the gate directly, then fix the hook's scope.
+
+### What skipping the hooks costs, measured
+
+`--no-verify` is available and this document does not tell you never to use
+it. It tells you what it costs, because the cost is counter-intuitive and was
+paid seven times in one working session before anyone wrote it down.
+
+The `implementation-status` hook takes about nine minutes: it runs 42
+verification commands to derive the document. Skipping it to save those nine
+minutes cost fifteen every time, because **the hook does not only check the
+derived documents — it is what keeps them current.** Bypass it and the commit
+carries a status document describing the tree as it was before your change,
+which CI reports twenty minutes later.
+
+So the rule is an ORDER, not a prohibition:
+
+1. Make the change.
+2. Make every small fix it needs — the lint, the format, the conflict.
+3. **Then** regenerate the derived documents, over a tree that has stopped
+   moving.
+4. Verify with `--check`, read the result, and only then commit and push.
+
+Step 3 is the one that gets inverted. Regenerating and *then* fixing a lint
+invalidates what you just generated, and the generation takes minutes, so any
+edit inside that window lands in the output. That is how a derived document
+came to record `Version consistency` as FAILING while it passed: it was
+generated during the window in which the failure was being fixed, and it
+preserved a state that no longer existed.
+
+Step 4 is the one that gets chained. `verify && push` in one command means you
+act before reading the result, which is the same mistake as step 3 wearing a
+shell operator.
+
+**When a bypass is defensible.** When the hook blocks work for a reason
+unrelated to the change — C7 red on accumulated drift, say — and the bypass is
+declared in the commit message with its reason. CI runs the same checks, so
+nothing is smuggled past; what a declared bypass buys is that the next reader
+knows it happened and why. An undeclared one is indistinguishable from an
+oversight.
 
 ## When a gate fails
 

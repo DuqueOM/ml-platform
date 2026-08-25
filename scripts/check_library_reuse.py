@@ -62,6 +62,20 @@ failures: list[str] = []
 notes: list[str] = []
 
 
+def _shown(path: Path) -> str:
+    """A path as a reader recognises it, without assuming where it lives.
+
+    `relative_to(REPO_ROOT)` raises when the caller has pointed `LIBS` or
+    `PROJECTS` somewhere else — which every sandboxed test does, and which the
+    fork tests found the moment they were written. A display helper that can
+    raise turns a finding into a traceback about formatting.
+    """
+    try:
+        return str(path.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
 def shared_libraries() -> dict[str, str]:
     """Distribution name -> import name, for every library under `libs/`.
 
@@ -118,7 +132,7 @@ def imported(project: Path) -> set[str]:
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"))
         except SyntaxError:
-            failures.append(f"{path.relative_to(REPO_ROOT)} does not parse, so its imports cannot be read")
+            failures.append(f"{_shown(path)} does not parse, so its imports cannot be read")
             continue
 
         for node in ast.walk(tree):
@@ -134,9 +148,74 @@ def imported(project: Path) -> set[str]:
     return found
 
 
+def library_exports() -> dict[str, str]:
+    """Public module-level symbol -> the library file defining it.
+
+    **Module level only, never a method.** The first version of this walked
+    the whole AST and reported two forks in `demand-forecast` within five
+    minutes: `coverage` and `beats_baseline`. Both were methods on a backtest
+    dataclass — a `@property` returning a mean, and a no-argument predicate —
+    colliding by name with `ml_core.conformal.coverage` and
+    `llm_core.retrieval_eval.beats_baseline(candidate, baseline, margin)`.
+
+    Neither was a fork. A method named like a library function is an ordinary
+    fact about English, and a detector that cannot tell them apart produces
+    findings that cost more to disprove than to have — which is what an
+    external review had just demonstrated by filing four of them.
+    """
+    found: dict[str, str] = {}
+    for path in sorted(LIBS.rglob("*.py")):
+        if "tests" in path.relative_to(LIBS).parts or "__pycache__" in path.parts:
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in tree.body:
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) and not node.name.startswith(
+                "_"
+            ):
+                found.setdefault(node.name, _shown(path))
+    return found
+
+
+def reimplemented(project: Path, exports: dict[str, str]) -> dict[str, str]:
+    """Symbols this project defines that a shared library already exports.
+
+    This is the half of charter criterion C1 nothing measured. C1 reads "a
+    second project reuses >=3 shared libraries WITH NO FORK", and the count
+    was the only half computed — so a project could import every library and
+    still reimplement their contents beside them.
+
+    The count is the weak proxy: it rewards adding a line to a manifest. This
+    is the substantive half, because a fork is what makes a monorepo of
+    unrelated projects rather than a platform, which ADR-000 names as the
+    failure C1 exists to detect.
+    """
+    found: dict[str, str] = {}
+    for path in sorted(project.rglob("*.py")):
+        relative = path.relative_to(project)
+        if "tests" in relative.parts or "__pycache__" in path.parts:
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in tree.body:
+            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+                continue
+            if node.name.startswith("_") or node.name not in exports:
+                continue
+            found[node.name] = f"{_shown(path)}:{node.lineno}"
+    return found
+
+
 def measure() -> dict[str, dict[str, list[str]]]:
     """Reuse per project, and the two disagreements that are defects."""
     report: dict[str, dict[str, list[str]]] = {}
+    exports = library_exports()
+    if not exports:
+        failures.append("libs/ exports no public symbol — the enumeration is broken, not the tree")
 
     for project in sorted(PROJECTS.iterdir()):
         if not (project / "pyproject.toml").is_file():
@@ -155,6 +234,14 @@ def measure() -> dict[str, dict[str, list[str]]]:
             failures.append(
                 f"{project.name} imports `{library}` without declaring it. The build works only because the "
                 f"workspace installs everything; it breaks the moment the project is built alone"
+            )
+
+        # The other half of C1, and the substantive one.
+        for symbol, where in sorted(reimplemented(project, exports).items()):
+            failures.append(
+                f"{where} defines `{symbol}`, which `{exports[symbol]}` already exports. Charter criterion C1 "
+                f"is 'reuses shared libraries WITH NO FORK' — import it, or rename this if it is genuinely a "
+                f"different thing"
             )
 
     if not report:

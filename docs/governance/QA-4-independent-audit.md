@@ -325,16 +325,17 @@ stay together.
 
 ---
 
-# QA-4 Round Six — Independent Audit
+## QA-4 Round Six — Independent Audit
 
-**Date**: 2026-08-19 · **Commit**: `5c02411` (4 commits audited) · **Session**: independent  
-**Delta from**: 2026-08-17 (`69e4c61`) — 4 commits following it  
-**Procedure**: `docs/governance/qa-procedures.md` QA-4  
-**Context**: Commits are fixes to findings the previous round raised; audit verifies fixes resolve without introducing new defects  
+**Date**: 2026-08-19 · **Commit**: `5c02411` (4 commits audited) · **Session**: independent
+**Delta from**: 2026-08-17 (`69e4c61`) — 4 commits following it
+**Procedure**: `docs/governance/qa-procedures.md` QA-4
+**Context**: Commits are fixes to findings the previous round raised; audit verifies fixes resolve without introducing new defects
 
 ## Scope
 
 Audited the four commits in the delta:
+
 - 2bdc4d7 `fix(coherence): C7 counted drift against a commit on no branch (#31)`
 - cd04dcd `fix(tests): the citation gate exempted any paragraph containing "upstream" (#32)`
 - 4544a70 `fix(scaffolding): the documented copier command produced an unrendered project (#33)`
@@ -395,10 +396,19 @@ tests/test_audit_drift_counter.py:232-289
 ```
 
 The reachability check tests orphaned commits and HEAD but does not explicitly test:
+
 - Lightweight tags (git tag without -a): Likely work (code uses `ref^{commit}` dereferencing) but untested
 - Shallow clones: Mentioned in comments, not tested
 
 These are edge cases; core functionality (unreachable markers, reachable markers) is well covered.
+
+**Closed.** Both cases now have tests —
+`test_a_marker_naming_a_lightweight_tag_still_measures` and
+`test_a_shallow_clone_refuses_rather_than_falling_back_to_dates`. The second
+matters more than its severity suggests: it is the only path where a wrong
+answer is invisible, because every other failure mode produces a red gate and
+that one produces a plausible number from the date comparison C7 was rewritten
+to escape.
 
 **Fix**: Add explicit tests for both cases to complete coverage.
 

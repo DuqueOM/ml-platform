@@ -268,3 +268,91 @@ def test_a_freshly_generated_project_satisfies_this_gate(tmp_path: Path) -> None
     manifest = tomllib.loads((destination / "pyproject.toml").read_text(encoding="utf-8"))
     assert manifest["project"]["name"], "the generated pyproject declares no project name"
     assert "{@" not in str(manifest), "the generated pyproject carries an unrendered token"
+
+
+def test_a_project_reimplementing_a_library_symbol_fails(tmp_path: Path, monkeypatch) -> None:
+    """The half of C1 nothing measured until now.
+
+    The criterion reads "a second project reuses >=3 shared libraries WITH NO
+    FORK", and only the count was computed. A project could import every
+    library and reimplement their contents beside them, and the number would
+    say the platform claim held.
+
+    The count is the weak proxy — it rewards adding a line to a manifest. This
+    is the substantive half: a fork is what makes a monorepo of unrelated
+    projects rather than a platform, which ADR-000 names as the exact failure
+    C1 exists to detect.
+    """
+    import importlib
+
+    module = importlib.import_module("check_library_reuse")
+
+    libs = tmp_path / "libs" / "ml-core" / "src" / "ml_core"
+    libs.mkdir(parents=True)
+    (tmp_path / "libs" / "ml-core" / "pyproject.toml").write_text(
+        '[project]\nname = "ml-core"\nversion = "0"\n', encoding="utf-8"
+    )
+    (libs / "__init__.py").write_text("def seed_everything(seed):\n    return seed\n", encoding="utf-8")
+
+    projects = tmp_path / "projects"
+    probe = projects / "probe"
+    (probe / "src" / "probe").mkdir(parents=True)
+    (probe / "pyproject.toml").write_text(
+        '[project]\nname = "probe"\nversion = "0"\ndependencies = []\n', encoding="utf-8"
+    )
+    (probe / "src" / "probe" / "__init__.py").write_text(
+        "def seed_everything(seed):\n    return seed + 1\n", encoding="utf-8"
+    )
+
+    monkeypatch.setattr(module, "LIBS", tmp_path / "libs")
+    monkeypatch.setattr(module, "PROJECTS", projects)
+    module.failures.clear()
+    module.measure()
+
+    assert any("already exports" in message for message in module.failures), (
+        "a project reimplementing a library symbol was not reported"
+    )
+
+
+def test_a_method_named_like_a_library_function_is_not_a_fork(tmp_path: Path, monkeypatch) -> None:
+    """The false positive this detector produced on its first run.
+
+    Walking the whole AST reported two forks in `demand-forecast` inside five
+    minutes — `coverage` and `beats_baseline`, both METHODS on a backtest
+    dataclass, colliding by name with `ml_core.conformal.coverage` and
+    `llm_core.retrieval_eval.beats_baseline(candidate, baseline, margin)`.
+
+    Neither was a fork. A method named like a library function is an ordinary
+    fact about English, and a detector that cannot tell them apart produces
+    findings costlier to disprove than to have — which an external review had
+    just demonstrated by filing four of them in one report.
+    """
+    import importlib
+
+    module = importlib.import_module("check_library_reuse")
+
+    libs = tmp_path / "libs" / "ml-core" / "src" / "ml_core"
+    libs.mkdir(parents=True)
+    (tmp_path / "libs" / "ml-core" / "pyproject.toml").write_text(
+        '[project]\nname = "ml-core"\nversion = "0"\n', encoding="utf-8"
+    )
+    (libs / "__init__.py").write_text("def coverage(folds):\n    return 0.9\n", encoding="utf-8")
+
+    projects = tmp_path / "projects"
+    probe = projects / "probe"
+    (probe / "src" / "probe").mkdir(parents=True)
+    (probe / "pyproject.toml").write_text(
+        '[project]\nname = "probe"\nversion = "0"\ndependencies = []\n', encoding="utf-8"
+    )
+    (probe / "src" / "probe" / "__init__.py").write_text(
+        "class Report:\n    @property\n    def coverage(self):\n        return 0.9\n", encoding="utf-8"
+    )
+
+    monkeypatch.setattr(module, "LIBS", tmp_path / "libs")
+    monkeypatch.setattr(module, "PROJECTS", projects)
+    module.failures.clear()
+    module.measure()
+
+    assert not any("already exports" in message for message in module.failures), (
+        "a method was reported as a fork; the detector is walking nested scopes again"
+    )
