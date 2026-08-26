@@ -156,6 +156,31 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Fixed
 
+- **`strict = true` was declared in a place mypy does not honour as written,
+  and three documents described the result.** It sat in a
+  `[[tool.mypy.overrides]]` section naming the five shared libraries, under a
+  comment saying `libs/` was checked strictly "while `projects/` is allowed to
+  be looser". mypy hoists `strict` out of a per-module section, applies it
+  globally, and reports that section's module list as unused. Measured with a
+  controlled experiment — known-bad code in a module the list does not name
+  drew all six strict diagnostics; deleting that one section dropped it to the
+  two options set globally; identical under mypy 1.20.2 and 2.3.1. Nothing got
+  weaker: the tree already passed strict everywhere, which is exactly why the
+  misdeclaration was invisible for the repository's whole history.
+
+  Two consequences worth stating plainly. The entry below claiming
+  **"`feature_defs` was missing from the mypy strict allow-list"** recorded a
+  fix that changed nothing — the list was never what was in force — and
+  `tests/test_type_gate_scope.py` had been asserting that a name appeared in
+  that list, i.e. checking a declaration rather than a behaviour, which is the
+  same family of defect it was written to catch. The option now sits at
+  `[tool.mypy]`, the test asserts no override may re-narrow it, and
+  `tests/test_type_gate_enforces_its_config.py` runs known-bad code through the
+  real config so every option the gate claims is watched failing before it is
+  trusted. Found while reviewing the mypy 1.x -> 2.x bump, where the question
+  was not whether the repository still passes but whether the checker still
+  *reports* — a checker gone quieter is indistinguishable from a clean build.
+
 Three defects that synthetic single-series data could not expose, found within
 minutes of pointing the backtest at the real feed:
 

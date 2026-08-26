@@ -37,7 +37,7 @@ Apply to every commit, regardless of what changed.
 | # | Claim | Command | Threshold | Why this value |
 | --- | --- | --- | --- | --- |
 | P1 | Dependency direction holds | `uv run pytest tests/test_dependency_direction.py` | Zero violations | Charter criterion C1 is unfalsifiable without it. Non-negotiable |
-| P2 | Type-checked | `uv run mypy libs/ scripts/ projects/demand-forecast/src/` | Zero errors, strict on `libs/` | `libs/` has the widest blast radius; a type error there reaches every project |
+| P2 | Type-checked | `uv run mypy libs/ scripts/ projects/demand-forecast/src/` | Zero errors, `strict` over everything in scope | This row said "strict on `libs/`" and was wrong for the repository's whole history: `strict` sat in a per-module override, and mypy applies that flag globally while reporting the module list as unused. Measured, not read — the narrower claim understated what already ran, and `tests/test_type_gate_enforces_its_config.py` now runs known-bad code through this config so the threshold is watched failing |
 | P3 | Lint and format clean | `uv run ruff check . && uv run ruff format --check .` | Zero | Formatting arguments are a tax; a tool ends them |
 | P4 | Documentation coherent | `uv run python scripts/check_doc_coherence.py` | Zero | ADR-005 rules C, D, H mechanised |
 | P6 | Cloud-specific surface | `uv run python scripts/measure_cloud_surface.py --check` | <= 75% of Terraform lines | Multi-cloud means the DIFFERENCE is small and counted, not that two configs exist. A rising share is the abstraction leaking |
