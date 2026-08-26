@@ -55,6 +55,66 @@ def _mutated(path: Path, old: str, new: str) -> Iterator[None]:
         path.write_text(original, encoding="utf-8")
 
 
+def _version_locations() -> list[Path]:
+    """Every file the gate compares, taken from the gate itself.
+
+    Hardcoding the list is what made the previous residue check incomplete: it
+    named `VERSION`, `pyproject.toml` and `llms.txt` while the gate compares
+    five locations, so a probe leaking into `CHANGELOG.md` or
+    `technical-plan.md` was invisible. Measured, not reasoned about — a
+    deliberate leak was watched escaping it.
+
+    `--show` prints `<label>: <version> — <path>` per location, and the
+    reference line names no path because it *is* `VERSION`.
+    """
+    shown = _run("--show").stdout
+    found = [REPO_ROOT / match for match in re.findall(r"—\s*(\S+)\s*$", shown, re.MULTILINE)]
+    return [REPO_ROOT / "VERSION", *found]
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _probe_residue() -> Iterator[None]:
+    """Assert this module restored the files it mutates — and nothing more.
+
+    The previous version ran `git diff --name-only` over three hardcoded paths
+    and failed if any was modified. That asks the wrong question twice.
+
+    A dirty working tree is the normal state of anyone editing
+    `pyproject.toml`, so it reported *"a probe was not restored"* for a change
+    the probes never touched — measured: it went red on a branch whose only
+    relevant edit was moving mypy's `strict` key, with every probe restored
+    correctly. A check that fails for reasons unrelated to its subject is worse
+    than absent; it is ignored on sight, and the one time it means something it
+    looks like all the other times.
+
+    And three of five locations were watched. A leak into `CHANGELOG.md` or
+    `docs/architecture/technical-plan.md` passed silently, which a deliberately
+    broken `_mutated` confirmed.
+
+    So: every location the gate itself reports, compared against the bytes read
+    before the first probe ran. That is the only comparison that can tell a
+    leak from someone's work in progress, and it holds on a dirty tree, on a
+    detached HEAD, and outside a git checkout entirely.
+    """
+    watched = [path for path in _version_locations() if path.is_file()]
+    assert len(watched) >= 5, (
+        f"only {len(watched)} version location(s) resolved from the gate — the parser stopped matching, and "
+        f"a residue check watching nothing passes for the same reason a leak does"
+    )
+    before = {path: path.read_bytes() for path in watched}
+
+    yield
+
+    changed = sorted(
+        str(path.relative_to(REPO_ROOT)) for path, content in before.items() if path.read_bytes() != content
+    )
+    assert not changed, (
+        f"a probe in this module did not restore {changed}. `_mutated` writes the original back in a finally "
+        f"block, so this means a test wrote outside it — the file is now wrong on disk and every later gate in "
+        f"the session reads the wrong value."
+    )
+
+
 # --- the baseline -----------------------------------------------------------
 
 
@@ -223,15 +283,19 @@ def test_every_location_the_release_procedure_names_is_gated() -> None:
         )
 
 
-def test_the_probes_left_no_residue() -> None:
-    """Runs last by name. Every probe above rewrites a committed file."""
-    result = subprocess.run(
-        ["git", "-C", str(REPO_ROOT), "diff", "--name-only", "--", "VERSION", "pyproject.toml", "llms.txt"],
-        capture_output=True,
-        text=True,
-        check=False,
+def test_the_probes_left_no_residue(request: pytest.FixtureRequest) -> None:
+    """The comparison itself runs in `_probe_residue`'s teardown, after this.
+
+    What this asserts is that the fixture is *wired* — an autouse fixture is
+    invisible at the call site, so dropping `autouse=True` removes the whole
+    guarantee while every test in the file keeps passing. That is the failure
+    mode this module exists to catch, one level up.
+    """
+    assert "_probe_residue" in request.fixturenames, (
+        "the residue fixture is not active for this module. If `autouse=True` was removed, nothing compares "
+        "the probed files against what they held before the probes ran, and a leaked mutation reaches every "
+        "later gate in the session as a wrong value on disk."
     )
-    assert not result.stdout.strip(), f"a probe was not restored: {result.stdout}"
 
 
 if __name__ == "__main__":  # pragma: no cover - convenience only

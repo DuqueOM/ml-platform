@@ -312,7 +312,22 @@ def test_a_marker_naming_a_lightweight_tag_still_measures() -> None:
     # pattern, so the setting is overridden rather than assumed.
     _git(REPO_ROOT, "-c", "tag.gpgSign=false", "tag", "-f", probe, "HEAD~1")
     try:
-        assert _commits_since_ref(probe) == 1, "a tag naming a reachable commit did not measure the drift behind it"
+        # Asserted as an EQUIVALENCE, never against a constant. The first
+        # version expected exactly 1, which holds only where `HEAD~1` is one
+        # commit behind `HEAD` — true on a linear local branch and false on a
+        # runner, where `actions/checkout` builds a merge commit whose first
+        # parent is the base, so the range spans the whole branch. It passed on
+        # a one-commit pull request and went red on the next, which is a test
+        # measuring the shape of the history rather than the thing it names.
+        #
+        # What the test is FOR is that a lightweight tag resolves exactly like
+        # the SHA it points at: that is the untested path round six reported,
+        # and it holds whatever the history looks like.
+        by_sha = _commits_since_ref(_git(REPO_ROOT, "rev-parse", "HEAD~1").strip())
+        by_tag = _commits_since_ref(probe)
+        assert by_tag == by_sha, f"a lightweight tag measured {by_tag} where the SHA it names measured {by_sha}"
+        assert by_tag is not None, "a reachable lightweight tag was reported unmeasurable"
+        assert by_tag >= 1, f"a tag naming a reachable commit did not measure the drift behind it: {by_tag}"
     finally:
         _git(REPO_ROOT, "tag", "-d", probe)
 
