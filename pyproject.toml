@@ -21,7 +21,7 @@ orchestration = [
 dev = [
     "pytest~=8.3",
     "pytest-cov~=6.0",
-    "mypy~=1.13",
+    "mypy~=2.3",
     "ruff~=0.16",
     # Without stubs, every `import yaml` in scripts/ is an error under the
     # widened type gate — and silently untyped under the narrow one.
