@@ -69,17 +69,38 @@ select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "PT", "SIM", "RUF"]
 
 [tool.mypy]
 python_version = "3.11"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
 
-# libs/ has the widest blast radius: a type error there reaches every project,
-# so it is checked strictly while projects/ is allowed to be looser.
+# `strict` sat in a per-module override listing the five shared libraries, above
+# a comment saying libs/ was "checked strictly while projects/ is allowed to be
+# looser". Measured, that was not what ran: mypy hoists `strict` out of a
+# per-module section and applies it GLOBALLY, then reports the section's module
+# list as unused. A file in a module matching none of those patterns was
+# receiving `type-arg`, `comparison-overlap`, `unused-ignore` and
+# `no-untyped-call` all along, and deleting that one section dropped it to the
+# two options set here — the controlled experiment, identical under mypy 1.20.2
+# and 2.3.1.
 #
-# These patterns are the IMPORTABLE module names, not the directory names: a
-# member at libs/data-contracts publishes `data_contracts`. An override written
-# as `libs.*` matches nothing and mypy reports it only as a note — a setting
-# that appears active while doing nothing.
+# Two things follow. The split this repository documented in three places never
+# existed; and the earlier fix that ADDED `feature_defs.*` to that list, framed
+# as closing a gap in strict coverage, changed nothing — the list was never what
+# was in force. Same shape this repository keeps finding: the declared mechanism
+# is not the operating mechanism.
+#
+# So the option is declared where it acts. Nothing gets weaker: the whole tree
+# already passes strict, which is precisely why the misdeclaration was invisible.
+#
+# `strict` subsumes warn_return_any, disallow_untyped_defs and
+# warn_unused_configs, which were listed here separately. Rather than leave them
+# as redundant lines that would read as the floor if `strict` were ever removed,
+# tests/test_type_gate_enforces_its_config.py runs known-bad code through this
+# file and asserts each diagnostic still fires.
+strict = true
+
+# The overrides below are per-module and genuinely per-module: unlike `strict`,
+# `ignore_missing_imports` and `implicit_reexport` apply to the modules listed.
+# The patterns are IMPORTABLE module names, not directory names — a member at
+# libs/data-contracts publishes `data_contracts`, and an override written as
+# `libs.*` matches nothing while mypy reports it only as a note.
 [[tool.mypy.overrides]]
 # Optional deep-learning frameworks: seeded when present, reported as
 # unavailable when not. Neither is a declared dependency.
@@ -100,15 +121,6 @@ ignore_missing_imports = true
 # list above would state something false AND discard the types it does provide.
 module = ["great_expectations.*"]
 implicit_reexport = true
-
-[[tool.mypy.overrides]]
-# feature_defs was missing from this list while every sibling was present.
-# It owns the point-in-time join and the leakage detector — the code where a
-# type error is most likely to be a correctness error — and it was the one
-# library checked loosely. Absence from an allow-list is invisible; nothing
-# reports "you forgot one".
-module = ["ml_core.*", "data_contracts.*", "feature_defs.*", "llm_core.*", "serving_core.*"]
-strict = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "libs", "projects"]
