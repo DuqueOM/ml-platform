@@ -156,6 +156,34 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Fixed
 
+- **A residue check that watched three of five files and failed on clean
+  work.** `test_the_probes_left_no_residue` ran `git diff --name-only` over
+  `VERSION`, `pyproject.toml` and `llms.txt`. A dirty working tree is the
+  normal state of anyone editing `pyproject.toml`, so it reported "a probe was
+  not restored" for edits the probes never touched, and it watched three of the
+  five locations the version gate actually compares — a leak into `CHANGELOG.md`
+  or `docs/architecture/technical-plan.md` passed silently, confirmed by
+  disabling `_mutated`'s restore and watching both files stay at 0.0.9 while the
+  check said nothing. Replaced by a module-scoped autouse fixture that reads
+  every location the gate reports through `--show` and compares bytes at
+  teardown, so it distinguishes a leak from work in progress on a dirty tree, a
+  detached HEAD, or outside a git checkout. The named test remains and asserts
+  the fixture is wired: an autouse fixture is invisible at the call site, so
+  dropping `autouse=True` would remove the guarantee with every test still
+  passing.
+- **A probe that measured the shape of the history, not the thing it named.**
+  `test_a_marker_naming_a_lightweight_tag_still_measures` tagged `HEAD~1` and
+  expected the drift counter to return exactly 1 — true on a linear local
+  branch, false on a runner, where `actions/checkout` builds a merge commit
+  whose first parent is the base. It passed on a one-commit pull request and
+  went red on the next, reporting a fault in the counter that was not there.
+  Asserted as an equivalence instead: a lightweight tag must measure exactly
+  what the SHA it points at measures. Verified against a locally reconstructed
+  merge commit, the shape that broke it.
+- **`actions/setup-python` was listed twice** in `pr-evidence-check.yml`, the
+  first without the `with:` block that pins `.python-version` — a stray line
+  from the commit that pinned eight actions to commit SHAs.
+
 - **`strict = true` was declared in a place mypy does not honour as written,
   and three documents described the result.** It sat in a
   `[[tool.mypy.overrides]]` section naming the five shared libraries, under a
