@@ -101,7 +101,8 @@ that only lists advantages is a decision nobody can revisit.
 
 ## Style
 
-Ruff for lint and format, line length 120. Mypy strict on `libs/`. Google-style
+Ruff for lint and format, line length 120. Mypy `strict` over everything it
+checks — `libs/`, `scripts/` and project sources alike. Google-style
 docstrings, type hints on public functions, `~=` for ML pins — `numpy 2.x`
 corrupts joblib artifacts, which is the kind of thing a pin exists for.
 
