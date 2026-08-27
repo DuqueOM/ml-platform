@@ -579,6 +579,28 @@ uv run python tests/test_dependency_direction.py
 libraries with no fork. If it cannot, the library boundaries are wrong and
 Phase 4 does not start until they are re-derived.
 
+**Met, and now a ratchet rather than a sentence.** `rag-assistant` reuses
+`data-contracts`, `llm-core` and `ml-core`, and the fork half reports nothing:
+
+```bash
+uv run python scripts/check_library_reuse.py
+  ok   [reuse] rag-assistant: reuses 3 shared librar(ies) — data-contracts, llm-core, ml-core
+```
+
+The third arrived with `abstention.py`, which fits the answer/refuse threshold
+with `ml_core.decision` — the same question the tabular track asks, and the
+reason a second implementation here would have been the fork this criterion
+exists to detect. `MINIMUM_REUSE` in that script records the floor, so the
+question a gate answers changes from *"has it got there yet"* — unanswerable
+while a project is mid-phase, which is why nothing enforced this before — to
+*"has it dropped back"*. `check_thresholds.py` watches the floor itself, since
+a number nobody watches is one that can be lowered instead of met.
+
+**What this does NOT clear.** The rest of Phase 3 — pgvector retrieval, the LLM
+gateway with per-request cost accounting, prompt versioning, Langfuse tracing,
+and the evaluation gates A1–A3 — remains open. C1 was the precondition on
+*Phase 4*, not a claim that Phase 3 is done.
+
 ---
 
 ## Phase 4 — ML depth

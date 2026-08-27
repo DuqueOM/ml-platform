@@ -5,6 +5,12 @@ description = "Retrieval-augmented assistant over SEC EDGAR filings, with retrie
 requires-python = ">=3.11"
 dependencies = [
     "llm-core",
+    # `abstention.py` fits the answer/refuse threshold with
+    # `ml_core.decision`. The question — given a confidence and what each
+    # mistake costs, where is the cut-off — is the same one the tabular track
+    # asks, and writing a second answer here is the fork charter criterion C1
+    # exists to prevent.
+    "ml-core",
     # Declared because `contracts.py` imports it: `parse_index` used to
     # validate EDGAR's index inline and skip bad rows without recording why.
     "data-contracts",

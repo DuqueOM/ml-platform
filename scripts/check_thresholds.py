@@ -117,6 +117,11 @@ THRESHOLDS = (
     # re-argued. Raising it is how "dated" decays into "permanent, with a
     # date on it" — the failure .security-baselines/README.md describes and
     # nothing enforced until the expiry gate landed.
+    Threshold(
+        "rag-assistant shared-library reuse floor",
+        "scripts/check_library_reuse.py",
+        r'"rag-assistant":\s*(\d+)',
+    ),
     Threshold("L1 line coverage floor", "scripts/check_branch_coverage.py", r"LINE_FLOOR\s*=\s*([\d.]+)"),
     Threshold("L2 branch coverage floor", "scripts/check_branch_coverage.py", r"BRANCH_FLOOR\s*=\s*([\d.]+)"),
     Threshold(
