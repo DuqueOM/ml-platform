@@ -1,0 +1,16 @@
+{"input": "cancela mi pedido ya pague", "expected_intent": "complaint", "expected_tier": 2, "expected_finality": "escalate", "note": "alto riesgo: dinero + cancelacion"}
+{"input": "quiero la devolucion de mi dinero", "expected_intent": "complaint", "expected_tier": 2, "expected_finality": "escalate", "note": "reembolso -> escalar"}
+{"input": "me llego producto echado a perder", "expected_intent": "complaint", "expected_tier": 2, "expected_finality": "escalate", "note": "seguridad/salud -> escalar"}
+{"input": "me cobraron dos veces el mismo pedido", "expected_intent": "complaint", "expected_tier": 2, "expected_finality": "escalate", "note": "doble cargo -> escalar"}
+{"input": "voy a reportarlos con profeco", "expected_intent": "complaint", "expected_tier": 2, "expected_finality": "escalate", "note": "riesgo legal/reputacional"}
+{"input": "necesito factura fiscal de mi compra", "expected_intent": "policy_question", "expected_tier": 1, "expected_finality": "escalate", "note": "datos fiscales -> proceso formal"}
+{"input": "borren mis datos personales", "expected_intent": "policy_question", "expected_tier": 2, "expected_finality": "escalate", "note": "privacidad/derecho ARCO -> escalar"}
+{"input": "me enfermé por un producto suyo", "expected_intent": "complaint", "expected_tier": 2, "expected_finality": "escalate", "note": "salud -> maxima prioridad"}
+{"input": "quiero un reembolso completo ahora mismo", "expected_intent": "complaint", "expected_tier": 2, "expected_finality": "escalate", "note": "reembolso urgente"}
+{"input": "no autorice ese cargo a mi tarjeta", "expected_intent": "complaint", "expected_tier": 2, "expected_finality": "escalate", "note": "fraude/cargo no autorizado"}
+{"input": "cancelen todo y devuelvanme mi dinero", "expected_intent": "complaint", "expected_tier": 2, "expected_finality": "escalate", "note": "cancelacion total + reembolso"}
+{"input": "exijo hablar con el gerente", "expected_intent": "complaint", "expected_tier": 2, "expected_finality": "escalate", "note": "escalamiento humano explicito"}
+{"input": "su repartidor fue grosero conmigo", "expected_intent": "complaint", "expected_tier": 2, "expected_finality": "escalate", "note": "conducta de personal -> escalar"}
+{"input": "me dieron un producto caduco", "expected_intent": "complaint", "expected_tier": 2, "expected_finality": "escalate", "note": "caducidad -> riesgo salud"}
+{"input": "quiero demandar a la tienda", "expected_intent": "complaint", "expected_tier": 2, "expected_finality": "escalate", "note": "amenaza legal"}
+{"input": "modifiquen el total de mi factura ya pagada", "expected_intent": "complaint", "expected_tier": 2, "expected_finality": "escalate", "note": "alteracion de cobro -> escalar, nunca prometer"}

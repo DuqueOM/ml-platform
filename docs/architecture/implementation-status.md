@@ -64,7 +64,7 @@ how "we deploy to two clouds" goes unchallenged.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**46 done · 2 partial · 6 absent** — of 54 tracked components.
+**46 done · 3 partial · 5 absent** — of 54 tracked components.
 
 **Proven in CI: 35 at L1 · 11 at L2.** Evidence available but NOT run here: 4 at L3, 0 at L4.
 
@@ -146,7 +146,7 @@ how "we deploy to two clouds" goes unchallenged.
 | | Layer | Component | Evidence |
 | :-: | :-: | --- | --- |
 | ✅ | L1 | libs/llm-core implementation | `uv run pytest libs/llm-core -q` passes |
-| ⬜ | — | projects/store-assistant | absent |
+| 🟡 | — | projects/store-assistant | 42 file(s), no verification command |
 | ✅ | L1 | projects/rag-assistant | `uv run pytest projects/rag-assistant -q` passes |
 
 ### Phase 4

@@ -1,0 +1,53 @@
+# Presupuestos por intent — evita loops bonitos pero caros
+# v3: valores estáticos por intent. Adaptativo: rechazado hasta tener >=4 semanas de P95 reales.
+
+default:
+  max_iterations: 4
+  max_tool_calls: 6
+  max_reflections: 1  # reflect es condicional (§F1.6): solo si tool-fail o risk>=medium
+  latency_budget_ms: 8000  # SLA WhatsApp
+  can_escalate_t3: false  # 31B requiere permiso explícito
+
+# Overrides por intent
+product_lookup:
+  max_iterations: 2  # Lookup simple
+  max_tool_calls: 3  # alias → inventory → pricing
+  latency_budget_ms: 5000
+
+order_create:
+  max_iterations: 5  # Puede requerir clarificaciones
+  max_tool_calls: 8  # Validación de stock + precios + creación
+  can_escalate_t3: true  # Orden es high-stakes
+  latency_budget_ms: 12000  # Tolera mayor latencia por complejidad
+
+order_status:
+  max_iterations: 2
+  max_tool_calls: 1
+  latency_budget_ms: 4000
+
+complaint:
+  max_iterations: 6
+  can_escalate_t3: true  # Sensible
+  latency_budget_ms: 10000
+
+policy_question:
+  max_iterations: 3
+  max_tool_calls: 2  # semantic_retrieval + maybe inventory
+  latency_budget_ms: 6000
+
+smalltalk:
+  max_iterations: 1
+  max_tool_calls: 0
+  max_reflections: 0  # No reflect en smalltalk
+  latency_budget_ms: 3000
+
+unknown:
+  max_iterations: 2
+  max_tool_calls: 1
+  latency_budget_ms: 5000
+
+# Cap diario de cloud (global, no por request)
+# Controlado por ExecutiveController en Fase 2
+cloud:
+  daily_cap_requests: 100  # 100 requests/día al tier cloud (si se usa opción A híbrida)
+  daily_cap_tokens: 500000  # 500k tokens/día

@@ -20,6 +20,71 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Added
 
+- **The agent core landed, four months after ADR-002 decided it.**
+  `agent-local` — multi-tier routing, a deterministic policy gate whose rules
+  are versioned data, a fail-closed tool capability contract, cross-tier
+  verification, decision telemetry with PII redaction, per-tier circuit
+  breakers — was still a separate repository on disk while this one carried
+  quality-gate rows written against its tests. `core/` is now `libs/llm-core`
+  and `usecases/tienda/` is `projects/store-assistant`, exactly the placement
+  ADR-002 wrote.
+
+  **History first.** The 31 commits were rewritten onto this repository's
+  topology with `git-filter-repo` and pushed as `history/agent-local`. ADR-002
+  asks for the commits because history is evidence; branch protection requires
+  linear history, so a subtree merge is impossible and an archived ref
+  satisfies the intent without a policy exception.
+
+  **Two boundary defects the move exposed, both fixed.** `load_usecase(name)`
+  resolved against `REPO_ROOT / "usecases"`, so the library knew that projects
+  exist and where; it takes the directory now. `load_agent(name)` imported
+  `usecases.<name>` through `importlib`; `build_agent(config, registry)` takes
+  the registry from the caller. Both were dependency-direction violations, and
+  the inversion is a better statement of what a use-case is.
+
+  The suite split along the same line, which is how the boundary was verified
+  rather than asserted: everything needing the store's prompts, policy data or
+  tools moved to the project, and what the library kept runs against a
+  synthetic use-case built in a temporary directory. 156 tests across the two.
+
+  `store-assistant` satisfies the project contract — README, `evals/gates.yaml`
+  with three blocking gates each naming a test that resolves, and a model card
+  whose limitations section says plainly that the model's judgement is not a
+  control. P1 is a recorded deviation with its cost, like `rag-assistant`'s:
+  a migrated project has no answers file.
+
+### Fixed
+
+- **Gate A5 passed by selecting nothing, and A3 and S3 with it.**
+  `uv run pytest -k tool_contract` matched no test in this repository and
+  **exited 0** — pytest deselects rather than fails — while the row carried no
+  PENDING marker. The selectors had been written against `agent-local`'s suite,
+  which is why they looked arbitrary here.
+
+  The instance is closed by the migration; the class is closed by C4, which now
+  rejects a `pytest -k` selector matching no test name or module in the tree.
+  **It found a third on its first run**: S3, "Serving invariants", whose
+  selector `serving_contract` appears nowhere in the repository and never did.
+  That row is now PENDING with the reason — `serving-core` is deliberately
+  empty until a second serving consumer exists, so there is nothing for those
+  invariants to hold over yet.
+
+  A4 was worse in a quieter way: its command was `--check cost`, a fragment of
+  a command line rather than one, so nothing could have run it. Marked PENDING
+  with what closing it means.
+- **The L1/L2 coverage gate measured a run that no longer executes the
+  library.** After the migration split the agent core's tests by ownership,
+  `pytest libs/` reported 76.48% lines and 57.85% branches while the suite that
+  actually runs the code reported 92.70%. The floors did not move; which runs
+  count did, and the alternative — a library suite duplicating a project's — is
+  the duplication ADR-001 exists to avoid.
+- **C2 read a project's own ADR numbering as dangling references.** The twelve
+  migrated records are `store-ADR-NNN` now, with the mapping and the reasoning
+  in their index, and the check was generalised from "a `template-` prefix" to
+  "any namespace prefix" so a third set never needs the gate edited. A file
+  PATH naming another repository's record is no longer read as a citation either — the
+  migrated records cite `ml-service-template` files by name.
+
 - **`rag-assistant` now clears charter criterion C1**, the precondition the
   technical plan puts on Phase 4: *"must reuse ≥3 shared libraries with no
   fork."* It reused two. The third arrived as work the project needed rather
@@ -193,8 +258,6 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   reach: rows already stored outside every ingested month. Reversible, since
   Iceberg records it as a snapshot — which is why EXPIRY is the STOP operation
   and this is not.
-
-### Fixed
 
 QA-4 round seven audited `35ffdec` and reported **1 P0, 6 P2, 4 P3**. Its
 verdict names the pattern better than any of the individual entries: *the

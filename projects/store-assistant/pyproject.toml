@@ -1,0 +1,22 @@
+[project]
+name = "store-assistant"
+version = "0.1.0"
+description = "The reference use-case for the agent core: a WhatsApp store assistant over fixture data."
+requires-python = ">=3.11"
+dependencies = [
+    # The whole point of this project, and the test ADR-001 rule 3 asks for: a
+    # second consumer that takes the library UNCHANGED. Every mechanism —
+    # routing, the policy engine, the tool registry, verification, telemetry —
+    # comes from here; what this project owns is domain content, which is
+    # exactly the split ADR-002 recorded when it placed `core/` in a library
+    # and `usecases/tienda/` in a project.
+    "llm-core",
+    "PyYAML~=6.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/store_assistant"]

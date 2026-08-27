@@ -47,7 +47,18 @@ _COMMAND = re.compile(r"`([^`]+)`")
 _SHELL_BUILTINS = frozenset({"cd", "make", "uv", "uvx", "python", "python3", "bash", "sh", "npx", "git"})
 
 _ADR_FILE = re.compile(r"^ADR-(\d{3})-[a-z0-9-]+\.md$")
-_ADR_REF = re.compile(r"(?<!template-)\bADR-(\d{3})")
+# Any hyphen-prefixed namespace is a FOREIGN reference: `template-ADR-018` is
+# ml-service-template's, `store-ADR-006` is the store use-case's. The rule was
+# written as a lookbehind for `template-` alone, so the ADR-002 migration —
+# which brought twelve project-scope ADRs whose numbers collide with this
+# repository's — would have had each one read as a dangling reference to an
+# index it was never part of. Generalised rather than extended with a second
+# project name, because naming projects in a gate is how the list grows.
+# A slash before it makes it a PATH, not a citation: the migrated store ADRs
+# cite `ml-service-template` files by their filename, and a filename is
+# checked by whether the file exists, not by this index. Without it, a correct
+# path to another repository's ADR read as a dangling reference to ours.
+_ADR_REF = re.compile(r"(?<![A-Za-z_/-])ADR-(\d{3})")
 # Inherited bodies use ml-service-template's numbering, namespaced so a
 # reference can never silently resolve against the wrong index (ADR-002).
 _INHERITED_ADR_REF = re.compile(r"\btemplate-ADR-(\d{3})")
@@ -259,6 +270,42 @@ def check_adrs_are_integrated(adrs: dict[str, Path]) -> None:
     ok("C3", "accepted ADRs are integrated")
 
 
+#: `pytest -k <selector>` inside a quality-gate row's command.
+_K_SELECTOR = re.compile(r"pytest[^`\n]*?-k\s+([A-Za-z_][A-Za-z0-9_ ]*)")
+
+
+def _test_names() -> frozenset[str]:
+    """Every test function name in this repository's own suites.
+
+    `templates/` and `services/` are excluded: the first is not executed as
+    tests, and the second is vendored from `ml-service-template` and tested in
+    its own repository, so a selector satisfied only there would be satisfied
+    by code this repository does not run.
+    """
+    names: set[str] = set()
+    for path in REPO_ROOT.rglob("test_*.py"):
+        relative = path.relative_to(REPO_ROOT).as_posix()
+        if relative.startswith(("templates/", "services/", ".venv/")):
+            continue
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        # The MODULE name too, because `-k` matches against the test id, which
+        # begins with it. Gate A3 selects `injection_containment` — the name of
+        # a file, not of any function in it — so a check that read only
+        # function names called a live gate dead. Caught by this check
+        # reporting a gate that had just been demonstrated selecting six tests.
+        names.add(path.stem)
+        names.update(re.findall(r"^\s*def (test_[A-Za-z0-9_]+)", text, re.M))
+    return frozenset(names)
+
+
+def _selects_a_test(token: str) -> bool:
+    """Whether `pytest -k <token>` would select at least one test.
+
+    Substring matching, which is what `-k` does against the test id.
+    """
+    return any(token in name for name in _test_names())
+
+
 def check_gate_traceability() -> None:
     """C4 — quality-gate rows carry a command and a threshold rationale.
 
@@ -305,6 +352,34 @@ def check_gate_traceability() -> None:
         for referenced in script_ref.findall(row):
             if not (REPO_ROOT / referenced).is_file():
                 fail("C4", f"gate {gate_id} runs {referenced}, which does not exist")
+
+        # A `pytest -k` selector that matches NO test. The sharpest form of the
+        # defect C4 exists for, because it exits 0: pytest DESELECTS rather
+        # than fails, so the command reports success for running nothing.
+        #
+        # Measured, not theorised. Gate A5 declared
+        # `uv run pytest -k tool_contract` with no PENDING marker — presenting
+        # itself as enforced — and the selector matched nothing here, because
+        # it had been written against the test suite of `agent-local`, which
+        # ADR-002 had not yet migrated. Running it printed nothing, exited 0,
+        # and C4 passed the row because `pytest` does appear in a workflow.
+        #
+        # Checked statically against the test names in the tree rather than by
+        # invoking pytest: a coherence check that imports the whole suite would
+        # take seconds and could fail for reasons that are not coherence.
+        for selector in _K_SELECTOR.findall(row):
+            unmatched = [
+                token
+                for token in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", selector)
+                if token not in {"and", "or", "not"} and not _selects_a_test(token)
+            ]
+            if unmatched:
+                fail(
+                    "C4",
+                    f"gate {gate_id} runs `pytest -k {selector.strip()}` and {unmatched} matches no test. "
+                    f"`-k` deselects rather than fails, so the command exits 0 while running nothing — "
+                    f"the one shape of dead gate that looks green",
+                )
 
         # A row naming a THIRD-PARTY binary was unchecked: only `scripts/*`
         # paths were resolved, so rows S4 and C1 declared

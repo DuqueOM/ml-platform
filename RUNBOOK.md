@@ -150,7 +150,7 @@ oversight.
 | Gate | Command | A failure means |
 | --- | --- | --- |
 | Lint / format | `uv run ruff check .` · `uv run ruff format --check .` | Mechanical. `ruff check --fix` and `ruff format` |
-| Types | `uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/` | `strict` applies to everything in scope, not only `libs/` — the per-module override that appeared to narrow it never did (mypy applies `strict` globally) |
+| Types | `uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/ projects/store-assistant/src/` | `strict` applies to everything in scope, not only `libs/` — the per-module override that appeared to narrow it never did (mypy applies `strict` globally) |
 | Agentic surfaces stale | `uv run python scripts/sync_agentic_adapters.py --check` | A canonical body changed without re-rendering. Fix with `make sync`, never by editing a rendered file. Passing, it reports the artifact and surface counts it checked — 74 across 4 |
 | Agentic surface integrity | `uv run python scripts/validate_agentic_surface.py --strict` | V1–V6: missing surface, drifted mirror, policy text in a pointer, an unresolvable authority, or a **de-escalated mode** |
 | Documentation coherence | `uv run python scripts/check_doc_coherence.py` | C1–C9; see the table below |

@@ -101,7 +101,7 @@ jobs:
         # every other claim in this repository, and it was the code the type
         # gate did NOT check — 26 errors sat there while the step reported
         # green. A gate scoped away from the gates is not a gate.
-        run: uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/
+        run: uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/ projects/store-assistant/src/
 
       - name: Agentic surface is current
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
@@ -219,8 +219,21 @@ jobs:
         # that ran (everything, failing at 78%) were different gates. Two
         # scopes need two thresholds, not one threshold applied to whichever
         # scope the command happened to name.
+        #
+        # The whole suite, measuring `libs/`. It ran `pytest libs/` until the
+        # ADR-002 migration, when the split it forced made that reading wrong:
+        # the agent core's domain-coupled tests moved to
+        # `projects/store-assistant`, so they exercise the library from there.
+        # Measured both ways on the same tree — 76.48% lines and 57.85%
+        # branches from `pytest libs/`, 92.70% and above the branch floor from
+        # the suite that actually runs the code.
+        #
+        # The floors are unchanged. What changed is which runs count, and the
+        # honest answer is "the ones that execute the library" — the
+        # alternative is a library suite that duplicates a project's, which is
+        # the duplication ADR-001 exists to avoid.
         run: |
-          uv run pytest libs/ -q \
+          uv run pytest -q \
             --cov=libs --cov-branch \
             --cov-report=term --cov-report=xml \
             --cov-fail-under=90

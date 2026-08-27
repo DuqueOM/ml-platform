@@ -30,6 +30,13 @@ PROJECTS = sorted(p for p in PROJECTS_DIR.iterdir() if p.is_dir() and not p.name
 #: danger, so `test_no_deviation_outlives_its_cause` makes each one expire the
 #: moment it stops being true.
 KNOWN_DEVIATIONS: dict[tuple[str, str], str] = {
+    ("store-assistant", "P1"): (
+        "Migrated from `agent-local` with its history (ADR-002), not generated, so there is no "
+        "answers file and `copier update` cannot reach it. Closing it means adopting a working "
+        "project into the generator, which rewrites its files — CONSULT, and recorded rather than "
+        "done quietly. The 31 original commits are on the `history/agent-local` branch, which is "
+        "the provenance an answers file would otherwise carry."
+    ),
     ("rag-assistant", "P1"): (
         "Built by hand rather than generated, so there is no answers file and `copier update` "
         "cannot reach it. Closing it means adopting the project into the generator, which "

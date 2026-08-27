@@ -48,6 +48,7 @@ members = ["libs/*", "projects/*"]
 ml-core = { workspace = true }
 data-contracts = { workspace = true }
 llm-core = { workspace = true }
+store-assistant = { workspace = true }
 serving-core = { workspace = true }
 feature-defs = { workspace = true }
 
@@ -121,7 +122,7 @@ ignore_missing_imports = true
 # Third-party packages that ship no type information. Listed explicitly rather
 # than set globally, so a NEW untyped import has to be added here deliberately
 # instead of being absorbed in silence.
-module = ["pyarrow.*", "pyiceberg.*", "duckdb.*", "sklearn.*", "joblib.*"]
+module = ["pyarrow.*", "pyiceberg.*", "duckdb.*", "sklearn.*", "joblib.*", "rank_bm25.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
