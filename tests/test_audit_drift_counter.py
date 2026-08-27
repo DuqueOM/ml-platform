@@ -22,7 +22,9 @@ longer asks it to.
 
 from __future__ import annotations
 
+import json
 import os
+import re
 import subprocess
 from datetime import date, datetime
 from pathlib import Path
@@ -363,4 +365,89 @@ def test_a_shallow_clone_refuses_rather_than_falling_back_to_dates(tmp_path: Pat
     assert verdict in (None, coherence.UNREACHABLE), (
         f"a commit absent from a shallow clone measured {verdict} instead of refusing. Whatever number that "
         f"is, it was not counted against the audited tree."
+    )
+
+
+# --- C7's marker must be corroborated by the hash-chained trail -------------
+
+
+def _trail(tmp_path: Path, *entries: dict[str, str]) -> Path:
+    path = tmp_path / "audit.jsonl"
+    path.write_text("\n".join(json.dumps(entry) for entry in entries) + "\n", encoding="utf-8")
+    return path
+
+
+def test_only_an_independent_audit_entry_corroborates_the_marker(tmp_path: Path) -> None:
+    """The marker is one editable line; the trail is append-only and chained.
+
+    Round six was audited, `AGENTS.md` moved to `5c02411` — which cleared C7 —
+    and `ops/audit.jsonl` received nothing. Nobody forged anything. The point
+    is that for a week nothing could have told the difference between a round
+    that happened and a line that said so.
+
+    A `promote` entry naming the same commit must NOT corroborate: any action
+    would, and the trail records dozens of them, so the check would clear
+    itself on ordinary work.
+    """
+    import sys
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    from check_doc_coherence import _audit_trail_names
+
+    audited = _trail(tmp_path, {"action": "independent-audit", "outcome": "Round 9 against tree abc1234"})
+    assert _audit_trail_names("abc1234", audited)
+
+    promoted = _trail(tmp_path, {"action": "promote", "outcome": "shipped abc1234"})
+    assert not _audit_trail_names("abc1234", promoted), (
+        "an entry of any action corroborated the marker, so ordinary work would clear the audit gate"
+    )
+
+
+def test_corroboration_matches_abbreviated_shas_in_both_directions(tmp_path: Path) -> None:
+    """A 7-character marker against a 40-character entry, and the reverse."""
+    import sys
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    from check_doc_coherence import _audit_trail_names
+
+    long_sha = "5c02411abcdef0123456789abcdef0123456789a"
+    assert _audit_trail_names("5c02411", _trail(tmp_path, {"action": "independent-audit", "outcome": long_sha}))
+    assert _audit_trail_names(long_sha, _trail(tmp_path, {"action": "independent-audit", "outcome": "5c02411"}))
+
+
+def test_a_malformed_line_does_not_hide_a_later_entry(tmp_path: Path) -> None:
+    """One unparseable line must not make the whole trail read as empty.
+
+    The failure would be silent and in the safe-looking direction: C7 would
+    report a missing corroboration for a round that is recorded three lines
+    further down.
+    """
+    import sys
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    from check_doc_coherence import _audit_trail_names
+
+    path = tmp_path / "audit.jsonl"
+    path.write_text(
+        "{ not json\n" + json.dumps({"action": "independent-audit", "outcome": "tree abc1234"}) + "\n",
+        encoding="utf-8",
+    )
+    assert _audit_trail_names("abc1234", path)
+
+
+def test_the_marker_this_repository_carries_is_corroborated() -> None:
+    """The guarantee itself, against the real files rather than a fixture."""
+    import sys
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    from check_doc_coherence import _audit_trail_names
+
+    marker = re.search(
+        r"Last independent audit:\s*\d{4}-\d{2}-\d{2}\s*\(([0-9a-f]{7,40})\)",
+        (REPO_ROOT / "AGENTS.md").read_text(encoding="utf-8"),
+    )
+    assert marker, "AGENTS.md carries no audit marker naming a commit"
+    assert _audit_trail_names(marker.group(1)), (
+        f"AGENTS.md names {marker.group(1)} as the audited commit and no independent-audit entry in "
+        f"ops/audit.jsonl mentions it — the line that clears C7 has nothing behind it"
     )

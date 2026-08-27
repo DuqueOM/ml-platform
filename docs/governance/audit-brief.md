@@ -130,18 +130,20 @@ should not.
 
 Broad shape:
 
-- 8 ADRs, `docs/decisions/`
-- Agentic surface: 23 rules, 29 skills, 22 workflows → 4 tool surfaces
-  (74 artifacts × 4 = 296 generated files)
-- 3 implemented libraries (`ml-core`, `data-contracts`, `feature-defs`) and
-  2 stubs (`llm-core`, `serving-core`, one file each). Listing five without
-  that split overstates what exists — which is the failure the derived
-  documents were built to prevent, occurring in the document that points at
-  them. `implementation-status.md` already marked both 🟡; only this prose
-  did not.
-- 1 project: `demand-forecast`
+- ADRs in `docs/decisions/`, agentic surface rendered to 4 tool surfaces —
+  counts from `check_doc_coherence.py`, never from this sentence
+- 5 libraries under `libs/`, of which `serving-core` is still a single module.
+  An earlier version of this brief listed five without that split and
+  overstated what existed — the failure the derived documents were built to
+  prevent, occurring in the document that points at them
+- 2 projects: `demand-forecast` and `rag-assistant`
 - the gates C4 resolves; `scripts/` holds the enforcing code
-- `ops/audit.jsonl` — hash-chained append-only operational record
+- `ops/audit.jsonl` — hash-chained append-only operational record, and since
+  round seven's preparation the record C7 checks its own marker against
+
+Run `uv run python scripts/check_library_reuse.py` for the split that matters:
+it prints how many shared libraries each project actually imports, and the
+technical plan's precondition for Phase 4 is **≥3 with no fork**.
 
 ---
 
@@ -291,7 +293,14 @@ Listed so their absence is not reported as a discovery — and so that anything
   training pipeline, expanding-window backtesting, serving generated from the
   template, end-to-end OTel traces.
 - Phase 2+ entirely: LLM and agent projects, multi-cloud infrastructure.
-- No independent audit has ever been recorded. That is what this brief is for.
+- Four verticals named in the plan and absent: `store-assistant`,
+  `credit-risk`, `doc-intelligence`, `agent-ops`.
+- Two absences that are decisions, recorded as such and not gaps: a shared
+  lakehouse module, and a documentation retrieval index.
+- `rag-assistant` reuses **2** shared libraries where charter criterion C1
+  asks for ≥3 with no fork. The gate reports the number and does not fail on
+  it, deliberately: a project mid-phase has a low count legitimately. The
+  precondition is still unmet and the plan still says Phase 4 waits on it.
 
 ---
 
@@ -346,12 +355,22 @@ When the audit is complete, append its outcome to the audit trail and record
 the date in `AGENTS.md`:
 
 ```bash
-python scripts/audit_record.py --action independent-audit --target ml-platform \
-  --mode CONSULT --outcome "<findings summary>" --evidence "<where the findings live>"
+uv run python scripts/audit_record.py --action independent-audit --target ml-platform \
+  --mode CONSULT --outcome "Round N against tree <sha>. <findings summary>" \
+  --evidence "<commands run, where the findings live>"
 ```
 
-Then add a line `Last independent audit: YYYY-MM-DD` to `AGENTS.md`. Check C7
-reads that line, and CI stays red until it exists.
+`--action independent-audit` and the **audited commit inside `--outcome`** are
+both load-bearing. Then add `Last independent audit: YYYY-MM-DD (<short-sha>)`
+to `AGENTS.md`.
+
+C7 reads that line **and requires the trail to corroborate it**: the marker is
+one editable line whose editing clears the gate, while `ops/audit.jsonl` is
+append-only and hash-chained. Round six was audited, the marker moved, and the
+trail received nothing — nobody forged anything, and that is the point: for a
+week nothing could have told the difference. The entry was backfilled in
+preparation for round seven, marked as backfilled, and the corroboration check
+was added so it cannot recur silently.
 
 **C7 must not be relaxed to make CI green.** A gate that passes because the
 thing it checks for is absent is the anti-pattern this repository was built to
@@ -359,76 +378,96 @@ avoid, and it has already occurred here once.
 
 ---
 
-## 11. Since the previous audit (2026-08-08)
+## 11. Since the previous audit — round seven's delta
 
-Forty-one commits. The counter C7 watches has been red throughout, which is the
-mechanism working rather than a build to fix.
+Round six audited `5c02411` on 2026-08-19 and reported **0 P0, 0 P1, 2 P2,
+1 P3** — the first round to find no broken control. What it found instead were
+the seams: an exemption phrase broad enough to cover ordinary prose, a command
+parser that split on whitespace, and two paths through C7 that were commented
+but untested.
 
-### New gates, and what each one caught on its first run
+Nine commits since. List them rather than trusting this paragraph:
 
-Every one of these was written because something was found wrong. Attack them
-first: a gate written in a hurry is a gate with a hole, and these were all
-written by the author of the thing they check.
+```bash
+git log --no-merges --oneline 5c02411..HEAD
+```
 
-| Gate | Found on arrival |
+### What landed, and what each thing was
+
+| Commit | What it was |
 | --- | --- |
-| `scripts/check_upstream_parity.py` | 17 artifacts the author's own hand comparison had missed, including a whole `.security-baselines/` directory |
-| `scripts/check_thresholds.py` | nothing yet — 9 numbers watched against git HEAD |
-| `scripts/check_test_clock_isolation.py` | a `date.today()` in the author's own expiry check |
-| `scripts/check_version_consistency.py` | five locations assert the version; nothing compared them |
-| `tests/test_security_controls.py` | four of six rows in `SECURITY.md` claimed to block and could not |
-| `tests/test_probe_paths.py` | six overlays probing routes the service does not serve |
-| `tests/test_project_contract.py` | `threshold: TODO` in the primary gate of the only implemented project |
-| `tests/test_absence_claims.py` | a sentence the author committed saying two files did not exist, hours after writing them |
-| `tests/test_gitops_manifests.py` (extended) | Pod Security unenforced in all six cloud overlays; production rendered with NO label and the suite passed 30/30 |
+| `cdef6ab` | Round six's three findings closed |
+| `ac852ab` | `rag-assistant`'s index parser silently dropped rows it could not read — a data-loss defect, found by the cloud review, not by a gate |
+| `c8fdcee` | Charter C1's **"with no fork"** half was never measured. The count was the only half computed, so a project could import every library and reimplement their contents beside them |
+| `#38`/`#39`/`#40` | Three Dependabot action bumps, SHA-pinned |
+| `021d2cd` | `strict = true` sat in a per-module mypy override; mypy applies it globally and marks the module list unused, so a documented strict/loose split never existed |
+| `242b5c6` | Three checks that misreported: a residue check watching 3 of 5 files and failing on unrelated edits, a probe measuring the shape of the history, a duplicated CI step |
+| `35ffdec` | mypy `~=1.13` → `~=2.3`, reviewed with a negative control rather than merged on green |
+| *(this branch)* | C7's marker must now be corroborated by the hash-chained trail |
 
-### The single most instructive failure
+### New checks to attack first
 
-`SECURITY.md` claimed Trivy blocks the build. `tests/test_security_controls.py`
-was written specifically to catch a control that claims to block and cannot —
-and the Trivy row **passed it**, because the step used `exit-code: "0"`, a third
-suppression spelling the check did not know. The defect was alive inside its
-own fix, and a cold reader of the workflow found it, not the test.
+A gate written by the author of the thing it checks is where a hole lives.
+These are the newest, and therefore the least weathered:
 
-Assume the same shape elsewhere. Every check in this repository knows a finite
-list of ways to be wrong, and the interesting failures are the ways not on the
-list.
+| Check | What it claims |
+| --- | --- |
+| `tests/test_type_gate_enforces_its_config.py` | Runs known-bad code through the real `pyproject.toml` and asserts six diagnostics fire. **Does it still fail if a diagnostic is silently downgraded rather than removed?** |
+| `_audit_trail_names` in `check_doc_coherence.py` | Matches shas out of free text in the trail. **A sha appearing in an entry for an unrelated reason would corroborate a marker that names it.** That is the obvious weakness and it is stated here rather than waited for |
+| `_probe_residue` in `tests/test_version_consistency.py` | Derives the watched files from `--show`. **If the parser stops matching, does the floor of 5 really catch it?** |
+| `reimplemented()` in `check_library_reuse.py` | Module-level definitions only, after two false positives on methods. **The narrowing that removed the false positives may have removed true ones** |
 
 ### Where the author's confidence proved wrong this round
 
-Stated plainly because it is the most useful thing here:
+The most useful section, stated plainly:
 
-- I told a subagent the pre-commit mypy failure was a SCOPE problem. It tested
-  that directly, found the scope was fine, and identified the real cause — an
-  isolated hook environment missing numpy and pytest. **My stated mechanism was
-  false and acting on it would not have produced green.**
-- I claimed the parity gap was 19 root files, 9 docs and 20 scripts. The gate
-  found 17 more.
-- I asserted a `:latest` tag was the finding; only the `local` overlay
-  overrode it, so six cloud overlays inherited it — a bigger blast radius than
-  I described.
-
-### Where to attack now, in order
-
-1. **`agentic/workflows/doc-coherence.md`** described the TEMPLATE's C1–C4
-   numbering for months. It was corrected this round. **Check every other
-   inherited body for the same defect** — a document that is right about the
-   upstream repository and wrong about this one.
-2. **The parity ledger's 32 rejections.** Each carries an argument. Some of
-   those arguments were written in bulk by the author, and the length floor
-   that caught six of them ("Same.") only catches brevity, not weakness.
-3. **`tests/local/`** — 35 tests that need a cluster, so CI never runs them.
-   They are the least-executed code in the repository.
-4. **`.security-baselines/`** holds zero suppressions and a policy for adding
-   one. Nobody has ever added one, so the policy has never been exercised.
-5. **`services/`** is byte-identical to upstream by claim. Nothing verifies
-   that claim.
+- I nearly filed **Dependabot's action-SHA change as a supply-chain finding**.
+  The old pin was the **annotated tag object**; the new one is the **commit it
+  dereferences to**. Both are `v0.36.0`. `git ls-remote --tags` shows both refs
+  and settled it in one command, after I had spent several reasoning about it.
+- I diagnosed a blocked pull request as **needing its branch updated**. It had
+  been updated; the real cause was that the second update produced **no
+  workflow run at all**, so four required checks had no result rather than a
+  failing one. The fix was to force a synchronize event, and the symptom
+  ("BLOCKED") is identical for both causes.
+- I asserted the mypy strict override **narrowed scope to `libs/`**. It never
+  did — and my own earlier fix, which added `feature_defs.*` to that list and
+  was recorded in the CHANGELOG as closing a gap in strict coverage, **changed
+  nothing**. The list was never what was in force.
+- I read a `type-arg` diagnostic out of a **shared `.mypy_cache`** and nearly
+  wrote down a conclusion the cache had produced, not the run. The probe now
+  uses its own cache directory, and that is written into the test.
 
 ### Explicitly still open, and not defects to report
 
-Recorded in `docs/architecture/technical-plan.md` under "Findings from the
-parity work": Checkov reports 114 findings and does not block; branch
-protection requires 2 of 4 CI jobs and no approving review; the vendored
-service's Pod Security differs from the platform's with nothing comparing
-them; and `no-commit-to-branch` contradicts a history of direct commits to
-`main`. Those are known. Finding them again is not a finding.
+Finding these again is not a finding. Verified at the time of writing, with
+the command that verifies them:
+
+- **P7 (Checkov) and P8 (Kubescape) are advisory, not blocking.** The CI steps
+  carry `soft_fail: true` and `continue-on-error: true`. `quality-gates.md`
+  published both as blocking thresholds until this round; the rows are now
+  marked ⚠️ with the reason. Promoting them is a triage commit against a
+  standing backlog, not a flag flip. **What IS a finding**: any other row in
+  that table whose CI step cannot fail.
+- **Branch protection requires 4 checks, `strict: true`, admins included, and
+  0 approving reviews** (`gh api repos/{owner}/{repo}/branches/main/protection`).
+  A single-maintainer repository cannot require a second approver; the second
+  party is C7, not a reviewer.
+- **`no-commit-to-branch` blocks direct commits to `main`** while the history
+  contains them from before it was added.
+- **`tests/local/`** needs a cluster, so CI never runs it. Still the
+  least-executed code here.
+- **Deployment has not started**, by the user's explicit sequencing, and the
+  old template deploys first.
+
+### The one question round seven exists to answer
+
+Round six found no broken control and reported seams. Rounds four and five
+found the same shape. **The hypothesis worth attacking is that this repository
+has stopped producing gates that cannot fail and started producing gates that
+fail for the wrong reason** — three of them were fixed this round alone, all
+found by CI rather than by review, and each had been green on the commit that
+introduced it.
+
+If that hypothesis is right, the useful audit is not another sweep for
+P-09. It is: take the checks that have never gone red in anger, and make them.
