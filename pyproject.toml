@@ -7,6 +7,13 @@ requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 dependencies = [
     "pyyaml>=6.0.3",
+    # `scripts/check_branch_coverage.py` reads `coverage.xml`. bandit flags
+    # stdlib `ElementTree.parse` as B314 — entity expansion — and the answer it
+    # names is this package, not a suppression. The input is a file our own
+    # coverage step writes, so the practical risk is small; adding a
+    # `# nosec` for a small risk is how a scanner becomes decorative, and
+    # `.security-baselines/` holds zero suppressions on purpose.
+    "defusedxml~=0.7",
 ]
 
 [project.optional-dependencies]
@@ -26,6 +33,9 @@ dev = [
     # Without stubs, every `import yaml` in scripts/ is an error under the
     # widened type gate — and silently untyped under the narrow one.
     "types-PyYAML~=6.0",
+    # defusedxml ships no py.typed, so the widened type gate reports its import
+    # as untyped rather than absorbing it in silence.
+    "types-defusedxml~=0.7",
 ]
 
 # uv workspace. Internal dependencies resolve from source, so a breaking change
@@ -147,6 +157,15 @@ omit = [
     "*/pytest-of-*/*",
     # Generated from ml-service-template and tested in its own repository.
     "services/*",
+    # A test suite measuring itself. `--cov=libs` counted `libs/*/tests/*`:
+    # 397 of 846 statements, at 99.26%, lifting the reported figure by roughly
+    # 2.3 points — so the number the L1 gate published was partly a statement
+    # about how thoroughly the tests execute themselves.
+    #
+    # QA-4 round seven measured the decomposition. The floor is unchanged at 90
+    # and the honest figure clears it; what changes is that the figure now
+    # answers the question the gate asks.
+    "*/tests/*",
 ]
 
 [tool.coverage.report]

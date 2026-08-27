@@ -142,6 +142,18 @@ def _codes(package: str, tmp_path: Path) -> set[str]:
         for match in [_CODE.search(line.strip())]
         if match
     }
+    reported = [line for line in result.stdout.splitlines() if ": error: " in line]
+    # Three states, and they used to collapse into one message that named the
+    # wrong cause. QA-4 round seven added `hide_error_codes = true` to
+    # `[tool.mypy]`: mypy ran fine and reported seven errors, the `_CODE` regex
+    # matched none of them, and this said "it failed to run" — sending the
+    # reader to debug a broken install instead of to the config line. A gate
+    # that fails for the wrong reason is this round's own hypothesis in
+    # miniature.
+    assert not (reported and not found), (
+        "mypy reported errors whose codes could not be parsed. The likely cause is `hide_error_codes` or "
+        "`show_error_codes = false` in pyproject.toml, not a broken checker:\n" + "\n".join(reported[:5])
+    )
     assert found or result.returncode == 0, (
         "mypy produced no diagnostics and did not exit cleanly — it failed to run, so this test proves "
         f"nothing:\n{result.stdout}\n{result.stderr}"

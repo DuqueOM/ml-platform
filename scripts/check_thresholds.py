@@ -62,12 +62,35 @@ class Threshold:
 
 
 #: Every number a gate fails on. A threshold absent from this list is one that
-#: can be lowered silently, so adding a gate means adding its number here —
-#: enforced by `test_every_gated_number_is_watched`.
+#: can be lowered silently, so adding a gate means adding its number here.
+#:
+#: **Nothing enforces that, and this comment used to say otherwise** — it named
+#: `test_every_gated_number_is_watched`, which does not exist and never has.
+#: Same defect as the docstring in `check_library_reuse.py` that claimed a test
+#: held a count against a threshold "at the moment a project claims its phase
+#: is done": a promise of enforcement is the same failure as a gate that cannot
+#: fail, arriving one layer earlier, and it was found here while fixing the
+#: round-seven findings rather than by any check.
+#:
+#: What IS enforced is `tests/test_thresholds.py::test_every_watched_threshold_is_findable`:
+#: every entry below must still resolve to a number. That catches the pattern
+#: going stale — which happened in this very commit, when renaming a CI step
+#: broke two patterns anchored on its label — but it cannot catch a NEW gate
+#: whose number nobody added. Deriving that would mean recognising a threshold
+#: in arbitrary code, and inventing a detector to close a comment would be
+#: worse than the gap.
 THRESHOLDS = (
     Threshold("library coverage floor", "pyproject.toml", r"fail_under\s*=\s*(\d+)"),
-    Threshold("libs coverage in CI", ".github/workflows/ci.yml", r"--cov-fail-under=(\d+)\n[\s\S]*?L3"),
-    Threshold("scripts coverage in CI", ".github/workflows/ci.yml", r"L3[\s\S]*?--cov-fail-under=(\d+)"),
+    # Anchored on WHAT IS MEASURED, not on a step label. Both patterns keyed
+    # off the literal `L3` in a step name, and QA-4 round seven found that
+    # label colliding with two other meanings — a pending gate row and the
+    # cluster tier of the evidence taxonomy. Renaming the step to `P12` broke
+    # both thresholds at once, and this gate reported it correctly: *a
+    # threshold that cannot be found cannot be watched.* `--cov=libs` and
+    # `--cov=scripts` say which floor is which without depending on prose
+    # anyone may reword.
+    Threshold("libs coverage in CI", ".github/workflows/ci.yml", r"--cov=libs[\s\S]*?--cov-fail-under=(\d+)"),
+    Threshold("scripts coverage in CI", ".github/workflows/ci.yml", r"--cov=scripts[\s\S]*?--cov-fail-under=(\d+)"),
     Threshold(
         "cloud-specific surface ceiling",
         "scripts/measure_cloud_surface.py",
@@ -94,6 +117,8 @@ THRESHOLDS = (
     # re-argued. Raising it is how "dated" decays into "permanent, with a
     # date on it" — the failure .security-baselines/README.md describes and
     # nothing enforced until the expiry gate landed.
+    Threshold("L1 line coverage floor", "scripts/check_branch_coverage.py", r"LINE_FLOOR\s*=\s*([\d.]+)"),
+    Threshold("L2 branch coverage floor", "scripts/check_branch_coverage.py", r"BRANCH_FLOOR\s*=\s*([\d.]+)"),
     Threshold(
         "baseline acceptance ceiling, in days",
         "scripts/check_baselines_expiry.py",
@@ -108,6 +133,18 @@ THRESHOLDS = (
 #: commit. Unset everywhere today; read rather than hardcoded so a PR lane can
 #: set it without touching this file.
 BASELINE_ENV = "THRESHOLD_BASELINE_REF"
+
+
+def _git(*args: str) -> str:
+    """Stripped stdout, or "" when git refuses. Never raises.
+
+    Every caller here is asking git a question whose "no" is a legitimate
+    answer — an absent `origin/main`, an initial commit with no parent — and
+    turning those into exceptions would make the gate fail where it should fall
+    back.
+    """
+    result = subprocess.run(["git", "-C", str(REPO_ROOT), *args], capture_output=True, text=True, check=False)
+    return result.stdout.strip() if result.returncode == 0 else ""
 
 
 def _baseline_ref(path: str) -> str:
@@ -127,11 +164,26 @@ def _baseline_ref(path: str) -> str:
 
     - **uncommitted** (a local run, pre-commit): the edit is in the working
       tree and `HEAD` is the state before it. Compare against `HEAD`.
-    - **committed** (CI, or a local run after committing): `HEAD` already
-      contains the edit, so the state before it is `HEAD~1`.
+    - **committed on a branch**: compare against the **merge base with the
+      default branch**, so the whole branch is in range however many commits it
+      carries.
+    - **committed on the default branch itself** (a push to `main`): the merge
+      base IS `HEAD`, which would compare the file against itself — the
+      original hole, restored by the fix for the other one. Falls back to
+      `HEAD~1`.
+
+    The middle case is QA-4 round seven's finding. `HEAD~1` was used for every
+    committed change, and the docstring's reasoning — "`HEAD` already contains
+    the edit, so the state before it is `HEAD~1`" — holds only for a
+    single-commit change. Measured: lower a floor, commit, and the gate fires;
+    commit anything else, and the same tree reports "none loosened". CI was
+    largely protected because a pull-request checkout is the merge commit whose
+    first parent is the base tip, but the LOCAL invocation gave a confident
+    all-clear on any branch with two or more commits — and local is where
+    someone checks before pushing.
 
     A workflow that knows better — a pull request validating a range — sets
-    `THRESHOLD_BASELINE_REF` and neither branch applies.
+    `THRESHOLD_BASELINE_REF` and none of this applies.
     """
     override = os.environ.get(BASELINE_ENV)
     if override:
@@ -146,15 +198,19 @@ def _baseline_ref(path: str) -> str:
     if dirty.stdout.strip():
         return "HEAD"
 
+    head = _git("rev-parse", "HEAD")
+    for default in ("origin/main", "main"):
+        base = _git("merge-base", "HEAD", default)
+        # `base == head` means HEAD is contained in the default branch — a push
+        # to main, or a branch nobody has committed on yet. Comparing against
+        # it would compare the file with itself, which is the failure mode this
+        # function was written for; fall through to the parent.
+        if base and base != head:
+            return base
+
     # No parent means the initial commit: there is no earlier state to compare
     # against, and reporting that as "not loosened" is the honest answer.
-    parent = subprocess.run(
-        ["git", "-C", str(REPO_ROOT), "rev-parse", "--verify", "HEAD~1"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return "HEAD~1" if parent.returncode == 0 else "HEAD"
+    return "HEAD~1" if _git("rev-parse", "--verify", "HEAD~1") else "HEAD"
 
 
 def _at_head(path: str) -> str | None:

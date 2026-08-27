@@ -35,6 +35,7 @@ worth a test rather than a fix.
 
 from __future__ import annotations
 
+import re
 import tomllib
 from pathlib import Path
 
@@ -107,4 +108,40 @@ def test_every_library_ships_a_py_typed_marker(package: Path) -> None:
     assert (package / "py.typed").is_file(), (
         f"{package.name} has no py.typed marker; consumers see it as untyped "
         f"(PEP 561). Create {package / 'py.typed'} (empty file)."
+    )
+
+
+def test_the_type_gate_covers_every_first_party_source_root() -> None:
+    """The scope is a hand-written path list, so a new project is invisible to it.
+
+    QA-4 round seven: `projects/rag-assistant/src/` — five modules including
+    `ingest.py`, whose silent row-dropping was the data-loss defect fixed in
+    `ac852ab` — was checked by no type gate. It passed strict when run by hand,
+    so this was an omission rather than hidden debt. The defect is that nothing
+    would have said so, and that this file, named `test_type_gate_scope`,
+    checked `strict` placement and `py.typed` markers and never the
+    invocation's scope.
+
+    Derived from the filesystem, never listed here: a hand-kept list is what
+    failed, and repeating it in the test would move the same defect one file
+    across.
+    """
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    invocation = re.search(r"uv run mypy ([^\n|&\"']*)", workflow)
+    assert invocation, "no `uv run mypy` invocation found in ci.yml"
+    checked = invocation.group(1).split()
+
+    roots = sorted(REPO_ROOT.glob("libs/*/src"))
+    roots += sorted(REPO_ROOT.glob("projects/*/src"))
+    roots.append(REPO_ROOT / "scripts")
+    assert len(roots) >= 7, f"only {len(roots)} source roots found — the globs stopped matching, not the tree"
+
+    def covered(root: Path) -> bool:
+        relative = root.relative_to(REPO_ROOT).as_posix()
+        return any(relative.startswith(argument.rstrip("/")) for argument in checked)
+
+    missing = sorted(str(root.relative_to(REPO_ROOT)) for root in roots if not covered(root))
+    assert not missing, (
+        f"the CI type gate does not reach {missing}. Every first-party source root must be checked; a project "
+        f"added without editing that command is checked by nothing, and nothing reports the omission."
     )

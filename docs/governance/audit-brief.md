@@ -121,8 +121,8 @@ Do **not** trust this section. Two documents are generated from the filesystem
 precisely so that no one has to:
 
 - `docs/architecture/implementation-status.md` — per-phase component status
-- `docs/architecture/technology-inventory.md` — 117 committed technologies,
-  each with a detector; documentation never counts as implementation
+- `docs/architecture/technology-inventory.md` — every committed technology
+  with a detector; documentation never counts as implementation
 
 Both are regenerated and diffed in CI. If they disagree with reality, that is
 a finding, and a serious one — it means a detector is matching something it
