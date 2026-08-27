@@ -11,6 +11,7 @@ it so nothing has a value to compare.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -149,3 +150,109 @@ def test_the_tree_is_left_as_it_was_found() -> None:
 
     assert after == hashes, "a probe changed a file's CONTENT and did not put it back"
     assert _probed_files_status() == before, "a probe changed a file's git state"
+
+
+# --- which commit the comparison is made against ----------------------------
+
+
+def _repo(tmp_path: Path) -> Path:
+    """A repository with `main`, and a branch carrying two commits.
+
+    Explicit identity and `-c commit.gpgSign=false`: two tests in this
+    repository have already failed on a runner because they inherited the
+    author's git configuration, and once is a mistake.
+    """
+    repo = tmp_path / "probe"
+    repo.mkdir()
+
+    def git(*args: str) -> None:
+        subprocess.run(
+            ["git", "-C", str(repo), "-c", "commit.gpgSign=false", *args],
+            check=True,
+            capture_output=True,
+            text=True,
+            env={
+                **os.environ,
+                "GIT_AUTHOR_NAME": "probe",
+                "GIT_AUTHOR_EMAIL": "probe@example.com",
+                "GIT_COMMITTER_NAME": "probe",
+                "GIT_COMMITTER_EMAIL": "probe@example.com",
+            },
+        )
+
+    git("init", "-q", "-b", "main")
+    (repo / "gate.cfg").write_text("fail_under = 90\n", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-qm", "base")
+    # `main` needs a parent of its own: with a single commit the parent
+    # fallback has nothing to resolve and the baseline is HEAD, which is the
+    # documented initial-commit case rather than the one under test.
+    (repo / "README.md").write_text("probe\n", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-qm", "second commit on main")
+
+    git("checkout", "-q", "-b", "work")
+    (repo / "gate.cfg").write_text("fail_under = 80\n", encoding="utf-8")
+    git("commit", "-qam", "lower the floor")
+    (repo / "unrelated.txt").write_text("noise\n", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-qm", "something else entirely")
+    return repo
+
+
+def test_the_baseline_spans_the_whole_branch_not_just_the_last_commit(tmp_path: Path, monkeypatch) -> None:
+    """QA-4 round seven: one more commit and a lowered threshold went invisible.
+
+    `HEAD~1` was the baseline for every committed change, and the reasoning —
+    "HEAD already contains the edit, so the state before it is HEAD~1" — holds
+    only for a single-commit change. Two commits and the lowering sits outside
+    the range, so the gate reports "none loosened" with confidence.
+
+    CI was largely protected: a pull-request checkout is a merge commit whose
+    first parent is the base tip. The hole was the LOCAL invocation — which is
+    the one someone runs to check before pushing.
+    """
+    import importlib
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    module = importlib.import_module("check_thresholds")
+    repo = _repo(tmp_path)
+    monkeypatch.setattr(module, "REPO_ROOT", repo)
+    monkeypatch.delenv(module.BASELINE_ENV, raising=False)
+
+    baseline = module._baseline_ref("gate.cfg")
+    at_base = subprocess.run(
+        ["git", "-C", str(repo), "show", f"{baseline}:gate.cfg"], capture_output=True, text=True, check=True
+    ).stdout
+    assert "90" in at_base, (
+        f"the baseline resolved to {baseline}, whose gate.cfg is {at_base.strip()!r} — the lowering is outside "
+        f"the compared range, so a threshold reduced two commits ago reads as untouched"
+    )
+
+
+def test_on_the_default_branch_the_baseline_is_still_the_parent(tmp_path: Path, monkeypatch) -> None:
+    """The other half, and the reason this is not simply `merge-base`.
+
+    On a push to `main`, the merge base with `main` IS `HEAD`, so comparing
+    against it would compare the file with itself — the original defect an
+    earlier audit found, restored by the fix for this one.
+    """
+    import importlib
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    module = importlib.import_module("check_thresholds")
+    repo = _repo(tmp_path)
+    subprocess.run(["git", "-C", str(repo), "checkout", "-q", "main"], check=True, capture_output=True)
+    monkeypatch.setattr(module, "REPO_ROOT", repo)
+    monkeypatch.delenv(module.BASELINE_ENV, raising=False)
+
+    head = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    resolved = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", module._baseline_ref("gate.cfg")],
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.strip()
+    assert resolved != head, "the baseline is HEAD itself, so the gate compares the file against itself"

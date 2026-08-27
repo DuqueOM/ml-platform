@@ -21,15 +21,40 @@ help: ## Show this help
 
 # --- gates ------------------------------------------------------------------
 
+# `verify` must be a SUPERSET of the gate commands in ci.yml, and
+# tests/test_verify_parity.py fails when it is not.
+#
+# It claimed to be "what CI runs" while running 10 of 26, with `mypy libs/`
+# where CI checks `libs/ scripts/ projects/…` — the narrow-type-gate defect
+# this repository had already found, fixed in CI and left here. QA-4 round
+# seven found it by planting an untyped function in `scripts/` and watching
+# `make verify` pass while CI failed.
+#
+# Kept as an explicit list rather than generated from the workflow: a target
+# that computes itself cannot be read, and reading it is the point. The test is
+# what keeps the list honest.
 .PHONY: verify
-verify: ## Run every repository gate (what CI runs)
+verify: ## Run every repository gate (superset of CI's; see RUNBOOK for what it still omits)
 	uv run ruff check .
 	uv run ruff format --check .
-	uv run mypy libs/
+	uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/
 	uv run python scripts/sync_agentic_adapters.py --check
 	uv run python scripts/validate_agentic_surface.py --strict
+	uv run python scripts/validate_quality_gates.py
 	uv run python scripts/check_doc_coherence.py
 	uv run python scripts/check_ci_references.py
+	uv run python scripts/check_action_pins.py
+	uv run python scripts/check_baselines_expiry.py
+	uv run python scripts/check_dashboard_inventory.py
+	uv run python scripts/check_gitleaks_pin.py
+	uv run python scripts/check_library_reuse.py
+	uv run python scripts/check_mcp_registry.py
+	uv run python scripts/check_test_clock_isolation.py
+	uv run python scripts/check_thresholds.py
+	uv run python scripts/check_upstream_parity.py
+	uv run python scripts/check_version_consistency.py
+	uv run python scripts/ci_verify_yaml.py
+	uv run python scripts/measure_cloud_surface.py --check
 	uv run python scripts/check_technology_inventory.py --check
 	uv run python scripts/check_implementation_status.py --check
 	uv run pytest -q

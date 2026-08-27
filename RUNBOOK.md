@@ -52,16 +52,29 @@ means exactly one thing.
 
 ### What `make verify` leaves out
 
-CI additionally runs `uv lock --check`, the upstream-parity ledger, clock
-isolation, both coverage floors, the cloud-surface budget, `kubectl kustomize`
-over every overlay, the threshold gate, the MCP registry, the project
-generator, Checkov, Kubescape, Trivy and gitleaks over full history. It also
-runs `mypy` over `libs/ scripts/ projects/demand-forecast/src/`, where
-`make verify` checks only `libs/` — and `scripts/` is where the code enforcing
-every other claim in this document lives. A type gate that covers less than it
-appears to is this repository's most-repeated defect;
-`tests/test_type_gate_scope.py` exists because it had already happened three
-times. `.github/workflows/ci.yml` is the authority on what must pass.
+`make verify` is now a **superset of CI's gate commands**, and
+`tests/test_verify_parity.py` fails when it stops being one — the direction
+matters, because a CI gate missing locally means a red build nobody could have
+reproduced first, which is what turns a gate into something people work around.
+
+It ran 10 of CI's 26 until QA-4 round seven, with `mypy libs/` where CI checks
+`libs/ scripts/ projects/demand-forecast/src/`. That second half is the sharper
+one: the narrow type gate is a defect this repository had already found and
+recorded, fixed in the workflow and left here, so the local command kept
+reporting green on exactly the code the fix was about.
+
+What CI still runs that `verify` does not, each for a stated reason:
+
+- **both coverage floors** and the three pytest subsets — they need the full
+  suite, which `verify` already runs whole; re-running it for a number that
+  cannot differ would double a five-minute command;
+- **`uv lock --check`**, enforced locally by the `uv-lock` pre-commit hook;
+- **bandit**, **`kubectl kustomize`** over every overlay, **Checkov**,
+  **Kubescape**, **Trivy** and **gitleaks over full history** — third-party
+  binaries `verify` does not install, and two of them (P7, P8) are advisory in
+  CI as well.
+
+`.github/workflows/ci.yml` remains the authority on what must pass.
 
 ### Where pre-commit fits
 
@@ -137,7 +150,7 @@ oversight.
 | Gate | Command | A failure means |
 | --- | --- | --- |
 | Lint / format | `uv run ruff check .` · `uv run ruff format --check .` | Mechanical. `ruff check --fix` and `ruff format` |
-| Types | `uv run mypy libs/ scripts/ projects/demand-forecast/src/` | `strict` applies to everything in scope, not only `libs/` — the per-module override that appeared to narrow it never did (mypy applies `strict` globally) |
+| Types | `uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/` | `strict` applies to everything in scope, not only `libs/` — the per-module override that appeared to narrow it never did (mypy applies `strict` globally) |
 | Agentic surfaces stale | `uv run python scripts/sync_agentic_adapters.py --check` | A canonical body changed without re-rendering. Fix with `make sync`, never by editing a rendered file. Passing, it reports the artifact and surface counts it checked — 74 across 4 |
 | Agentic surface integrity | `uv run python scripts/validate_agentic_surface.py --strict` | V1–V6: missing surface, drifted mirror, policy text in a pointer, an unresolvable authority, or a **de-escalated mode** |
 | Documentation coherence | `uv run python scripts/check_doc_coherence.py` | C1–C9; see the table below |

@@ -356,3 +356,137 @@ def test_a_method_named_like_a_library_function_is_not_a_fork(tmp_path: Path, mo
     assert not any("already exports" in message for message in module.failures), (
         "a method was reported as a fork; the detector is walking nested scopes again"
     )
+
+
+def _scaffold(tmp_path: Path, library: str, *project_modules: tuple[str, str]) -> tuple[Path, Path]:
+    """A one-library, one-project tree. Returns (libs, projects).
+
+    Written for the round-seven cases rather than retrofitted onto the tests
+    above: those predate it and rewriting them would put untested churn in a
+    commit whose subject is a detector fix.
+    """
+    libs = tmp_path / "libs" / "ml-core" / "src" / "ml_core"
+    libs.mkdir(parents=True)
+    (tmp_path / "libs" / "ml-core" / "pyproject.toml").write_text(
+        '[project]\nname = "ml-core"\nversion = "0"\n', encoding="utf-8"
+    )
+    (libs / "__init__.py").write_text(library, encoding="utf-8")
+
+    projects = tmp_path / "projects"
+    probe = projects / "probe"
+    (probe / "src" / "probe").mkdir(parents=True)
+    (probe / "pyproject.toml").write_text(
+        '[project]\nname = "probe"\nversion = "0"\ndependencies = []\n', encoding="utf-8"
+    )
+    for name, source in project_modules:
+        (probe / "src" / "probe" / name).write_text(source, encoding="utf-8")
+    return tmp_path / "libs", projects
+
+
+def _findings(module, libs: Path, projects: Path, monkeypatch) -> list[str]:
+    monkeypatch.setattr(module, "LIBS", libs)
+    monkeypatch.setattr(module, "PROJECTS", projects)
+    module.failures.clear()
+    module.measure()
+    return [message for message in module.failures if "already exports" in message]
+
+
+def test_a_vendored_copy_behind_an_import_fallback_is_a_fork(tmp_path: Path, monkeypatch) -> None:
+    """QA-4 round seven's first evasion, and the worst shape of the class.
+
+    ```
+    try:
+        from ml_core import seed_everything
+    except ImportError:
+        def seed_everything(seed):   # vendored copy, diverges
+            return seed
+    ```
+
+    The import is present and declared, so the reuse count reads correctly and
+    the fork sits beside it — the count says the platform claim holds while the
+    thing it claims is being bypassed at runtime on any machine where the
+    import fails. `for node in tree.body` could not see it: that expresses
+    "not nested in ANYTHING", where the rule is "not inside a def or a class".
+    """
+    import importlib
+
+    module = importlib.import_module("check_library_reuse")
+    libs, projects = _scaffold(
+        tmp_path,
+        "def seed_everything(seed):\n    return seed\n",
+        (
+            "__init__.py",
+            "try:\n"
+            "    from ml_core import seed_everything\n"
+            "except ImportError:\n"
+            "\n"
+            "    def seed_everything(seed):\n"
+            "        return seed\n",
+        ),
+    )
+    assert _findings(module, libs, projects, monkeypatch), "a vendored copy behind an ImportError fallback was missed"
+
+
+def test_a_feature_flagged_definition_is_a_fork(tmp_path: Path, monkeypatch) -> None:
+    """Round seven's second evasion: `if os.getenv(...): def ...`."""
+    import importlib
+
+    module = importlib.import_module("check_library_reuse")
+    libs, projects = _scaffold(
+        tmp_path,
+        "def seed_everything(seed):\n    return seed\n",
+        (
+            "__init__.py",
+            'import os\n\nif os.getenv("USE_LOCAL"):\n\n    def seed_everything(seed):\n        return seed + 1\n',
+        ),
+    )
+    assert _findings(module, libs, projects, monkeypatch), "a feature-flagged redefinition was missed"
+
+
+def test_a_closure_inside_a_function_is_not_a_fork(tmp_path: Path, monkeypatch) -> None:
+    """The other side of the boundary, asserted so the widening cannot creep.
+
+    Recursing through control flow must not become recursing through
+    everything: a helper defined inside a function is as local as a method, and
+    reporting it would reproduce the false positives that narrowed this
+    detector in the first place.
+    """
+    import importlib
+
+    module = importlib.import_module("check_library_reuse")
+    libs, projects = _scaffold(
+        tmp_path,
+        "def seed_everything(seed):\n    return seed\n",
+        (
+            "__init__.py",
+            "def configure(seed):\n"
+            "    def seed_everything(value):\n"
+            "        return value\n"
+            "\n"
+            "    return seed_everything(seed)\n",
+        ),
+    )
+    assert not _findings(module, libs, projects, monkeypatch), (
+        "a closure was reported as a fork; the recursion is descending into function bodies again"
+    )
+
+
+def test_two_files_forking_the_same_symbol_are_both_reported(tmp_path: Path, monkeypatch) -> None:
+    """Found while verifying the fix above, by planting both evasions at once.
+
+    `reimplemented()` returned a dict keyed by SYMBOL, so two files forking one
+    function collapsed to whichever sorted last. Only one finding appeared, and
+    a reader would have fixed that file and believed the gate clean.
+    """
+    import importlib
+
+    module = importlib.import_module("check_library_reuse")
+    libs, projects = _scaffold(
+        tmp_path,
+        "def seed_everything(seed):\n    return seed\n",
+        ("__init__.py", ""),
+        ("fork_one.py", "def seed_everything(seed):\n    return seed\n"),
+        ("fork_two.py", "def seed_everything(seed):\n    return seed + 1\n"),
+    )
+    findings = _findings(module, libs, projects, monkeypatch)
+    assert len(findings) == 2, f"expected both forks to be named, got {len(findings)}:\n" + "\n".join(findings)

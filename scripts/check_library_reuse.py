@@ -148,6 +148,44 @@ def imported(project: Path) -> set[str]:
     return found
 
 
+def _module_level_defs(node: ast.AST) -> list[ast.stmt]:
+    """Definitions reachable at module scope, including conditional ones.
+
+    `for node in tree.body` was the first implementation, and QA-4 round seven
+    showed it implements something narrower than what its docstring claims.
+    "Module level only, never a method" is the right rule; `tree.body` means
+    "not nested in ANYTHING", which also discards:
+
+        try:
+            from llm_core.retrieval_eval import beats_baseline
+        except ImportError:
+            def beats_baseline(candidate, baseline, margin):  # vendored copy
+                return candidate > baseline
+
+    That is the canonical vendoring shape, and it is worse than an ordinary
+    fork: the import is present and declared, so the reuse count reads 2 while
+    the fork sits beside it. The auditor also planted a feature-flag branch
+    (`if os.getenv(...): def ...`) and both were invisible.
+
+    So: recurse through control flow, never through a `def` or a `class`. A
+    method keeps colliding harmlessly with a library function name — the false
+    positives that motivated the original narrowing, `coverage` and
+    `beats_baseline` on a backtest dataclass, stay excluded — and a closure
+    inside a function is not an API either.
+
+    Noted by the same round: `imported()` in this file already used `ast.walk`
+    and saw nested imports. One file, two different answers to "where can a
+    statement be".
+    """
+    found: list[ast.stmt] = []
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            found.append(child)
+        elif isinstance(child, ast.stmt | ast.ExceptHandler | ast.match_case):
+            found.extend(_module_level_defs(child))
+    return found
+
+
 def library_exports() -> dict[str, str]:
     """Public module-level symbol -> the library file defining it.
 
@@ -171,15 +209,14 @@ def library_exports() -> dict[str, str]:
             tree = ast.parse(path.read_text(encoding="utf-8"))
         except SyntaxError:
             continue
-        for node in tree.body:
-            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) and not node.name.startswith(
-                "_"
-            ):
-                found.setdefault(node.name, _shown(path))
+        for node in _module_level_defs(tree):
+            name = getattr(node, "name", "")
+            if name and not name.startswith("_"):
+                found.setdefault(name, _shown(path))
     return found
 
 
-def reimplemented(project: Path, exports: dict[str, str]) -> dict[str, str]:
+def reimplemented(project: Path, exports: dict[str, str]) -> list[tuple[str, str]]:
     """Symbols this project defines that a shared library already exports.
 
     This is the half of charter criterion C1 nothing measured. C1 reads "a
@@ -192,7 +229,7 @@ def reimplemented(project: Path, exports: dict[str, str]) -> dict[str, str]:
     unrelated projects rather than a platform, which ADR-000 names as the
     failure C1 exists to detect.
     """
-    found: dict[str, str] = {}
+    found: list[tuple[str, str]] = []
     for path in sorted(project.rglob("*.py")):
         relative = path.relative_to(project)
         if "tests" in relative.parts or "__pycache__" in path.parts:
@@ -201,13 +238,12 @@ def reimplemented(project: Path, exports: dict[str, str]) -> dict[str, str]:
             tree = ast.parse(path.read_text(encoding="utf-8"))
         except SyntaxError:
             continue
-        for node in tree.body:
-            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+        for node in _module_level_defs(tree):
+            name = getattr(node, "name", "")
+            if not name or name.startswith("_") or name not in exports:
                 continue
-            if node.name.startswith("_") or node.name not in exports:
-                continue
-            found[node.name] = f"{_shown(path)}:{node.lineno}"
-    return found
+            found.append((name, f"{_shown(path)}:{node.lineno}"))
+    return sorted(found)
 
 
 def measure() -> dict[str, dict[str, list[str]]]:
@@ -237,7 +273,12 @@ def measure() -> dict[str, dict[str, list[str]]]:
             )
 
         # The other half of C1, and the substantive one.
-        for symbol, where in sorted(reimplemented(project, exports).items()):
+        # A list, not a dict keyed by symbol: two files forking the SAME symbol
+        # reported only whichever sorted last, so planting a vendored copy and a
+        # feature-flagged copy of one function produced a single finding. Found
+        # while verifying round seven's fix — by planting both at once, which
+        # is the only reason the collapse was visible at all.
+        for symbol, where in reimplemented(project, exports):
             failures.append(
                 f"{where} defines `{symbol}`, which `{exports[symbol]}` already exports. Charter criterion C1 "
                 f"is 'reuses shared libraries WITH NO FORK' — import it, or rename this if it is genuinely a "
