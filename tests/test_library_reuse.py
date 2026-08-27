@@ -490,3 +490,70 @@ def test_two_files_forking_the_same_symbol_are_both_reported(tmp_path: Path, mon
     )
     findings = _findings(module, libs, projects, monkeypatch)
     assert len(findings) == 2, f"expected both forks to be named, got {len(findings)}:\n" + "\n".join(findings)
+
+
+def test_the_reuse_floor_fires_when_a_project_drops_below_it(tmp_path: Path, monkeypatch) -> None:
+    """The Phase 4 precondition, as a ratchet rather than a phase signal.
+
+    The technical plan says `rag-assistant` must reuse >=3 shared libraries
+    with no fork, and that Phase 4 does not start until it does. Nothing could
+    check that while the project was mid-phase: a gate that goes red for
+    legitimately unfinished work gets disabled rather than satisfied, which is
+    why `check_library_reuse.py` reported the count without failing on it.
+
+    It reuses three now, so the question changes from "has it got there yet" to
+    "has it dropped back" — and a gate can answer the second on every commit.
+    """
+    import importlib
+
+    module = importlib.import_module("check_library_reuse")
+    libs, projects = _scaffold(tmp_path, "def seed_everything(seed):\n    return seed\n", ("__init__.py", ""))
+    (projects / "probe" / "pyproject.toml").write_text(
+        '[project]\nname = "probe"\nversion = "0"\ndependencies = []\n', encoding="utf-8"
+    )
+
+    monkeypatch.setattr(module, "MINIMUM_REUSE", {"probe": 1})
+    monkeypatch.setattr(module, "LIBS", libs)
+    monkeypatch.setattr(module, "PROJECTS", projects)
+    module.failures.clear()
+    module.measure()
+
+    assert any("recorded floor" in message for message in module.failures), (
+        f"a project below its recorded reuse floor was not reported: {module.failures}"
+    )
+
+
+def test_a_project_with_no_recorded_floor_is_only_reported(tmp_path: Path, monkeypatch) -> None:
+    """A project still being built must not be failed for being unfinished.
+
+    The floors are a ratchet on projects that have already arrived. Applying
+    one to every project would turn the gate into something to switch off on
+    the first day of the next vertical.
+    """
+    import importlib
+
+    module = importlib.import_module("check_library_reuse")
+    libs, projects = _scaffold(tmp_path, "def seed_everything(seed):\n    return seed\n", ("__init__.py", ""))
+    (projects / "probe" / "pyproject.toml").write_text(
+        '[project]\nname = "probe"\nversion = "0"\ndependencies = []\n', encoding="utf-8"
+    )
+
+    monkeypatch.setattr(module, "MINIMUM_REUSE", {})
+    monkeypatch.setattr(module, "LIBS", libs)
+    monkeypatch.setattr(module, "PROJECTS", projects)
+    module.failures.clear()
+    module.measure()
+
+    assert not any("recorded floor" in message for message in module.failures), module.failures
+
+
+def test_the_floor_matches_what_the_plan_requires() -> None:
+    """One decision, not two numbers that can drift apart."""
+    import importlib
+
+    module = importlib.import_module("check_library_reuse")
+    plan = (REPO_ROOT / "docs" / "architecture" / "technical-plan.md").read_text(encoding="utf-8")
+    assert "reuse ≥3 shared" in plan or "reuse >=3 shared" in plan, (
+        "the plan no longer states the reuse precondition the floor in check_library_reuse.py enforces"
+    )
+    assert module.MINIMUM_REUSE["rag-assistant"] == 3

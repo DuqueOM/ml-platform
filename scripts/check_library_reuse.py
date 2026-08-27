@@ -58,6 +58,29 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 PROJECTS = REPO_ROOT / "projects"
 LIBS = REPO_ROOT / "libs"
 
+#: Per-project floors on the number of shared libraries reused. A **ratchet**,
+#: not a target: the number may rise, and dropping below the recorded floor is
+#: a failure.
+#:
+#: This is how the technical plan's precondition became enforceable without
+#: inventing the thing this repository does not have — a signal that a phase is
+#: complete. The plan says *"`rag-assistant` must reuse >=3 shared libraries
+#: with no fork. If it cannot, the library boundaries are wrong and Phase 4
+#: does not start until they are re-derived."* Nothing could check that while
+#: the project was mid-phase, because a gate that goes red for legitimately
+#: unfinished work gets disabled rather than satisfied.
+#:
+#: It reuses three now — `data-contracts`, `llm-core`, `ml-core` — so the
+#: question changes from "has it got there yet" to "has it dropped back", and
+#: the second one a gate can answer on every commit.
+#:
+#: A project absent from this map is reported without a floor, which is the
+#: right treatment for one still being built.
+MINIMUM_REUSE: dict[str, int] = {
+    # Charter criterion C1 and the Phase 4 precondition, in one number.
+    "rag-assistant": 3,
+}
+
 failures: list[str] = []
 notes: list[str] = []
 
@@ -270,6 +293,15 @@ def measure() -> dict[str, dict[str, list[str]]]:
             failures.append(
                 f"{project.name} imports `{library}` without declaring it. The build works only because the "
                 f"workspace installs everything; it breaks the moment the project is built alone"
+            )
+
+        floor = MINIMUM_REUSE.get(project.name)
+        if floor is not None and len(used) < floor:
+            failures.append(
+                f"{project.name} reuses {len(used)} shared librar(ies) and its recorded floor is {floor}. "
+                f"This is a ratchet: the technical plan makes >=3 with no fork the precondition for Phase 4, "
+                f"and dropping below a floor already reached is a regression, not progress. Restore the reuse "
+                f"or argue the boundary is wrong in an ADR — lowering the number here is a STOP operation (P-10)"
             )
 
         # The other half of C1, and the substantive one.

@@ -20,6 +20,46 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Added
 
+- **`rag-assistant` now clears charter criterion C1**, the precondition the
+  technical plan puts on Phase 4: *"must reuse ≥3 shared libraries with no
+  fork."* It reused two. The third arrived as work the project needed rather
+  than a line in a manifest — `abstention.py`, which decides when the assistant
+  should refuse to answer.
+
+  A RAG system with no abstention answers confidently when the evidence never
+  reached its context, and on filings a fabricated figure reads exactly like a
+  correct one. Where to put that cut-off is a question about **relative cost**,
+  which is what `ml_core.decision` already answers for the tabular track:
+  `choose_threshold` searches the observed probabilities rather than a grid,
+  because the cost function is piecewise constant. Writing a second answer here
+  is the fork C1 exists to detect, and it would have lost that detail silently.
+
+  The costs are recorded as a decision — a wrong answer costs eight times a
+  refusal, in analyst-hours, with the reasoning beside the numbers — because
+  `ErrorCosts` refuses two zero costs and a 1:1 ratio is the same evasion
+  spelled differently.
+
+  **The confidence signal is measured, not assumed.** There are no retrieval
+  scores to work with (the retriever interface returns indices, deliberately),
+  so confidence is how far the candidate retriever and the lexical baseline
+  agree — computable at serving time, needing no labels. Whether that separates
+  the queries whose answer was retrieved from those whose was not is a
+  hypothesis, so the policy reports it: **+0.185 at k=3 and +0.215 at k=5** over
+  the repository's own 1,270-section corpus and 30-question gold set, and
+  **no separation** on a 12-document fixture where the retriever hits 11 of 12.
+  A policy fitted on a signal that does not separate is marked unusable and
+  `should_answer` raises rather than falling back to answering everything.
+
+- **The Phase 4 precondition is now a ratchet, not a sentence.** Nothing could
+  enforce it while the project was mid-phase — a gate that goes red for
+  legitimately unfinished work gets disabled rather than satisfied, which is
+  why `check_library_reuse.py` reported the count without failing on it. With
+  the floor reached, the question a gate answers changes from "has it got there
+  yet" to "has it dropped back", and the second is answerable on every commit.
+  `MINIMUM_REUSE` records it, `check_thresholds.py` watches the floor itself,
+  and both ways of losing it — dropping the declaration, deleting the module
+  that imports it — were watched failing.
+
 - **Expanding-window backtesting** for `demand-forecast`, with a gap sized to
   the longest feature lag — training up to the first test hour leaks through
   the lag window even when the timestamps look disjoint.

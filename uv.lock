@@ -3952,6 +3952,7 @@ source = { editable = "projects/rag-assistant" }
 dependencies = [
     { name = "data-contracts" },
     { name = "llm-core" },
+    { name = "ml-core" },
     { name = "polars" },
 ]
 
@@ -3959,6 +3960,7 @@ dependencies = [
 requires-dist = [
     { name = "data-contracts", editable = "libs/data-contracts" },
     { name = "llm-core", editable = "libs/llm-core" },
+    { name = "ml-core", editable = "libs/ml-core" },
     { name = "polars", specifier = "~=1.20" },
 ]
 
