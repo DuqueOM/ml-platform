@@ -41,7 +41,24 @@ BEGIN, END = "<!-- BEGIN GENERATED -->", "<!-- END GENERATED -->"
 # the very technologies they merely describe — kyverno, sagemaker-pipelines,
 # argo-rollouts and pandera all reported ✅ on the strength of a sentence.
 _EXCLUDED_FROM_CONTENT_SEARCH = ("docs/", "AGENTS.md", "CLAUDE.md", "CHANGELOG.md")
-_EXCLUDED_FILENAMES = {"README.md"}
+
+#: Markup whose content is prose by construction, wherever the file sits.
+#:
+#: This replaced a filename set of `{"README.md"}` plus the directory list
+#: above, and QA-4 round seven showed why the two together were not the rule
+#: they were written to express. A file at `libs/NOTES.md` is under none of the
+#: excluded prefixes and is not named README, so it was treated as CODE:
+#: `_code_lines` strips `#`-prefixed lines, which removes a markdown HEADING
+#: and keeps an ordinary sentence. One line — "We evaluated feast for the
+#: feature store" — flipped `feast` from ⬜ to ✅, falsifying the legend this
+#: generator prints in its own output: *documentation alone never counts*.
+#:
+#: Third instance of the class. Placeholder READMEs were the first, a docstring
+#: naming `sagemaker-pipelines` the second, and both were closed by adding
+#: another entry to a list. The list was the defect: it enumerated PLACES,
+#: while the rule is about a KIND of file. `.txt` is deliberately absent —
+#: `requirements.txt` naming a package is real evidence.
+_PROSE_SUFFIXES = {".md", ".markdown", ".rst"}
 
 # Tiers that are decisions rather than gaps: not implemented, and not intended
 # to be. Counting them as missing would misrepresent a decision as debt.
@@ -77,18 +94,27 @@ def _is_tracked(path: Path) -> bool:
 
 
 def _has_substance(path: Path) -> bool:
-    """True when a path is a file, or a directory holding more than a README.
+    """True when a path is a file, or a directory holding more than prose.
 
     A directory containing only its placeholder README is a documented
     intention, not an implementation. Treating one as evidence is how a
     repository comes to look finished while nothing runs.
+
+    The test was `name not in {"README.md"}` and is now the same prose-suffix
+    rule the content search uses, for the reason round seven gave: a rule about
+    a KIND of file, enumerated as a list of names, closes one instance and
+    leaves the class open — `NOTES.md` beside an empty directory read as
+    substance while `README.md` did not. Measured before changing it: the
+    generated document is byte-identical either way today, so the stricter rule
+    costs nothing and stops costing something later.
     """
     if path.is_file():
         return True
     if not path.is_dir():
         return False
     return any(
-        child.is_file() and child.name not in _EXCLUDED_FILENAMES and _is_tracked(child) for child in path.rglob("*")
+        child.is_file() and child.suffix.lower() not in _PROSE_SUFFIXES and _is_tracked(child)
+        for child in path.rglob("*")
     )
 
 
@@ -161,7 +187,7 @@ def _content_matches(pattern: str, scope: str) -> bool:
 
     for line in result.stdout.splitlines():
         rel = Path(line).resolve().relative_to(REPO_ROOT).as_posix()
-        if rel.startswith(_EXCLUDED_FROM_CONTENT_SEARCH) or Path(rel).name in _EXCLUDED_FILENAMES:
+        if rel.startswith(_EXCLUDED_FROM_CONTENT_SEARCH) or Path(rel).suffix.lower() in _PROSE_SUFFIXES:
             continue
         # Tracked only. grep walks the real filesystem, so a provider BINARY
         # under an untracked `.terraform/` matched entries like `terraform` and

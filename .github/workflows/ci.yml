@@ -101,7 +101,7 @@ jobs:
         # every other claim in this repository, and it was the code the type
         # gate did NOT check — 26 errors sat there while the step reported
         # green. A gate scoped away from the gates is not a gate.
-        run: uv run mypy libs/ scripts/ projects/demand-forecast/src/
+        run: uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/
 
       - name: Agentic surface is current
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
@@ -225,7 +225,17 @@ jobs:
             --cov-report=term --cov-report=xml \
             --cov-fail-under=90
 
-      - name: Tests with coverage (L3 — gate scripts)
+      - name: Coverage floors L1 and L2, read separately
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        # `--cov-fail-under` above tests one COMBINED figure that mixes
+        # statements and branches. L1 and L2 are two thresholds — >=90% lines
+        # and >=80% branches — and a suite could fall under the branch floor
+        # while clearing the combined number on line coverage alone. Round
+        # seven: "L2 declares >=80% branches but no command can fail on
+        # branches alone."
+        run: uv run python scripts/check_branch_coverage.py
+
+      - name: Tests with coverage (P12 — gate scripts)
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         # scripts/ enforces every other claim in this repository and had no
         # coverage floor at all; two of its files sat at 0% while a green

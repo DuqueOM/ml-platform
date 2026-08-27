@@ -402,6 +402,45 @@ def _forbidden_hashes() -> set[str]:
     }
 
 
+def _read_lossy(path: Path) -> str:
+    """File content with undecodable bytes dropped, never an exception.
+
+    `_read` decodes strictly, which is right for the documents this checker
+    compares — a mojibake ADR should be a loud failure. It is wrong for a scan
+    over EVERY committed file: widening C6's link scan past `*.md` put binary
+    files in its path, and the first one crashed the whole gate with a
+    `UnicodeDecodeError` naming a byte offset. Nine checks reported nothing
+    because the tenth met a PNG.
+
+    Found in CI rather than locally, which is its own small lesson: the tree
+    that broke it was the runner's, and the difference was one untracked file.
+
+    Lossy matches `_check_forbidden_names`, which has read the same set this
+    way since it was written. A URL is ASCII; anything a lossy decode drops
+    cannot have been one.
+    """
+    try:
+        return path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return ""
+
+
+def _scannable_files() -> list[Path]:
+    """Every committed file, plus present-but-unstaged ones.
+
+    `--others --exclude-standard` for the same reason `_check_forbidden_names`
+    uses it: the moment this check matters most is the one before the name is
+    committed.
+    """
+    result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "ls-files", "--cached", "--others", "--exclude-standard"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return [REPO_ROOT / rel for rel in sorted(set(result.stdout.splitlines())) if (REPO_ROOT / rel).is_file()]
+
+
 def _check_forbidden_names() -> None:
     """Scan EVERY committed file for a denylisted name, not only markdown.
 
@@ -439,6 +478,11 @@ def _check_forbidden_names() -> None:
                 fail("C6", f"{rel} contains a denylisted private name (hash match). Remove it.")
 
 
+#: The account whose repositories can be private. A link under any other owner
+#: is a third-party reference, not a disclosure.
+PRIVATE_ACCOUNT = "DuqueOM"
+
+
 def check_language_and_privacy() -> None:
     """C6 — the repository is public: English documentation, no private references.
 
@@ -472,9 +516,22 @@ def check_language_and_privacy() -> None:
     scanned = 0
 
     _check_forbidden_names()
+    before = len(failures)
 
-    for path in sorted(REPO_ROOT.rglob("*.md")):
-        if not _is_scannable(path, exclude={"projects"}):
+    # Every committed or untracked-but-present file, exactly the set
+    # `_check_forbidden_names` reads. This half used to scan `*.md` with
+    # `projects/` excluded — 233 files of 1312 — so a link to a non-public
+    # repository passed in any `.py`, in any YAML, and anywhere under
+    # `projects/`. QA-4 round seven demonstrated all three.
+    #
+    # The name scan and the link scan answer different questions: the denylist
+    # catches the repository whose name must never appear, the link scan
+    # catches ANY repository that is not on the public list — including one
+    # nobody has thought to add to a denylist yet. Running the strong half over
+    # 1312 files and the general half over 233 left the general one where a
+    # leak is likeliest to be a surprise.
+    for path in _scannable_files():
+        if not _is_scannable(path):
             continue
         scanned += 1
         # `{owner}/{repo}` are literal placeholders the gh CLI substitutes itself;
@@ -510,13 +567,34 @@ def check_language_and_privacy() -> None:
             "codespaces",
             "sponsors",
         }
-        for owner, repo in repo_link.findall(_read(path)):
+        for owner, repo in repo_link.findall(_read_lossy(path)):
             repo = repo.removesuffix(".git")
             if owner in placeholders or repo in placeholders or owner in reserved:
                 continue
+            # The OWNER is what makes a link a privacy question. Widening this
+            # scan from `*.md` to the whole tree surfaced 21 links to
+            # third-party repositories — kind, kubescape, gitleaks,
+            # argo-rollouts, every pre-commit hook — and none of them is a
+            # leak. The check had been reading "not one of OUR public repos"
+            # as "private", which only looked correct because the file set it
+            # scanned happened to contain no third-party links.
+            #
+            # A repository under someone else's account cannot disclose
+            # anything about this author, and its visibility is not knowable
+            # from here. What can leak is a repository under THEIR account that
+            # is not on the public list.
+            if owner != PRIVATE_ACCOUNT:
+                continue
             if repo not in public_repos:
                 fail("C6", f"{path.relative_to(REPO_ROOT)} links to non-public repository {repo!r}")
-    ok("C6", f"{scanned} files checked for private references")
+
+    # Only when nothing failed. `ok()` was called unconditionally, so C6
+    # printed a reassuring summary line directly ABOVE its own FAIL — and the
+    # count came from the link scan while the label named the denylist scan,
+    # which reads a different and much larger set. Two numbers, one label, and
+    # an "ok" above a "FAIL".
+    if len(failures) == before:
+        ok("C6", f"{scanned} files scanned for non-public repository links and denylisted names")
 
 
 _COPIER_COMMAND = re.compile(r"copier\s+(?:copy|update|recopy)\b(.*)")

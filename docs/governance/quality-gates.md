@@ -37,7 +37,7 @@ Apply to every commit, regardless of what changed.
 | # | Claim | Command | Threshold | Why this value |
 | --- | --- | --- | --- | --- |
 | P1 | Dependency direction holds | `uv run pytest tests/test_dependency_direction.py` | Zero violations | Charter criterion C1 is unfalsifiable without it. Non-negotiable |
-| P2 | Type-checked | `uv run mypy libs/ scripts/ projects/demand-forecast/src/` | Zero errors, `strict` over everything in scope | This row said "strict on `libs/`" and was wrong for the repository's whole history: `strict` sat in a per-module override, and mypy applies that flag globally while reporting the module list as unused. Measured, not read — the narrower claim understated what already ran, and `tests/test_type_gate_enforces_its_config.py` now runs known-bad code through this config so the threshold is watched failing |
+| P2 | Type-checked | `uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/` | Zero errors, `strict` over everything in scope | This row said "strict on `libs/`" and was wrong for the repository's whole history: `strict` sat in a per-module override, and mypy applies that flag globally while reporting the module list as unused. Measured, not read — the narrower claim understated what already ran, and `tests/test_type_gate_enforces_its_config.py` now runs known-bad code through this config so the threshold is watched failing |
 | P3 | Lint and format clean | `uv run ruff check . && uv run ruff format --check .` | Zero | Formatting arguments are a tax; a tool ends them |
 | P4 | Documentation coherent | `uv run python scripts/check_doc_coherence.py` | Zero | ADR-005 rules C, D, H mechanised |
 | P6 | Cloud-specific surface | `uv run python scripts/measure_cloud_surface.py --check` | <= 75% of Terraform lines | Multi-cloud means the DIFFERENCE is small and counted, not that two configs exist. A rising share is the abstraction leaking |
@@ -47,6 +47,7 @@ Apply to every commit, regardless of what changed.
 | P9 | Dependencies resolve reproducibly | `uv lock --check` | Lockfile current | An out-of-date lock means CI and local are different systems |
 | P10 | Third-party actions identify a program | `uv run python scripts/check_action_pins.py` | Every reference a 40-char commit SHA with its tag in a comment | A tag is a mutable pointer to code that runs with the job's token; re-pointing it swaps the program with no commit here, and a subverted scanner reports nothing — the same output as a clean tree |
 | P11 | Shared libraries are reused, not decorated | `uv run python scripts/check_library_reuse.py` | Every declared library imported, every imported library declared | Charter C1 counts libraries a project reuses, so a declaration nobody imports raises the count without reusing anything — found twice in demand-forecast on the gate's first run |
+| P12 | Gate scripts are exercised | `uv run pytest -q --cov=scripts --cov-fail-under=74` | ≥74%, a ratchet | `scripts/` enforces every other claim here and had no coverage floor at all; two files sat at 0%. 74% is what the suite measures today rather than an aspiration — a floor above the measurement is a red build, not a standard. Raise it as coverage rises, never lower it (P-10). A **platform** gate, not a library one: CI labelled its step "L3", which is both the pending public-API row below and the cluster tier of the L1–L4 evidence taxonomy |
 
 **Two rows are marked ⚠️ advisory.** They were published as blocking
 thresholds while their CI steps ran with `soft_fail` / `continue-on-error`.
@@ -59,9 +60,15 @@ to close it stays named.
 
 | # | Claim | Command | Threshold | Why this value |
 | --- | --- | --- | --- | --- |
-| L1 | Line coverage | `uv run pytest libs/ --cov --cov-fail-under=90` | ≥90% | Shared code; an untested path here fails in every consumer |
-| L2 | Branch coverage | same, `--cov-branch` | ≥80% | Branches are where the untested paths hide |
+| L1 | Line coverage | `uv run python scripts/check_branch_coverage.py` | ≥90% lines | Shared code; an untested path here fails in every consumer. Read from the coverage report's line rate, because `--cov-fail-under` tests a COMBINED statement-and-branch figure while this row says *lines* |
+| L2 | Branch coverage | `uv run python scripts/check_branch_coverage.py` | ≥80% branches | Branches are where the untested paths hide. This row had no command that could fail on branches alone until QA-4 round seven said so — the combined figure could clear 90 on line coverage while branches sat under the floor |
 | L3 ⏳ | Public API documented | `uv run python scripts/check_docstrings.py libs/` | 100% of public symbols | A library is its contract; an undocumented public function has none · **PENDING — Phase 2** |
+
+Neither figure includes the suites themselves. `--cov=libs` counted
+`libs/*/tests/*` — 397 of 846 statements, at 99.26% — so the published number
+was partly a statement about how thoroughly the tests execute themselves.
+`[tool.coverage.run] omit` now excludes them; the floors are unchanged and the
+honest figures clear them.
 
 Coverage is a **floor, not evidence of adequacy** (ADR-005 rule J). A suite at
 95% that asserts nothing meaningful is worse than one at 85% that falsifies —

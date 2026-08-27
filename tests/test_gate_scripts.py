@@ -130,13 +130,106 @@ def test_doc_coherence_fails_on_a_dangling_adr_reference() -> None:
 
 
 def test_doc_coherence_fails_on_a_private_repository_link() -> None:
-    """The repository is public; a private reference must not survive review."""
+    """The repository is public; a private reference must not survive review.
+
+    The probe URL is ASSEMBLED rather than written out. C6 used to scan `*.md`
+    only, so this file's own fixture text was invisible to it; QA-4 round seven
+    widened the scan to every committed file and the literal string here became
+    a finding against the test that plants it. Building it from pieces is the
+    same discipline the denylist uses — the file that tests for a leak should
+    not contain one.
+    """
     probe = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.md"
-    with temporarily(probe, "See https://github.com/DuqueOM/not-a-public-repo\n"):
+    link = "https://github.com/" + "DuqueOM" + "/" + "not-a-public" + "-repo"
+    with temporarily(probe, f"See {link}\n"):
         result = _run(GATES["doc-coherence"])
 
     assert result.returncode == 1
-    assert "not-a-public-repo" in result.stdout
+    assert "not-a-public" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "location",
+    [
+        "docs/runbooks/_gate_probe.md",
+        "projects/rag-assistant/_gate_probe.md",
+        "scripts/_gate_probe.py",
+        "platform/kubernetes/_gate_probe.yaml",
+    ],
+)
+def test_a_private_repository_link_is_caught_wherever_it_lives(location: str) -> None:
+    """C6's link scan read `*.md` with `projects/` excluded — 233 files of 1312.
+
+    QA-4 round seven put the same URL in a file under `projects/` and in a
+    comment in `scripts/`, and both passed. The denylisted NAME was caught
+    everywhere, so the standing absolute constraint held; what was uncovered
+    was the general half — any repository under this account that is not on the
+    public list, including one nobody has thought to denylist yet.
+
+    Parametrised over the four shapes rather than asserted once, because the
+    defect was about WHERE the scan looked and a single location would have
+    passed before the fix as well.
+    """
+    probe = REPO_ROOT / location
+    link = "https://github.com/" + "DuqueOM" + "/" + "not-a-public" + "-repo"
+    with temporarily(probe, f"# see {link}\n"):
+        result = _run(GATES["doc-coherence"])
+
+    assert result.returncode == 1, f"a private repository link in {location} was not reported"
+    assert "not-a-public" in result.stdout
+
+
+def test_a_binary_file_does_not_crash_the_whole_gate() -> None:
+    """Widening C6 past `*.md` put binary files in its path.
+
+    The first one crashed the entire checker with a `UnicodeDecodeError`
+    naming a byte offset: nine checks reported nothing because the tenth met a
+    PNG. It passed locally and failed on the runner, where one untracked file
+    differed — so the tree that broke it was not the tree it was written on.
+
+    A URL is ASCII. Anything a lossy decode drops cannot have been one.
+    """
+    probe = REPO_ROOT / "_gate_probe.bin"
+    probe.write_bytes(b"\x95\xfe\xff binary \x00 content")
+    try:
+        result = _run(GATES["doc-coherence"])
+    finally:
+        probe.unlink(missing_ok=True)
+
+    assert "UnicodeDecodeError" not in result.stdout + result.stderr, (
+        "an undecodable file crashed the coherence gate:\n" + result.stdout + result.stderr
+    )
+    assert result.returncode == 0, result.stdout
+
+
+def test_a_third_party_repository_link_is_not_a_finding() -> None:
+    """The control, and the reason widening the scan needed a second change.
+
+    Reading "not one of OUR public repos" as "private" only looked correct
+    while the scan could not see the 21 links to kind, kubescape, gitleaks and
+    every pre-commit hook that live outside markdown. A repository under
+    someone else's account discloses nothing about this author, and its
+    visibility is not knowable from here.
+    """
+    probe = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.md"
+    with temporarily(probe, "See https://github.com/kubernetes-sigs/kind and https://github.com/gitleaks/gitleaks\n"):
+        result = _run(GATES["doc-coherence"])
+
+    assert "kind" not in result.stdout.replace("kind of", ""), result.stdout
+    assert result.returncode == 0, f"a third-party link was reported as a private leak:\n{result.stdout}"
+
+
+def test_c6_does_not_print_ok_above_its_own_failure() -> None:
+    """`ok()` was unconditional, so a reassuring summary sat above the FAIL."""
+    probe = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.md"
+    link = "https://github.com/" + "DuqueOM" + "/" + "not-a-public" + "-repo"
+    with temporarily(probe, f"See {link}\n"):
+        result = _run(GATES["doc-coherence"])
+
+    c6_lines = [line for line in result.stdout.splitlines() if "[C6]" in line]
+    assert not any(line.strip().startswith("ok") for line in c6_lines), (
+        "C6 reported ok alongside its own failure:\n" + "\n".join(c6_lines)
+    )
 
 
 def test_ci_references_fails_when_a_workflow_names_a_missing_script() -> None:

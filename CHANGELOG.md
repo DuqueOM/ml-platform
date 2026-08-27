@@ -156,6 +156,111 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Fixed
 
+QA-4 round seven audited `35ffdec` and reported **1 P0, 6 P2, 4 P3**. Its
+verdict names the pattern better than any of the individual entries: *the
+audited claims are trustworthy about what the gates check and not yet
+trustworthy about what they cover* — four hand-maintained scope lists and one
+coverage measurement quietly described more ground than they held. All eleven
+are closed below; each fix was watched failing before and passing after.
+
+- **[P0] Documentation counted as implementation, for the third time.**
+  `check_technology_inventory.py` excluded `docs/`, three named files and any
+  `README.md` from its content search — a list of PLACES, where the rule is
+  about a KIND of file. A sentence in `libs/NOTES.md` flipped `feast` from ⬜
+  to ✅, falsifying the legend the generator prints in its own output. The
+  earlier two instances were closed by adding another entry to that list;
+  markdown is now excluded by SUFFIX wherever it lives, `_has_substance` uses
+  the same rule (measured: byte-identical output today), and
+  `tests/test_technology_inventory.py` exists — the script had no test file at
+  all, reachable only through a generic sweep that runs it and checks the exit
+  code.
+- **[P2] The fork detector could not see a conditional definition.**
+  `reimplemented()` read `tree.body`, which expresses "not nested in anything"
+  rather than the "module level, never a method" its docstring claims — so
+  `try: from llm_core import x / except ImportError: def x(...)`, the canonical
+  vendoring shape, was invisible while the import kept the reuse count honest.
+  Now it recurses through control flow and never through a `def` or a `class`,
+  and a closure is still not a fork. Found while verifying that fix: two files
+  forking the same symbol collapsed to one finding, because the result was
+  keyed by symbol name.
+- **[P2] `make verify` claimed to be "what CI runs" and ran 10 of 26**, with
+  `mypy libs/` where CI checks `libs/ scripts/ projects/…` — the narrow type
+  gate this repository had already found, fixed in the workflow and left in the
+  Makefile, so the local command reported green on exactly the code the fix was
+  about. `verify` is now a superset and `tests/test_verify_parity.py` fails
+  when it stops being one, with the four CI-only commands listed and reasoned.
+- **[P2] A whole project was outside the type gate.**
+  `projects/rag-assistant/src/` — five modules including the `ingest.py` whose
+  silent row-dropping was the data-loss defect fixed in `ac852ab` — was checked
+  by nothing. It passes strict, so this was an omission rather than debt; the
+  defect is that nothing would have said so. The scope is now asserted against
+  every first-party source root derived from the filesystem.
+- **[P2] A lowered threshold went invisible after one more commit.**
+  `check_thresholds.py` compared against `HEAD~1`, whose reasoning holds only
+  for a single-commit change. CI was largely protected by the merge-commit
+  checkout; the LOCAL invocation — the one someone runs before pushing — gave a
+  confident all-clear on any branch with two commits. Now the merge base with
+  the default branch, falling back to the parent on `main` itself, where the
+  merge base IS `HEAD` and would restore the original defect.
+- **[P2] C6's link scan read 233 files of 1312.** Markdown only, `projects/`
+  excluded, so a link to a non-public repository passed in any `.py`, any YAML
+  and anywhere under `projects/`. Widening it surfaced 21 links to third-party
+  repositories and none was a leak, which exposed the second half: the check
+  read "not one of OUR public repos" as "private". The OWNER is what makes a
+  link a privacy question, and that only looked correct while the scan could
+  not see outside markdown.
+- **[P2] The coverage gate measured its own test suite** — 397 of 846
+  statements at 99.26%, lifting the published figure by ~2.3 points. Excluded;
+  the floors are unchanged and the honest figures clear them. And L2's ">=80%
+  branches" had no command that could fail on branches alone:
+  `--cov-fail-under` tests one combined figure. `scripts/check_branch_coverage.py`
+  now reads the two rates separately, and fails when branch data is absent
+  rather than reporting a missing number as a passing one.
+- **[P3] The auditor's brief carried a status figure** three paragraphs after
+  declaring it carries none, and it was stale. Deleted.
+- **[P3] CI labelled a step "L3"**, which names both a pending public-API gate
+  in `quality-gates.md` and the cluster tier of the L1–L4 evidence taxonomy.
+  The scripts-coverage ratchet is now **P12**, a platform gate, declared as a
+  row rather than living only in a step name.
+- **[P3] The type-gate test misattributed `hide_error_codes`** as "mypy failed
+  to run", sending a reader to debug a broken install instead of to the config
+  line. It now distinguishes "no diagnostics" from "diagnostics whose codes
+  cannot be parsed".
+- **[P3] C6 printed `ok` directly above its own `FAIL`**, with a count from one
+  scan and a label naming the other.
+
+Four more, found while closing those:
+
+- **bandit flagged the new coverage gate's XML parsing** (B314, entity
+  expansion). Answered with `defusedxml`, which is the remedy the tool names,
+  rather than a `# nosec` — the input is a file our own coverage step writes,
+  so the practical risk is small, and adding a suppression for a small risk is
+  how a scanner becomes decorative. `.security-baselines/` holds zero
+  suppressions on purpose. The type gate then insisted the parsed root is
+  optional, which was also right: an empty report would have raised
+  `AttributeError`, and a gate that dies is indistinguishable from one that was
+  never wired.
+
+- **Widening C6 past `*.md` put binary files in its path**, and the first one
+  crashed the whole checker with a `UnicodeDecodeError` — nine checks reported
+  nothing because the tenth met a PNG. The link scan now decodes lossily, the
+  way `_check_forbidden_names` has read the same set since it was written. It
+  passed locally and failed on the runner, where one untracked file differed:
+  the tree that broke it was not the tree it was written on.
+
+- **`check_thresholds.py` anchored two of its patterns on a step label**, so
+  renaming CI's "L3" step to P12 — the fix for the P3 above — broke both
+  thresholds at once. The gate reported it correctly (*a threshold that cannot
+  be found cannot be watched*), which is the only reason it did not land
+  silently. Both now anchor on `--cov=libs` and `--cov=scripts`: what is
+  measured, rather than prose anyone may reword.
+- **A comment naming an enforcing test that has never existed.** `THRESHOLDS`
+  said adding a gate means adding its number "enforced by
+  `test_every_gated_number_is_watched`". There is no such test. Same defect as
+  the `check_library_reuse.py` docstring found in round five — a promise of
+  enforcement is a gate that cannot fail, one layer earlier. Corrected to state
+  what is actually enforced, and the two new coverage floors are now watched.
+
 - **C7's marker cleared the gate with nothing behind it.** The
   independent-audit marker is one editable line in `AGENTS.md`, and editing it
   resets the check. Round six was audited and the marker moved to `5c02411` —
