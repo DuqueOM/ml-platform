@@ -40,8 +40,10 @@ in CI, and neither installs anything.
 the table below is the full list. Prefer it over both wrappers:
 
 - `make verify` is a **subset of CI, not a mirror of it**, despite what its
-  help text says (see below), and it stops at the first failure — which is
-  currently C7, so it cannot reach the end.
+  help text says (see below), and it stops at the first failure — so on a tree
+  where C7 has gone red on accumulated drift it never reaches the checks after
+  it. That was the standing state when this line was written and it is not
+  standing now; run the gate rather than reading this sentence.
 - `pre-commit` invokes a *differently scoped* copy of several of the same
   checks (see below), so a red hook is not evidence that a gate is red.
 
@@ -169,7 +171,7 @@ against absolute paths, examined **zero files**, and passed.
 | C4 | Every quality-gate row carries a command that resolves and a threshold rationale | Add the command, or delete the claim. A metric that cannot fail is decoration |
 | C5 | The agentic counts in `AGENTS.md` match the filesystem | Update the count after adding a rule, skill or workflow |
 | C6 | Public-repo hygiene: no link to a non-public repository, no denylisted private name | Remove the reference. The name is never printed — printing it would publish it in the CI log |
-| C7 | The independent-audit marker is fresh | See below. Not clearable from the session doing the work |
+| C7 | The independent-audit marker is fresh **and corroborated by the hash-chained trail** | See below. Not clearable from the session doing the work |
 | C8 | `CHANGELOG.md` has a non-empty `[Unreleased]` while commits accumulate | Write the entry |
 | C9 | Every copier command in a fenced block names a `--vcs-ref` | Pin it. Unpinned, copier resolves to the highest-sorting tag; upstream that destroyed a real service, deleting 582 files including the answers file it would have needed to recover |
 
@@ -178,12 +180,19 @@ a command you document here is held to the same rule as one you run.
 
 ### C7, and why you cannot clear it here
 
-C7 fails right now, deliberately, and a fresh clone will show it failing. Run
-today, on a tree 38 commits past the recorded audit:
+C7 is the one check no one can clear from inside the session doing the work.
+It reports the drift budget on every run, passing or failing, so the number is
+visible before it becomes a red build:
 
 ```text
-FAIL [C7] 38 commits since the audit on 2026-08-08 (grace: 10).
-Recording an audit resets the counter, not a 90-day silence.
+ok  [C7] last independent audit 8 days ago, 9/10 commits not contained in 5c02411
+```
+
+Run it yourself rather than reading a figure here — the numbers above were
+current when typed and the command is the authority:
+
+```bash
+uv run python scripts/check_doc_coherence.py
 ```
 
 **Coherence checking is self-review by construction.** It compares documents
@@ -222,10 +231,28 @@ To clear it:
    edits has destroyed the evidence it was sent to collect;
    [`docs/governance/QA-4-independent-audit.md`](docs/governance/QA-4-independent-audit.md)
    is the previous one, and shows the form.
-2. Record it: `uv run python scripts/audit_record.py --action audit --target
-   ml-platform --mode AUTO --outcome completed --evidence "<findings and the
-   commit audited>"`.
-3. Update `Last independent audit: YYYY-MM-DD` in `AGENTS.md`.
+2. Record it in the hash-chained trail, with **`--action independent-audit`**
+   and the audited commit named in `--outcome`:
+
+   ```bash
+   uv run python scripts/audit_record.py --action independent-audit \
+     --target ml-platform --mode CONSULT \
+     --outcome "Round N against tree <sha>. <findings>" \
+     --evidence "<commands run, where the findings live>"
+   ```
+
+   Both details are load-bearing, and this step used to name neither: it said
+   `--action audit --outcome completed`, which no round has ever used and which
+   C7 does not accept. The marker in `AGENTS.md` is one editable line and
+   clearing this gate is exactly what editing it does, so C7 now requires an
+   `independent-audit` entry mentioning the same commit. Round six was audited
+   and the marker moved while the trail received nothing — nobody forged
+   anything, but for a week nothing could have told the difference.
+
+3. Update `Last independent audit: YYYY-MM-DD (<short-sha>)` in `AGENTS.md`.
+   **With the commit**: a marker carrying only a date cannot be counted exactly
+   and cannot be matched to a trail entry, so it degrades both halves of the
+   check at once.
 
 Note that the test suite **tolerates a C7-only failure and the gate does not**.
 `tests/test_gate_scripts.py` skips when every reported failure carries `[C7]`,
