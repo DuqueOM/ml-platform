@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import itertools
+import json
 import re
 import subprocess
 import sys
@@ -781,6 +782,29 @@ def check_audit_freshness() -> None:
     # the correction in detail. A mechanism that is documented and not wired
     # is the defect this checker exists to find, committed while fixing it.
     reviewed = marker.group(2)
+
+    # The marker is a line of prose in a file anyone can edit, and editing it
+    # resets this gate. Round six was audited and the marker moved to
+    # `5c02411` — clearing C7 — while `ops/audit.jsonl` received nothing, so
+    # for a week the only evidence the round had happened was the sentence
+    # that benefited from it. Nobody forged anything; the point is that
+    # nothing could have told the difference.
+    #
+    # So the marker must be corroborated by the hash-chained trail, which is
+    # append-only and whose tampering is detectable by
+    # `audit_record.py --verify`. Checked only when the marker names a commit:
+    # a bare date cannot be matched to an entry, which is a second reason the
+    # documented format includes the sha.
+    if reviewed and not _audit_trail_names(reviewed):
+        fail(
+            "C7",
+            f"the audit marker names {reviewed} and no `independent-audit` entry in ops/audit.jsonl mentions "
+            f"it. The marker is one editable line and resets this gate; the trail is hash-chained. Record the "
+            f"round with `python scripts/audit_record.py --action independent-audit --target ml-platform "
+            f"--mode CONSULT --outcome '...{reviewed}...' --evidence '...'`, naming the commit in the outcome.",
+        )
+        return
+
     drift = _commits_since_ref(reviewed) if reviewed else None
 
     if drift == UNREACHABLE:
@@ -813,6 +837,43 @@ def check_audit_freshness() -> None:
         # only the age hides how close the budget is to exhausted, and the
         # first anyone hears of it is a red gate on somebody else's branch.
         ok("C7", f"last independent audit {age} days ago, {drift}/{AUDIT_GRACE_COMMITS} commits {measured}")
+
+
+def _audit_trail_names(commit: str, trail: Path | None = None) -> bool:
+    """Does an `independent-audit` entry in the trail mention this commit?
+
+    Text matching, deliberately. The trail's schema has no field for the tree
+    audited, and inventing one would invalidate every existing entry's hash —
+    the chain is the property that makes this corroboration worth anything.
+    Rounds 4, 5 and 6 all name the tree in `outcome` ("Round 5 against tree
+    7c36f58"), so the convention already exists and this reads it.
+
+    A short marker matching a longer sha in the entry, or the reverse, both
+    count: the marker may be abbreviated to 7 characters while the entry
+    carries more.
+
+    `trail` is injectable so the tests can build a trail with a known shape
+    instead of asserting against the repository's own, which grows by one
+    entry every time anything consequential happens here.
+    """
+    trail = trail or REPO_ROOT / "ops" / "audit.jsonl"
+    if not trail.is_file():
+        return False
+
+    for line in trail.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            entry = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if entry.get("action") != "independent-audit":
+            continue
+        text = f"{entry.get('outcome', '')} {entry.get('evidence', '')}"
+        for token in re.findall(r"\b[0-9a-f]{7,40}\b", text):
+            if token.startswith(commit) or commit.startswith(token):
+                return True
+    return False
 
 
 def _commit_count() -> int:

@@ -156,6 +156,24 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Fixed
 
+- **C7's marker cleared the gate with nothing behind it.** The
+  independent-audit marker is one editable line in `AGENTS.md`, and editing it
+  resets the check. Round six was audited and the marker moved to `5c02411` —
+  clearing C7 — while `ops/audit.jsonl` received no entry. Nobody forged
+  anything; the point is that for a week nothing could have told the
+  difference. The round is now recorded, marked as backfilled and dated
+  honestly, and C7 requires an `independent-audit` entry in the hash-chained
+  trail naming the same commit. `RUNBOOK.md`'s recording step named
+  `--action audit --outcome completed`, which no round has ever used and which
+  the gate does not accept; corrected, along with a stale example output and a
+  claim that C7 "fails right now".
+- **Two quality-gate rows published thresholds their CI steps cannot
+  enforce.** P7 (Checkov) runs with `soft_fail: true` and P8 (Kubescape) with
+  `continue-on-error: true`, while the table gave both a blocking threshold —
+  the third option `quality-gates.md` says does not exist, in the document that
+  says it. Marked ⚠️ advisory with the reason rather than deleted, so the gap
+  stays visible; promoting them is a triage commit against a standing backlog,
+  not a flag flip.
 - **A residue check that watched three of five files and failed on clean
   work.** `test_the_probes_left_no_residue` ran `git diff --name-only` over
   `VERSION`, `pyproject.toml` and `llms.txt`. A dirty working tree is the

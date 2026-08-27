@@ -41,12 +41,19 @@ Apply to every commit, regardless of what changed.
 | P3 | Lint and format clean | `uv run ruff check . && uv run ruff format --check .` | Zero | Formatting arguments are a tax; a tool ends them |
 | P4 | Documentation coherent | `uv run python scripts/check_doc_coherence.py` | Zero | ADR-005 rules C, D, H mechanised |
 | P6 | Cloud-specific surface | `uv run python scripts/measure_cloud_surface.py --check` | <= 75% of Terraform lines | Multi-cloud means the DIFFERENCE is small and counted, not that two configs exist. A rising share is the abstraction leaking |
-| P7 | IaC misconfiguration | `checkov -d platform/ --framework terraform,kubernetes` | No HIGH findings | Terraform and manifests provision what every other scanner then inspects; nothing was reading them |
-| P8 | Kubernetes posture | `kubescape scan framework nsa,cis-v1.10.0` on rendered overlays | No failed control at HIGH | The overlays DECLARE restricted Pod Security; this checks the declaration against a published baseline |
+| P7 ⚠️ | IaC misconfiguration | `checkov -d platform/ --framework terraform,kubernetes` | **Advisory — reports, does not block** | The CI step runs with `soft_fail: true`, so this row published a threshold the workflow does not enforce — the third option this document says does not exist, sitting in the document that says it. Stated as advisory until the standing backlog is triaged; promoting it is a triage commit, not a flag flip, and doing the flip first would make the gate something people switch off |
+| P8 ⚠️ | Kubernetes posture | `kubescape scan framework nsa,cis-v1.10.0` on rendered overlays | **Advisory — reports, does not block** | Same defect as P7, same correction: the step carries `continue-on-error: true`. What the overlays DECLARE is separately gated — `tests/test_gitops_manifests.py` fails on a namespace without restricted Pod Security labels, and that one blocks |
 | P5 | No committed secrets | `gitleaks detect` over full history | Zero | Scanning the working tree misses what history already published |
 | P9 | Dependencies resolve reproducibly | `uv lock --check` | Lockfile current | An out-of-date lock means CI and local are different systems |
 | P10 | Third-party actions identify a program | `uv run python scripts/check_action_pins.py` | Every reference a 40-char commit SHA with its tag in a comment | A tag is a mutable pointer to code that runs with the job's token; re-pointing it swaps the program with no commit here, and a subverted scanner reports nothing — the same output as a clean tree |
 | P11 | Shared libraries are reused, not decorated | `uv run python scripts/check_library_reuse.py` | Every declared library imported, every imported library declared | Charter C1 counts libraries a project reuses, so a declaration nobody imports raises the count without reusing anything — found twice in demand-forecast on the gate's first run |
+
+**Two rows are marked ⚠️ advisory.** They were published as blocking
+thresholds while their CI steps ran with `soft_fail` / `continue-on-error`.
+Neither the command nor the intent was wrong; the row was, and a row that
+overstates a gate is worse than a missing row because it retires the question.
+They are corrected rather than deleted, so the gap stays visible and the work
+to close it stays named.
 
 ## Library gates
 
