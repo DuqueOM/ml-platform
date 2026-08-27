@@ -63,6 +63,25 @@ class EvaluationResult:
         return f"candidate {self.candidate} | baseline {self.baseline} | {verdict}"
 
 
+def chunk_corpus(documents: dict[str, str], *, target_chars: int = 800) -> list[Chunk]:
+    """The corpus, chunked once, in a stable order.
+
+    Extracted so `abstention` chunks IDENTICALLY rather than by a second copy
+    of these four lines. A confidence threshold fitted over one chunking and
+    applied to another is fitted to a corpus that no longer exists, and the
+    two chunkings would drift the first time anyone tuned `target_chars` —
+    silently, because both halves would still run.
+    """
+    chunks = [
+        chunk
+        for source, text in sorted(documents.items())
+        for chunk in chunk_document(text, source, target_chars=target_chars)
+    ]
+    if not chunks:
+        raise ValueError("the corpus produced no chunks")
+    return chunks
+
+
 def locate_answers(chunks: Sequence[Chunk], queries: Sequence[GoldQuery]) -> list[int]:
     """Map each gold answer to the chunk containing it.
 
@@ -102,14 +121,7 @@ def evaluate_corpus(
     two retrievers over two corpora and attribute the difference to the
     retriever, which is the most convincing way to be wrong about this.
     """
-    chunks = [
-        chunk
-        for source, text in sorted(documents.items())
-        for chunk in chunk_document(text, source, target_chars=target_chars)
-    ]
-    if not chunks:
-        raise ValueError("the corpus produced no chunks")
-
+    chunks = chunk_corpus(documents, target_chars=target_chars)
     texts = [chunk.text for chunk in chunks]
     relevant = locate_answers(chunks, queries)
     questions = [query.question for query in queries]
