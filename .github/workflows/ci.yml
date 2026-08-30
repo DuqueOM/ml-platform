@@ -101,7 +101,7 @@ jobs:
         # every other claim in this repository, and it was the code the type
         # gate did NOT check — 26 errors sat there while the step reported
         # green. A gate scoped away from the gates is not a gate.
-        run: uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/ projects/store-assistant/src/
+        run: uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/ projects/store-assistant/src/ orchestration/
 
       - name: Agentic surface is current
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}

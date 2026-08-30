@@ -134,8 +134,10 @@ def backtest_model(
     # to build the component's output spec, and the annotation must match what
     # the body constructs. A class defined at module level is not in scope
     # inside the isolated container this function runs in.
-    outcome = NamedTuple("BacktestOutcome", [("skill", float), ("coverage_ok", bool)])  # noqa: UP014
-    return outcome(report.skill, report.intervals_are_calibrated())  # type: ignore[return-value]
+    # The variable name must match the type name for the checker to bind
+    # them; KFP only cares about the annotation, so both are satisfiable.
+    BacktestOutcome = NamedTuple("BacktestOutcome", [("skill", float), ("coverage_ok", bool)])  # noqa: UP014
+    return BacktestOutcome(report.skill, report.intervals_are_calibrated())
 
 
 @dsl.component(base_image=BASE_IMAGE)

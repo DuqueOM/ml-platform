@@ -55,6 +55,86 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Fixed
 
+An independent audit found three defects that every existing gate passed over.
+All three are closed here, each watched failing before and passing after.
+
+- **[P0] Every lag and the seasonal-naive baseline were computed by ROW offset,
+  not hour offset.** `to_hourly_demand()` used `group_by`, which emits a row
+  only for hours that had a trip, so an hour with zero demand vanished.
+  `features.py` then builds every lag with `shift(n).over(zone)` and the
+  baseline with `shift(168)` — row offsets, on a panel whose rows are not
+  hours. Reproduced independently on a synthetic panel with 40% of hours
+  empty: **`lag_24` reached back a median of 41 hours** (p90 48, max 62) and
+  **the weekly baseline 286** instead of 168.
+
+  It is not leakage — every value still comes from the past, which is exactly
+  why no leakage test could see it. It is a units error, and it flatters the
+  model: the baseline degrades faster than the model does, so reported skill
+  inflates. This repository's own trail shows the shape, +12.2% skill on
+  synthetic data against +55.8% on real data, and the fixture in
+  `test_training.py` is a perfectly contiguous grid — which is why no test
+  could have caught it.
+
+  The panel is now densified to a complete hourly grid per zone, within each
+  zone's own observed span. After the fix `lag_24` reaches back exactly 24
+  hours and the baseline exactly 168. A densified hour keeps `mean_distance`
+  NULL rather than 0.0: the mean of no trips is undefined, and zero would state
+  that trips occurred and were short.
+
+- **[P1] A DAG task read two attributes that do not exist.**
+  `demand_forecast_training.py` logged `report.rejected` and `report.total`;
+  `IngestReport` has `rows_read`, `rows_written`, `violations` and
+  `reject_rate`. It would have raised `AttributeError` on the first real run.
+  Three things had to be true for it to hide, and all three are fixed: nine DAG
+  tests import the graph without executing a task body, **`orchestration/` was
+  outside the type gate**, and **the projects shipped no `py.typed`**, so mypy
+  would have seen an untyped import even inside the gate. Widening the scope
+  immediately surfaced a second instance of the same class —
+  `WarehouseValidation.failed_expectations`, which is `failed`.
+
+- **[P1] The production overlay provisioned an identity and a secret that
+  nothing used, and advertised a scrape the cluster refused.** The Deployment
+  named no ServiceAccount, so it ran as `default` — which cannot carry a
+  Workload Identity or IRSA binding, while the repository's own invariant reads
+  "ALWAYS IRSA / Workload Identity". The ExternalSecret resolved two remote
+  keys into a Secret no container referenced. And the pod annotated
+  `prometheus.io/scrape` on port 8000 while the only ingress rule admitted
+  `ingress-nginx`, so under `default-deny` the scrape was denied and the SLO
+  rules rested on a series that would never arrive. Six overlays, all
+  rendering green — an annotation is a request and a NetworkPolicy is the
+  answer, and nothing compared them.
+
+- **A pre-commit battery nobody can afford to run.** The same audit measured
+  the suite from the other end: `pytest libs` and `pytest projects` finish in
+  about **eight seconds each**, and `pytest tests` takes **over thirty
+  minutes**. Reproduced here, and the mechanism narrowed to one number: the
+  status generator runs **41 verification commands** — most of them
+  `uv run pytest` — and **five test files invoke it**. Timed on an otherwise
+  idle machine, `pytest tests/test_status_layers.py` alone exceeds ten
+  minutes; `pre-commit run --files CHANGELOG.md`, on a one-file documentation
+  change, did the same.
+
+  A first reading of this blamed the generator for invoking itself
+  recursively. It does not: no component's verification command runs a test
+  file that executes it, checked rather than assumed, and the fix that
+  diagnosis produced was reverted before it landed.
+
+  Moved to the manual stage. It is still a gate — CI runs it on every push and
+  `make verify` runs it locally — but a hook that costs ten minutes on a typo
+  is a hook people route around, and they route around the whole battery,
+  including the checks that catch real defects in seconds.
+
+- **[P1] `terraform destroy` would have refused.** `google_container_cluster`
+  did not set `deletion_protection`, and `hashicorp/google ~> 6.0` defaults it
+  to true. The technical plan makes destroy the cost control — *"the phase is
+  not complete until the billing export shows zero standing spend"* — so the
+  one control the greenfield posture depends on was disabled by a provider
+  default. Now explicit, with the reasoning, and asserted as EXPLICIT rather
+  than as a particular value. AWS is not symmetric and the test says why:
+  `aws_eks_cluster` gained the argument in provider 6.x, so under the pinned
+  `~> 5.0` demanding it would produce invalid Terraform — the test reads the
+  pin instead of remembering it.
+
 - **Gate A5 passed by selecting nothing, and A3 and S3 with it.**
   `uv run pytest -k tool_contract` matched no test in this repository and
   **exited 0** — pytest deselects rather than fails — while the row carried no

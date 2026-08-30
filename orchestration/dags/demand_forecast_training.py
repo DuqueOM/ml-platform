@@ -100,7 +100,19 @@ def demand_forecast_training() -> None:
         demand = to_hourly_demand(trips)
         written = write_demand(demand, overwrite=True)
 
-        logger.info("ingested %s: %d rows rejected of %d", source.name, report.rejected, report.total)
+        # `report.rejected` and `report.total` do not exist on `IngestReport`;
+        # this line raised `AttributeError` the first time a task body ran.
+        # Nine DAG tests pass without noticing because none executes a body,
+        # `orchestration/` was outside the type gate, and `demand_forecast`
+        # shipped no `py.typed` — so even inside the gate, mypy would have seen
+        # an untyped import and said nothing. All three are fixed together;
+        # any one alone leaves the next instance invisible.
+        logger.info(
+            "ingested %s: %d rows rejected of %d",
+            source.name,
+            report.rows_read - report.rows_written,
+            report.rows_read,
+        )
         return {"month": f"{interval_start:%Y-%m}", "rows": len(demand), "snapshot_id": written.snapshot_id}
 
     @task
@@ -120,7 +132,7 @@ def demand_forecast_training() -> None:
         dense, density = check_density(demand)
 
         if not result.success:
-            raise ValueError(f"warehouse validation failed: {result.failed_expectations}")
+            raise ValueError(f"warehouse validation failed: {result.failed}")
         if not dense:
             raise ValueError(f"hour density {density:.3f} is below the floor; the month has gaps")
 
@@ -186,7 +198,11 @@ def demand_forecast_training() -> None:
         logger.info("published %s trained through %s", metadata["version"], metadata["trained_through"])
         return {**metrics, **metadata}
 
-    publish_model(check_quality_gate(backtest_model(validate_warehouse(ingest_month()))))
+    # `XComArg`, not `dict`: inside a DAG body a decorated task returns
+    # Airflow's definition-time proxy, and the dict in each signature is what
+    # arrives at RUNTIME. mypy cannot model that hand-off, and annotating the
+    # signatures as `XComArg` would make the bodies wrong instead.
+    publish_model(check_quality_gate(backtest_model(validate_warehouse(ingest_month()))))  # type: ignore[arg-type]
 
 
 demand_forecast_training()

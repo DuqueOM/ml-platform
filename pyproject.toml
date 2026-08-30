@@ -126,6 +126,22 @@ module = ["pyarrow.*", "pyiceberg.*", "duckdb.*", "sklearn.*", "joblib.*", "rank
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# KFP's component DSL ships no type information, and every pipeline step is
+# wrapped in one of its decorators. `disallow_untyped_decorators` then reports
+# each step — seven findings that all say the same thing about a third-party
+# library, and none about this code.
+#
+# Per-module and narrow. Unlike `strict`, these options really are per-module:
+# that asymmetry is recorded in the comment at [tool.mypy], and it is why this
+# block can be trusted to do what it says.
+module = ["demand_forecast_pipeline"]
+disallow_untyped_decorators = false
+
+[[tool.mypy.overrides]]
+module = ["kfp.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 # Great Expectations SHIPS py.typed, so it is not an untyped import — it
 # re-exports its expectation classes through `great_expectations.expectations`
 # without listing them in `__all__`. Adding it to the ignore_missing_imports

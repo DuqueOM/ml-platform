@@ -18,3 +18,16 @@ spec:
             matchLabels: { app.kubernetes.io/name: ingress-nginx }
       ports:
         - { protocol: TCP, port: 8000 }
+    # Prometheus, on the same port, and this rule was missing.
+    #
+    # The Deployment annotates `prometheus.io/scrape: "true"` on port 8000 and
+    # `default-deny` denies every ingress not named here — so the pod
+    # ADVERTISED a scrape the cluster refused. The SLO rules, the dashboards
+    # and the alerting all rest on a series that would never have arrived, and
+    # nothing in the rendered manifests disagrees with itself: an annotation is
+    # a request, a NetworkPolicy is the answer, and only one of them was read.
+    - from:
+        - namespaceSelector:
+            matchLabels: { app.kubernetes.io/name: monitoring }
+      ports:
+        - { protocol: TCP, port: 8000 }

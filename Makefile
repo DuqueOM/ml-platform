@@ -37,7 +37,7 @@ help: ## Show this help
 verify: ## Run every repository gate (superset of CI's; see RUNBOOK for what it still omits)
 	uv run ruff check .
 	uv run ruff format --check .
-	uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/ projects/store-assistant/src/
+	uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/ projects/store-assistant/src/ orchestration/
 	uv run python scripts/sync_agentic_adapters.py --check
 	uv run python scripts/validate_agentic_surface.py --strict
 	uv run python scripts/validate_quality_gates.py
