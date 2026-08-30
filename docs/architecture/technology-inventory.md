@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**48 of 119 committed technologies implemented (40%)** — plus 15 studied and 10 rejected, which are decisions rather than gaps.
+**49 of 119 committed technologies implemented (41%)** — plus 15 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 | :-: | --- |
@@ -268,14 +268,14 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ✅ | `copier-project-generator` | core | |
 | 📓 | `pants` | studied | Correct at a build-time threshold not yet reached (ADR-001 revisit trigger). |
 
-## Governance — 2 built, 4 pending
+## Governance — 3 built, 3 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
 | ⬜ | `eu-ai-act` | core | |
 | ⬜ | `iso-42001` | core | |
 | ⬜ | `nist-ai-rmf` | core | |
-| ⬜ | `model-cards` | core | The file exists; its sections are still TODO, and a card that says TODO documents nothing. |
+| ✅ | `model-cards` | core | |
 | ✅ | `adrs` | core | |
 | ✅ | `quality-gates` | core | |
 

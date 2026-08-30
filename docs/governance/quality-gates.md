@@ -37,7 +37,7 @@ Apply to every commit, regardless of what changed.
 | # | Claim | Command | Threshold | Why this value |
 | --- | --- | --- | --- | --- |
 | P1 | Dependency direction holds | `uv run pytest tests/test_dependency_direction.py` | Zero violations | Charter criterion C1 is unfalsifiable without it. Non-negotiable |
-| P2 | Type-checked | `uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/` | Zero errors, `strict` over everything in scope | This row said "strict on `libs/`" and was wrong for the repository's whole history: `strict` sat in a per-module override, and mypy applies that flag globally while reporting the module list as unused. Measured, not read — the narrower claim understated what already ran, and `tests/test_type_gate_enforces_its_config.py` now runs known-bad code through this config so the threshold is watched failing |
+| P2 | Type-checked | `uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/ projects/store-assistant/src/ orchestration/` | Zero errors, `strict` over everything in scope | This row said "strict on `libs/`" and was wrong for the repository's whole history: `strict` sat in a per-module override, and mypy applies that flag globally while reporting the module list as unused. Measured, not read — the narrower claim understated what already ran, and `tests/test_type_gate_enforces_its_config.py` now runs known-bad code through this config so the threshold is watched failing |
 | P3 | Lint and format clean | `uv run ruff check . && uv run ruff format --check .` | Zero | Formatting arguments are a tax; a tool ends them |
 | P4 | Documentation coherent | `uv run python scripts/check_doc_coherence.py` | Zero | ADR-005 rules C, D, H mechanised |
 | P6 | Cloud-specific surface | `uv run python scripts/measure_cloud_surface.py --check` | <= 75% of Terraform lines | Multi-cloud means the DIFFERENCE is small and counted, not that two configs exist. A rising share is the abstraction leaking |
@@ -64,6 +64,13 @@ to close it stays named.
 | L2 | Branch coverage | `uv run python scripts/check_branch_coverage.py` | ≥80% branches | Branches are where the untested paths hide. This row had no command that could fail on branches alone until QA-4 round seven said so — the combined figure could clear 90 on line coverage while branches sat under the floor |
 | L3 ⏳ | Public API documented | `uv run python scripts/check_docstrings.py libs/` | 100% of public symbols | A library is its contract; an undocumented public function has none · **PENDING — Phase 2** |
 
+**Measured over the whole suite, not over `pytest libs/`.** The ADR-002
+migration split the agent core's tests by ownership — the ones needing the
+store use-case's prompts, policy data and tools moved to that project — so a
+run restricted to `libs/` stopped executing much of the library it was
+measuring: 76.48% lines and 57.85% branches, against 92.70% from the suite that
+actually runs the code. The floors did not move; which runs count did.
+
 Neither figure includes the suites themselves. `--cov=libs` counted
 `libs/*/tests/*` — 397 of 846 statements, at 99.26% — so the published number
 was partly a statement about how thoroughly the tests execute themselves.
@@ -80,7 +87,7 @@ worse, because the number invites trust.
 | --- | --- | --- | --- | --- |
 | S1 ⏳ | API contract holds | `uv run schemathesis run "$OPENAPI_URL"` | Zero failures | Generated cases find what hand-written tests assume away · **PENDING — Phase 2** |
 | S2 ⏳ | Latency SLO | `k6 run <project>/tests/load.js` | p99 within the project's stated SLO | The claim is public; the gate makes it accountable · **PENDING — Phase 2** |
-| S3 | Serving invariants | `uv run pytest -k serving_contract` | Zero | Inherited from `ml-service-template` (ADR-003) — every one encodes a past incident |
+| S3 ⏳ | Serving invariants | `uv run pytest -k serving_contract` | Zero | Inherited from `ml-service-template` (ADR-003) — every one encodes a past incident · **PENDING — the selector matches no test anywhere in this repository, and did not when the row was written. Found by C4 the day it learned to check `-k` selectors, not by reading. `serving-core` is deliberately empty until a second serving consumer exists (ADR-001 rule 3), so there is nothing here for these invariants to hold over yet** |
 | S4 ⏳ | Image signed and attested | `cosign verify-attestation --type slsaprovenance "$DIGEST"` | Verified | Deploying an unverifiable image forfeits the entire supply chain · **PENDING — nothing here builds an image yet, so there is nothing to sign. Wired when Phase 2 publishes one** |
 
 ## Model gates
@@ -101,10 +108,10 @@ Evaluated before promotion, never after.
 | # | Claim | Command | Threshold | Why this value |
 | --- | --- | --- | --- | --- |
 | A1 ⏳ | Retrieval quality | `uv run python -m rag_assistant.evals --check retrieval` | recall@k per project | Generation quality is bounded by retrieval; measure the bound · **PENDING — Phase 3** |
-| A2 ⏳ | Answer faithfulness | `uv run promptfoo eval -c evals/config.yaml` | Per project | Blocks merge — the LLM equivalent of M1 · **PENDING — Phase 3** |
-| A3 ⏳ | Policy gate holds under injection | `uv run pytest -k injection_containment` | Zero bypasses | Asserts the *loop's* behaviour when the model is fooled, never the model's judgement · **PENDING — Phase 3** |
-| A4 | Cost per request | `--check cost` | Within budget | An unbounded agent loop is a billing incident |
-| A5 | Tool capability contract | `uv run pytest -k tool_contract` | Fail-closed | A mutating tool reachable without the gate is a P0 |
+| A2 ⏳ | Answer faithfulness | `uv run promptfoo eval -c evals/config.yaml` | Per project | Blocks merge — the LLM equivalent of M1 · **PENDING — needs an LLM endpoint. Every other gate here runs offline and deterministically; this one cannot, and pretending otherwise would put a network call and a bill inside CI** |
+| A3 | Policy gate holds under injection | `uv run pytest -k injection_containment` | Zero bypasses | Asserts the *loop's* behaviour when the model is fooled, never the model's judgement — the model is a scripted double, so the gate is deterministic and needs no endpoint. Six cases: a price claim with no lookup, an illegal promise, a fabricated confirmation, an invented promotion, a smuggled paid flag, and a tool name the registry does not know |
+| A4 ⏳ | Cost per request | `uv run pytest -k cost_budget` | Within budget | An unbounded agent loop is a billing incident · **PENDING — the command was `--check cost`, a fragment of a command line rather than one, so nothing could have run it. The migrated core carries per-tier budgets; wiring a gate over them is the next step and this row says so rather than implying it is done** |
+| A5 | Tool capability contract | `uv run pytest -k tool_contract` | Fail-closed | A mutating tool reachable without the gate is a P0. **This selector matched no test until the ADR-002 migration landed the suite it was written against** — and a `pytest` selector deselects rather than fails, so it exited 0 while running nothing. C4 now rejects a selector that matches nothing |
 
 ## Compliance gates
 

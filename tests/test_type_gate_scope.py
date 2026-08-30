@@ -134,7 +134,15 @@ def test_the_type_gate_covers_every_first_party_source_root() -> None:
     roots = sorted(REPO_ROOT.glob("libs/*/src"))
     roots += sorted(REPO_ROOT.glob("projects/*/src"))
     roots.append(REPO_ROOT / "scripts")
-    assert len(roots) >= 7, f"only {len(roots)} source roots found — the globs stopped matching, not the tree"
+    # `orchestration/` too. It was outside the gate, and that is where an
+    # audit found a DAG task reading `report.rejected` and `report.total` from
+    # a dataclass that has neither — an AttributeError waiting for the first
+    # real run, invisible because nine DAG tests import the graph without
+    # executing a single task body. Widening the list here was not enough on
+    # its own: the projects shipped no `py.typed`, so mypy saw untyped imports
+    # and had nothing to check against.
+    roots.append(REPO_ROOT / "orchestration")
+    assert len(roots) >= 8, f"only {len(roots)} source roots found — the globs stopped matching, not the tree"
 
     def covered(root: Path) -> bool:
         relative = root.relative_to(REPO_ROOT).as_posix()

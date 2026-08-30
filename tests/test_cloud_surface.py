@@ -11,6 +11,7 @@ lets this run while the cloud work is deliberately paused (constraint S3).
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -114,3 +115,44 @@ def test_the_ceiling_can_actually_be_exceeded() -> None:
 
     healthy = Surface(shared=100, per_adapter={"gcp": 5, "aws": 5})
     assert healthy.within_budget
+
+
+def test_a_destroyable_cluster_says_so_explicitly() -> None:
+    """`terraform destroy` is this plan's only cost control, and it refuses by default.
+
+    `hashicorp/google ~> 6.0` defaults `google_container_cluster` to
+    `deletion_protection = true`, so `destroy` declines to delete the cluster.
+    The technical plan makes that the acceptance criterion: *"infrastructure
+    exists only inside validation windows; `terraform destroy` is an acceptance
+    criterion, not a follow-up, and the phase is not complete until the billing
+    export shows zero standing spend."* A cluster that cannot be destroyed
+    leaves the bill running — the one failure the greenfield posture exists to
+    prevent, and the plan would have discovered it at teardown.
+
+    Asserted as EXPLICIT rather than as `false`: a repository that later runs a
+    cluster outliving a window should set it to `true` here, and the defect is
+    inheriting a default that decides this either way.
+    """
+    gcp = "\n".join(
+        path.read_text(encoding="utf-8") for path in (REPO_ROOT / "platform" / "terraform" / "gcp").glob("*.tf")
+    )
+    assert "deletion_protection" in gcp, (
+        "gcp: google_container_cluster does not set `deletion_protection`, and the pinned provider defaults it "
+        "to true — `terraform destroy` then refuses, leaving the bill running."
+    )
+
+    # AWS is not symmetric, and the asymmetry is the provider's rather than
+    # this repository's. `aws_eks_cluster` gained `deletion_protection` in
+    # hashicorp/aws 6.x; under the pinned `~> 5.0` the argument does not exist
+    # and `terraform validate` would reject it. Nothing blocks destroy there
+    # today — but a version bump changes that silently, so the condition is
+    # read from the pin rather than remembered.
+    aws = "\n".join(
+        path.read_text(encoding="utf-8") for path in (REPO_ROOT / "platform" / "terraform" / "aws").glob("*.tf")
+    )
+    pinned_six = re.search(r'source\s*=\s*"hashicorp/aws"\s*\n\s*version\s*=\s*"~>\s*([6-9]|\d{2,})', aws)
+    if pinned_six:
+        assert "deletion_protection" in aws, (
+            "aws: the provider pin moved to 6.x, where `aws_eks_cluster` has `deletion_protection` — state it "
+            "explicitly, for the same reason as GCP."
+        )

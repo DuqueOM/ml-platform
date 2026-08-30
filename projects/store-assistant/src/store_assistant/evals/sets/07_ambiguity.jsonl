@@ -1,0 +1,16 @@
+{"input": "lo de siempre", "expected_intent": "unknown", "expected_tier": 0, "expected_finality": "clarify", "note": "sin historial -> aclarar"}
+{"input": "quiero eso", "expected_intent": "unknown", "expected_tier": 0, "expected_finality": "clarify", "note": "referente ambiguo"}
+{"input": "me das una", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "pedido sin producto"}
+{"input": "cuanto", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "clarify", "note": "precio de que?"}
+{"input": "hay?", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "clarify", "note": "disponibilidad de que?"}
+{"input": "y el otro", "expected_intent": "unknown", "expected_tier": 0, "expected_finality": "clarify", "note": "referente perdido"}
+{"input": "lo quiero frio", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "clarify", "note": "atributo sin producto"}
+{"input": "mandalo", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "accion sin objeto"}
+{"input": "es para hoy", "expected_intent": "unknown", "expected_tier": 0, "expected_finality": "clarify", "note": "contexto insuficiente"}
+{"input": "dos por favor", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "cantidad sin producto"}
+{"input": "el grande", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "clarify", "note": "presentacion sin producto"}
+{"input": "me ayudas", "expected_intent": "smalltalk", "expected_tier": 0, "expected_finality": "clarify", "note": "peticion vaga de ayuda"}
+{"input": "esta disponible", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "clarify", "note": "que producto"}
+{"input": "cuando llega", "expected_intent": "order_status", "expected_tier": 1, "expected_finality": "clarify", "note": "pedido sin folio"}
+{"input": "lo mismo de ayer", "expected_intent": "unknown", "expected_tier": 0, "expected_finality": "clarify", "note": "referencia a historial inexistente"}
+{"input": "puedes?", "expected_intent": "smalltalk", "expected_tier": 0, "expected_finality": "clarify", "note": "pregunta sin contenido"}

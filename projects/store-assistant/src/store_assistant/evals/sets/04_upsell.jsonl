@@ -1,0 +1,16 @@
+{"input": "quiero una coca", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "upsell: ofrecer presentacion mayor / combo"}
+{"input": "dame un pan", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "upsell: leche/huevo complementarios"}
+{"input": "necesito leche", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "upsell: pan/cereal"}
+{"input": "me llevo 2 cocas", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "answer", "note": "upsell: paquete de 6"}
+{"input": "quiero frijol y arroz", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "upsell: combo despensa"}
+{"input": "dame huevos", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "upsell: tocino/pan para desayuno"}
+{"input": "una coca de 600 por favor", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "answer", "note": "upsell: 2x descuento"}
+{"input": "quiero pan para el desayuno", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "upsell contextual desayuno"}
+{"input": "me das una leche entera", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "answer", "note": "upsell: 2 litros precio"}
+{"input": "voy a hacer una fiesta, dame refrescos", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "upsell volumen evento"}
+{"input": "quiero algo de botana", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "upsell: bebida con botana"}
+{"input": "dame lo basico para la semana", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "upsell: canasta basica"}
+{"input": "quiero cocas para 5 personas", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "upsell por cantidad de personas"}
+{"input": "me das pan y ya", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "answer", "note": "cliente cierra; upsell suave o respeto"}
+{"input": "necesito desayuno completo", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "upsell combo desayuno"}
+{"input": "solo quiero una coca nada mas", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "answer", "note": "no upsell: respetar 'nada mas'"}

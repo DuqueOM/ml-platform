@@ -98,6 +98,24 @@ ruff, coverage and the CI steps were argued into having, so it lints generator
 source that is Jinja rather than YAML, and type-checks a directory set CI does
 not.
 
+**One hook was moved to the manual stage, and that is a trade-off rather than
+a relaxation.** `implementation-status` regenerates the derived document by
+RUNNING each component's evidence command — around thirty-five nested
+`uv run pytest` invocations. Measured: `pre-commit run --files CHANGELOG.md`,
+on a one-file documentation change, exceeded ten minutes and was still going.
+An independent audit measured the same shape from the other end:
+`pytest libs` and `pytest projects` finish in about eight seconds each, and
+`pytest tests` takes over thirty minutes. The mechanism is arithmetic rather
+than recursion — the generator runs 41 verification commands and five test
+files invoke it, so `pytest tests/test_status_layers.py` alone exceeds ten
+minutes on an idle machine.
+
+It remains a gate: CI runs it on every push and `make verify` runs it locally.
+What changed is that a typo no longer costs ten minutes, because a hook that
+does is a hook people route around — and they route around the whole battery,
+including the checks that catch real defects in seconds. Run it on demand with
+`pre-commit run implementation-status --hook-stage manual`.
+
 That is a defect in the hook configuration, and the fix belongs in
 `.pre-commit-config.yaml` — bringing each hook's scope into line with the CI
 step it shadows. **A hook set that cannot pass is one people route around**,
@@ -150,7 +168,7 @@ oversight.
 | Gate | Command | A failure means |
 | --- | --- | --- |
 | Lint / format | `uv run ruff check .` · `uv run ruff format --check .` | Mechanical. `ruff check --fix` and `ruff format` |
-| Types | `uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/` | `strict` applies to everything in scope, not only `libs/` — the per-module override that appeared to narrow it never did (mypy applies `strict` globally) |
+| Types | `uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/ projects/store-assistant/src/ orchestration/` | `strict` applies to everything in scope, not only `libs/` — the per-module override that appeared to narrow it never did (mypy applies `strict` globally) |
 | Agentic surfaces stale | `uv run python scripts/sync_agentic_adapters.py --check` | A canonical body changed without re-rendering. Fix with `make sync`, never by editing a rendered file. Passing, it reports the artifact and surface counts it checked — 74 across 4 |
 | Agentic surface integrity | `uv run python scripts/validate_agentic_surface.py --strict` | V1–V6: missing surface, drifted mirror, policy text in a pointer, an unresolvable authority, or a **de-escalated mode** |
 | Documentation coherence | `uv run python scripts/check_doc_coherence.py` | C1–C9; see the table below |

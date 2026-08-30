@@ -192,8 +192,37 @@ def to_hourly_demand(trips: pl.DataFrame) -> pl.DataFrame:
     ``event_time`` the START of the interval. That matters for point-in-time
     correctness downstream: a feature computed at 14:30 must not attach to the
     14:00 bucket, because at 14:00 it did not exist yet.
+
+    **The result is a DENSE hourly grid per zone, and that is not cosmetic.**
+
+    `group_by` emits a row only for hours that had a trip, so an hour with zero
+    demand disappears. Everything downstream then counts ROWS where it means
+    HOURS: `features.py` builds every lag with `shift(n).over(zone)` and the
+    seasonal-naive baseline with `shift(168)`. On a sparse panel those are not
+    "24 hours ago" and "same hour last week" — they are "24 rows ago" and "168
+    rows ago", which reach back an arbitrary and varying distance.
+
+    Measured on a synthetic panel with 40% of hours empty, before this fix:
+
+        lag_24   -> median 41 h, p90 48 h, max 62 h
+        shift(168) -> median 286 h, max 304 h
+
+    It is not leakage — every value still comes from the past — and that is
+    what makes it hard to see. It is a units error, and it flatters the model:
+    the seasonal baseline degrades faster than the model does, so reported
+    skill inflates. This repository's own trail shows the shape, +12.2% skill
+    on synthetic data against +55.8% on real data, and the synthetic fixture in
+    `test_training.py` is a perfectly contiguous grid, which is why no test
+    could see it.
+
+    A zero-trip hour is also a real observation. Dropping it biases the model
+    upward by training only on hours that happened to have demand.
+
+    `mean_distance` stays NULL on a densified hour rather than 0.0: the mean of
+    no trips is undefined, and writing zero would state that trips occurred and
+    were short. `total_fare` is 0.0, which is the true sum of an empty set.
     """
-    return (
+    observed = (
         trips.with_columns(pl.col("tpep_pickup_datetime").dt.truncate("1h").alias("event_time"))
         .group_by(["PULocationID", "event_time"])
         .agg(
@@ -202,5 +231,34 @@ def to_hourly_demand(trips: pl.DataFrame) -> pl.DataFrame:
             pl.col("fare_amount").sum().alias("total_fare"),
         )
         .rename({"PULocationID": "zone_id"})
+    )
+    if observed.is_empty():
+        return observed.sort(["zone_id", "event_time"])
+
+    # Per zone, from its own first observed hour to its own last. A global
+    # calendar would invent zeros for a zone before it existed in the data,
+    # which is a different falsehood from the one being fixed.
+    spans = observed.group_by("zone_id").agg(
+        pl.col("event_time").min().alias("first_hour"),
+        pl.col("event_time").max().alias("last_hour"),
+    )
+    grid = (
+        spans.with_columns(
+            pl.datetime_ranges(pl.col("first_hour"), pl.col("last_hour"), interval="1h").alias("event_time")
+        )
+        # `empty_as_null=False`: a zone with a single observed hour yields a
+        # one-element range, never an empty one, so the two behaviours agree
+        # here — pinned rather than inherited, because polars 2.0 changes the
+        # default and a silent change to how rows appear is the kind of drift
+        # this panel cannot afford.
+        .explode("event_time", empty_as_null=False)
+        .select("zone_id", "event_time")
+    )
+    return (
+        grid.join(observed, on=["zone_id", "event_time"], how="left")
+        .with_columns(
+            pl.col("trip_count").fill_null(0).cast(pl.UInt32),
+            pl.col("total_fare").fill_null(0.0),
+        )
         .sort(["zone_id", "event_time"])
     )

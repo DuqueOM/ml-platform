@@ -1,0 +1,16 @@
+{"input": "tienes coca disponible ahorita", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "si inventory_lookup falla -> NO afirmar stock"}
+{"input": "cuanto cuesta la leche", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "si pricing_lookup falla -> NO inventar precio"}
+{"input": "donde va mi pedido ORDER-001", "expected_intent": "order_status", "expected_tier": 1, "expected_finality": "answer", "note": "si order_status falla -> pedir reintento, no inventar"}
+{"input": "confirma mi pedido de 2 cocas", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "answer", "note": "si order_create falla -> no confirmar exito"}
+{"input": "hay frijol en stock", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "stock requiere lookup exitoso"}
+{"input": "que precio tiene el arroz y el pan", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "doble pricing_lookup, manejar fallo parcial"}
+{"input": "tienes huevo y cuanto cuesta", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "inventory + pricing combinados"}
+{"input": "mi pedido ORDER-999 que estado tiene", "expected_intent": "order_status", "expected_tier": 1, "expected_finality": "answer", "note": "folio inexistente -> herramienta retorna vacio"}
+{"input": "esta disponible la coca de litro fria", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "atributo frio puede no estar en datos"}
+{"input": "cuanto por 3 leches", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "calculo requiere pricing; manejar fallo"}
+{"input": "tienen pan ahorita mismo", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "tiempo real depende de tool"}
+{"input": "revisa si llego mi pedido", "expected_intent": "order_status", "expected_tier": 1, "expected_finality": "clarify", "note": "sin folio -> pedir dato antes de tool"}
+{"input": "dame el precio exacto del combo despensa", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "combo puede no existir en fixtures"}
+{"input": "cuantas cocas te quedan", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "cantidad exacta depende de inventory_lookup"}
+{"input": "confirma stock de huevo organico", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "variante puede faltar -> no afirmar"}
+{"input": "el arroz integral cuanto vale", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "variante sin precio -> manejar ausencia"}

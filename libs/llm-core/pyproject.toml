@@ -11,6 +11,15 @@ requires-python = ">=3.11"
 dependencies = [
     "numpy~=2.4",
     "scikit-learn~=1.9",
+    # The migrated agent core (ADR-002) validates every tool call and every
+    # tier response against a model before anything acts on it. Structured
+    # tool calling is the whole reason the loop is safe to run: a model that
+    # names a tool cannot also decide what its arguments mean.
+    "pydantic~=2.9",
+    "PyYAML~=6.0",
+    "httpx~=0.28",
+    # BM25 lexical retrieval, the agent core's in-context document tool.
+    "rank-bm25~=0.2",
 ]
 
 [build-system]

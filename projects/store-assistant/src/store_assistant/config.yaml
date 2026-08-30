@@ -1,0 +1,199 @@
+# Use-case: "tienda" — WhatsApp store assistant (example use-case).
+#
+# NOTE ON LANGUAGE: platform documentation is English, but this use-case serves
+# Spanish-speaking customers, so the router/agent prompts below are Spanish on
+# purpose. They are use-case *content/config*, not engineering documentation.
+
+name: tienda
+language: es
+
+# Lifecycle phase. 1 = read-only (fixtures); the tool registry refuses mutating
+# tools (ADR-006). Set to 2 only once real mutating backends + their evals exist.
+phase: 1
+
+# Closed set of intents the router may emit (enforced by the grammar AND
+# validated at runtime against this list).
+allowed_intents:
+  - product_lookup
+  - order_create
+  - order_status
+  - smalltalk
+  - complaint
+  - policy_question
+  - maintenance_task
+  - unknown
+
+# llama.cpp (OpenAI-compatible) endpoints per tier. Override via deployment.
+# Tier topology (ADR-011). ONE committed config serves all three profiles; the
+# environment decides which one is active:
+#
+#   local-only  export nothing -> tiers 1..3 expand to an empty URL and are
+#               dropped; every escalation resolves down to Tier 0. ~2 GB RAM.
+#   hybrid      export AGENT_TIER{1,2,3}_URL/_MODEL/_API_KEY -> Tier 0 stays
+#               local for routing, reasoning goes remote. ~2 GB RAM. DEFAULT
+#               for any environment that holds provider credentials.
+#   all-remote  additionally point AGENT_TIER0_URL at a remote endpoint and set
+#               AGENT_TIER0_KIND=remote. ~0 GB RAM (CI). Note that GBNF routing
+#               constraints are unavailable there — see ADR-011 Consequences.
+#
+# Credentials are named, never inlined: `api_key_env` is a VARIABLE NAME.
+tier_endpoints:
+  0:                                                       # router/guardrail
+    url: "${AGENT_TIER0_URL:-http://127.0.0.1:8091/v1/chat/completions}"
+    kind: "${AGENT_TIER0_KIND:-local}"
+    model: "${AGENT_TIER0_MODEL:-}"
+    api_key_env: "${AGENT_TIER0_API_KEY_ENV:-}"
+    # ADR-012: where the weights are resident decides which budget they are
+    # charged against. The measured 43 tok/s (bench/RESULTS.md) is a GPU
+    # number; the same model on CPU exceeds available system RAM and swaps.
+    device: "${AGENT_TIER0_DEVICE:-gpu}"
+    weights_gb: 4.95                    # E4B Q4_K_M, reported by llama-bench
+  1:                                                       # mid reasoning
+    url: "${AGENT_TIER1_URL:-}"
+    kind: remote
+    model: "${AGENT_TIER1_MODEL:-}"
+    api_key_env: "AGENT_TIER1_API_KEY"
+  2:                                                       # main assistant
+    url: "${AGENT_TIER2_URL:-}"
+    kind: remote
+    model: "${AGENT_TIER2_MODEL:-}"
+    api_key_env: "AGENT_TIER2_API_KEY"
+  3:                                                       # judge/verifier
+    url: "${AGENT_TIER3_URL:-}"
+    kind: remote
+    model: "${AGENT_TIER3_MODEL:-}"
+    api_key_env: "AGENT_TIER3_API_KEY"
+
+# Transient-failure retry for tier/router HTTP calls (I-1). A llama-server blip
+# (timeout, connection reset, 429/5xx) is retried with backoff+jitter so it does
+# not trip the circuit breaker; terminal 4xx are never retried. Budget kept well
+# under the ~8s SLA. Omit to accept these defaults.
+tiers:
+  retry:
+    max_retries: 2
+    base_delay: 0.25
+    max_delay: 4.0
+    jitter: 0.25
+
+# Size caps that protect the small-model context budget (I-4), plus the
+# resident-memory invariant (ADR-011).
+limits:
+  observation_chars: 4000   # per tool result injected into a prompt
+  retrieval_chars: 2000     # per BM25 document returned by semantic_retrieval
+  max_local_tiers: 1        # how many tiers may hold a model in memory at once.
+                            # Raising this is a deliberate act: each additional
+                            # local tier costs its full quantised model size,
+                            # and config load fails rather than let the OOM
+                            # killer discover the overcommit at request time.
+
+  # Per-device budgets (ADR-012), measured on the reference workstation
+  # 2026-08-05. Each value records HOW it was obtained, because the first
+  # version of these numbers came from single readings and was wrong — see
+  # the "Correction" section of ADR-012.
+  #
+  #   gpu: RTX 5070 Laptop, 8150 MiB total. The desktop's hold on the dGPU
+  #        FLUCTUATES; sampled repeatedly it sits at 241-252 MiB, not the
+  #        ~1900 MiB an unlucky single sample reported. Free is therefore
+  #        ~7650 MiB. Stated at 7.4 to leave KV-cache and compute-buffer
+  #        headroom (a fully-offloaded 12B peaked at 7635 MiB used).
+  #        Re-measure by SAMPLING, never by one reading:
+  #          for i in $(seq 1 10); do \
+  #            nvidia-smi --query-gpu=memory.used --format=csv,noheader; \
+  #            sleep 3; done
+  #   cpu: system RAM available to WSL2 under its default 50% host allocation.
+  #        Raising this requires a .wslconfig change — see
+  #        docs/workstation-memory-budget.md.
+  memory_budget_gb:
+    gpu: 7.4
+    cpu: 4.0
+
+router:
+  prompt_file: "prompts/router.md"
+  grammar_file: "grammars/route.gbnf"
+
+retrieval:
+  docs_dir: "policies"     # *.md indexed by BM25
+
+fixtures_dir: "data"       # JSON fixtures backing the Phase-1 tools
+budgets_file: "budgets.yaml"
+
+# Deterministic policy-gate rules (data, not code) live in a VERSIONED file so
+# its PR diff is the compliance audit trail (plan §F2.2). Override the path with
+# `policy_file:` if needed; default is policies/policy.yaml.
+policy_file: "policies/policy.yaml"
+
+# Cross-tier verifier (plan §F2.3). For risk medium|high the answer is judged by
+# a HIGHER tier (judge_tier_offset) — never self-review. self_consistency_k > 1
+# (majority vote) is meant for ASYNC high-stakes only; interactive WhatsApp keeps
+# k=1 to respect the ~8s budget.
+verification:
+  enabled: true
+  judge_tier_offset: 1
+  self_consistency_k: 1
+  self_consistency_high_only: true
+
+# Decision telemetry (plan §F3). One redacted JSONL line per request. PII is
+# redacted at write time. shadow_sample_rate logs what a higher tier WOULD route
+# on a fraction of requests (the comparison call is gated; needs a model).
+telemetry:
+  enabled: true
+  path: "ops/telemetry.jsonl"
+  source: "local"
+  shadow_sample_rate: 0.1
+
+# Agent prompt templates. Placeholders are filled by the loop with f-style
+# .format(): {message} {intent} {risk} {ambiguity} {tools} {max_tool_calls}
+# {observations} {response}.
+prompts:
+  plan_system: "Eres un planificador de una tienda. Decides qué herramientas usar y devuelves SOLO JSON válido, sin texto adicional."
+  plan_user: |
+    El cliente dice: "{message}"
+
+    Intent clasificado: {intent}
+    Risk: {risk}
+    Ambiguity: {ambiguity}
+
+    Herramientas disponibles:
+    {tools}
+
+    Devuelve SOLO un objeto JSON con las herramientas a usar (máx {max_tool_calls}):
+    {{"tool_calls": [{{"tool": "inventory_lookup", "args": {{"product_id": "SKU-COCA-600"}}}}]}}
+
+    Si no necesitas herramientas: {{"tool_calls": []}}
+
+  generate_system: "Eres un asistente de tienda por WhatsApp. Responde de forma amable y profesional."
+  generate_user: |
+    Cliente: "{message}"
+    Intent: {intent}
+
+    Información de herramientas:
+    {observations}
+
+    Genera una respuesta clara, corta y comercial para WhatsApp. NO inventes
+    stock ni precios que no estén en las observaciones.
+
+  reflect_system: "Reflexiona sobre los resultados de herramientas."
+  reflect_user: |
+    Mensaje original: "{message}"
+
+    Observaciones de herramientas:
+    {observations}
+
+    ¿Falta información crítica? ¿Alguna herramienta contradijo la suposición?
+    Responde en 1-2 oraciones.
+
+  critic_system: "Eres un verificador. Valida respuestas contra datos reales."
+  critic_user: |
+    Respuesta propuesta: "{response}"
+
+    Observaciones reales:
+    {observations}
+
+    Verifica:
+    1. ¿Consistente con los datos de herramientas?
+    2. ¿Promete algo no confirmado en stock/precio?
+    3. ¿Claro para el cliente?
+
+    Responde SOLO: APPROVED o REJECTED
+
+  safe_fallback: "Disculpa, no puedo procesar tu solicitud en este momento. ¿Podrías reformular tu pregunta o contactar directamente con la tienda?"

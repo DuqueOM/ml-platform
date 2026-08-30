@@ -18,6 +18,14 @@ build/
 data/
 *.parquet
 *.gguf
+# …but a use-case's committed FIXTURES are not a dataset. `data/` is here for
+# downloaded corpora, which must never be committed; `store-assistant` ships
+# four small synthetic JSON files inside its package so its suite runs offline.
+# They were silently excluded by the rule above and the tests passed locally
+# while failing on a clean checkout — the difference being files that existed
+# on one machine and in no commit.
+!projects/*/src/*/data/
+!projects/*/src/*/data/**
 
 # MCP config carries credentials; only the example is committed.
 .codex/mcp.json

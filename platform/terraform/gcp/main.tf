@@ -55,6 +55,22 @@ resource "google_container_cluster" "primary" {
     channel = var.environment == "prod" ? "STABLE" : "REGULAR"
   }
 
+  # Explicit, and false on purpose.
+  #
+  # `hashicorp/google ~> 6.0` defaults this to TRUE, so `terraform destroy`
+  # REFUSES to delete the cluster — and the technical plan makes destroy the
+  # cost control: "infrastructure exists only inside validation windows;
+  # `terraform destroy` is an acceptance criterion, not a follow-up, and the
+  # phase is not complete until the billing export shows zero standing spend."
+  # A cluster that cannot be destroyed leaves the bill running, which is the
+  # one failure the greenfield posture exists to prevent.
+  #
+  # Written out rather than inherited either way: a default that decides
+  # whether the plan's only cost control works is a decision, and it belongs in
+  # the file where someone can dispute it. If this repository ever runs a
+  # cluster that outlives a window, this line is where that changes.
+  deletion_protection = false
+
   resource_labels = module.runtime.common_labels
 }
 

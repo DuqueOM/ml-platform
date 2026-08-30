@@ -1,0 +1,58 @@
+{
+  "SKU-COCA-600": {
+    "product_id": "SKU-COCA-600",
+    "name": "Coca-Cola 600ml",
+    "stock": 45,
+    "category": "Bebidas",
+    "refrigerated": true
+  },
+  "SKU-COCA-2L": {
+    "product_id": "SKU-COCA-2L",
+    "name": "Coca-Cola 2L",
+    "stock": 12,
+    "category": "Bebidas",
+    "refrigerated": false
+  },
+  "SKU-PEPSI-600": {
+    "product_id": "SKU-PEPSI-600",
+    "name": "Pepsi 600ml",
+    "stock": 0,
+    "category": "Bebidas",
+    "refrigerated": true
+  },
+  "SKU-FRIJOL-NEGRO-1KG": {
+    "product_id": "SKU-FRIJOL-NEGRO-1KG",
+    "name": "Frijol Negro 1kg",
+    "stock": 78,
+    "category": "Abarrotes",
+    "refrigerated": false
+  },
+  "SKU-ARROZ-1KG": {
+    "product_id": "SKU-ARROZ-1KG",
+    "name": "Arroz Blanco 1kg",
+    "stock": 92,
+    "category": "Abarrotes",
+    "refrigerated": false
+  },
+  "SKU-LECHE-1L": {
+    "product_id": "SKU-LECHE-1L",
+    "name": "Leche Entera 1L",
+    "stock": 34,
+    "category": "Lácteos",
+    "refrigerated": true
+  },
+  "SKU-PAN-BLANCO": {
+    "product_id": "SKU-PAN-BLANCO",
+    "name": "Pan Blanco Integral",
+    "stock": 18,
+    "category": "Panadería",
+    "refrigerated": false
+  },
+  "SKU-HUEVOS-12": {
+    "product_id": "SKU-HUEVOS-12",
+    "name": "Huevos Blancos 12 pzas",
+    "stock": 25,
+    "category": "Lácteos y Huevos",
+    "refrigerated": true
+  }
+}

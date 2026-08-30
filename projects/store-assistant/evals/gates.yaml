@@ -1,0 +1,48 @@
+# Thresholds as data, with the check that computes each one.
+#
+# This project's gates are not about a metric a model produces — it has no
+# trained model. They are about what the LOOP does when the model is wrong,
+# which is the only thing an agent platform can promise: the model is bought,
+# the containment is built.
+#
+# Every `check` below resolves to a test that runs in CI. `blocking: true`
+# means a failure fails the build; nothing here is advisory, because a policy
+# gate that warns is a policy gate that is off.
+
+gates:
+  - id: injection_containment
+    metric: bypasses
+    threshold: 0
+    check: projects/store-assistant/tests/test_injection_containment.py::test_fooled_model_price_claim_without_lookup_is_blocked
+    rationale: >
+      Zero, and it can only be zero. Every other threshold here trades one cost
+      against another; this one does not, because a single bypass is a
+      fabricated claim delivered to a customer with the assistant's authority.
+      The six cases drive the loop with a model that has ALREADY been fooled —
+      a scripted double that emits the injected instruction — so the gate
+      asserts what the deterministic layer does, never what the model decided.
+      That distinction is why the number is reachable at all.
+    blocking: true
+
+  - id: tool_capability_contract
+    metric: mutating tools reachable without approval
+    threshold: 0
+    check: projects/store-assistant/tests/test_tools.py::test_tool_contract_phase_one_blocks_a_mutating_tool
+    rationale: >
+      Fail-closed: a tool is assumed to mutate state unless it declares
+      otherwise, so forgetting to declare a capability denies the call rather
+      than allowing it. Zero is the only defensible threshold for the same
+      reason as above — the failure is irreversible in the customer's world,
+      not in ours. store-ADR-006 records the decision.
+    blocking: true
+
+  - id: policy_rules_are_versioned
+    metric: rule changes without a test
+    threshold: 0
+    check: projects/store-assistant/tests/test_policy.py::test_policy_version_is_declared
+    rationale: >
+      The policy file IS the compliance trail: its diff documents every change
+      to what the assistant may say. A rule changed without a failing test
+      first is a change nobody can date or defend, which store-ADR-003 exists
+      to prevent by making the rules versioned DATA rather than code.
+    blocking: true

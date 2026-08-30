@@ -1,0 +1,8 @@
+root   ::= "{" ws "\"intent\"" ws ":" ws intent "," ws "\"tier\"" ws ":" ws tier "," ws "\"confidence\"" ws ":" ws conf "," ws "\"risk\"" ws ":" ws lvl "," ws "\"ambiguity\"" ws ":" ws lvl "," ws "\"tool_needed\"" ws ":" ws bool "," ws "\"finality\"" ws ":" ws fin "," ws "\"expected_followup\"" ws ":" ws bool ws "}"
+intent ::= "\"product_lookup\"" | "\"order_create\"" | "\"order_status\"" | "\"smalltalk\"" | "\"complaint\"" | "\"policy_question\"" | "\"maintenance_task\"" | "\"unknown\""
+tier   ::= "0" | "1" | "2" | "3"
+conf   ::= "0." [0-9] [0-9]? | "1.0"
+lvl    ::= "\"low\"" | "\"medium\"" | "\"high\""
+fin    ::= "\"answer\"" | "\"clarify\"" | "\"escalate\""
+bool   ::= "true" | "false"
+ws     ::= [ \t\n]*

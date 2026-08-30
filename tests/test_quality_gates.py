@@ -108,7 +108,11 @@ def test_it_reports_how_many_rows_it_examined() -> None:
         f"validate_quality_gates counts {count} rows and C4 counts {c4.group(1)}. "
         f"Two counters over the same declarations disagreeing means one of them narrowed."
     )
-    assert "4 gate(s) across 1 file(s)" in result.stdout, result.stdout
+    # Pinned, and it moved once: `store-assistant` arrived with three gates of
+    # its own (ADR-002), so one file became two and four gates became seven. A
+    # pin that is updated when the tree really changes still catches a filter
+    # that stops matching, which is what it is for.
+    assert "7 gate(s) across 2 file(s)" in result.stdout, result.stdout
 
 
 def test_a_duplicate_gate_id_fails() -> None:
