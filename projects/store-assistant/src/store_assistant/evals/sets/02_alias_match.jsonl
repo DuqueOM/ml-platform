@@ -1,0 +1,18 @@
+{"input": "tienes coca", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "alias coca -> Coca-Cola"}
+{"input": "hay cocacola", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "alias sin guion"}
+{"input": "venden coca cola", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "alias con espacio"}
+{"input": "tienen koka", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "misspelling fonetico"}
+{"input": "hay refresco de cola", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "alias generico -> categoria cola"}
+{"input": "tienes pepsi", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "marca alterna"}
+{"input": "venden leche", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "producto base"}
+{"input": "hay lechita", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "diminutivo -> leche"}
+{"input": "tienen frijol", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "producto base"}
+{"input": "hay frijoles", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "plural -> frijol"}
+{"input": "venden arros", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "misspelling arroz"}
+{"input": "tienes guevos", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "misspelling huevo"}
+{"input": "hay pan de caja", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "variante de pan"}
+{"input": "tienen panecillos", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "variante -> pan"}
+{"input": "venden coca de 600", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "alias + presentacion"}
+{"input": "hay coca light", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "alias + variante"}
+{"input": "tienes coca zero fria", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "alias + variante + atributo"}
+{"input": "venden agua embotellada", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "producto generico"}

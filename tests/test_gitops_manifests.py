@@ -365,3 +365,106 @@ def test_no_overlay_ships_a_mutable_image_tag(overlay: str) -> None:
                 f"runs; pin a digest, or leave the deploy-pipeline placeholder so an accidental apply "
                 f"fails loudly instead of pulling whatever moved."
             )
+
+
+# --- what an external audit found rendering green ---------------------------
+
+
+@pytest.mark.parametrize("cloud", CLOUDS)
+@pytest.mark.parametrize("env", ENVIRONMENTS)
+def test_the_pod_runs_as_a_named_service_account(cloud: str, env: str) -> None:
+    """`default` has no cloud identity, and every overlay was binding one.
+
+    Workload Identity (GCP) and IRSA (AWS) attach a cloud identity to a NAMED
+    Kubernetes ServiceAccount. Without `serviceAccountName` the pod runs as the
+    namespace's `default`, so the binding each overlay provisions reaches
+    nothing — while the repository's own invariant reads "ALWAYS IRSA /
+    Workload Identity, no hardcoded credentials".
+
+    Nothing disagreed: the manifests rendered, the policy was declared, and the
+    identity was simply never claimed.
+    """
+    documents = _build(OVERLAYS / f"{cloud}-{env}")
+    deployment = next(doc for doc in documents if doc["kind"] == "Deployment")
+    name = deployment["spec"]["template"]["spec"].get("serviceAccountName")
+
+    assert name, f"{cloud}-{env}: the pod names no ServiceAccount, so it runs as `default`"
+    assert name != "default", f"{cloud}-{env}: `default` cannot carry a cloud identity binding"
+    accounts = {doc["metadata"]["name"] for doc in documents if doc["kind"] == "ServiceAccount"}
+    assert name in accounts, f"{cloud}-{env}: the pod names {name!r} and the overlay renders {sorted(accounts)}"
+
+
+@pytest.mark.parametrize("cloud", CLOUDS)
+@pytest.mark.parametrize("env", ENVIRONMENTS)
+def test_every_provisioned_secret_is_consumed(cloud: str, env: str) -> None:
+    """An ExternalSecret nothing reads is the whole delivery path running for nothing.
+
+    The operator resolved two remote keys into a Secret that no container
+    mounted or referenced. Every step reported success — the pull, the Secret,
+    the pod — because none of them is the step that would notice.
+    """
+    documents = _build(OVERLAYS / f"{cloud}-{env}")
+    provisioned = {
+        doc["spec"]["target"]["name"]
+        for doc in documents
+        if doc["kind"] == "ExternalSecret" and doc["spec"].get("target")
+    }
+    if not provisioned:
+        pytest.skip("this overlay provisions no ExternalSecret")
+
+    consumed: set[str] = set()
+    for doc in documents:
+        if doc["kind"] != "Deployment":
+            continue
+        pod = doc["spec"]["template"]["spec"]
+        for container in pod.get("containers", []):
+            for entry in container.get("env", []):
+                ref = entry.get("valueFrom", {}).get("secretKeyRef", {})
+                if ref.get("name"):
+                    consumed.add(ref["name"])
+            for source in container.get("envFrom", []):
+                if source.get("secretRef", {}).get("name"):
+                    consumed.add(source["secretRef"]["name"])
+        for volume in pod.get("volumes", []):
+            if volume.get("secret", {}).get("secretName"):
+                consumed.add(volume["secret"]["secretName"])
+
+    orphans = sorted(provisioned - consumed)
+    assert not orphans, f"{cloud}-{env}: {orphans} provisioned and read by nothing"
+
+
+@pytest.mark.parametrize("cloud", CLOUDS)
+@pytest.mark.parametrize("env", ENVIRONMENTS)
+def test_an_advertised_scrape_port_is_reachable(cloud: str, env: str) -> None:
+    """An annotation is a request; a NetworkPolicy is the answer.
+
+    The pod annotated `prometheus.io/scrape: "true"` on port 8000 while
+    `default-deny` denied every ingress except the one rule naming
+    `ingress-nginx`. Prometheus is not in that namespace, so the scrape was
+    refused — and the SLO rules, the dashboards and the alerting all rest on a
+    series that would never have arrived.
+
+    Nothing in the rendered manifests contradicts itself, which is why this has
+    to be asserted across two documents rather than inside one.
+    """
+    documents = _build(OVERLAYS / f"{cloud}-{env}")
+    deployment = next(doc for doc in documents if doc["kind"] == "Deployment")
+    annotations = deployment["spec"]["template"]["metadata"].get("annotations", {})
+    if annotations.get("prometheus.io/scrape") != "true":
+        pytest.skip("this overlay advertises no scrape")
+
+    port = int(annotations.get("prometheus.io/port", 0))
+    assert port, f"{cloud}-{env}: scrape advertised with no port"
+
+    allowed = any(
+        any(int(entry.get("port", -1)) == port for entry in rule.get("ports", []))
+        for doc in documents
+        if doc["kind"] == "NetworkPolicy" and "Ingress" in doc["spec"].get("policyTypes", [])
+        for rule in doc["spec"].get("ingress", [])
+        for source in rule.get("from", [])
+        if "monitoring" in str(source)
+    )
+    assert allowed, (
+        f"{cloud}-{env}: port {port} is advertised for scraping and no NetworkPolicy admits the monitoring "
+        f"namespace to it, so the metrics the SLO rules depend on never arrive"
+    )

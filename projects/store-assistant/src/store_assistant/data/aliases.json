@@ -1,0 +1,10 @@
+{
+  "SKU-COCA-600": ["coca", "cocacola", "coca cola", "coca de 600", "refresco coca", "coca 600ml"],
+  "SKU-COCA-2L": ["coca 2 litros", "coca grande", "coca familiar", "coca 2l"],
+  "SKU-PEPSI-600": ["pepsi", "pepsi 600", "pepsi chica"],
+  "SKU-FRIJOL-NEGRO-1KG": ["frijol", "frijol negro", "frijol americano", "frijoles", "frijol 1kg"],
+  "SKU-ARROZ-1KG": ["arroz", "arroz blanco", "arroz 1kg"],
+  "SKU-LECHE-1L": ["leche", "leche entera", "leche 1 litro", "leche fresca"],
+  "SKU-PAN-BLANCO": ["pan", "pan blanco", "pan de caja", "pan integral"],
+  "SKU-HUEVOS-12": ["huevos", "huevo", "carton de huevos", "12 huevos", "docena de huevos"]
+}

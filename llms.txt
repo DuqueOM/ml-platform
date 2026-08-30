@@ -39,8 +39,9 @@ is generated from it and not edited.
 
 - `libs/` — 5 shared libraries: `ml-core`, `data-contracts`, `feature-defs`,
   `llm-core`, `serving-core`
-- `projects/` — 2 verticals: `demand-forecast` (tabular regression with
-  conformal intervals), `rag-assistant` (retrieval over SEC filings)
+- `projects/` — 3 verticals: `demand-forecast` (tabular regression with
+  conformal intervals), `rag-assistant` (retrieval over SEC filings),
+  `store-assistant` (the multi-tier agent, migrated with history per ADR-002)
 - `platform/` — terraform, kubernetes, observability, policies, local stack
 - `orchestration/` — Airflow DAGs (business flow) and KFP pipelines (ML compute)
 - `agentic/` — canonical rules, skills and workflows; the per-tool directories

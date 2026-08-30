@@ -48,6 +48,7 @@ members = ["libs/*", "projects/*"]
 ml-core = { workspace = true }
 data-contracts = { workspace = true }
 llm-core = { workspace = true }
+store-assistant = { workspace = true }
 serving-core = { workspace = true }
 feature-defs = { workspace = true }
 
@@ -121,7 +122,23 @@ ignore_missing_imports = true
 # Third-party packages that ship no type information. Listed explicitly rather
 # than set globally, so a NEW untyped import has to be added here deliberately
 # instead of being absorbed in silence.
-module = ["pyarrow.*", "pyiceberg.*", "duckdb.*", "sklearn.*", "joblib.*"]
+module = ["pyarrow.*", "pyiceberg.*", "duckdb.*", "sklearn.*", "joblib.*", "rank_bm25.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# KFP's component DSL ships no type information, and every pipeline step is
+# wrapped in one of its decorators. `disallow_untyped_decorators` then reports
+# each step — seven findings that all say the same thing about a third-party
+# library, and none about this code.
+#
+# Per-module and narrow. Unlike `strict`, these options really are per-module:
+# that asymmetry is recorded in the comment at [tool.mypy], and it is why this
+# block can be trusted to do what it says.
+module = ["demand_forecast_pipeline"]
+disallow_untyped_decorators = false
+
+[[tool.mypy.overrides]]
+module = ["kfp.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

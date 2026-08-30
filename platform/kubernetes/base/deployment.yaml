@@ -25,6 +25,10 @@ spec:
       # Pod Security "restricted" is the namespace default, so every field it
       # requires is set here rather than left to be discovered at admission —
       # a rejected pod at deploy time reads as an outage, not as a policy.
+      # Named, never `default`. Workload Identity and IRSA both bind a cloud
+      # identity to a NAMED ServiceAccount; on `default` the pod has none, and
+      # every overlay was provisioning a binding the pod could not use.
+      serviceAccountName: demand-forecast
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -44,6 +48,25 @@ spec:
           image: ghcr.io/duqueom/ml-platform/demand-forecast:set-by-deploy-pipeline
           ports:
             - containerPort: 8000
+          # The ExternalSecret provisions `demand-forecast` and NOTHING read
+          # it: the operator resolved two remote keys into a Secret that no
+          # container ever mounted or referenced. A secret delivered and unused
+          # is the whole pipeline running for no effect, and it renders green.
+          #
+          # Named keys rather than `envFrom`: a future key added to the remote
+          # store should reach the pod because someone decided it should, not
+          # because the Secret grew.
+          env:
+            - name: WAREHOUSE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: demand-forecast
+                  key: warehouse-password
+            - name: MLFLOW_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: demand-forecast
+                  key: mlflow-token
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

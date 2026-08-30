@@ -451,7 +451,17 @@ COMPONENTS: list[Component] = [
         # was tracked, collected and passing all along.
         "uv run pytest libs/llm-core -q",
     ),
-    Component("3", "projects/store-assistant", ["projects/store-assistant"]),
+    Component(
+        "3",
+        "projects/store-assistant",
+        ["projects/store-assistant"],
+        # It ships a suite; the row said "47 file(s), no verification command"
+        # and rendered 🟡 for a project whose tests pass. A component with
+        # tests and no command declared is presence counted as if it were the
+        # best available evidence, which is the reading this document exists to
+        # refuse.
+        "uv run pytest projects/store-assistant -q",
+    ),
     Component(
         "3",
         "projects/rag-assistant",

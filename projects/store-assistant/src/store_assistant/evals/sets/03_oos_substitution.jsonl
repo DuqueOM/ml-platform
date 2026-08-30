@@ -1,0 +1,16 @@
+{"input": "no tienen coca? entonces que refresco hay", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "OOS -> pedir alternativas de categoria"}
+{"input": "si no hay leche entera que tienen", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "OOS -> sustituto leche"}
+{"input": "se acabo el pan? hay algo parecido", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "OOS -> sustituto pan"}
+{"input": "no hay pepsi, me sirve la coca", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "cliente propone sustituto"}
+{"input": "quiero arroz pero si no hay frijol esta bien", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "orden con sustituto condicional"}
+{"input": "dame leche y si no hay deslactosada cualquier otra", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "orden con fallback de sustituto"}
+{"input": "que me recomiendas en lugar de la coca", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "recomendacion de sustituto"}
+{"input": "no encontre huevo, hay alternativa", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "OOS -> alternativa"}
+{"input": "si esta agotada la coca de litro hay de 600", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "sustituto por presentacion"}
+{"input": "necesito frijol negro, hay bayo si no", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "sustituto por variante"}
+{"input": "me das pan blanco o integral lo que tengan", "expected_intent": "order_create", "expected_tier": 2, "expected_finality": "clarify", "note": "orden flexible"}
+{"input": "hay leche? si no, yogur me sirve", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "disponibilidad + sustituto"}
+{"input": "se agoto el arroz que cereal tienen", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "OOS -> categoria cercana"}
+{"input": "no quiero coca, que otra marca de refresco", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "preferencia + alternativa"}
+{"input": "si no llega mi pan hoy lo cambio por galletas", "expected_intent": "order_status", "expected_tier": 1, "expected_finality": "clarify", "note": "estatus + sustituto"}
+{"input": "tienen huevo organico o normal cualquiera", "expected_intent": "product_lookup", "expected_tier": 1, "expected_finality": "answer", "note": "indiferencia de variante"}
