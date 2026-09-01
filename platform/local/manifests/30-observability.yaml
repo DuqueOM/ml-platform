@@ -62,7 +62,7 @@ spec:
         seccompProfile: { type: RuntimeDefault }
       containers:
         - name: collector
-          image: otel/opentelemetry-collector-contrib:0.157.0
+          image: otel/opentelemetry-collector-contrib:0.159.0
           args: ["--config=/conf/config.yaml"]
           ports: [{ containerPort: 4317 }, { containerPort: 4318 }, { containerPort: 8889 }]
           resources:
