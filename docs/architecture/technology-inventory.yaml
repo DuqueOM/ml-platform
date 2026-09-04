@@ -235,3 +235,10 @@ categories:
       - {id: model-cards, tier: core, detect: ["filled:projects/*/model-card.md"], note: "The file exists; its sections are still TODO, and a card that says TODO documents nothing."}
       - {id: adrs, tier: core, detect: ["docs/decisions/ADR-000-charter-and-scope.md"]}
       - {id: quality-gates, tier: core, detect: ["docs/governance/quality-gates.md"]}
+      # Neither of these was tracked while the platform had no implementation of
+      # either, so nothing could report them absent — the failure mode this file
+      # names in its own header. Both now resolve to real modules.
+      - {id: fairness-metrics, tier: core, detect: ["libs/ml-core/src/ml_core/fairness.py"],
+         note: "Disparate impact, equal opportunity, demographic parity, equalized-odds FPR gap. An UNDEFINED ratio escalates rather than passing: a model selecting nobody has no DIR, and the obvious implementations report it as perfectly fair. Promoted from ml-service-template and rewritten to drop pandas, file IO and the protected-attribute names ADR-001 keeps out of libs/."}
+      - {id: fairness-four-fifths-margin, tier: core, detect: ["pattern:CONSULTATION_UPPER|libs/ml-core"],
+         note: "The AGENTS.md automatic STOP for a disparate impact ratio in [0.80, 0.85], encoded rather than restated. A verdict sampling noise could move is not a verdict."}

@@ -20,6 +20,44 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Added
 
+- **Fairness metrics promoted to `libs/ml-core`, rewritten rather than copied.**
+  `ml_core.fairness` — disparate impact ratio, equal opportunity difference,
+  demographic parity difference and the equalized-odds FPR gap, over
+  `GroupOutcome` counts. The platform had **no fairness implementation at all**
+  while Phase 4 promises fairness gates and `AGENTS.md` carries an escalation
+  trigger keyed to a disparate impact ratio — a governance rule with nothing to
+  govern. Nothing in the inventory tracked it either, so nothing could report
+  it absent.
+
+  **Rewritten, and the distinction matters.** `ml-service-template`'s version
+  was correct arithmetic wrapped in things ADR-001 excludes from `ml-core`:
+  `PROTECTED_ATTRIBUTES` TODOs naming features, pandas DataFrames, JSON file
+  output, logging, and a second `calibration_error` beside the one
+  `ml_core.decision` already exports. ADR-003 makes the template authoritative
+  on **service-level** concerns and its point 3 assigns multi-project libraries
+  here, so this is not a local patch of upstream.
+
+  **The design problem was never the arithmetic.** Every one of these metrics
+  has inputs on which it cannot be computed, and the dangerous outcome is
+  `None` reaching a gate that reads absence as absence-of-finding. So an
+  undefined ratio **escalates rather than passing**: a model that selects
+  nobody has no defined disparate impact, and the obvious implementations
+  either return 1.0 or omit the key — both report the most discriminatory
+  possible model as the fairest. `demand-forecast`'s gates file already named
+  that failure in prose ("a gate that passes by being uncomputable") as its
+  reason for deleting a fairness gate rather than keeping a plausible one; it
+  is now executable.
+
+  A group too small to be reliable is **reported and does not escalate** —
+  making a rare category a STOP blocks every audit that has one, and the
+  blocked party's cheapest fix is deleting the category, which destroys the
+  evidence rather than the disparity.
+
+  `Action` is imported from `ml_core.drift` rather than redefined: a fairness
+  finding and a drift finding both end in a human decision or they do not, and
+  `agent-ops` consumes them through one enum. 32 tests, 100% line and branch
+  coverage.
+
 - **The drift contract exists, four months after ADR-007 specified it.**
   `libs/ml-core/src/ml_core/drift/` — `ReferenceWindow`, `DriftSignal`,
   `DriftResponse`, `Verdict`, `Action`, `Direction`, `worst_action`. The

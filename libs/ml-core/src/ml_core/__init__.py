@@ -22,15 +22,19 @@ reading `from ml_core.drift import ...` says which vocabulary is in play:
 from ml_core.conformal import CoverageReport, SplitConformalRegressor
 from ml_core.decision import ErrorCosts, ThresholdChoice, calibration_error, choose_threshold, expected_cost
 from ml_core.determinism import SeedReport, seed_everything, stable_hash
+from ml_core.fairness import FairnessReport, GroupOutcome, audit
 
 __version__ = "0.1.0"
 
 __all__ = [
     "CoverageReport",
     "ErrorCosts",
+    "FairnessReport",
+    "GroupOutcome",
     "SeedReport",
     "SplitConformalRegressor",
     "ThresholdChoice",
+    "audit",
     "calibration_error",
     "choose_threshold",
     "expected_cost",
