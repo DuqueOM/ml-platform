@@ -20,6 +20,38 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Added
 
+- **The drift contract exists, four months after ADR-007 specified it.**
+  `libs/ml-core/src/ml_core/drift/` — `ReferenceWindow`, `DriftSignal`,
+  `DriftResponse`, `Verdict`, `Action`, `Direction`, `worst_action`. The
+  inventory declared `drift-contract` at Core tier with a detector pointing at
+  that path; the path did not exist, which is the same defect DVC carried.
+
+  The module computes almost nothing. Its value is that four ways of producing
+  a worthless drift number are now impossible to express: a measurement with no
+  method (ADR-005 rule A, refused); a baseline that moved with no record
+  (`ReferenceWindow.roll` links what it replaced, because ADR-007 permits
+  rolling and forbids rolling *silently*); a verdict with no declared response
+  (`DriftResponse` has no defaults — a field with a default is a field nobody
+  fills in); and a direction left implicit.
+
+  **`Direction` is the one that would have bitten.** PSI, embedding distance
+  and cost-per-request drift upward; recall@5, accuracy and interval coverage
+  drift downward. A contract assuming one silently inverts the verdict for
+  every metric of the other kind — toward "stable", which is the half nobody
+  checks. 0.55 is a WARNING against a recall floor and DRIFTED against a PSI
+  ceiling, and a test asserts exactly that.
+
+  **AGENTS.md's escalation trigger is encoded, not restated.** "Drift PSI above
+  TWICE the configured threshold" becomes `escalate_at`, defaulting to
+  `2 x drifted_at` for an upward metric and **refused** for a downward one:
+  doubling a recall floor of 0.5 gives 1.0, putting the STOP boundary at
+  perfect performance where it can never fire. Escalation only ever raises, so
+  a project declaring a milder response does not opt out of a STOP.
+
+  34 tests, 100% line and branch coverage. The four detectors remain
+  per-project and absent, correctly: their inventory rows point at
+  `projects/credit-risk`, `projects/doc-intelligence` and `projects/agent-ops`.
+
 - **The tool registry publishes its capability surface as data.**
   `ToolRegistry.manifest()` and `mutating_tools()` — tools register by import
   side effect, so "what can this agent do, and what may it mutate" was

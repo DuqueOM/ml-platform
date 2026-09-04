@@ -1,4 +1,4 @@
-"""Determinism, uncertainty, calibration and cost-based decisions.
+"""Determinism, uncertainty, calibration, cost-based decisions and the drift contract.
 
 Business-agnostic by construction: nothing here may know a feature name, a
 dataset or a project. That constraint is what makes it reusable, and it is
@@ -10,6 +10,13 @@ enforced by ``tests/test_dependency_direction.py`` rather than by review.
         ErrorCosts, choose_threshold,  # thresholds in business units, not F1
         calibration_error,        # the precondition cost-based thresholds need
     )
+
+`ml_core.drift` is a SUBMODULE rather than a re-export, deliberately. Its
+`Action`, `Verdict` and `Direction` are generic enough that lifting them to the
+top level would collide with names a consumer already has, and the import site
+reading `from ml_core.drift import ...` says which vocabulary is in play:
+
+    from ml_core.drift import DriftSignal, ReferenceWindow, worst_action
 """
 
 from ml_core.conformal import CoverageReport, SplitConformalRegressor
