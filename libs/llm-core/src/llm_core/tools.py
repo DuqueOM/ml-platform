@@ -16,6 +16,22 @@ from pydantic import BaseModel, ValidationError
 from .schemas import Observation, ToolCall
 
 
+def _first_line(docstring: str | None) -> str:
+    """The summary line of a docstring, or an empty string.
+
+    Deriving the description from the docstring rather than requiring a second
+    declaration keeps the two from disagreeing. A tool whose docstring says one
+    thing and whose registered description says another is worse than one with
+    no description, because the manifest would publish the stale half.
+    """
+    if not docstring:
+        return ""
+    for line in docstring.strip().splitlines():
+        if line.strip():
+            return line.strip()
+    return ""
+
+
 @dataclass(frozen=True)
 class ToolSpec:
     """A registered tool plus its capability contract (ADR-006).
@@ -33,6 +49,10 @@ class ToolSpec:
             in Phase 1 even though it is not strictly read-only.
         args_model: Optional Pydantic model validating ``ToolCall.args`` before
             execution (I-5). Validation failures surface as a structured error.
+        description: One line saying what the tool does. Defaults to the first
+            line of the function's docstring, so a tool that documents itself
+            needs no second declaration — and one that does not is visible as an
+            empty string in the manifest rather than absent from it.
     """
 
     fn: Callable[..., Observation]
@@ -40,6 +60,7 @@ class ToolSpec:
     destructive: bool = False
     dry_run_only: bool = False
     args_model: type[BaseModel] | None = None
+    description: str = ""
 
 
 class ToolRegistry:
@@ -65,6 +86,7 @@ class ToolRegistry:
         destructive: bool = False,
         dry_run_only: bool = False,
         args_model: type[BaseModel] | None = None,
+        description: str = "",
     ) -> Callable[..., Any]:
         """Decorator that registers a function as a tool under ``name``."""
 
@@ -76,6 +98,7 @@ class ToolRegistry:
                 destructive=destructive,
                 dry_run_only=dry_run_only,
                 args_model=args_model,
+                description=description,
             )
             return fn
 
@@ -90,6 +113,7 @@ class ToolRegistry:
         destructive: bool = False,
         dry_run_only: bool = False,
         args_model: type[BaseModel] | None = None,
+        description: str = "",
     ) -> None:
         """Register a tool callable imperatively (non-decorator form)."""
         self._registry[name] = ToolSpec(
@@ -98,6 +122,7 @@ class ToolRegistry:
             destructive=destructive,
             dry_run_only=dry_run_only,
             args_model=args_model,
+            description=description or _first_line(fn.__doc__),
         )
 
     def __contains__(self, name: str) -> bool:
@@ -110,6 +135,56 @@ class ToolRegistry:
     def spec(self, name: str) -> ToolSpec | None:
         """Return the :class:`ToolSpec` for a tool name, or ``None``."""
         return self._registry.get(name)
+
+    def manifest(self) -> list[dict[str, Any]]:
+        """The capability surface as reviewable data, one entry per tool.
+
+        Tools register by import side effect, so until now the only way to
+        answer "what can this agent do, and what is it allowed to mutate" was
+        to import the package and read decorator arguments. That makes the
+        capability contract discoverable by execution, which is the one method
+        unavailable to a reviewer, a diff, or an audit.
+
+        This is the same move this repository already made twice: thresholds
+        became data in ``evals/gates.yaml``, dataset bytes became data in
+        ``datasets.lock.json``. A claim that can be read as data can be gated;
+        one that can only be reached by running the program cannot.
+
+        The idea is adapted from the plugin-manifest convention in
+        `deepseek-ai/deepseek-harness`, which was evaluated and NOT forked
+        (ADR-004's argument against a second toolchain). Its discovery
+        convention is worth having; its runtime is not.
+
+        Deliberately excluded: ``fn``. A callable is not serialisable and its
+        identity is not stable across runs, so including it would make two
+        manifests of the same registry compare unequal.
+
+        Returns:
+            Entries sorted by name, each JSON-serialisable, carrying the name,
+            the description, all three capability flags and the argument schema
+            where one is declared.
+        """
+        return [
+            {
+                "name": name,
+                "description": spec.description,
+                "read_only": spec.read_only,
+                "destructive": spec.destructive,
+                "dry_run_only": spec.dry_run_only,
+                "args_schema": spec.args_model.model_json_schema() if spec.args_model is not None else None,
+            }
+            for name, spec in sorted(self._registry.items())
+        ]
+
+    def mutating_tools(self) -> list[str]:
+        """Names of tools this registry would refuse to run in a read-only phase.
+
+        The complement of the fail-closed gate in :meth:`run`, exposed so a test
+        or an audit can assert over the set rather than by attempting each call.
+        A tool is mutating unless it declares otherwise — absence of a
+        declaration is not a claim of safety.
+        """
+        return sorted(name for name, spec in self._registry.items() if not spec.read_only and not spec.dry_run_only)
 
     def planner_json_schema(self) -> dict[str, Any]:
         """JSON schema for the planner's structured tool-call output (ADR-007).

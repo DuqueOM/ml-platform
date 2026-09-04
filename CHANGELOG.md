@@ -20,6 +20,22 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Added
 
+- **The tool registry publishes its capability surface as data.**
+  `ToolRegistry.manifest()` and `mutating_tools()` — tools register by import
+  side effect, so "what can this agent do, and what may it mutate" was
+  answerable only by running the program, which is the one method unavailable
+  to a reviewer or an audit. It is the move this repository already made twice:
+  thresholds became data in `evals/gates.yaml`, dataset bytes in
+  `datasets.lock.json`.
+
+  Descriptions default to the tool's docstring summary, so the five existing
+  store tools gained descriptions with zero changes at any call site — and a
+  tool with neither shows as an empty string in the manifest rather than being
+  absent from it. The idea is adapted from the plugin-manifest convention in
+  `deepseek-ai/deepseek-harness`, evaluated and **not** forked: a
+  TypeScript/pnpm runtime in a uv workspace is the second-toolchain argument
+  ADR-004 has already rejected five times.
+
 - **Data versioning got an owner per class of data, and the pin got
   committed** ([ADR-009](docs/decisions/ADR-009-data-versioning-ownership.md)).
   `dvc` sat at Core tier in the technology inventory with `detect: [".dvc",
