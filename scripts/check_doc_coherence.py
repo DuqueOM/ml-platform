@@ -590,8 +590,12 @@ def check_language_and_privacy() -> None:
     repo_link = re.compile(r"github\.com/([A-Za-z0-9_-]+)/([A-Za-z0-9_.-]+)")
     scanned = 0
 
-    _check_forbidden_names()
+    # Snapshotted BEFORE either scan runs. Taking it after
+    # `_check_forbidden_names` left the guard below able to see only what the
+    # link scan added, so a denylisted-name failure — the standing absolute
+    # constraint — still printed `ok` above its own `FAIL`.
     before = len(failures)
+    _check_forbidden_names()
 
     # Every committed or untracked-but-present file, exactly the set
     # `_check_forbidden_names` reads. This half used to scan `*.md` with

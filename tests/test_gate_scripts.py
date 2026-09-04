@@ -232,6 +232,60 @@ def test_c6_does_not_print_ok_above_its_own_failure() -> None:
     )
 
 
+def test_c6_does_not_print_ok_above_a_denylisted_name_failure() -> None:
+    """The same property, for the half the first fix did not reach.
+
+    C6 has two scans and the fix reached one of them. `before = len(failures)`
+    was snapshotted AFTER `_check_forbidden_names`, so the guard saw only what
+    the link scan added and a denylisted-name FAIL — the standing absolute
+    constraint, and the more serious of the two — kept a reassuring `ok`
+    directly above it.
+
+    It shipped green because the test above uses a LINK probe: the same half
+    the fix touched. Two code paths need two probes, which is the whole lesson
+    and the reason this is a sibling test rather than a parametrisation of
+    that one.
+
+    The token is invented here and only its hash is written. The denylist
+    stores hashes precisely so that no private name is ever committed, and a
+    test that needed the real name would defeat the mechanism it checks.
+    """
+    # Assembled across two statements, and that is load-bearing. C6 tokenises
+    # EVERY file git knows about, this one included, and it rejoins ADJACENT
+    # words — so writing the token whole, or as two halves on one line, makes
+    # the gate report THIS FILE as carrying the name. The run then fails on a
+    # fixture rather than on the probe, and the vacuity guard below is
+    # satisfied by the test's own source. Two statements put `suffix` between
+    # the halves, so the pair never forms. For the same reason neither half is
+    # spelled out in this comment.
+    prefix = "zzqaudit"
+    suffix = "probe"
+    token = prefix + suffix
+    denylist = REPO_ROOT / "docs" / "governance" / "private-names.sha256"
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    # No GitHub URL in the probe: the link scan must stay silent so that a
+    # failure here can only have come from the denylist scan.
+    probe = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.md"
+
+    with (
+        temporarily(denylist, denylist.read_text(encoding="utf-8") + f"{digest}\n"),
+        temporarily(probe, f"{token}\n"),
+    ):
+        result = _run(GATES["doc-coherence"])
+
+    c6_lines = [line for line in result.stdout.splitlines() if "[C6]" in line]
+    # Without this the test passes vacuously the moment the tokenizer stops
+    # reaching the probe — a check that proves nothing while staying green is
+    # the P-09 shape C6 itself exists to refuse.
+    assert any("FAIL" in line and probe.name in line for line in c6_lines), (
+        "the denylist scan did not name the probe file, so this test proves nothing about the probe:\n"
+        + "\n".join(c6_lines)
+    )
+    assert not any(line.strip().startswith("ok") for line in c6_lines), (
+        "C6 reported ok alongside its own denylisted-name failure:\n" + "\n".join(c6_lines)
+    )
+
+
 def test_ci_references_fails_when_a_workflow_names_a_missing_script() -> None:
     """A workflow calling a RENAMED script stops testing what it claims to.
 

@@ -207,6 +207,26 @@ All three are closed here, each watched failing before and passing after.
   actually runs the code reported 92.70%. The floors did not move; which runs
   count did, and the alternative — a library suite duplicating a project's — is
   the duplication ADR-001 exists to avoid.
+- **C6 suppressed its `ok` line for one of its two failures, and the test could
+  not tell.** The round-seven fix made a denylisted-name FAIL and a
+  non-public-link FAIL both suppress the reassuring summary above them. Only
+  the link half did: `before = len(failures)` was snapshotted AFTER
+  `_check_forbidden_names`, so the guard could see only what the link scan
+  added, and the denylisted name — the standing absolute constraint, and the
+  more serious of the two — kept printing `ok` directly above its own `FAIL`.
+
+  It shipped green because the regression test used a link probe: **the same
+  half the fix touched**. That is the finding worth keeping. The one-line
+  reorder is closed by a sibling test that probes the denylist half instead,
+  confirmed failing before it and passing after.
+
+  Writing that test found a second instance of the same shape. C6 tokenises
+  every file git knows about, this repository's own tests included, so a probe
+  token spelled out in the test source made the gate report the TEST FILE —
+  and the vacuity guard, which asked only whether some FAIL appeared, was then
+  satisfied by the fixture rather than by the probe. The token is assembled
+  across two statements so the pair never forms, and the guard now requires
+  the probe file to be named.
 - **C2 read a project's own ADR numbering as dangling references.** The twelve
   migrated records are `store-ADR-NNN` now, with the mapping and the reasoning
   in their index, and the check was generalised from "a `template-` prefix" to
