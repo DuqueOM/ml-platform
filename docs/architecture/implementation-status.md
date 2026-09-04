@@ -88,10 +88,10 @@ how "we deploy to two clouds" goes unchallenged.
 | | Layer | Component | Evidence |
 | :-: | :-: | --- | --- |
 | ✅ | L1 | Dataset acquisition scripts | `uv run pytest tests/test_dataset_registry.py -q` passes |
-| 🟡 | — | Local validation stack | 8 file(s), no verification command · L3 evidence, not run here: `make local-up && uv run pytest tests/local/test_local_stack.py -q -m local` |
+| 🟡 | — | Local validation stack | 8 file(s), no verification command — the only candidate command inspects HOST state (free ports, free memory), so it returns a different marker from the same commit depending on the machine · L3 evidence, not run here: `make local-up && uv run pytest tests/local/test_local_stack.py -q -m local` |
 | ✅ | L1 | libs/ml-core implementation | `uv run pytest libs/ml-core -q` passes |
 | ✅ | L1 | libs/data-contracts implementation | `uv run pytest libs/data-contracts -q` passes |
-| 🟡 | — | libs/serving-core implementation | 1 file(s), no verification command |
+| 🟡 | — | libs/serving-core implementation | 1 file(s), no verification command — deliberately empty: there is one serving consumer, and a library shaped by one caller is a library the second caller bends around. `pytest` over an empty package exits 0, so a verify command here would render 'nothing exists' as a green tick. That the emptiness is DECLARED rather than accidental is proven separately by `uv run pytest tests/test_empty_libraries_say_so.py -q` |
 | ✅ | L1 | projects/demand-forecast | `uv run pytest projects/demand-forecast -q` passes |
 | ✅ | L1 | Iceberg ingestion (demand-forecast) | `uv run pytest projects/demand-forecast/tests/test_overwrite_scope.py -q` passes |
 | ✅ | L1 | Panel-aware temporal splitting | `uv run pytest projects/demand-forecast/tests/test_backtest.py -q` passes |
