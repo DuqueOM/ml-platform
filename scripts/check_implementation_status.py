@@ -60,6 +60,16 @@ class Component:
     #: document can say "evidence exists at L3, here is how to produce it"
     #: instead of either claiming it or hiding it.
     evidence: str | None = None
+    #: Why this component has no `verify`, when the absence is a DECISION.
+    #:
+    #: Two components sat at 🟡 with the detail "no verification command" while
+    #: their reasons — a preflight that reads host state, and a package that is
+    #: empty on purpose — were written only as comments in this file. A reader
+    #: of the generated document saw two yellow rows and could not tell a
+    #: decision from an oversight, which is the distinction the whole document
+    #: exists to make. Required whenever `verify` is None; see
+    #: `test_status_components.py`.
+    why_unverifiable: str | None = None
     #: Files matching these are scaffolding, not implementation.
     ignore: list[str] = field(default_factory=lambda: ["__init__.py", ".gitkeep", "README.md"])
 
@@ -137,6 +147,10 @@ COMPONENTS: list[Component] = [
         # `make local-verify` is the assertion that it functions, and it is a
         # human-run command for exactly that reason.
         evidence="make local-up && uv run pytest tests/local/test_local_stack.py -q -m local",
+        why_unverifiable=(
+            "the only candidate command inspects HOST state (free ports, free memory), so it "
+            "returns a different marker from the same commit depending on the machine"
+        ),
     ),
     Component(
         "1",
@@ -154,7 +168,18 @@ COMPONENTS: list[Component] = [
     # something to verify: zero modules, zero tests. `pytest` over an empty
     # package exits 0, so wiring one here would turn "nothing exists" into a
     # green tick — the exact inversion the status document exists to prevent.
-    Component("1", "libs/serving-core implementation", ["libs/serving-core/src"]),
+    Component(
+        "1",
+        "libs/serving-core implementation",
+        ["libs/serving-core/src"],
+        why_unverifiable=(
+            "deliberately empty: there is one serving consumer, and a library shaped by one caller "
+            "is a library the second caller bends around. `pytest` over an empty "
+            "package exits 0, so a verify command here would render 'nothing exists' as a green "
+            "tick. That the emptiness is DECLARED rather than accidental is proven separately by "
+            "`uv run pytest tests/test_empty_libraries_say_so.py -q`"
+        ),
+    ),
     Component(
         "1",
         "projects/demand-forecast",
@@ -662,6 +687,11 @@ def evaluate() -> list[tuple[Component, str, str, str]]:
             # L3 command entirely, and under-reporting is the same dishonesty
             # as over-reporting, just easier to miss because it errs modestly.
             detail = f"{count} file(s), no verification command"
+            if component.why_unverifiable:
+                # The reason travels INTO the document. A 🟡 carrying its
+                # rationale is a decision; the same 🟡 without one reads as
+                # work somebody forgot.
+                detail += f" — {component.why_unverifiable}"
             if component.evidence:
                 detail += f" · {evidence_layer(component.evidence)} evidence, not run here: `{component.evidence}`"
             rows.append((component, "🟡", "—", detail))

@@ -778,6 +778,21 @@ rather than reading it:
 
 ### Changed
 
+- **A yellow marker in the implementation status now has to say why it is
+  yellow.** `Component.why_unverifiable` is required whenever a component has
+  no verify command. Two rows — the local validation stack, whose only
+  candidate command reads host state and so returns different markers from the
+  same commit, and `libs/serving-core`, deliberately empty with one serving
+  consumer — carried their reasons as comments in the generator, where no
+  reader of the generated document could see them. Both markers were correct;
+  the document could not distinguish either from an oversight.
+
+  One of those comments also cited "ADR-001 rule 3" for a claim that ADR does
+  not make — rule 3 is *"`libs/` packages may depend on each other,
+  acyclically"*. The citation is dropped rather than corrected to another
+  number, because no ADR states the premature-abstraction rule that three other
+  places also attribute to it.
+
 - Corrections are **appended, never applied in place**. A wrong claim in an
   accepted ADR stays, with a dated `## Correction` section — the error is
   usually more instructive than the number.
