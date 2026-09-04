@@ -20,6 +20,43 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Added
 
+- **Data versioning got an owner per class of data, and the pin got
+  committed** ([ADR-009](docs/decisions/ADR-009-data-versioning-ownership.md)).
+  `dvc` sat at Core tier in the technology inventory with `detect: [".dvc",
+  "dvc.yaml"]` matching nothing, `AGENTS.md` carried a permissions row for a
+  tool no checkout could run, and `docs/datasets/register.md` claimed datasets
+  were versioned by "a download script plus a DVC pointer". Half of that was
+  true.
+
+  **The defect was narrower and worse than "DVC is missing".** `fetch.py` has
+  computed a SHA-256 per file since it was written — into `manifest.json`,
+  which lives under `data/`, which is gitignored. `git ls-files data/` returned
+  nothing. The digests proved *this machine keeps getting the same bytes* and
+  could not prove *everyone gets the same bytes*, which is the entire value of
+  a pin. A source re-publishing different content under a stable URL would have
+  moved every downstream number with no diff anywhere.
+
+  **Three mechanisms, one mechanical criterion each**, so assignment is not a
+  judgement call: Iceberg owns pipeline tables; `docs/datasets/datasets.lock.json`
+  owns third-party downloads, because an authoritative URL can re-serve the
+  bytes and a digest is therefore sufficient; DVC owns data with no such URL —
+  generated, derived, curated or labelled here — because for those a digest
+  records with cryptographic precision that the data was lost.
+
+  Built: the committed lock (263 MB across 3 files pinned), `fetch.py --verify`
+  and `--write-lock`, `tests/test_dataset_lock.py` (8 tests), and `.dvc/` with
+  an S3-protocol remote and analytics disabled. `--verify` was **proven able to
+  fail** by falsifying a pin, which is the check ADR-005 rule K asks for and the
+  one most often skipped. The inventory now reports `dvc` Built because the
+  artifacts exist — the YAML was not edited to make that happen.
+
+  **A correction this work forced.** An earlier reading of this area claimed
+  the retrieval gold set was unversioned data gating promotion. It is not: it
+  is `libs/llm-core/src/llm_core/doc_questions.py`, Python source in git,
+  labelled by `path#heading` so a heading added elsewhere cannot silently
+  re-point it, with `test_doc_retrieval.py` failing when a label stops
+  resolving. Moving it to DVC would have made it less reviewable, not more.
+
 - **The agent core landed, four months after ADR-002 decided it.**
   `agent-local` — multi-tier routing, a deterministic policy gate whose rules
   are versioned data, a fail-closed tool capability contract, cross-tier

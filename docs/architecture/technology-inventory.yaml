@@ -128,7 +128,8 @@ categories:
   - name: ML lifecycle
     items:
       - {id: mlflow, tier: core, detect: ["pattern:mlflow|libs/ml-core/pyproject.toml"]}
-      - {id: dvc, tier: core, detect: [".dvc", "dvc.yaml"]}
+      - {id: dvc, tier: core, detect: [".dvc", "dvc.yaml"],
+         note: "Owns ONE class of data (ADR-009): datasets with no authoritative URL. Third-party downloads are pinned by sha256 in docs/datasets/datasets.lock.json instead — a source that can re-serve the same bytes does not need a second copy of them. Listed core with no artifact behind it for months; the detector now matches a real .dvc/."}
       - {id: ray-tune, tier: demonstrated, detect: ["pattern:ray|projects"]}
       - {id: katib, tier: rejected, note: "Ray Tune chosen; Katib requires operating Kubeflow."}
   - name: Deep learning
