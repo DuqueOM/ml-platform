@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**53 of 121 committed technologies implemented (43%)** — plus 15 studied and 10 rejected, which are decisions rather than gaps.
+**55 of 121 committed technologies implemented (45%)** — plus 15 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 | :-: | --- |
@@ -15,7 +15,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | 📓 | Studied: deliberately not wired in (ADR-004) |
 | 🚫 | Rejected, with the reason recorded |
 
-## Python toolchain — 5 built, 1 pending
+## Python toolchain — 6 built, 0 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
@@ -24,7 +24,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ✅ | `ruff` | core | |
 | ✅ | `mypy` | core | |
 | ✅ | `pytest` | core | |
-| ⬜ | `coverage` | core | |
+| ✅ | `coverage` | core | |
 | 🚫 | `black` | rejected | Superseded by ruff format (ADR-004). Keeping both is two formatters disagreeing. |
 | 🚫 | `isort` | rejected | Superseded by ruff's I rules (ADR-004). |
 | 🚫 | `poetry` | rejected | uv chosen (ADR-004); two resolvers is two lockfiles. |
@@ -54,13 +54,13 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | 📓 | `docker-compose` | studied | kind used instead: the local stack must exercise Kubernetes manifests, which compose cannot. |
 | ✅ | `devcontainers` | demonstrated | |
 
-## CI/CD — 8 built, 1 pending
+## CI/CD — 9 built, 0 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
 | ✅ | `github-actions` | core | |
 | ✅ | `codecov` | core | |
-| ⬜ | `coverage-gate` | core | |
+| ✅ | `coverage-gate` | core | |
 | ✅ | `release-on-tag` | core | |
 | ✅ | `openssf-scorecard` | core | |
 | ✅ | `docs-quality-lint` | core | |
