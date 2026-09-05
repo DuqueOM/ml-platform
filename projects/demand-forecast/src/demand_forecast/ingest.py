@@ -215,6 +215,10 @@ def to_hourly_demand(trips: pl.DataFrame) -> pl.DataFrame:
     `test_training.py` is a perfectly contiguous grid, which is why no test
     could see it.
 
+    Re-measured after this fix, on the same two months and the same three-fold
+    design that produced it, +55.8% became +23.0%. The inflation was real and
+    it was large: the broken baseline was about twice as easy to beat.
+
     A zero-trip hour is also a real observation. Dropping it biases the model
     upward by training only on hours that happened to have demand.
 
