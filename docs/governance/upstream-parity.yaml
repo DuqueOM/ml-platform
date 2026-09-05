@@ -432,3 +432,26 @@ artifacts:
     status: rejected
     reason: >-
       Smoke-tests a rendered SERVICE. The equivalent here renders templates/project and asserts the project contract: tests/test_project_generator.py.
+  # --- QA-4 round nine: five artifacts upstream gained since the last sweep ---
+  # Decided together because four of them are one mechanism in four files, and
+  # deciding them apart would have adopted a gate without the baseline it reads.
+  - path: scripts/check_doc_path_refs.py
+    status: pending
+    reason: >-
+      Decided to adopt. It verifies that every repo-relative path named in documentation or in a code comment resolves, and this repository has two live instances of exactly that defect, both found by audit rather than by any gate. Three technology-inventory detectors scope docs/governance/compliance-mapping.md, a path that has never existed at any commit — so eu-ai-act, iso-42001 and nist-ai-rmf can never report built no matter what work is done. And the remediation work order's W-7 instructs adding a component whose detector is libs/ml-core/src/ml_core/drift.py, while the contract that landed is the package drift/; executing W-7 literally would create a fourth. Upstream's own rationale is the same class one level over: a Copier migration relocated the scaffolder payload, updated everything that executes because it breaks loudly, and left thirty documents pointing at deleted directories. Closes by porting the script, its baseline and its governance document together, then wiring the pre-commit hook and the CI job.
+  - path: .doc-path-baseline.yml
+    status: pending
+    reason: >-
+      Decided to adopt, as the file check_doc_path_refs.py reads. Adopting the gate without it would fail on every pre-existing dangling path at once with no way to stage the cleanup, which is how a gate gets marked continue-on-error in its first week. Its design earns its place independently: it separates "the documentation promises something never built" — which requires an `expiry:` and fails once past it — from a path that is simply wrong, because those are different claims and only one of them is honestly deferrable.
+  - path: docs/governance/doc-path-references.md
+    status: pending
+    reason: >-
+      Decided to adopt, as the third file of the same mechanism. It records what the gate enforces and, more usefully, what it did NOT enforce for its first weeks: the gate shipped scanning .md and .txt only, which left a security baseline justifying three suppressed HIGH findings against a directory that had been deleted. That is the kind of scoping hole this repository keeps rediscovering under its own names, documented by the people who hit it first.
+  - path: scripts/generate_adr_index.py
+    status: pending
+    reason: >-
+      Decided to adopt. docs/decisions/README.md is maintained by hand here, and this session demonstrated the cost twice in one commit: the index row for ADR-009 was written by hand, and llms.txt asserted "9 ADRs" against ten on disk. The second was caught, but only because test_llms_txt.py happens to test that one count; nothing guards the index itself, so an ADR added without its row is invisible. Upstream wrote this after finding a compliance mapping that cited an ADR index which did not exist and miscounted the directory it pointed at. Closes by porting the script with --check wired into CI, and replacing the hand-maintained index.
+  - path: .security-baselines/trivy-config.trivyignore
+    status: rejected
+    reason: >-
+      Rejected after establishing that it suppresses findings this repository has never produced. Upstream's file is for `trivy config` over Terraform, running at CRITICAL,HIGH,MEDIUM, and its entries are specific determinations about upstream's own access-log buckets. This repository runs `trivy fs` for VULNERABILITIES at CRITICAL,HIGH with its own .security-baselines/.trivyignore (ci.yml, trivyignores:) and does not scan IaC with trivy at all — checkov and kubescape cover that surface here. Importing another repository's suppression list would mean carrying accepted risk for findings nobody here has seen, against infrastructure that is not the same infrastructure, at a severity this repository does not scan. A suppression is earned per repository against its own output or it is not a suppression, it is a blindfold. Reverses to adopted the day `trivy config` runs on platform/terraform here, and then each entry is earned against what it actually reports.
