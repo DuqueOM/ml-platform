@@ -55,7 +55,7 @@ documents restate which facts; a hand edit fixes the copy you remembered.
 ## Independent audit
 
 ```text
-Last independent audit: 2026-08-27 (35ffdec)
+Last independent audit: 2026-08-29 (c7131a1)
 ```
 
 The commit in parentheses is the tree the auditor read, and it is what C7
@@ -89,6 +89,16 @@ Last independent audit: YYYY-MM-DD (<short-sha of the commit audited>)
 ```
 
 Record the commit the auditor read, not the commit that writes the line.
+
+**Unless a squash merge has since orphaned it.** This repository allows squash
+merges only, so a branch audited before it lands stops being an ancestor of
+`main` while its object survives in the local store — and C7 refuses an
+unreachable marker rather than counting drift against a commit on no branch.
+When that happens the marker names **the commit that actually landed**, and the
+tree the auditor read stays recorded in `ops/audit.jsonl`, so the provenance
+survives the re-point. Round five re-pointed `7c36f58` to `69e4c61` (2bdc4d7);
+round eight re-pointed `16b4711` to `c7131a1`. The rule above still governs the
+ordinary case: never name the commit that writes the line.
 
 ## What this repository is
 
