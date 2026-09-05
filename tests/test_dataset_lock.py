@@ -54,7 +54,7 @@ def pinned(lock: dict[str, Any]) -> dict[str, Any]:
 
 def test_the_lock_declares_its_version(lock: dict[str, Any]) -> None:
     """An unversioned lock cannot be migrated without guessing its shape."""
-    assert lock.get("version") == 1, f"unexpected lock version {lock.get('version')!r}"
+    assert lock.get("version") == 2, f"unexpected lock version {lock.get('version')!r}"
 
 
 def test_every_pin_names_a_registered_dataset(pinned: dict[str, Any]) -> None:
@@ -109,8 +109,50 @@ def test_no_unfetched_entry_outlives_its_cause(lock: dict[str, Any], pinned: dic
     unregistered = sorted(set(unfetched) - set(REGISTRY))
     assert not unregistered, f"listed as unfetched but no longer registered: {unregistered}"
 
-    unexplained = sorted(key for key, reason in unfetched.items() if not str(reason).strip())
+    unexplained = sorted(key for key, entry in unfetched.items() if not str(entry.get("reason", "")).strip())
     assert not unexplained, f"listed as unfetched with no reason: {unexplained}"
+
+
+def test_an_unfetched_entry_names_the_condition_that_would_end_it(lock: dict[str, Any]) -> None:
+    """A reason that does not say how to end it is an excuse with a citation.
+
+    The counterpart to
+    `test_project_contract.py::test_every_deviation_names_what_would_close_it`,
+    which version 1 of this file had no equivalent of — QA-4 round eight named
+    that gap. `blocked_on` is a repo-relative path rather than prose, so the
+    condition is machine-checkable rather than a promise in a sentence.
+    """
+    for key, entry in sorted(lock.get("unfetched", {}).items()):
+        blocked_on = str(entry.get("blocked_on", "")).strip()
+        assert blocked_on, (
+            f"{key} is exempt from pinning with no `blocked_on`. Without it nothing can tell "
+            f"whether the exemption is still true, which is what made the version-1 check weaker "
+            f"than the deviation list it was modelled on"
+        )
+        reason = str(entry.get("reason", ""))
+        assert len(reason) > 80, f"{key}: the reason is too short to contain a remedy"
+
+
+def test_an_unfetched_entry_expires_when_its_blocker_appears(lock: dict[str, Any]) -> None:
+    """The re-evaluation version 1 did not do.
+
+    `test_no_deviation_outlives_its_cause` re-runs the requirement and fails
+    when an exemption is no longer needed. This is that, for datasets: `funsd`
+    is unpinned because `projects/doc-intelligence` does not exist, so the day
+    it does, this fails until somebody fetches the data and re-pins.
+
+    Checkable in CI with no data present, which is the point of making the
+    condition a path instead of a sentence about one.
+    """
+    stale = []
+    for key, entry in sorted(lock.get("unfetched", {}).items()):
+        blocked_on = str(entry.get("blocked_on", "")).strip()
+        if blocked_on and (REPO_ROOT / blocked_on).exists():
+            stale.append(
+                f"{key} is exempt because {blocked_on!r} does not exist — but it does now. "
+                f"Fetch the dataset and run `python scripts/datasets/fetch.py --write-lock`"
+            )
+    assert not stale, "stale unfetched exemption(s):\n  " + "\n  ".join(stale)
 
 
 def test_pinned_urls_match_the_registry(pinned: dict[str, Any]) -> None:

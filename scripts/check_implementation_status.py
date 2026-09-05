@@ -67,8 +67,18 @@ class Component:
     #: empty on purpose — were written only as comments in this file. A reader
     #: of the generated document saw two yellow rows and could not tell a
     #: decision from an oversight, which is the distinction the whole document
-    #: exists to make. Required whenever `verify` is None; see
-    #: `test_status_components.py`.
+    #: exists to make.
+    #:
+    #: **Required of any component that renders 🟡** — files present, no verify
+    #: command — and enforced by `tests/test_status_components.py`. NOT required
+    #: of a ⬜ component: "why is there no verification command" has no content
+    #: for a thing with no files, and demanding prose there would produce five
+    #: ceremonial strings and teach everyone the field is boilerplate.
+    #:
+    #: This comment claimed the wider requirement, and named that test file,
+    #: for four commits during which the file did not exist. QA-4 round eight
+    #: found it — the same shape round five found in `check_library_reuse.py`,
+    #: which is why `tests/test_empty_libraries_say_so.py` exists.
     why_unverifiable: str | None = None
     #: Files matching these are scaffolding, not implementation.
     ignore: list[str] = field(default_factory=lambda: ["__init__.py", ".gitkeep", "README.md"])

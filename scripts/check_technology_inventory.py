@@ -167,8 +167,29 @@ def _as_word(pattern: str) -> str:
 
     Only applied to patterns that ARE a bare word. Anything carrying regex
     syntax was written deliberately and is left alone.
+
+    **Each boundary is anchored only where one can exist.** `\b` sits between a
+    word character and a non-word character, so `\b-` can never match anything:
+    a hyphen is not a word character, and there is no boundary before it at the
+    start of a token. The first version wrapped every accepted pattern
+    unconditionally, and the accepted set included a leading `-`. The result was
+    a regex that could not match its own literal text — `\b--cov-fail-under\b`
+    against the string `--cov-fail-under` is False — so `coverage` and
+    `coverage-gate` reported NOT BUILT while both flags sat in `ci.yml`, and the
+    headline understated the built count by two.
+
+    That is the inverse of the failure this function was written for: not a
+    detector matching prose, a detector matching nothing. It is the worse
+    direction, because an over-matching detector shows up as a technology
+    nobody recognises, while an under-matching one is indistinguishable from
+    honest absence. Found by QA-4 round eight, not by a test — the test suite
+    exercised this function with the bare word `feast` only.
     """
-    return rf"\b{pattern}\b" if re.fullmatch(r"[A-Za-z0-9_-]+", pattern) else pattern
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", pattern):
+        return pattern
+    prefix = r"\b" if re.match(r"\w", pattern) else ""
+    suffix = r"\b" if re.search(r"\w$", pattern) else ""
+    return f"{prefix}{pattern}{suffix}"
 
 
 def _content_matches(pattern: str, scope: str) -> bool:

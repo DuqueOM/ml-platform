@@ -86,7 +86,7 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   perfect performance where it can never fire. Escalation only ever raises, so
   a project declaring a milder response does not opt out of a STOP.
 
-  34 tests, 100% line and branch coverage. The four detectors remain
+  35 tests, 100% line and branch coverage. The four detectors remain
   per-project and absent, correctly: their inventory rows point at
   `projects/credit-risk`, `projects/doc-intelligence` and `projects/agent-ops`.
 
@@ -750,6 +750,51 @@ minutes of pointing the backtest at the real feed:
   the selection instead of calling the production code, so they passed with the
   defects deliberately reintroduced. `calibration_split` was extracted to be
   callable, and both tests were then confirmed failing against each bug.
+
+- **QA-4 round eight: two published claims of enforcement that enforced
+  nothing.** Both were found by an independent session, neither by a gate.
+
+  **`Component.why_unverifiable` was required by a docstring and a CHANGELOG
+  entry, and by nothing that runs.** The comment said *"Required whenever
+  `verify` is None; see `test_status_components.py`"* — a file that had never
+  existed — and 5 of the 7 such components lacked the field. This is a verbatim
+  recurrence: `tests/test_empty_libraries_say_so.py` exists because round five
+  found the same shape in `check_library_reuse.py`, and the recurrence landed
+  four commits after that test was cited as precedent.
+
+  The test now exists, and the invariant is **narrower than the docstring
+  claimed**: a component that renders 🟡 must say why. Requiring it of ⬜ rows
+  would demand a reason from three projects that do not exist — "why is there
+  no verification command" has no content for a thing with no files — and would
+  produce five ceremonial strings that teach everyone the field is boilerplate.
+  Proven able to fail by stripping the reason from `serving-core`.
+
+  **A detector regex that could not match its own text.** `_as_word` accepted a
+  leading hyphen and wrapped it in `\b`, and `\b-` is unsatisfiable: a hyphen
+  is not a word character. `\b--cov-fail-under\b` never matched
+  `--cov-fail-under`, so `coverage` and `coverage-gate` reported NOT BUILT while
+  both flags sat in `ci.yml`. **The headline understated the built count by
+  two: 53 of 121 was really 55.** Anchoring is now conditional on the first and
+  last character, and `ray` still does not match inside `NDArray` — the
+  false-positive this function was written for.
+
+  The gap that let it through was the test suite: it exercised the function
+  with the bare word `feast` only. There is now a sweep over every `pattern:`
+  detector in the committed inventory, asserting each can match its own literal
+  text, which fails on the old implementation.
+
+  **A weaker exemption list than the one it cited as its model.**
+  `datasets.lock.json`'s `unfetched` section carried a reason and nothing that
+  could expire it, while `test_project_contract.py` — named in its own docstring
+  as the model — re-evaluates each deviation's condition. Lock version 2 pairs
+  the reason with `blocked_on`, the repo-relative path whose appearance ends the
+  exemption, so the condition is machine-checkable in CI with no data present.
+  `load_lock` migrates v1 in memory: a format bump that forced everyone to
+  re-download 263 MB to regenerate their pins would be a lockfile working
+  against the reproducibility it exists for.
+
+  Also corrected: the drift CHANGELOG entry said 34 tests where `pytest`
+  collects 35. Wrong when written.
 
 ## [0.1.0] - 2026-08-07
 

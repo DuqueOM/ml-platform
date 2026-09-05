@@ -60,17 +60,26 @@ MANIFEST_NAME = "manifest.json"
 #: chosen) and `registry.py` (how to obtain it), completing the trio with
 #: *which exact bytes* — see ADR-009.
 LOCK_PATH = REPO_ROOT / "docs" / "datasets" / "datasets.lock.json"
-LOCK_VERSION = 1
+LOCK_VERSION = 2
 
-#: Why a fetchable dataset has no pin. An entry here is a statement that the
-#: absence is sequencing rather than oversight, and `test_dataset_lock.py`
-#: deletes it the moment the dataset appears — the same expiry discipline
-#: `test_project_contract.py` applies to its contract deviations.
-UNFETCHED_REASONS = {
-    "funsd": (
-        "Consumed by projects/doc-intelligence, which does not exist yet (Phase 5). "
-        "Fetching it now would download data no code reads, to pin bytes no measurement uses."
-    ),
+#: Why a fetchable dataset has no pin, and **what would end the exemption**.
+#:
+#: The reason alone was version 1, and QA-4 round eight found it strictly weaker
+#: than the model it cites: `test_project_contract.py` re-evaluates each
+#: deviation's condition and expires it, while this only checked the lock
+#: against itself. `blocked_on` is that condition, as a repo-relative path
+#: rather than prose — the moment it exists, the exemption is stale and the
+#: suite says so. A path is checkable in CI with no data present; a sentence is
+#: not.
+UNFETCHED_REASONS: dict[str, dict[str, str]] = {
+    "funsd": {
+        "reason": (
+            "Consumed by projects/doc-intelligence, which does not exist yet (Phase 5). "
+            "Fetching it now would download data no code reads, to pin bytes no measurement "
+            "uses. Closed by that project landing, then running --write-lock."
+        ),
+        "blocked_on": "projects/doc-intelligence",
+    },
 }
 
 # SEC EDGAR requires a declared contact and enforces ~10 req/s. Anything
@@ -211,9 +220,24 @@ def load_lock() -> dict[str, Any]:
     if not LOCK_PATH.is_file():
         return {"version": LOCK_VERSION, "datasets": {}}
     lock: dict[str, Any] = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
-    if lock.get("version") != LOCK_VERSION:
-        raise ValueError(f"{LOCK_PATH.name} is version {lock.get('version')!r}, this script writes {LOCK_VERSION}")
-    return lock
+    version = lock.get("version")
+    if version == LOCK_VERSION:
+        return lock
+    if version == 1:
+        # v1 -> v2: `unfetched` held a bare reason string; v2 pairs it with the
+        # path whose appearance ends the exemption. Migrated in memory rather
+        # than by refusing the file: a format bump that forces everyone to
+        # re-download 263 MB to regenerate their pins is a lockfile working
+        # against the reproducibility it exists for. `blocked_on` is filled from
+        # UNFETCHED_REASONS on the next write, and left empty where nothing
+        # declares one — which the tests then report.
+        lock["unfetched"] = {
+            key: value if isinstance(value, dict) else {"reason": value, "blocked_on": ""}
+            for key, value in lock.get("unfetched", {}).items()
+        }
+        lock["version"] = LOCK_VERSION
+        return lock
+    raise ValueError(f"{LOCK_PATH.name} is version {version!r}, this script writes {LOCK_VERSION}")
 
 
 def _lock_entry(dataset: Dataset, manifest: dict[str, Any]) -> dict[str, Any]:
@@ -267,7 +291,7 @@ def write_lock() -> int:
     # list inside a test, keeps the lock self-describing: the file that says
     # what is pinned also says what is not, and for how long that is expected.
     unfetched = {
-        key: UNFETCHED_REASONS.get(key, "declared fetchable, never fetched")
+        key: UNFETCHED_REASONS.get(key, {"reason": "declared fetchable, never fetched", "blocked_on": ""})
         for key in sorted(REGISTRY)
         if REGISTRY[key].access is Access.PUBLIC_HTTP and REGISTRY[key].urls and key not in datasets
     }
