@@ -53,6 +53,55 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   control. P1 is a recorded deviation with its cost, like `rag-assistant`'s:
   a migrated project has no answers file.
 
+### Changed
+
+- **The headline forecast metric was re-measured, and it fell by more than half.**
+  Densifying the panel fixed the P0 but nothing re-ran the backtest, so
+  **+55.8% skill** — published against the mis-specified baseline — stood as
+  this platform's primary claim while being known-invalid with no replacement.
+  It is replaced here rather than corrected in place; the dated `[0.1.0]` entry
+  keeps the number it published, because the error is the more instructive half.
+
+  Measured from the two registered months (`yellow_tripdata_2024-01/02`,
+  checksums verified against `data/nyc-tlc/manifest.json`) rather than from
+  `read_demand()`, which would have reproduced the old sparse shape and
+  reported it as the new one:
+
+  | | Dated entry | Corrected |
+  | --- | --- | --- |
+  | Hourly rows | 151,904 | **357,426** |
+  | Modellable zones | 140 of 261 | **255 of 261** |
+  | Skill, 3 folds | +55.8% | **+23.0%** |
+  | Skill, 5 folds (current default) | not measured | **+12.6%** |
+  | Coverage, 5 folds | 89.8% | **89.6%** against 90% nominal |
+
+  **Both fold designs are reported because the dated entry used three folds and
+  `evaluate()` now defaults to five.** Comparing +55.8% against +12.6% would
+  charge a design change to the defect. Like for like, at three folds, the
+  correction is **+55.8% → +23.0%**: the broken baseline was roughly twice as
+  easy to beat, not three times.
+
+  Fold design: expanding window cut on TIME, 168-hour test horizon, gap of
+  `LONGEST_LAG` (168h) so training cannot reach the test window through the
+  lags, conformal calibration on the last 168 hours of each training window,
+  `seed=42`. Each figure is two readings at the same seed, byte-identical —
+  a single reading is not a measurement.
+
+  **Modellable zones nearly doubled, and that is the same units error one scale
+  down.** `MIN_ZONE_HOURS` is documented as hours and counts rows; on a sparse
+  panel those differ, so 115 zones with enough history were excluded for
+  lacking rows they did in fact have. Densification made rows and hours the
+  same thing, and the threshold started measuring what it says.
+
+  Both figures clear the floors that gate them — `MIN_SKILL = 0.05` and
+  `MIN_COVERAGE = 0.85`. No threshold was moved, and lowering one to fit a
+  measurement is STOP.
+
+- **The Iceberg table was re-ingested to the fixed shape**, 151,891 sparse rows
+  replaced by 357,426 dense ones, at snapshot `5953582871017899527`. Time
+  travel to the pre-fix snapshot `1293138664020475634` still returns the
+  151,891-row panel, so the correction added history rather than rewriting it.
+
 ### Fixed
 
 An independent audit found three defects that every existing gate passed over.
