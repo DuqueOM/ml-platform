@@ -192,7 +192,11 @@ def test_a_binary_file_does_not_crash_the_whole_gate() -> None:
     probe = REPO_ROOT / "_gate_probe.bin"
     probe.write_bytes(b"\x95\xfe\xff binary \x00 content")
     try:
-        result = _run(GATES["doc-coherence"])
+        # `--only C6`, not the whole gate. This asserts C6 survives a binary
+        # file; asserting the gate's global exit status would additionally
+        # assert that eight unrelated checks are green, and report THIS cause
+        # when one of them is not.
+        result = _run(GATES["doc-coherence"], "--only", "C6")
     finally:
         probe.unlink(missing_ok=True)
 
@@ -213,9 +217,13 @@ def test_a_third_party_repository_link_is_not_a_finding() -> None:
     """
     probe = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.md"
     with temporarily(probe, "See https://github.com/kubernetes-sigs/kind and https://github.com/gitleaks/gitleaks\n"):
-        result = _run(GATES["doc-coherence"])
+        result = _run(GATES["doc-coherence"], "--only", "C6")
 
     assert "kind" not in result.stdout.replace("kind of", ""), result.stdout
+    # Scoped to C6. This assertion used to run the whole gate, and QA-4 round
+    # nine caught it reporting "a third-party link was reported as a private
+    # leak" when the actual cause was C7's audit-staleness counter — sending an
+    # auditor to investigate C6, which was fine.
     assert result.returncode == 0, f"a third-party link was reported as a private leak:\n{result.stdout}"
 
 
@@ -224,7 +232,7 @@ def test_c6_does_not_print_ok_above_its_own_failure() -> None:
     probe = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.md"
     link = "https://github.com/" + "DuqueOM" + "/" + "not-a-public" + "-repo"
     with temporarily(probe, f"See {link}\n"):
-        result = _run(GATES["doc-coherence"])
+        result = _run(GATES["doc-coherence"], "--only", "C6")
 
     c6_lines = [line for line in result.stdout.splitlines() if "[C6]" in line]
     assert not any(line.strip().startswith("ok") for line in c6_lines), (
@@ -597,3 +605,62 @@ def test_copier_check_reads_commands_not_the_word() -> None:
         caught = _run(GATES["doc-coherence"])
     assert caught.returncode == 1
     assert "unpinned copier command" in caught.stdout
+
+
+# --- the composite gate can be exercised one check at a time ----------------
+# QA-4 round nine, and round seven's hypothesis confirmed: a composite gate with
+# no per-check entry point forces every negative control to assert global green,
+# so every control fails when any unrelated check does — and reports its own
+# subject as the cause. `--only` is that entry point.
+def test_every_coherence_check_is_reachable_by_only() -> None:
+    """A check the registry omits cannot be exercised in isolation.
+
+    The registry is hand-written, which is the shape of defect W-7 describes
+    one level up: anything missing from a hand-maintained list is not marked
+    absent, it is invisible. Derived from the module rather than restated here,
+    so adding a check and forgetting the registry entry fails.
+    """
+    import ast
+
+    source = (REPO_ROOT / "scripts" / "check_doc_coherence.py").read_text(encoding="utf-8")
+    defined = {
+        node.name
+        for node in ast.parse(source).body
+        if isinstance(node, ast.FunctionDef) and node.name.startswith("check_")
+    }
+    assert len(defined) >= 9, f"only {len(defined)} check functions parsed — the scan broke, not the gate"
+
+    registered = subprocess.run(
+        [sys.executable, "-c", "import check_doc_coherence as m; print(' '.join(m._registry({})))"],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT / "scripts",
+        timeout=60,
+    )
+    assert registered.returncode == 0, registered.stderr
+    ids = registered.stdout.split()
+    assert len(ids) == len(defined), (
+        f"{len(defined)} check functions, {len(ids)} registry entries ({', '.join(ids)}). "
+        f"A check absent from the registry runs in the full sweep and cannot be isolated, "
+        f"so any control for it must assert global green"
+    )
+
+
+def test_only_refuses_an_unknown_check_rather_than_passing() -> None:
+    """`--only C99` running nothing and exiting 0 is the dead-gate shape.
+
+    Exit 2, not 1: this is a usage error, distinct from a coherence failure, so
+    a caller can tell "you asked for a check that does not exist" from "the
+    check you asked for found something".
+    """
+    result = _run(GATES["doc-coherence"], "--only", "C99")
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "unknown check" in result.stderr
+
+
+def test_only_runs_exactly_the_check_it_names() -> None:
+    """Isolation is the whole point; a flag that runs extras provides none."""
+    result = _run(GATES["doc-coherence"], "--only", "C1")
+    assert result.returncode == 0, result.stdout
+    reported = {line.split("]")[0].split("[")[-1] for line in result.stdout.splitlines() if "[C" in line}
+    assert reported == {"C1"}, f"--only C1 also reported {sorted(reported - {'C1'})}"
