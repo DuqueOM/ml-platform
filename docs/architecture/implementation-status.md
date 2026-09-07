@@ -64,9 +64,9 @@ how "we deploy to two clouds" goes unchallenged.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**47 done · 2 partial · 5 absent** — of 54 tracked components.
+**48 done · 2 partial · 5 absent** — of 55 tracked components.
 
-**Proven in CI: 36 at L1 · 11 at L2.** Evidence available but NOT run here: 4 at L3, 0 at L4.
+**Proven in CI: 37 at L1 · 11 at L2.** Evidence available but NOT run here: 4 at L3, 0 at L4.
 
 ### Phase 0
 
@@ -91,6 +91,7 @@ how "we deploy to two clouds" goes unchallenged.
 | 🟡 | — | Local validation stack | 8 file(s), no verification command — the only candidate command inspects HOST state (free ports, free memory), so it returns a different marker from the same commit depending on the machine · L3 evidence, not run here: `make local-up && uv run pytest tests/local/test_local_stack.py -q -m local` |
 | ✅ | L1 | libs/ml-core implementation | `uv run pytest libs/ml-core -q` passes |
 | ✅ | L1 | libs/data-contracts implementation | `uv run pytest libs/data-contracts -q` passes |
+| ✅ | L1 | Drift contract (ADR-007) | `uv run pytest libs/ml-core/tests/test_drift.py -q` passes |
 | 🟡 | — | libs/serving-core implementation | 1 file(s), no verification command — deliberately empty: there is one serving consumer, and a library shaped by one caller is a library the second caller bends around. `pytest` over an empty package exits 0, so a verify command here would render 'nothing exists' as a green tick. That the emptiness is DECLARED rather than accidental is proven separately by `uv run pytest tests/test_empty_libraries_say_so.py -q` |
 | ✅ | L1 | projects/demand-forecast | `uv run pytest projects/demand-forecast -q` passes |
 | ✅ | L1 | Iceberg ingestion (demand-forecast) | `uv run pytest projects/demand-forecast/tests/test_overwrite_scope.py -q` passes |
