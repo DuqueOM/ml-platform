@@ -318,16 +318,29 @@ from that list is not marked ⬜; it is invisible. Drift detection — the
 [ADR-007](../decisions/ADR-007-drift-detection-per-project-kind.md) and Phase 1
 both name as deliverables — has **no row at all**.
 
-1. Add the missing row, so the absence becomes visible:
+> **Correction, 2026-09-05.** This step was written when the contract did not
+> exist, and both of its particulars have since stopped being true. It named
+> `libs/ml-core/src/ml_core/drift.py`; what landed is the package
+> `libs/ml-core/src/ml_core/drift/`, so the original path would have created a
+> detector matching nothing — the same defect QA-4 round nine found in
+> `_as_word`, reintroduced by the instruction written to prevent its class. And
+> the row no longer renders ⬜: the contract has 35 tests, so it carries a
+> verify command and renders ✅. Step 1 is done in the commit carrying this
+> correction. **Step 2 is untouched and is the valuable half.**
+
+1. ~~Add the missing row, so the absence becomes visible~~ — done:
 
    ```python
    COMPONENTS = [
        # ...
-       Component("1", "Drift detection (DriftSignal + PSI)", ["libs/ml-core/src/ml_core/drift.py"]),
+       Component(
+           "1",
+           "Drift contract (ADR-007)",
+           ["libs/ml-core/src/ml_core/drift"],
+           "uv run pytest libs/ml-core/tests/test_drift.py -q",
+       ),
    ]
    ```
-
-   With no files present it renders ⬜, which is the correct and honest state.
 
 2. Then close the class: add a test asserting that every deliverable bullet in
    the technical plan maps to a `COMPONENTS` row. This is the same defect the

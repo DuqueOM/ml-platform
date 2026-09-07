@@ -178,6 +178,17 @@ COMPONENTS: list[Component] = [
     # something to verify: zero modules, zero tests. `pytest` over an empty
     # package exits 0, so wiring one here would turn "nothing exists" into a
     # green tick — the exact inversion the status document exists to prevent.
+    # W-7: drift had no row at all, so its absence was invisible rather than ⬜.
+    # The work order named `drift.py`; the contract landed as the package
+    # `drift/`, and a detector pointing at the module would have matched nothing
+    # — the defect QA-4 round nine found in `_as_word`, reintroduced by the
+    # instruction meant to prevent its class. The path is the package.
+    Component(
+        "1",
+        "Drift contract (ADR-007)",
+        ["libs/ml-core/src/ml_core/drift"],
+        "uv run pytest libs/ml-core/tests/test_drift.py -q",
+    ),
     Component(
         "1",
         "libs/serving-core implementation",
