@@ -23,6 +23,30 @@
 # Adopting a list closes the gap once. This ledger closes it every time: an
 # artifact present upstream with no entry here fails the gate whenever the
 # template checkout is reachable.
+#
+# SCOPE, AND WHERE A DECISION MAY LIVE INSTEAD.
+# `_UNCOMPARED_PREFIXES` in scripts/check_upstream_parity.py removes whole
+# directories from comparison — generated tool surfaces, scaffolding source,
+# service internals — so "zero pending" is true within that scope and not
+# outside it. QA-4 round four found the prefix list hiding two governance
+# documents and the entry was removed; round five found four upstream paths
+# that are still excluded AND are cited by name in this repository's own
+# agentic bodies.
+#
+# Those four are a deliberate no-entry. Each citation states inline which
+# repository owns the file and what the local equivalent is, so the decision
+# is recorded where a reader meets it rather than in a row they would have to
+# go looking for:
+#
+#   agentic/skills/incident-postmortem/SKILL.md  -> docs/audit/AUDIT_R8_STAFF_LEAD.md
+#   agentic/skills/cost-audit/SKILL.md           -> docs/observability/business-kpis.md
+#   agentic/skills/security-audit/SKILL.md       -> templates/k8s/policies/kyverno-image-verification.yaml
+#   agentic/rules/11-kubernetes.md               -> templates/k8s/policies/pod-security-standards.yaml
+#
+# Duplicating those four arguments here would give each of them two homes and
+# one of the two would go stale. An auditor re-deriving the excluded set should
+# check the citing body before reporting an omission — and should report one
+# when a prefix hides a path that NOTHING explains.
 version: 1
 upstream: ml-service-template
 
