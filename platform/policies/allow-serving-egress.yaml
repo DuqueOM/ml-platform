@@ -1,0 +1,83 @@
+# Egress the serving pod actually needs. Until this existed, `default-deny` plus
+# `allow-dns` meant the pod could resolve a name and reach nothing — so it could
+# not fetch its model, read the lakehouse, authenticate, or export a span. The
+# symptom of each is a timeout, which reads as the dependency being down.
+#
+# Nothing here is a secret-manager rule, deliberately: the ExternalSecret is
+# resolved by the External Secrets controller in ITS namespace and projected in
+# as a Secret, so the pod never talks to the secret manager. The next reader
+# will look for that rule and should find this sentence instead of silence.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-serving-egress
+spec:
+  podSelector:
+    matchLabels: { app: demand-forecast }
+  policyTypes: [Egress]
+  egress:
+    # The cloud metadata server, and the reason this rule is first.
+    #
+    # Workload Identity on GCP and IRSA on AWS both mint tokens at
+    # 169.254.169.254. Without it the identity the previous round wired up
+    # cannot authenticate at all, and the failure surfaces as a permission
+    # error against object storage — sending whoever debugs it to the IAM
+    # binding, which is correct and has nothing wrong with it.
+    #
+    # Scoped to the single address rather than the link-local /16: the rest of
+    # 169.254.0.0/16 is not the metadata service and has no reason to be
+    # reachable from a serving pod.
+    - to:
+        - ipBlock: { cidr: 169.254.169.254/32 }
+      ports:
+        - { protocol: TCP, port: 80 }
+        - { protocol: TCP, port: 443 }
+
+    # Object storage: the model artifact and the Iceberg table.
+    #
+    # NetworkPolicy cannot match a hostname, and the public GCS and S3 ranges
+    # are large and change without notice, so this is public HTTPS with the
+    # private ranges carved out. State the trade-off plainly: this permits any
+    # public HTTPS destination, not object storage alone. What it does NOT
+    # permit is the thing that makes a broad egress rule dangerous — reaching
+    # back into the cluster or the VPC, which is where lateral movement goes.
+    #
+    # The narrow version is a Private Service Connect endpoint on GCP or a
+    # gateway VPC endpoint on AWS, whose CIDR is per-environment and per-VPC.
+    # When those land, replace this rule with that CIDR in the cloud overlays
+    # and delete this comment; until then a rule that names a CIDR nobody has
+    # provisioned would permit nothing while looking narrower.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+              - 169.254.0.0/16
+      ports:
+        - { protocol: TCP, port: 443 }
+
+    # Span export. `tracing.py` speaks OTLP over gRPC to the collector, and a
+    # dropped span is the quietest failure in this list: nothing errors, the
+    # trace is simply absent, and the dashboard that would have shown it looks
+    # merely idle.
+    - to:
+        - namespaceSelector:
+            matchLabels: { app.kubernetes.io/name: monitoring }
+      ports:
+        - { protocol: TCP, port: 4317 }
+
+    # Postgres is DEFERRED, and this comment is the record rather than the
+    # absence being one. F-04 was silence, so silence is not available here.
+    #
+    # The online feature store and pgvector are open Phase 3 work; no Postgres
+    # exists in any cloud overlay today. A namespaceSelector for a namespace
+    # nobody has created would render, pass every check, and permit nothing —
+    # a rule that reads as coverage. It lands with the database, as:
+    #
+    #   - to:
+    #       - namespaceSelector:
+    #           matchLabels: { app.kubernetes.io/name: postgres }
+    #     ports:
+    #       - { protocol: TCP, port: 5432 }

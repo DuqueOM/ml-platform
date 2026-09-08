@@ -7,9 +7,14 @@
 #   - `../../base/secrets` and `secret-store.yaml` need the External Secrets
 #     CRDs and a cloud identity. Installing them here would test a mock of the
 #     thing rather than the thing.
-#   - `../../../policies` are Kyverno policies, and kind ships no Kyverno.
-#     Applying them without the controller would report success while enforcing
-#     nothing — the exact shape of defect this repository keeps finding.
+#   - `../../../policies` are `networking.k8s.io/v1` NetworkPolicies, not
+#     Kyverno policies as this comment said until QA-4 round nine. The
+#     conclusion it reached was right and its reason was not, which is the
+#     more durable kind of wrong: kind's default CNI does not enforce
+#     NetworkPolicy AT ALL, so applying them here would report success while
+#     enforcing nothing — the exact shape of defect this repository keeps
+#     finding, and it would have been reached by looking for a Kyverno
+#     controller that was never the point.
 #
 # Both are named here rather than silently omitted, so the difference between
 # "runs locally" and "runs in a cloud" stays legible.

@@ -468,3 +468,77 @@ def test_an_advertised_scrape_port_is_reachable(cloud: str, env: str) -> None:
         f"{cloud}-{env}: port {port} is advertised for scraping and no NetworkPolicy admits the monitoring "
         f"namespace to it, so the metrics the SLO rules depend on never arrive"
     )
+
+
+@pytest.mark.parametrize("cloud", CLOUDS)
+@pytest.mark.parametrize("env", ENVIRONMENTS)
+def test_the_pod_can_reach_what_it_needs_to_start(cloud: str, env: str) -> None:
+    """Egress the pod depends on, asserted against the policies that permit it.
+
+    `default-deny` plus `allow-dns` left the pod able to resolve a name and
+    reach nothing, so it could not fetch its model, read the lakehouse,
+    authenticate, or export a span. Each failure surfaces as a timeout, which
+    reads as the dependency being down — the same shape as the scrape port
+    above, in the other direction.
+
+    The metadata address is the one worth naming explicitly. Workload Identity
+    and IRSA both mint tokens at 169.254.169.254, and without egress to it the
+    identity fails to authenticate — surfacing as a permission error against
+    object storage, which sends whoever debugs it to an IAM binding that is
+    correct.
+    """
+    documents = _build(OVERLAYS / f"{cloud}-{env}")
+    egress = [
+        rule
+        for doc in documents
+        if doc["kind"] == "NetworkPolicy" and "Egress" in doc["spec"].get("policyTypes", [])
+        for rule in doc["spec"].get("egress", [])
+    ]
+    assert egress, f"{cloud}-{env}: every egress is denied, so the pod cannot start"
+
+    def _permits(match: str, port: int) -> bool:
+        return any(
+            any(int(entry.get("port", -1)) == port for entry in rule.get("ports", []))
+            for rule in egress
+            if match in str(rule.get("to", []))
+        )
+
+    assert _permits("169.254.169.254", 443), (
+        f"{cloud}-{env}: no egress to the metadata server. Workload Identity and IRSA mint tokens there, "
+        f"so the identity cannot authenticate and the symptom appears as a storage permission error"
+    )
+    assert _permits("0.0.0.0/0", 443) or _permits("ipBlock", 443), (
+        f"{cloud}-{env}: no HTTPS egress, so the model artifact and the Iceberg table are unreachable"
+    )
+    assert _permits("monitoring", 4317), (
+        f"{cloud}-{env}: no egress to the OTLP collector, so spans are dropped silently — nothing errors "
+        f"and the trace is simply absent"
+    )
+
+
+@pytest.mark.parametrize("cloud", CLOUDS)
+@pytest.mark.parametrize("env", ENVIRONMENTS)
+def test_broad_https_egress_cannot_reach_back_into_the_cluster(cloud: str, env: str) -> None:
+    """The carve-out is what makes a 0.0.0.0/0 rule acceptable.
+
+    NetworkPolicy cannot match a hostname and the public object-storage ranges
+    change without notice, so HTTPS egress is broad by necessity. Broad egress
+    to the internet is a cost; broad egress that also reaches the VPC and the
+    cluster is lateral movement, and the difference is entirely in `except`.
+    """
+    documents = _build(OVERLAYS / f"{cloud}-{env}")
+    for doc in documents:
+        if doc["kind"] != "NetworkPolicy":
+            continue
+        for rule in doc["spec"].get("egress", []):
+            for target in rule.get("to", []):
+                block = target.get("ipBlock", {})
+                if block.get("cidr") != "0.0.0.0/0":
+                    continue
+                excluded = set(block.get("except", []))
+                missing = {"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"} - excluded
+                assert not missing, (
+                    f"{cloud}-{env}: {doc['metadata']['name']} permits egress to 0.0.0.0/0 without "
+                    f"excluding {sorted(missing)}, so it reaches the VPC and the cluster as well as "
+                    f"the internet"
+                )
