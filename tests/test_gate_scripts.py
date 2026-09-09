@@ -89,6 +89,31 @@ def _probe_residue() -> Iterator[None]:
     its subject is worse than absent. The same rule
     `test_version_consistency.py::_probe_residue` follows, and the one the
     session-scoped version broke by widening its subject to the whole tree.
+
+    **The disposable worktree was attempted here and does not work. Measured,
+    not assumed.** A `git worktree` gives real git metadata, so the gates'
+    `git ls-files` enumeration survives, and applying the working tree's diff
+    on top keeps a developer's uncommitted edits under test rather than HEAD.
+    Twenty-four of this module's tests ran against it correctly.
+
+    It fails on the two that matter, and it fails silently. The mirror has no
+    `.venv` — it is gitignored — and every verification command
+    `check_implementation_status.py` spawns is `uv run`. So the gate reports
+    STALE inside the mirror for want of `yaml`, and
+    `test_implementation_status_fails_when_the_committed_table_is_stale` then
+    PASSES: it asked for returncode 1 and a STALE line, and got both from a
+    cause it never planted. A negative control passing for the wrong reason is
+    the defect round seven hypothesised and round nine confirmed, and the
+    mirror reintroduces it.
+
+    Those same two tests are the ones that produced both residues this branch
+    actually saw — `MUTATED` in the derived document, and
+    `platform/local/_probe_new/`. So the mirror would prevent leaks from tests
+    that never leaked and cover neither that did.
+
+    Prevention needs the generator to stop shelling out to `uv run`, or the
+    mirror to carry a usable environment. Until one of those, this guard
+    detects and that is the honest limit.
     """
     watched = [REPO_ROOT / rel for rel in _TOUCHED]
     before = {path: (path.read_bytes() if path.is_file() else None) for path in watched}
