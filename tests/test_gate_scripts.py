@@ -46,6 +46,76 @@ def _run(script: Path, *args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+#: Exactly what this module writes into the repository, and nothing else.
+#:
+#: The list is hand-written and that is the point. QA-4 round ten found the
+#: session-scoped guard this replaces diffing a GLOBAL set of untracked files
+#: while `check_implementation_status.py` runs its verification pool eight
+#: commands wide: a session that snapshotted before another created a probe
+#: blamed itself for a file it never wrote, so the derived document became
+#: non-deterministic and `--check` reported STALE with no edit between runs.
+#: Reproduced directly — the session that wrote the probe passed, the innocent
+#: one failed.
+#:
+#: Watching only this module's own paths is immune to that, because
+#: `_verify_all` keys its pool by command string: duplicates collapse, so no
+#: module ever runs concurrently with itself. The failure mode of a stale entry
+#: here is a path that stops being watched — a miss, which is recoverable —
+#: rather than a session blamed for someone else's probe, which is what taught
+#: everyone to ignore the check.
+_TOUCHED = (
+    "docs/architecture/implementation-status.md",
+    "docs/architecture/technology-inventory.md",
+    "docs/runbooks/_gate_probe.md",
+    "docs/decisions/README.md",
+    "platform/local/_probe_new/extra.yaml",
+    ".github/workflows/_gate_probe.yml",
+    "_gate_probe.bin",
+)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _probe_residue() -> Iterator[None]:
+    """Assert this module restored what it mutates, and left no probe behind.
+
+    Two shapes, both seen in this repository: a derived document left carrying
+    `MUTATED` because a `finally` did not run under SIGTERM, and a probe
+    directory left in the tree where the pre-commit protocol's `git add -A`
+    would have staged it. The first is the worse one — the next run reads the
+    mutation as the file's real content and fails about something else.
+
+    Bytes read before, never `git diff`: a dirty working tree is the normal
+    state of anyone editing, and a check that fails for reasons unrelated to
+    its subject is worse than absent. The same rule
+    `test_version_consistency.py::_probe_residue` follows, and the one the
+    session-scoped version broke by widening its subject to the whole tree.
+    """
+    watched = [REPO_ROOT / rel for rel in _TOUCHED]
+    before = {path: (path.read_bytes() if path.is_file() else None) for path in watched}
+
+    yield
+
+    changed, leaked = [], []
+    for path, content in before.items():
+        rel = str(path.relative_to(REPO_ROOT))
+        now = path.read_bytes() if path.is_file() else None
+        if content is None and now is not None:
+            leaked.append(rel)
+        elif content is not None and now != content:
+            changed.append(rel)
+
+    assert not changed, (
+        f"this module did not restore {sorted(changed)}. A probe mutates a derived document to prove the "
+        f"staleness gate fires and restores it in a finally, so this means the finally did not run. The "
+        f"file is wrong on disk now, and the next run reads the mutation as its real content."
+    )
+    assert not leaked, (
+        f"this module left {sorted(leaked)} behind. Probes are written into the real repository on purpose "
+        f"— the gate resolves its roots from its own location — and removed in a finally. `git add -A` in "
+        f"the pre-commit protocol would stage these."
+    )
+
+
 @contextmanager
 def temporarily(path: Path, content: str) -> Iterator[None]:
     """Write ``content`` to ``path``, then restore whatever was there.
