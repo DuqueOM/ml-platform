@@ -14,6 +14,11 @@ dependencies = [
     # `# nosec` for a small risk is how a scanner becomes decorative, and
     # `.security-baselines/` holds zero suppressions on purpose.
     "defusedxml~=0.7",
+    # `scripts/check_artifact_compatibility.py` compares a resolved version
+    # against a requirement specifier. Hand-parsing `~=` is how a gate quietly
+    # gets the compatible-release rule wrong in the permissive direction, and
+    # this was available transitively — which is not the same as declared.
+    "packaging>=24.0",
 ]
 
 [project.optional-dependencies]

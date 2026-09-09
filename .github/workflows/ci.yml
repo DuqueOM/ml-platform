@@ -189,6 +189,18 @@ jobs:
         # eight actions on tags, three of them scanners.
         run: uv run python scripts/check_action_pins.py
 
+      - name: Model artifact crosses the serving seam intact
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        # The workspace pickles a model with the versions uv.lock resolves; the
+        # container unpickles it with what its requirements.txt installs. A
+        # joblib load across an incompatible numpy does not raise — it returns
+        # arrays it has misread, and the service serves predictions from them.
+        #
+        # Three straddles exist today and are exempted by name against ADR-008,
+        # so this step is green on the known and red on a fourth. The exemption
+        # lifts mechanically when that ADR stops saying Proposed.
+        run: uv run python scripts/check_artifact_compatibility.py
+
       - name: Shared library reuse (charter C1)
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         # Reports the reuse count per project and FAILS on a manifest that

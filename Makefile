@@ -44,6 +44,7 @@ verify: ## Run every repository gate (superset of CI's; see RUNBOOK for what it 
 	uv run python scripts/check_doc_coherence.py
 	uv run python scripts/check_ci_references.py
 	uv run python scripts/check_action_pins.py
+	uv run python scripts/check_artifact_compatibility.py
 	uv run python scripts/check_baselines_expiry.py
 	uv run python scripts/check_dashboard_inventory.py
 	uv run python scripts/check_gitleaks_pin.py
