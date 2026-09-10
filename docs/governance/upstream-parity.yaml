@@ -483,3 +483,45 @@ artifacts:
     status: pending
     reason: >-
       Decided to adopt, and it arrived mid-sweep: upstream gained it while the five above were being decided, which is the ledger demonstrating its own argument. It asserts that an "Enforced by X" claim names a file that exists and that the file actually references what it claims to enforce, over the D-NN anti-pattern table. QA-4 round nine found this repository's two P0s in exactly that class — a docstring requiring a field "see tests/test_status_components.py", a file that had never existed, and five places citing "ADR-001 rule 3" for a claim that ADR does not make. Both were found by a human reading, which is the method upstream's own rationale says cannot work: a comment cannot be verified, only believed. Adoption needs adapting rather than copying: this repository has eleven D-NN rows but only two "Enforced by" clauses, and its equivalent claims live in quality-gates.md, which validate_quality_gates.py already covers in part, and in module docstrings, which nothing covers. Closes by porting the traversal and re-aiming it at those two surfaces.
+  # --- QA-4 round ten sweep: nine artifacts, decided together -----------------
+  # Four of them are about `templates/service/`, upstream's render root, which
+  # has no counterpart here: this repository renders `templates/project/`, nine
+  # files shipping a pyproject.toml rather than a service with a Dockerfile and
+  # several requirements files. Deciding them apart would have repeated that
+  # finding four times.
+  - path: scripts/check_template_render_safety.py
+    status: pending
+    reason: >-
+      Decided to adopt, and it is the one of these nine that lands on a real gap. `copier.yml` here sets `_templates_suffix: ""`, exactly the condition upstream wrote it for: EVERY file under the render root is a Jinja template, so any file that happens to contain Jinja delimiters aborts `copier copy` entirely rather than rendering oddly. This repository does have a render test — `tests/test_project_generator.py`, thirteen tests — and it renders for real, which is stronger than static parsing in one respect and weaker in the one that matters here: it renders a single answer set, `project_kind: "tabular"`, while copier.yml offers four kinds. A payload file that renders under tabular and breaks under llm or agent passes the whole suite and fails in an adopter's `copier copy`, which is the person least able to diagnose it. Static parsing catches that without rendering anything. Closes by porting the parser and pointing it at templates/project.
+  - path: scripts/resolve_python_dependencies.py
+    status: rejected
+    reason: >-
+      Rejected on a measurement rather than an assumption, because the assumption was worth checking: upstream wrote this after finding its Trivy filesystem scan had never examined a single Python dependency, and this repository's Trivy step is blocking at CRITICAL,HIGH with a comment claiming zero findings — which is equally consistent with clean and with blind. Measured with `trivy fs . --scanners vuln`: it reports `uv.lock` as `type=uv` and found three HIGH CVEs in sqlparse, all with fixes, none baselined. So the scanner is not blind here and needs no requirements files resolved for it; uv.lock is read natively. The finding it surfaced is fixed in its own commit. Reverses if this repository ever ships a requirements.txt that Trivy cannot resolve — the generated service under services/ has one, and it is upstream's to scan.
+  - path: scripts/check_dependency_partition.py
+    status: rejected
+    reason: >-
+      Rejected: it verifies that nothing a served IMAGE runs imports a training-only package, against `templates/service/requirements.txt` and the Dockerfile that installs it. Nothing here builds an image — S4 and C1 in quality-gates.md are both PENDING for that reason — and the payload ships a pyproject.toml, not a requirements file destined for a container. Reverses the day Phase 2 publishes an image, at which point the partition it checks becomes a real boundary rather than a hypothetical one.
+  - path: scripts/check_dependency_pin_coherence.py
+    status: rejected
+    reason: >-
+      Rejected: it checks that several requirements files installed into ONE environment agree on their pins, a hazard upstream's generated service has because its tutorial walks an adopter through installing more than one. The payload here ships a single pyproject.toml, so there is no second file to disagree with. The equivalent hazard in this repository is a version straddle across the SERVING seam, which is a different comparison — writer versus reader rather than two readers — and is gated by scripts/check_artifact_compatibility.py (P14). Reverses if templates/project ever ships more than one requirements file.
+  - path: scripts/check_payload_test_scope.py
+    status: rejected
+    reason: >-
+      Rejected: it separates tests that ship WITH a generated service from tests that are about the template, which had come to share `templates/service/tests/`. Checked rather than assumed — `templates/project/tests/test_contracts.py` opens with `{@ project_name @}`, so it is templated and unambiguously about the generated project, and the tests about the template live in tests/test_project_generator.py outside the render root. The separation upstream had to enforce is structural here. Reverses if a test about the template ever lands inside templates/project.
+  - path: scripts/check_markdownlint_parity.py
+    status: rejected
+    reason: >-
+      Rejected: it asserts that upstream's own markdownlint rule block matches the one it ships to generated services, which requires two configurations. This repository ships NONE to generated projects — `find templates/ -name ".markdownlint*"` returns nothing — so there is no second config to diverge from. Reverses the day templates/project ships one, and the reason it would matter is upstream's: a template holding itself to a stricter bar than it prescribes has the same credibility problem as a gate that reports green without running.
+  - path: .markdownlint-cli2.jsonc
+    status: rejected
+    reason: >-
+      Rejected as present under a different extension. This repository carries `.markdownlint-cli2.yaml`, the same tool and the same mechanism, with four rules relaxed and a reason written beside each — MD013 for tables and commands, MD024 scoped to siblings because every ADR repeats Context/Decision/Consequences, MD033 for the HTML markers the derived documents depend on, and the first-line rule for the generated files that open with a banner. Adopting upstream's file would mean two configurations for one linter, which is the shape this repository refuses everywhere else.
+  - path: .security-baselines/trivy-fs.trivyignore
+    status: rejected
+    reason: >-
+      Rejected as present in a merged form. Upstream splits its baseline by scanner — trivy-config for IaC, trivy-fs for Python dependencies — because it runs both. This repository runs `trivy fs` only, and `.security-baselines/.trivyignore` accepts both kinds of identifier, which its own header states. The discipline that makes upstream's file worth having is already here and enforced: entries carry `# expiry: YYYY-MM-DD`, three do today, and scripts/check_baselines_expiry.py fails the build once past that date. Adopting a second file would split one reviewed list in two without adding a control. Reverses alongside trivy-config.trivyignore, if `trivy config` is ever run here.
+  - path: scripts/validate_k8s_manifests.sh
+    status: rejected
+    reason: >-
+      Rejected: the equivalent exists and is better placed. `tests/test_gitops_manifests.py` validates base and every overlay across seven of them, and asserts properties a shell validator cannot reach — that an advertised scrape port is admitted by a NetworkPolicy, that the pod has egress to the metadata server, that a 0.0.0.0/0 egress rule carves out the private ranges. Those are cross-document invariants, which is where this repository's manifest defects have actually been. Adopting a second validator would mean two things to keep current and one of them going stale.
