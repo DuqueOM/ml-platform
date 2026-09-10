@@ -848,7 +848,13 @@ def main() -> int:
         return 0
 
     document.write_text(updated, encoding="utf-8")
-    print(f"[status] wrote {document}")
+    # Relative when it is inside the repository, absolute when `--document`
+    # points elsewhere: a test writing to a scratch copy should say so.
+    try:
+        shown = document.relative_to(REPO_ROOT)
+    except ValueError:
+        shown = document
+    print(f"[status] wrote {shown}")
     return 0
 
 
