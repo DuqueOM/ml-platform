@@ -23,7 +23,6 @@ import os
 import re
 import subprocess
 import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -670,27 +669,44 @@ def _verify(command: str) -> bool:
 #: was pytest inside pytest inside pytest. The step took 886 of the job's 1021
 #: seconds.
 #:
-#: Eight, not "as many as there are". Several commands are `uv run pytest`,
-#: which contend on the same virtualenv and `.pytest_cache`; a wider pool
-#: trades wall time for a class of flake that would be blamed on the tests.
-VERIFY_WORKERS = 8
+#: **The concurrency is gone; the deduplication is what saved the time.**
+#: 1e359bd did both at once and attributed the saving to the pool. Measured on
+#: this tree, counterbalanced 1,8,8,1 twice on an idle 12-core machine:
+#:
+#:     serial (1 worker)      55.48  56.34  56.47  55.88   mean 56.0s
+#:     concurrent (8 workers) 77.10  77.14  73.89  78.42   mean 76.6s
+#:
+#: Concurrency costs 37% MORE wall time. Twelve cores means this is not CPU
+#: oversubscription — the commands are `uv run pytest`, and what they contend
+#: on is serialised anyway: one virtualenv, one `.pytest_cache`, one disk.
+#:
+#: So the pool bought nothing and charged for it twice. 1e359bd's own message
+#: records the second charge: it introduced a flake its author could not
+#: reproduce, mitigated with `UV_NO_SYNC=1` and guarded by a determinism test
+#: rather than by a fix. Running serially removes the shared mutable state
+#: instead of managing it — the same move `--only` and `--document` make on the
+#: gates this script runs.
+#:
+#: Re-measure before reintroducing a pool. The saving 1e359bd is remembered for
+#: came from keying by COMMAND, which is kept below.
 
 
 def _verify_all(components: list[Component]) -> dict[str, bool]:
-    """Run every verification command at once, keyed by the command itself.
+    """Run every verification command once, keyed by the command itself.
 
     Keyed by COMMAND rather than by component: several components share one —
     `validate_agentic_surface.py --strict` backs three — and running it once
     is both faster and more honest, since a command cannot pass for one
-    component and fail for another in the same instant.
+    component and fail for another in the same instant. That deduplication is
+    the half of 1e359bd that earned its place.
+
+    Serially, in sorted order. Two independent subprocesses that only read the
+    tree can still disagree about it when one of them writes a probe, and this
+    generator's output is COMMITTED and diffed — so a document that depends on
+    an interleaving makes every later `--check` diff ambiguous.
     """
     commands = {c.verify for c in components if c.verify}
-    if not commands:
-        return {}
-
-    with ThreadPoolExecutor(max_workers=VERIFY_WORKERS) as pool:
-        futures = {pool.submit(_verify, command): command for command in sorted(commands)}
-        return {futures[future]: future.result() for future in as_completed(futures)}
+    return {command: _verify(command) for command in sorted(commands)}
 
 
 def evaluate() -> list[tuple[Component, str, str, str]]:
