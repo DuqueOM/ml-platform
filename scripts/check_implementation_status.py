@@ -767,7 +767,20 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--write", action="store_true", help="update the status document")
     parser.add_argument("--check", action="store_true", help="fail if the document is stale")
+    parser.add_argument(
+        "--document",
+        type=Path,
+        default=DOC,
+        help=(
+            "the document to write or check, instead of the committed one. For tests: proving that the "
+            "staleness check fires requires a stale document, and mutating the real one makes it stale "
+            "for every OTHER process reading it at that moment — a concurrent `--check` then reports "
+            "STALE correctly, about a mutation nobody made. Point this at a copy and the shared state "
+            "goes away, the same reason `--only` exists on the coherence gate."
+        ),
+    )
     args = parser.parse_args()
+    document: Path = args.document
 
     rows = evaluate()
     generated = render(rows)
@@ -776,13 +789,13 @@ def main() -> int:
         print(generated)
         return 0
 
-    if not DOC.is_file():
-        sys.exit(f"missing {DOC.relative_to(REPO_ROOT)}")
+    if not document.is_file():
+        sys.exit(f"missing {document}")
 
-    current = DOC.read_text(encoding="utf-8")
+    current = document.read_text(encoding="utf-8")
     pattern = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END), re.DOTALL)
     if not pattern.search(current):
-        sys.exit(f"{DOC.relative_to(REPO_ROOT)} has no generated block")
+        sys.exit(f"{document} has no generated block")
 
     updated = pattern.sub(lambda _: generated, current)
 
@@ -818,8 +831,8 @@ def main() -> int:
         print("[status] OK — implementation status matches the filesystem")
         return 0
 
-    DOC.write_text(updated, encoding="utf-8")
-    print(f"[status] wrote {DOC.relative_to(REPO_ROOT)}")
+    document.write_text(updated, encoding="utf-8")
+    print(f"[status] wrote {document}")
     return 0
 
 

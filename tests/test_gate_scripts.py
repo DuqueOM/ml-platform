@@ -21,6 +21,7 @@ import ast
 import hashlib
 import subprocess
 import sys
+import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -413,11 +414,22 @@ def test_implementation_status_fails_when_the_committed_table_is_stale() -> None
     mutated = original.replace("done ·", "MUTATED ·", 1)
     assert mutated != original, "probe did not apply — the document format changed"
 
-    with temporarily(document, mutated):
-        result = _run(GATES["implementation-status"], "--check")
+    # A COPY, via `--document`. Mutating the committed file made it genuinely
+    # stale for every other process reading it in that instant, so a concurrent
+    # `--check` reported STALE correctly about a mutation nobody made. That cost
+    # two false diagnoses in one session before the mechanism was reproduced.
+    # The gate still scans the real tree; only the document it compares moves.
+    with tempfile.TemporaryDirectory() as scratch:
+        copy = Path(scratch) / "implementation-status.md"
+        copy.write_text(mutated, encoding="utf-8")
+        result = _run(GATES["implementation-status"], "--check", "--document", str(copy))
 
     assert result.returncode == 1
     assert "STALE" in result.stdout
+    assert document.read_text(encoding="utf-8") == original, (
+        "the committed document changed while proving the staleness check fires; the whole point of "
+        "--document is that this test never makes the shared file stale for anyone else"
+    )
 
 
 def test_technology_inventory_fails_when_the_report_is_stale() -> None:
