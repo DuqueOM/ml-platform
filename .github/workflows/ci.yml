@@ -201,6 +201,18 @@ jobs:
         # lifts mechanically when that ADR stops saying Proposed.
         run: uv run python scripts/check_artifact_compatibility.py
 
+      - name: The project generator still renders (Copier render root parses)
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        # `_templates_suffix: ""` makes EVERY file under templates/project a
+        # Jinja template, so a stray delimiter aborts `copier copy` entirely —
+        # the adopter gets no project, not a project with an odd line in it.
+        #
+        # tests/test_project_generator.py renders for real and is the authority
+        # on behaviour, but it renders one answer set out of the four kinds
+        # copier.yml offers. Parsing is answer-independent and costs
+        # milliseconds, so it covers the other three.
+        run: uv run python scripts/check_template_render_safety.py
+
       - name: Shared library reuse (charter C1)
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         # Reports the reuse count per project and FAILS on a manifest that

@@ -19,6 +19,13 @@ dependencies = [
     # gets the compatible-release rule wrong in the permissive direction, and
     # this was available transitively — which is not the same as declared.
     "packaging>=24.0",
+    # `scripts/check_template_render_safety.py` parses every payload file with
+    # Copier's own delimiters. Jinja2 was already resolving here — as a
+    # transitive of the `orchestration` extra — which means the gate would have
+    # worked on a machine that had run `uv sync --all-extras` and failed on a
+    # base sync, with an ImportError rather than a verdict. Same argument as
+    # `packaging` above: available is not declared.
+    "jinja2>=3.1",
 ]
 
 [project.optional-dependencies]

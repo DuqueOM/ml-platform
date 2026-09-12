@@ -2868,6 +2868,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "defusedxml" },
+    { name = "jinja2" },
     { name = "packaging" },
     { name = "pyyaml" },
 ]
@@ -2897,6 +2898,7 @@ dev = [
 requires-dist = [
     { name = "apache-airflow", marker = "extra == 'orchestration'", specifier = "~=3.3" },
     { name = "defusedxml", specifier = "~=0.7" },
+    { name = "jinja2", specifier = ">=3.1" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "~=2.3" },
     { name = "packaging", specifier = ">=24.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = "~=8.3" },

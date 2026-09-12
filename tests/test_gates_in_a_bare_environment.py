@@ -39,6 +39,12 @@ GATES = {
     "doc-coherence": ("check_doc_coherence.py",),
     "technology-inventory": ("check_technology_inventory.py", "--check"),
     "ci-references": ("check_ci_references.py",),
+    # Reads copier.yml and the render root, both tracked. Included because its
+    # render root comes from configuration rather than a constant: a gate that
+    # resolved the root relative to a working copy would report OK here while
+    # parsing an empty tree, which is case 1 in the list above wearing a
+    # different hat.
+    "template-render-safety": ("check_template_render_safety.py",),
 }
 
 

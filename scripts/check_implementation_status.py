@@ -371,6 +371,12 @@ COMPONENTS: list[Component] = [
             "scripts/ci_verify_yaml.py",
             "scripts/ci_classify_failure.py",
             "scripts/ci_collect_context.py",
+            # Ported after the parity sweep left it the one PENDING entry of
+            # nine. It guards the generator every future project comes from:
+            # `_templates_suffix: ""` makes every payload file a template, so
+            # a stray delimiter aborts `copier copy` rather than rendering
+            # oddly.
+            "scripts/check_template_render_safety.py",
         ],
         # `scripts/mcp_doctor.py` was here and is gone deliberately: the ledger
         # records it REJECTED, because three of its four checks resolve against
@@ -387,7 +393,7 @@ COMPONENTS: list[Component] = [
         "uv run pytest tests/test_clock_isolation.py tests/test_gitleaks_pin.py "
         "tests/test_yaml_verification.py tests/test_dashboard_inventory.py "
         "tests/test_quality_gates.py tests/test_baselines_expiry.py "
-        "tests/test_ci_triage.py -q",
+        "tests/test_ci_triage.py tests/test_template_render_safety.py -q",
     ),
     # --- Phase 1e: retrieval over this platform's own documentation ---------
     # No verify command until there is something to verify. A gate that passes

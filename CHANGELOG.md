@@ -20,6 +20,45 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Added
 
+- **The Copier render root is parsed, so a stray delimiter cannot break the
+  generator for everyone.** `scripts/check_template_render_safety.py`, gate P15,
+  ported from `ml-service-template`. `copier.yml` sets `_templates_suffix: ""`,
+  which makes **every** file under `templates/project/` a Jinja template — not
+  only the ones that look like one. A file that happens to contain the
+  delimiters therefore does not render oddly; it aborts `copier copy`, and
+  whoever ran the generator gets nothing at all.
+
+  **This is not what the render test already covers.**
+  `tests/test_project_generator.py` renders the payload for real, which is the
+  stronger check on behaviour and remains the authority on it. It renders **one
+  answer set** — the tabular kind — while `copier.yml` offers four. A payload
+  file that renders under tabular and breaks under the LLM or agent kind passes
+  all thirteen tests and fails in an adopter's terminal, which is the worst
+  place for it to surface and the person least able to diagnose it. Parsing is
+  answer-independent, so it covers all four at once, and it costs milliseconds
+  rather than a render — which is why it can also run in pre-commit.
+
+  **Three deliberate departures from upstream, recorded rather than silent.**
+  Path *segments* are parsed as well as file bodies: copier renders those too,
+  and this render root has one, `src/{@ project_slug @}/`, which the original
+  would not have examined. The single function was decomposed and a `--root`
+  flag added, so each defect class is watched failing against a temporary tree
+  — breaking the real payload to prove the gate works would put shared state
+  under three other checks and a concurrent render test, which is the defect
+  class this repository has now found four times. And `jinja2` moved from a
+  transitive of the `orchestration` extra to a declared dependency: the gate
+  would otherwise have worked on a machine that had run `uv sync --all-extras`
+  and raised `ImportError` on a base sync, which is a verdict replaced by an
+  environment error.
+
+  The delimiters are read from `copier.yml` `_envops`, never hardcoded, and
+  they are not Jinja's defaults — this repository uses `{@ … @}` so a generated
+  project's GitHub Actions `${{ … }}` does not collide. That choice removes the
+  Actions hazard and introduces a quieter one the gate now names in its failure
+  output: bash's `"${@}"` contains `{@`, and `${#array[@]}` opens `{#`, the
+  comment token. Both are reproduced in
+  `tests/test_template_render_safety.py`.
+
 - **Fairness metrics promoted to `libs/ml-core`, rewritten rather than copied.**
   `ml_core.fairness` — disparate impact ratio, equal opportunity difference,
   demographic parity difference and the equalized-odds FPR gap, over
