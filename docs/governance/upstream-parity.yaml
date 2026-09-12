@@ -541,3 +541,33 @@ artifacts:
     status: rejected
     reason: >-
       Rejected: the equivalent exists and is better placed. `tests/test_gitops_manifests.py` validates base and every overlay across seven of them, and asserts properties a shell validator cannot reach — that an advertised scrape port is admitted by a NetworkPolicy, that the pod has egress to the metadata server, that a 0.0.0.0/0 egress rule carves out the private ranges. Those are cross-document invariants, which is where this repository's manifest defects have actually been. Adopting a second validator would mean two things to keep current and one of them going stale.
+  - path: scripts/check_deploy_contract_documented.py
+    status: rejected
+    reason: >-
+      Rejected on a measurement. It compares every `vars.NAME` and `secrets.NAME` a SHIPPED deploy workflow reads
+      against what the runbooks tell an adopter to set, in the right channel — GitHub does not fall back from
+      `secrets.X` to `vars.X`, so a value in the wrong place arrives as an empty string and fails exactly as
+      silently as a missing one. There is no deploy workflow to check here, in either place it could be: the Copier
+      payload ships nine files and none is a workflow, and this repository's own five workflows reference two names
+      in total, `secrets.GITHUB_TOKEN`, which GitHub provides, and `secrets.CODECOV_TOKEN`. The second IS
+      undocumented — `grep -rl CODECOV_TOKEN --include='*.md'` returns nothing — and it is recorded here rather
+      than left as a silent finding: its step carries `fail_ci_if_error: false`, so an unset token degrades to no
+      coverage upload rather than a failed deployment, which is the whole reason this gate's class is dangerous and
+      this instance is not. Reverses the day a deploy workflow lands, in the payload or here, which Phase 2 and 3
+      both imply.
+  - path: scripts/check_config_is_read.py
+    status: pending
+    reason: >-
+      Decided to adopt, and measured before deciding rather than assumed either way. It catches the class where a
+      field is declared, loaded from YAML, validated, and read by NOTHING — a config that answers "where do my runs
+      go?" with a value that is not the answer, and the adopter cannot tell from the outside. Upstream found 24 of
+      51 fields in that state. The obvious rejection here is that this repository ships no `configs/` tree and no
+      pydantic settings class, and it is wrong: `libs/llm-core/src/llm_core/config.py` declares `UsecaseConfig`,
+      loaded from a use-case `config.yaml`, and that is the documented extension seam — a new domain is a new
+      `usecases/<name>/`, so the surface grows by design. Measured across 29 declared fields in 2 classes, ONE is
+      read by nothing outside the declaring module: `UsecaseConfig.language`. It is documented in the class
+      docstring as the ISO code of the customer-facing surface, it is loaded with a default of `en`, and
+      `projects/store-assistant/src/store_assistant/config.yaml` sets it to `es` — so a user who set the language
+      got no language. That is the upstream defect exactly, at one instance instead of twenty-four. Closes by
+      fixing `language` first, since a gate landing red teaches people to skip it, then porting the AST analysis
+      pointed at llm-core's config module with a ratchet on the unwired count.
