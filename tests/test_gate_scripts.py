@@ -47,37 +47,55 @@ def _run(script: Path, *args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-#: Exactly what this module writes into the repository, and nothing else.
+#: What this module has written into the repository during the current
+#: module run: each path mapped to its bytes BEFORE the first write (None when
+#: it did not exist), and every directory a helper had to create.
 #:
-#: The list is hand-written and that is the point. QA-4 round ten found the
-#: session-scoped guard this replaces diffing a GLOBAL set of untracked files
-#: while `check_implementation_status.py` runs its verification pool eight
-#: commands wide: a session that snapshotted before another created a probe
-#: blamed itself for a file it never wrote, so the derived document became
-#: non-deterministic and `--check` reported STALE with no edit between runs.
-#: Reproduced directly — the session that wrote the probe passed, the innocent
-#: one failed.
-#:
-#: Watching only this module's own paths is immune to that, because
-#: `_verify_all` keys its pool by command string: duplicates collapse, so no
-#: module ever runs concurrently with itself. The failure mode of a stale entry
-#: here is a path that stops being watched — a miss, which is recoverable —
-#: rather than a session blamed for someone else's probe, which is what taught
-#: everyone to ignore the check.
-_TOUCHED = (
-    "docs/architecture/implementation-status.md",
-    "docs/architecture/technology-inventory.md",
-    "docs/runbooks/_gate_probe.md",
-    "docs/decisions/README.md",
-    "platform/local/_probe_new/extra.yaml",
-    ".github/workflows/_gate_probe.yml",
-    "_gate_probe.bin",
-)
+#: Filled by the helpers below, never by hand. It replaced `_TOUCHED`, a
+#: hand-written tuple of seven paths, and QA-4 round eleven showed the tuple was
+#: already stale: removing the ADR restore from a test's `finally` left
+#: `docs/decisions/ADR-007-*.md` deleted on disk and the module PASSED, because
+#: that path was never listed — and neither were five others this module
+#: writes. A hand-written list of what a module touches goes stale exactly when
+#: someone adds a probe, which is when it is needed. The failure mode is now the
+#: opposite: a write that bypasses the helpers fails
+#: `test_every_repository_write_goes_through_a_recording_helper`.
+_RECORDED: dict[Path, bytes | None] = {}
+_CREATED_DIRS: set[Path] = set()
+
+
+def _record(path: Path) -> None:
+    """Remember what `path` held before this module first touched it."""
+    if path not in _RECORDED:
+        _RECORDED[path] = path.read_bytes() if path.is_file() else None
+
+
+def _residue(recorded: dict[Path, bytes | None], created: set[Path], root: Path = REPO_ROOT) -> list[str]:
+    """Every recorded path not back to its original bytes, and every created directory still present.
+
+    A pure function over the registry, so the guard can be watched failing
+    without breaking the repository to do it.
+    """
+    findings = []
+    for path, original in sorted(recorded.items()):
+        rel = path.relative_to(root).as_posix() if path.is_relative_to(root) else path.as_posix()
+        now = path.read_bytes() if path.is_file() else None
+        if original is None and now is not None:
+            findings.append(f"left behind: {rel}")
+        elif original is not None and now is None:
+            findings.append(f"deleted and not restored: {rel}")
+        elif original is not None and now != original:
+            findings.append(f"changed and not restored: {rel}")
+    for directory in sorted(created):
+        if directory.exists():
+            rel = directory.relative_to(root).as_posix() if directory.is_relative_to(root) else directory.as_posix()
+            findings.append(f"directory left behind: {rel}/")
+    return findings
 
 
 @pytest.fixture(scope="module", autouse=True)
 def _probe_residue() -> Iterator[None]:
-    """Assert this module restored what it mutates, and left no probe behind.
+    """Assert this module restored everything it wrote, and left no probe or directory behind.
 
     Two shapes, both seen in this repository: a derived document left carrying
     `MUTATED` because a `finally` did not run under SIGTERM, and a probe
@@ -85,11 +103,10 @@ def _probe_residue() -> Iterator[None]:
     would have staged it. The first is the worse one — the next run reads the
     mutation as the file's real content and fails about something else.
 
-    Bytes read before, never `git diff`: a dirty working tree is the normal
-    state of anyone editing, and a check that fails for reasons unrelated to
-    its subject is worse than absent. The same rule
-    `test_version_consistency.py::_probe_residue` follows, and the one the
-    session-scoped version broke by widening its subject to the whole tree.
+    Scoped to what THIS module recorded, never the whole tree: a dirty working
+    tree is the normal state of anyone editing, and the session-scoped guard
+    that diffed every untracked file blamed innocent sessions for each other's
+    probes (QA-4 round ten, P0).
 
     **The disposable worktree was attempted here and does not work. Measured,
     not assumed.** A `git worktree` gives real git metadata, so the gates'
@@ -116,50 +133,75 @@ def _probe_residue() -> Iterator[None]:
     mirror to carry a usable environment. Until one of those, this guard
     detects and that is the honest limit.
     """
-    watched = [REPO_ROOT / rel for rel in _TOUCHED]
-    before = {path: (path.read_bytes() if path.is_file() else None) for path in watched}
-
+    _RECORDED.clear()
+    _CREATED_DIRS.clear()
     yield
-
-    changed, leaked = [], []
-    for path, content in before.items():
-        rel = str(path.relative_to(REPO_ROOT))
-        now = path.read_bytes() if path.is_file() else None
-        if content is None and now is not None:
-            leaked.append(rel)
-        elif content is not None and now != content:
-            changed.append(rel)
-
-    assert not changed, (
-        f"this module did not restore {sorted(changed)}. A probe mutates a derived document to prove the "
-        f"staleness gate fires and restores it in a finally, so this means the finally did not run. The "
-        f"file is wrong on disk now, and the next run reads the mutation as its real content."
+    findings = _residue(_RECORDED, _CREATED_DIRS)
+    _RECORDED.clear()
+    _CREATED_DIRS.clear()
+    assert not findings, (
+        "this module did not restore what it wrote. Probes are written into the real repository on purpose "
+        "— the gates resolve their roots from their own location — and restored in a finally, so a finding "
+        "here means a finally did not run or a restore is wrong. The file is wrong on disk now, and "
+        "`git add -A` in the pre-commit protocol would stage it:\n  " + "\n  ".join(findings)
     )
-    assert not leaked, (
-        f"this module left {sorted(leaked)} behind. Probes are written into the real repository on purpose "
-        f"— the gate resolves its roots from its own location — and removed in a finally. `git add -A` in "
-        f"the pre-commit protocol would stage these."
-    )
+
+
+def _make_parents(path: Path) -> list[Path]:
+    """Create `path`'s missing parents and return them, deepest first, for removal."""
+    missing = []
+    parent = path.parent
+    while not parent.exists():
+        missing.append(parent)
+        parent = parent.parent
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _CREATED_DIRS.update(missing)
+    return missing
+
+
+def _remove_if_empty(directories: list[Path]) -> None:
+    for directory in directories:  # deepest first
+        if directory.is_dir() and not any(directory.iterdir()):
+            directory.rmdir()
 
 
 @contextmanager
-def temporarily(path: Path, content: str) -> Iterator[None]:
-    """Write ``content`` to ``path``, then restore whatever was there.
+def temporarily(path: Path, content: str | bytes) -> Iterator[None]:
+    """Write ``content`` to ``path``, then restore whatever was there — and remove directories it created.
 
     Restores on failure too. A test that leaves a repository dirty makes every
-    later test in the session suspect.
+    later test in the session suspect. Every write is recorded, so the module's
+    residue guard checks what was actually written rather than what someone
+    remembered to list.
     """
-    existed = path.exists()
-    original = path.read_text(encoding="utf-8") if existed else None
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+    _record(path)
+    existed = path.is_file()
+    original = path.read_bytes() if existed else None
+    created = _make_parents(path)
+    if isinstance(content, bytes):
+        path.write_bytes(content)
+    else:
+        path.write_text(content, encoding="utf-8")
     try:
         yield
     finally:
         if original is None:
             path.unlink(missing_ok=True)
         else:
-            path.write_text(original, encoding="utf-8")
+            path.write_bytes(original)
+        _remove_if_empty(created)
+
+
+@contextmanager
+def temporarily_absent(path: Path) -> Iterator[None]:
+    """Remove ``path`` for the duration, then put its exact bytes back."""
+    _record(path)
+    original = path.read_bytes()
+    path.unlink()
+    try:
+        yield
+    finally:
+        path.write_bytes(original)
 
 
 # --- every gate is runnable and currently green -----------------------------
@@ -286,15 +328,12 @@ def test_a_binary_file_does_not_crash_the_whole_gate() -> None:
     A URL is ASCII. Anything a lossy decode drops cannot have been one.
     """
     probe = REPO_ROOT / "_gate_probe.bin"
-    probe.write_bytes(b"\x95\xfe\xff binary \x00 content")
-    try:
+    with temporarily(probe, b"\x95\xfe\xff binary \x00 content"):
         # `--only C6`, not the whole gate. This asserts C6 survives a binary
         # file; asserting the gate's global exit status would additionally
         # assert that eight unrelated checks are green, and report THIS cause
         # when one of them is not.
         result = _run(GATES["doc-coherence"], "--only", "C6")
-    finally:
-        probe.unlink(missing_ok=True)
 
     assert "UnicodeDecodeError" not in result.stdout + result.stderr, (
         "an undecodable file crashed the coherence gate:\n" + result.stdout + result.stderr
@@ -567,8 +606,6 @@ def test_derived_documents_ignore_untracked_files(gate: str, tmp_path: Path) -> 
     # without its newest directories, which CI then calls stale. That is not a
     # hypothetical: it happened on the commit that added platform/kubernetes/.
     intruder = REPO_ROOT / "platform" / "terraform" / "gcp" / ".terraform" / "probe" / "artifact.tf"
-    intruder.parent.mkdir(parents=True, exist_ok=True)
-    intruder.write_text('resource "aws_s3_bucket" "probe" {}\nterraform {}\n', encoding="utf-8")
 
     document = {
         "implementation-status": REPO_ROOT / "docs" / "architecture" / "implementation-status.md",
@@ -576,11 +613,11 @@ def test_derived_documents_ignore_untracked_files(gate: str, tmp_path: Path) -> 
     }[gate]
     before = document.read_text(encoding="utf-8")
 
-    try:
+    # `.terraform/` may not exist on a fresh checkout; the helper removes every
+    # directory it had to create, which the hand-written `rmdir()` here did for
+    # `probe/` only — leaving `.terraform/` behind (QA-4 round eleven).
+    with temporarily(intruder, 'resource "aws_s3_bucket" "probe" {}\nterraform {}\n'):
         result = _run(GATES[gate], "--check")
-    finally:
-        intruder.unlink(missing_ok=True)
-        intruder.parent.rmdir()
 
     assert document.read_text(encoding="utf-8") == before, "the probe mutated the committed document"
     assert result.returncode == 0, f"an ignored file changed what {gate} derives:\n{result.stdout}"
@@ -607,13 +644,8 @@ def test_a_new_unignored_file_is_visible_to_the_status_generator() -> None:
     # and this test began passing vacuously — caught the same afternoon, by the
     # suite, one commit after the change that caused it.
     newcomer = REPO_ROOT / "platform" / "local" / "_probe_new" / "extra.yaml"
-    newcomer.parent.mkdir(parents=True, exist_ok=True)
-    newcomer.write_text("kind: ConfigMap\n", encoding="utf-8")
-    try:
+    with temporarily(newcomer, "kind: ConfigMap\n"):
         result = _run(GATES["implementation-status"], "--check")
-    finally:
-        newcomer.unlink(missing_ok=True)
-        newcomer.parent.rmdir()
 
     assert result.returncode == 1, (
         "a new unignored file was invisible to the generator; regenerating before "
@@ -635,18 +667,12 @@ def test_deleting_an_adr_with_its_index_line_is_caught() -> None:
     adr = next((REPO_ROOT / "docs" / "decisions").glob("ADR-007-*.md"))
     index = REPO_ROOT / "docs" / "decisions" / "README.md"
 
-    adr_text = adr.read_text(encoding="utf-8")
     index_text = index.read_text(encoding="utf-8")
     trimmed = "\n".join(line for line in index_text.splitlines() if "ADR-007" not in line) + "\n"
     assert trimmed != index_text, "the probe did not apply — ADR-007 is not in the index"
 
-    adr.unlink()
-    index.write_text(trimmed, encoding="utf-8")
-    try:
+    with temporarily_absent(adr), temporarily(index, trimmed):
         result = _run(GATES["doc-coherence"])
-    finally:
-        adr.write_text(adr_text, encoding="utf-8")
-        index.write_text(index_text, encoding="utf-8")
 
     assert result.returncode == 1
     assert "STOP operation" in result.stdout
@@ -771,3 +797,102 @@ def test_only_runs_exactly_the_check_it_names() -> None:
     assert result.returncode == 0, result.stdout
     reported = {line.split("]")[0].split("[")[-1] for line in result.stdout.splitlines() if "[C" in line}
     assert reported == {"C1"}, f"--only C1 also reported {sorted(reported - {'C1'})}"
+
+
+# --- the residue guard, watched failing -------------------------------------
+
+
+def test_the_residue_guard_reports_every_shape_of_unrestored_write(tmp_path: Path) -> None:
+    """Each finding the guard exists for, produced against a temporary tree.
+
+    The ADR case is the one round eleven reproduced: a file recorded with its
+    bytes and then deleted. The hand-written tuple could not see it because the
+    path was never listed.
+    """
+    leaked, changed, deleted, kept = (tmp_path / name for name in ("leaked", "changed", "deleted", "kept"))
+    changed.write_bytes(b"original")
+    deleted.write_bytes(b"an accepted decision")
+    kept.write_bytes(b"same")
+    recorded: dict[Path, bytes | None] = {
+        leaked: None,
+        changed: b"original",
+        deleted: b"an accepted decision",
+        kept: b"same",
+    }
+    leaked.write_bytes(b"probe")
+    changed.write_bytes(b"MUTATED")
+    deleted.unlink()
+    stray = tmp_path / "created" / "nested"
+    stray.mkdir(parents=True)
+
+    findings = _residue(recorded, {tmp_path / "created", stray}, root=tmp_path)
+
+    assert findings == [
+        "changed and not restored: changed",
+        "deleted and not restored: deleted",
+        "left behind: leaked",
+        "directory left behind: created/",
+        "directory left behind: created/nested/",
+    ], findings
+
+
+def test_the_helpers_leave_nothing_behind_including_directories(tmp_path: Path) -> None:
+    """The directory half is what the hand-written `rmdir()` calls got wrong."""
+    target = tmp_path / "a" / "b" / "probe.txt"
+    before = dict(_RECORDED), set(_CREATED_DIRS)
+    try:
+        with temporarily(target, "probe"):
+            assert target.read_text(encoding="utf-8") == "probe"
+        assert not (tmp_path / "a").exists(), "a directory the helper created was left behind"
+
+        existing = tmp_path / "existing.txt"
+        existing.write_bytes(b"\x00original\xff")
+        with temporarily_absent(existing):
+            assert not existing.exists()
+        assert existing.read_bytes() == b"\x00original\xff"
+        assert _residue(_RECORDED, _CREATED_DIRS, root=tmp_path) == []
+    finally:
+        _RECORDED.clear()
+        _RECORDED.update(before[0])
+        _CREATED_DIRS.clear()
+        _CREATED_DIRS.update(before[1])
+
+
+#: Receivers of a write in this module that are NOT the repository. Each is a
+#: temporary copy; a new entry here is a claim that a write cannot reach the
+#: tree, and should be read as one.
+_WRITES_OUTSIDE_THE_REPOSITORY = frozenset({"copy", "existing", "leaked", "changed", "deleted", "kept", "stray"})
+_HELPERS = frozenset({"temporarily", "temporarily_absent", "_make_parents", "_remove_if_empty"})
+
+
+def test_every_repository_write_goes_through_a_recording_helper() -> None:
+    """The inversion that makes the registry trustworthy: an unrecorded write fails HERE.
+
+    With a hand-written list, a new probe was unwatched until someone noticed.
+    With a registry, a new probe is watched only if it uses a helper — so every
+    call that writes, deletes or creates, outside the helpers themselves, must
+    be on a receiver known not to be the repository.
+    """
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    mutating = {"write_text", "write_bytes", "unlink", "rmdir", "mkdir", "rename", "replace", "touch"}
+    offenders = []
+    for function in (node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)):
+        if function.name in _HELPERS:
+            continue
+        for call in (node for node in ast.walk(function) if isinstance(node, ast.Call)):
+            target = call.func
+            if not (isinstance(target, ast.Attribute) and target.attr in mutating):
+                continue
+            # `Path.replace(target)` takes one argument; `str.replace(old, new[, count])`
+            # takes two or more. Deciding by the receiver's NAME read
+            # `result.stdout.replace("kind of", "")` as a filesystem write.
+            if target.attr == "replace" and len(call.args) >= 2:
+                continue
+            receiver = target.value
+            name = receiver.id if isinstance(receiver, ast.Name) else ast.unparse(receiver)
+            if name not in _WRITES_OUTSIDE_THE_REPOSITORY:
+                offenders.append(f"{function.name}:{call.lineno} {name}.{target.attr}()")
+    assert not offenders, (
+        "a write bypasses temporarily()/temporarily_absent(), so the residue guard cannot see it: "
+        + ", ".join(offenders)
+    )

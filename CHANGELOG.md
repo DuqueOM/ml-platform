@@ -263,6 +263,26 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Fixed
 
+- **The residue guard watched a hand-written list, and the list was already
+  stale.** QA-4 round eleven, P2. `tests/test_gate_scripts.py` checked that it
+  restored seven named paths. Removing the ADR restore from a test's `finally`
+  left `docs/decisions/ADR-007-*.md` deleted on disk and the module passed —
+  that path was never listed, and neither were five others the module writes.
+  A list of what a module touches goes stale exactly when a probe is added,
+  which is when it is needed.
+
+  The helpers now record every write: `temporarily()` stores each path's bytes
+  before the first write and removes every directory it had to create, and a
+  new `temporarily_absent()` covers deletion. The four probes that wrote
+  directly now go through them. That also fixes a leak the hand-written
+  cleanup had: it removed `probe/` and left `.terraform/` behind. Three tests
+  guard the guard: `_residue()` as a pure function against every shape of
+  unrestored write, the helpers leaving no directory behind, and an AST check
+  that fails on any write in the module that bypasses them — so an unrecorded
+  probe is now a red test rather than an unwatched path. The auditor's
+  reproduction was re-run in a throwaway worktree with the restore sabotaged:
+  the module fails naming the deleted ADR.
+
 - **The serving-seam gate made a promise it could not keep, read its ADR from
   the wrong place, and had no test.** QA-4 round eleven, P2 and P3, in P14.
 
