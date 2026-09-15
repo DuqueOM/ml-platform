@@ -28,15 +28,12 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   delimiters therefore does not render oddly; it aborts `copier copy`, and
   whoever ran the generator gets nothing at all.
 
-  **This is not what the render test already covers.**
-  `tests/test_project_generator.py` renders the payload for real, which is the
-  stronger check on behaviour and remains the authority on it. It renders **one
-  answer set** — the tabular kind — while `copier.yml` offers four. A payload
-  file that renders under tabular and breaks under the LLM or agent kind passes
-  all thirteen tests and fails in an adopter's terminal, which is the worst
-  place for it to surface and the person least able to diagnose it. Parsing is
-  answer-independent, so it covers all four at once, and it costs milliseconds
-  rather than a render — which is why it can also run in pre-commit.
+  **What it adds to the render test — corrected, see Fixed.**
+  `tests/test_project_generator.py` renders the payload for real and remains
+  the authority on behaviour. A render exercises only the branches its answers
+  select; a parse examines every branch of every file for any answers, and costs
+  milliseconds rather than a render — which is why it can also run in
+  pre-commit.
 
   **Three deliberate departures from upstream, recorded rather than silent.**
   Path *segments* are parsed as well as file bodies: copier renders those too,
@@ -265,6 +262,23 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   151,891-row panel, so the correction added history rather than rewriting it.
 
 ### Fixed
+
+- **The render-safety gate was justified by a claim that was false, and could
+  pass over nothing.** Three findings from QA-4 round eleven, all in P15.
+
+  Its justification — in the script, the gate row, the parity ledger and this
+  CHANGELOG — said `tests/test_project_generator.py` renders a single answer
+  set. It renders three of the four project kinds; the claim came from a grep
+  that found the default `ANSWERS` and missed the parametrize overriding
+  `project_kind`. The kind it really omitted, `agent`, is now rendered, and the
+  four documents now make the argument that survives: a parse covers every
+  branch for any answers, a render only the branches its answers select.
+
+  It printed `OK — 0 file(s)` with exit 0 for an empty render root, and for a
+  checkout living under any directory named like a cache, because `SKIP_DIRS`
+  was matched against absolute path components. A render root with no payload
+  file is now a setup error, and skip rules apply only inside the root. Both
+  are reproduced in `tests/test_template_render_safety.py`.
 
 - **Every cloud overlay denied DNS, and the only assertion checked a name.**
   All seven kustomizations — and the base — used `commonLabels`, which adds

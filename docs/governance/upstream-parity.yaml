@@ -492,23 +492,21 @@ artifacts:
   - path: scripts/check_template_render_safety.py
     status: adopted
     reason: >-
-      Adopted, and it is the one of these nine that landed on a real gap. `copier.yml` here sets
-      `_templates_suffix: ""`, exactly the condition upstream wrote it for: EVERY file under the render root is a
-      Jinja template, so any file that happens to contain Jinja delimiters aborts `copier copy` entirely rather
-      than rendering oddly. This repository does have a render test — tests/test_project_generator.py, thirteen
-      tests — and it renders for real, which is stronger than static parsing in one respect and weaker in the one
-      that matters here: it renders a single answer set, the tabular kind, while copier.yml offers four. A payload
-      file that renders under tabular and breaks under the LLM or agent kind passes the whole suite and fails in an
-      adopter's `copier copy`, which is the person least able to diagnose it. Static parsing is answer-independent,
-      so it covers all four at once. Ported with three deliberate changes, each recorded rather than silent. (1)
-      Path SEGMENTS are parsed as well as file bodies: copier renders those too, and this render root actually has
-      one, `src/{@ project_slug @}/`, which upstream's version would not have examined. (2) The one function was
-      decomposed, and a `--root` flag added, so each defect class is watched failing against a temporary tree — the
-      payload is read by three other checks and by a concurrent render test, and breaking it to prove a gate works
-      is the shared-state defect this repository has now found four times. (3) jinja2 moved from a transitive of
-      the orchestration extra to a declared dependency, because the gate would otherwise have worked on a machine
-      that had run `uv sync --all-extras` and raised ImportError on a base sync. Wired as P15 in quality-gates.md,
-      in `make verify`, in CI, in pre-commit on the render root, and in the bare-environment sandbox.
+      Adopted, and it lands on a real gap. `copier.yml` here sets `_templates_suffix: ""`, exactly the condition
+      upstream wrote it for: EVERY file under the render root is a Jinja template, so any file that happens to
+      contain Jinja delimiters aborts `copier copy` entirely rather than rendering oddly. This entry first argued
+      that tests/test_project_generator.py renders a single answer set. That was false — it renders three of the
+      four project kinds and omitted only agent, which it now renders too — and QA-4 round eleven caught it after
+      the claim had been copied into three other documents. The case that survives: a render exercises only the
+      branches its answers select, while a parse examines every branch of every file for any answers, including
+      values nobody enumerates, and costs milliseconds, so it runs in pre-commit on every payload edit. Ported with
+      three deliberate changes. (1) Path SEGMENTS are parsed as well as file bodies, walked separately from the
+      parsed files so a malformed directory holding only binaries is still reported; this render root has one,
+      `src/{@ project_slug @}/`. (2) The function was decomposed and `--root` added, so each defect class is watched
+      failing against a temporary tree rather than by breaking a payload other checks read. (3) jinja2 is a declared
+      dependency rather than a transitive of the orchestration extra. Round eleven also found it could print OK over
+      zero files — an empty root, or a checkout under a directory named like a cache — and both are now failures.
+      Wired as P15, in make verify, in CI, in pre-commit and in the bare-environment sandbox.
   - path: scripts/resolve_python_dependencies.py
     status: rejected
     reason: >-

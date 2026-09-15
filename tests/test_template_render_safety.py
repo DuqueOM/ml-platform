@@ -196,3 +196,25 @@ def test_a_configuration_declaring_no_render_root_is_a_setup_error() -> None:
     """`_subdirectory` is what points this gate at anything at all."""
     with pytest.raises(ValueError, match="_subdirectory"):
         render_root({"_templates_suffix": ""})
+
+
+# --- the gate must not pass by examining nothing ----------------------------
+
+
+def test_an_empty_render_root_is_a_setup_error_not_a_pass(tmp_path: Path) -> None:
+    """QA-4 round eleven: `--root <empty>` printed `OK — 0 file(s)` with rc=0."""
+    result = _run("--root", str(tmp_path))
+    assert result.returncode == 2, result.stdout
+    assert "nothing was checked" in result.stdout
+
+
+def test_a_checkout_under_a_cache_named_directory_is_still_checked(tmp_path: Path) -> None:
+    """Skip rules apply INSIDE the render root, not to wherever the repository lives.
+
+    Round eleven copied the repository under a directory named `.mypy_cache/`
+    with a broken template inside, and the gate reported OK over zero files:
+    `SKIP_DIRS` was matched against absolute path components.
+    """
+    root = _tree(tmp_path / ".mypy_cache" / "payload", {"README.md": "{@ unterminated\n"})
+    assert payload_files(root), "the file was skipped because of a directory ABOVE the render root"
+    assert len(_findings(root)) == 1

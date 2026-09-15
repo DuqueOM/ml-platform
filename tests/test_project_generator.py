@@ -169,7 +169,16 @@ def test_leakage_gate_is_always_present(rendered: Path) -> None:
 
 @pytest.mark.parametrize(
     ("kind", "expected_gate"),
-    [("tabular", "fairness_disparate_impact"), ("llm", "cost_per_request"), ("deep-learning", "inference_latency")],
+    [
+        ("tabular", "fairness_disparate_impact"),
+        ("llm", "cost_per_request"),
+        ("deep-learning", "inference_latency"),
+        # `agent` was the one kind copier.yml offers that nothing rendered (QA-4
+        # round eleven). It shares every conditional branch with `llm` in
+        # evals/gates.yaml today, which is exactly when a branch added for
+        # agents alone would go unrendered.
+        ("agent", "cost_per_request"),
+    ],
 )
 def test_gates_are_specific_to_the_project_kind(tmp_path: Path, kind: str, expected_gate: str) -> None:
     """A generic gate set is one nobody believes.

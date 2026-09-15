@@ -19,15 +19,22 @@ array-length syntax. Both were caught by its full render job in CI, which is
 the right place for the BEHAVIOUR to be checked and the wrong place to discover
 a typo.
 
-Why it lands on a real gap here rather than duplicating what we have
---------------------------------------------------------------------
-`tests/test_project_generator.py` renders the payload for real, which is
-stronger than parsing in one respect and weaker in the one this addresses: it
-renders **a single answer set**, `project_kind: "tabular"`, while `copier.yml`
-offers four kinds. A payload file that renders under `tabular` and breaks under
-`llm` or `agent` passes the whole suite and fails in the adopter's `copier
-copy` — the person least able to diagnose it. Parsing is answer-independent, so
-it covers every kind at once, and it costs milliseconds rather than a render.
+What it adds to the render test, stated after getting it wrong once
+------------------------------------------------------------------
+`tests/test_project_generator.py` renders the payload for real, which is the
+stronger check on behaviour. When this gate landed, its justification said that
+test rendered ONE answer set. That was false: a grep found the default
+`ANSWERS` and missed the parametrize that overrides `project_kind`, and the
+claim was repeated in four places before QA-4 round eleven caught it. The
+render test covered `tabular`, `llm` and `deep-learning`. It omitted `agent`,
+which it now renders as well.
+
+So the case for parsing is not the kinds the render test forgot. A render
+exercises only the branches its answers select; a parse examines every branch
+of every file whatever the answers are — including answer values nobody
+enumerates, like a dataset key or an owner string — and it costs milliseconds,
+which is what lets it run in pre-commit on every payload edit rather than in a
+job measured in minutes.
 
 The two checks are complements and neither subsumes the other. Parsing cannot
 catch an undefined variable or a wrong answers file; the render test remains
@@ -55,7 +62,8 @@ Exit codes
 ----------
 - 0: every file and every path segment parses.
 - 1: at least one is not a valid Copier template.
-- 2: setup error (`copier.yml` unreadable or declaring no render root).
+- 2: setup error (`copier.yml` unreadable, no render root, or a render root
+  holding no payload file — a gate that examined nothing has not passed).
 """
 
 from __future__ import annotations
@@ -148,13 +156,25 @@ def environment(config: dict[str, object]) -> Environment:
     )
 
 
+def _in_skipped_dir(path: Path, root: Path) -> bool:
+    """Whether `path` sits in a cache directory INSIDE the render root.
+
+    Matched against the path relative to the root, never the absolute one.
+    Matching absolute components meant a checkout that happened to live under
+    any directory named `.mypy_cache` — or `.git`, which a worktree layout can
+    produce — skipped every file, and the gate printed OK over zero files
+    (QA-4 round eleven).
+    """
+    return any(part in SKIP_DIRS for part in path.relative_to(root).parts)
+
+
 def payload_files(root: Path) -> list[Path]:
     """Every file under the render root that Copier renders as text."""
     found = []
     for path in sorted(root.rglob("*")):
         if not path.is_file():
             continue
-        if any(part in SKIP_DIRS for part in path.parts):
+        if _in_skipped_dir(path, root):
             continue
         if path.suffix.lower() in SKIP_SUFFIXES:
             continue
@@ -184,7 +204,7 @@ def path_segments(root: Path) -> dict[str, Path]:
     """
     segments: dict[str, Path] = {}
     for path in sorted(root.rglob("*")):
-        if any(part in SKIP_DIRS for part in path.parts):
+        if _in_skipped_dir(path, root):
             continue
         for part in path.relative_to(root).parts:
             segments.setdefault(part, path)
@@ -239,8 +259,15 @@ def main() -> int:
         print(f"[render-safety] SETUP ERROR — render root {_relative(root)} does not exist")
         return 2
 
-    failures = parse_failures(root, env)
     checked = len(payload_files(root))
+    if checked == 0:
+        # A render root with nothing in it has no unparseable file, so the
+        # loop below would report OK. That is the answer to a question nobody
+        # asked: the generator has no payload, or the skip rules swallowed it.
+        print(f"[render-safety] SETUP ERROR — no payload file under {_relative(root)}; nothing was checked")
+        return 2
+
+    failures = parse_failures(root, env)
 
     if failures:
         print("[render-safety] FAILED\n")
