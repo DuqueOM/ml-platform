@@ -4,10 +4,12 @@
 runs while the cloud work is deliberately paused (constraint S3).
 
 One thing these tests deliberately do NOT claim: that the NetworkPolicies
-work. The local cluster runs kindnet, which accepts a NetworkPolicy and
-enforces nothing — see `test_the_local_cluster_cannot_validate_networkpolicies`.
-Applying one here and watching it succeed would be the most convincing kind of
-false evidence, because the API server reports success.
+work. Rendering proves intent — selectors, peers, ports — and nothing about a
+packet being dropped. This paragraph used to add that kind cannot provide that
+evidence because kindnet enforces nothing; QA-4 round eleven showed kindnetd
+enforcing a default-deny on a live kind cluster. Local enforcement evidence is
+obtainable and not yet collected — see
+`docs/governance/remediation-work-order.md`, round eleven.
 """
 
 from __future__ import annotations
@@ -208,16 +210,17 @@ def test_nothing_prunes_automatically() -> None:
 
 @pytest.mark.local
 def test_the_local_cluster_cannot_validate_networkpolicies() -> None:
-    """States what local validation CANNOT prove, and checks the reason holds.
+    """Asserts the local CNI is kindnet — and nothing more, which is the open item.
 
-    kind's default CNI is kindnet, which has no NetworkPolicy implementation:
-    the API server accepts the object and nothing enforces it. Applying a
-    default-deny here and watching traffic still flow — or watching the apply
-    succeed and concluding it works — is the most convincing false evidence
-    available, because every command reports success.
-
-    If this ever fails, kind has gained a policy-capable CNI and the local
-    stack CAN start proving something it currently cannot.
+    Its docstring claimed kindnet has no NetworkPolicy implementation, so a
+    default-deny applied locally would enforce nothing. QA-4 round eleven
+    disproved that on a live kind v0.30 cluster: kindnetd timed DNS out under
+    the rendered policies. What this test should become is an enforcement
+    probe — DNS allowed under the policies as written, denied when the peer
+    selector is wrong — and that waits on a running cluster and on the
+    namespace-label decision recorded in the remediation work order, round
+    eleven. Until then it is kept, renamed in intent rather than in name so
+    the history of the claim stays findable.
     """
     result = subprocess.run(
         ["kubectl", "get", "daemonset", "-n", "kube-system", "-o", "name"],
@@ -227,7 +230,7 @@ def test_the_local_cluster_cannot_validate_networkpolicies() -> None:
         pytest.skip("no cluster reachable")
 
     assert "kindnet" in result.stdout, (
-        "the CNI is no longer kindnet; NetworkPolicy enforcement may now be testable locally"
+        "the CNI is no longer kindnet; the enforcement probe planned as R11-2 must be re-validated against it"
     )
 
 

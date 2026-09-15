@@ -263,6 +263,25 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Fixed
 
+- **Five documents stated closed gaps as open, or a possible check as
+  impossible.** QA-4 round eleven, P2 and P3. `docs/COMPLIANCE_MAPPING.md`
+  reported the cloud overlays as carrying no Pod Security label, the image as
+  `:latest` and the policies README as describing Kyverno — all three closed.
+  It and three other places — the policies README, the local overlay's comment
+  and the manifest tests' docstrings — said kind cannot enforce NetworkPolicy,
+  which round eleven disproved on a live cluster. The policies README omitted
+  the egress policy beside it. The audit brief listed five shipped Phase 1
+  components as not done, restated a figure its own rule says not to restate,
+  and its round-eleven draft omitted open findings.
+
+  All are corrected, and what remains open is no longer implicit:
+  `docs/governance/remediation-work-order.md` gains a *Round eleven* section
+  giving each open item its mode, what it waits on and its closing condition —
+  the namespace-label contract, local enforcement evidence, the artifact the
+  container cannot import, the hand-written serving seam, the model card, an
+  unread configuration field and three small items. W-3 and W-4 are marked done
+  with the commits that did them.
+
 - **The egress test could not fail, and it checked the wrong port.** QA-4
   rounds ten and eleven, P2. `_permits` matched a substring of the serialised
   rule, so the metadata server's `ipBlock` satisfied the HTTPS assertion:
