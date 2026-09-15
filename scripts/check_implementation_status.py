@@ -651,12 +651,13 @@ def _verify(command: str) -> bool:
     # COMPONENTS above, never derived from input.
     #
     # `UV_NO_SYNC=1` was added when these ran CONCURRENTLY, against a write
-    # race on the shared virtualenv. The pool is gone (d0744e0), so that race
-    # cannot occur — this comment said otherwise until QA-4 round eleven. It is
-    # kept for the reason that survives: a verification command re-syncing the
-    # environment would mutate the interpreter this generator is itself running
-    # in, halfway through producing a document from it. Every caller reaches
-    # this script through `uv run`, so the environment is already synced.
+    # race on the shared virtualenv. The pool is gone (commit "perf(status):
+    # remove the verification pool"), so that race cannot occur — this comment
+    # said otherwise until QA-4 round eleven. It is kept for the reason that
+    # survives: a verification command re-syncing the environment would mutate
+    # the interpreter this generator is itself running in, halfway through
+    # producing a document from it. Every caller reaches this script through
+    # `uv run`, so the environment is already synced.
     environment = {**os.environ, "UV_NO_SYNC": "1"}
     # Popen in its own session rather than `subprocess.run(..., timeout=)`,
     # because on expiry `run` kills only the SHELL. Measured on this machine

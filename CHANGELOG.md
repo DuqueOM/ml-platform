@@ -317,7 +317,7 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   timed out. `_verify` now runs each command in its own process group and
   kills the group; the test demonstrates both halves — `run` leaving a
   survivor, `_verify` leaving none. Its comments no longer describe the
-  verification pool removed in d0744e0 as current.
+  verification pool removed in *perf(status): remove the verification pool, which cost 37% and bought nothing* as current.
 
   Every CI job carries `timeout-minutes`, sized from the last five green runs
   rather than guessed: 75 for repository invariants (47.4 min measured at its

@@ -385,33 +385,37 @@ avoid, and it has already occurred here once.
 ## 11. Since the previous audit — round twelve's starting point
 
 Round eleven audited `0fe7343` on 2026-09-14 and reported **1 P1, 5 P2, 6 P3**.
+That tree was rebased onto `main` as `8897281` before landing, and the marker in
+`AGENTS.md` follows whatever it lands as.
 It was handed this section as a staged, uncommitted draft, and found the draft
 itself wrong in three places: it omitted two open round-ten findings, reported
 a closed Pod Security gap as open by leaving it out, and said no CI job set
 `timeout-minutes` when one did. The draft never landed; this replaces it.
 
-List what changed rather than trusting this paragraph:
+List what changed rather than trusting this paragraph. The range is read from
+the marker rather than written here, because a squash or a rebase rewrites
+the commit, and a SHA restated in a document goes stale when it does:
 
 ```bash
-git log --no-merges --oneline 0fe7343..HEAD
+git log --no-merges --oneline "$(grep -oE 'Last independent audit: [0-9-]+ \(([0-9a-f]+)\)' AGENTS.md | grep -oE '[0-9a-f]{7,}')..HEAD"
 ```
 
 ### What round eleven found, and where each one went
 
 | Finding | State |
 | --- | --- |
-| **P1** — `commonLabels` rewrote the DNS policy's peer selector; DNS denied in all six cloud overlays, proven on a live cluster | Closed, `8adfa16` |
+| **P1** — `commonLabels` rewrote the DNS policy's peer selector; DNS denied in all six cloud overlays, proven on a live cluster | Closed, *fix(k8s): stop commonLabels rewriting the DNS policy's peer selector* |
 | **P2** — kind does enforce NetworkPolicy; four documents said it could not | Claim corrected everywhere it appeared; the enforcement evidence itself is open as **R11-2** |
-| **P2** — the residue guard's hand-written list was stale; a deleted ADR passed | Closed, `988ea72` |
+| **P2** — the residue guard's hand-written list was stale; a deleted ADR passed | Closed, *fix(tests): record what the gate probes write instead of listing it by hand* |
 | **P2** — the container cannot import the model artifact at all | Open as **R11-3**, a CONSULT decision under ADR-008 |
-| **P2** — P14 could never report "a fourth straddle", and had no test | Closed, `ba9d3f4`; the hand-written `SEAM` is **R11-4** |
+| **P2** — P14 could never report "a fourth straddle", and had no test | Closed, *fix(gates): P14 promised a red it could not give and read its ADR wrongly*; the hand-written `SEAM` is **R11-4** |
 | **P2** — the brief's delta omitted open findings | This section |
-| **P3** — the status document was stale at HEAD | Closed in the round's record, `a9fabcd` |
-| **P3** — P15 justified by a false claim; OK over zero files | Closed, `6c738cf` |
-| **P3** — P14's ADR status regex read the whole document | Closed, `ba9d3f4` |
-| **P3** — ADR-008 stated three facts the repository contradicts | Closed, `ba9d3f4` |
-| **P3** — 1 of 25 subprocesses bounded; CI jobs unbounded | Closed, `fe51baa` |
-| **P3** — round ten's remaining P3s | Policies README and compliance mapping corrected; the egress assertion closed in `392a544`; namespace labels open as **R11-1**; model card open as **R11-5** |
+| **P3** — the status document was stale at HEAD | Closed in the round's record, *chore(governance): record QA-4 round eleven* |
+| **P3** — P15 justified by a false claim; OK over zero files | Closed, *fix(gates): P15 was justified by a false claim and could pass over nothing* |
+| **P3** — P14's ADR status regex read the whole document | Closed, *fix(gates): P14 promised a red it could not give and read its ADR wrongly* |
+| **P3** — ADR-008 stated three facts the repository contradicts | Closed, *fix(gates): P14 promised a red it could not give and read its ADR wrongly* |
+| **P3** — 1 of 25 subprocesses bounded; CI jobs unbounded | Closed, *fix(gates): bound every subprocess and every CI job* |
+| **P3** — round ten's remaining P3s | Policies README and compliance mapping corrected; the egress assertion closed in *fix(k8s): the egress test could not fail, and asserted the wrong metadata port*; namespace labels open as **R11-1**; model card open as **R11-5** |
 
 Everything open carries a mode, what it waits on, and its closing condition in
 `docs/governance/remediation-work-order.md` under *Round eleven*. Finding one of

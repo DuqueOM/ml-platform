@@ -169,8 +169,8 @@ repository. Both are authoring work needing no cluster.
 
 ### W-3 — Give the pod the egress it needs, including the metadata server
 
-> **Status: done** on `fix/c6-ok-above-name-failure` — `ba13995` added the policy; `8adfa16` fixed the rendered DNS
-> selector (round eleven P1); `392a544` made the egress assertion able to fail and dropped the unused 443 on the
+> **Status: done** on `fix/c6-ok-above-name-failure` — *feat(k8s): give the serving pod the egress it needs, including the metadata server* added the policy; *fix(k8s): stop commonLabels rewriting the DNS policy's peer selector* fixed the rendered DNS
+> selector (round eleven P1); *fix(k8s): the egress test could not fail, and asserted the wrong metadata port* made the egress assertion able to fail and dropped the unused 443 on the
 > metadata server. The `monitoring` namespace selector it relies on is round-eleven item R11-1.
 
 **Mode**: AUTO · **Closes**: F-04 · **Size**: ~2h
@@ -216,7 +216,7 @@ across all seven overlays.
 
 ### W-4 — Gate the version straddle across the serving seam
 
-> **Status: done** on `fix/c6-ok-above-name-failure` — `9dff7d1` added P14; `ba9d3f4` gave it tests, scoped its ADR
+> **Status: done** on `fix/c6-ok-above-name-failure` — *feat(gates): gate the version straddle across the serving seam* added P14; *fix(gates): P14 promised a red it could not give and read its ADR wrongly* gave it tests, scoped its ADR
 > status check to the header, and withdrew a promise it could not keep. What it cannot see is R11-3 and R11-4.
 
 **Mode**: AUTO · **Closes**: the unblocked half of F-06 · **Size**: ~2h
@@ -507,12 +507,15 @@ a round with a human in it.
 
 ## Round eleven — what stays open, and why each one waits
 
-QA-4 round eleven audited `0fe7343` and reported 1 P1, 5 P2 and 6 P3. What
-closed, on `fix/c6-ok-above-name-failure`: the P1 (`8adfa16`), the render-safety
-gate's false justification and zero-file pass (`6c738cf`), the serving-seam
-gate's untested paths and ADR parsing (`ba9d3f4`), the hand-written residue
-list (`988ea72`), unbounded subprocesses and CI jobs (`fe51baa`), the egress
-assertion (`392a544`), and the compliance mapping, policies README, local
+QA-4 round eleven audited `0fe7343` — rebased onto `main` as `8897281` — and
+reported 1 P1, 5 P2 and 6 P3. Commits below are cited by subject, not SHA:
+this repository merges by squash, which rewrites every SHA on a branch, and
+ten SHAs this section first cited stopped resolving at the rebase before the
+merge had even happened. What closed, on `fix/c6-ok-above-name-failure`: the P1 (*fix(k8s): stop commonLabels rewriting the DNS policy's peer selector*), the render-safety
+gate's false justification and zero-file pass (*fix(gates): P15 was justified by a false claim and could pass over nothing*), the serving-seam
+gate's untested paths and ADR parsing (*fix(gates): P14 promised a red it could not give and read its ADR wrongly*), the hand-written residue
+list (*fix(tests): record what the gate probes write instead of listing it by hand*), unbounded subprocesses and CI jobs (*fix(gates): bound every subprocess and every CI job*), the egress
+assertion (*fix(k8s): the egress test could not fail, and asserted the wrong metadata port*), and the compliance mapping, policies README, local
 overlay comment and audit brief, which stated closed gaps as open or open ones
 as impossible.
 
