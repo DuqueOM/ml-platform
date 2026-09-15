@@ -29,7 +29,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         # The interpreter is pinned by .python-version, not left to whatever
         # the runner image ships. Unpinned, CI resolved 3.12 while local
         # resolved 3.11, and mypy — told to parse as 3.11 — choked on numpy
@@ -351,7 +351,7 @@ jobs:
         # no credentials, so it runs while the cloud work is deliberately
         # paused. soft_fail on the FIRST run only — an unread wall of findings
         # is a gate people switch off, and the triage is a separate commit.
-        uses: bridgecrewio/checkov-action@5659ddea96102e16d8f221b3d8402453c0b1c150 # v12
+        uses: bridgecrewio/checkov-action@a8664e3a0549367977f0cda990a34311835c87c0 # v12
         with:
           directory: platform/
           framework: terraform,kubernetes
