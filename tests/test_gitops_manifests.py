@@ -542,3 +542,82 @@ def test_broad_https_egress_cannot_reach_back_into_the_cluster(cloud: str, env: 
                     f"excluding {sorted(missing)}, so it reaches the VPC and the cluster as well as "
                     f"the internet"
                 )
+
+
+# --- selectors are not rewritten ----------------------------------------------
+#
+# QA-4 round ten found, and round eleven proved on a live cluster, that every
+# cloud overlay denied DNS. `commonLabels` rewrites selectors as well as labels,
+# so allow-dns's peer selector `{k8s-app: kube-dns}` rendered as
+# `{cloud, environment, k8s-app}` — a selector no CoreDNS pod carries. The only
+# existing assertion checked that a policy NAMED allow-dns was present, which
+# it was.
+
+_ALL_OVERLAYS = sorted(p.name for p in OVERLAYS.iterdir() if (p / "kustomization.yaml").is_file())
+
+
+def test_no_kustomization_uses_common_labels() -> None:
+    """The mechanism, banned — so the next policy cannot be broken the same way.
+
+    Checked as parsed YAML rather than grep, because the explanatory comment in
+    each kustomization names the key it replaced.
+    """
+    offenders = [
+        path.relative_to(REPO_ROOT).as_posix()
+        for path in sorted((REPO_ROOT / "platform").rglob("kustomization.yaml"))
+        if "commonLabels" in (yaml.safe_load(path.read_text(encoding="utf-8")) or {})
+    ]
+    assert not offenders, (
+        f"commonLabels rewrites selectors it does not own, including NetworkPolicy peers: {offenders}. "
+        f"Use `labels:` with includeSelectors: false"
+    )
+
+
+@pytest.mark.parametrize("cloud", CLOUDS)
+@pytest.mark.parametrize("env", ENVIRONMENTS)
+def test_dns_egress_selects_the_cluster_dns_pods_exactly(cloud: str, env: str) -> None:
+    """Exact equality, not containment: an extra key is precisely the defect."""
+    documents = _build(OVERLAYS / f"{cloud}-{env}")
+    policy = next((d for d in documents if d["kind"] == "NetworkPolicy" and d["metadata"]["name"] == "allow-dns"), None)
+    assert policy is not None, f"{cloud}-{env}: allow-dns is missing"
+    peers = [peer for rule in policy["spec"]["egress"] for peer in rule.get("to", [])]
+    assert peers, f"{cloud}-{env}: allow-dns names no peer"
+    for peer in peers:
+        assert peer.get("podSelector") == {"matchLabels": {"k8s-app": "kube-dns"}}, (
+            f"{cloud}-{env}: allow-dns selects {peer.get('podSelector')}, which no CoreDNS pod carries — "
+            f"DNS is denied under default-deny"
+        )
+        assert peer.get("namespaceSelector") == {"matchLabels": {"kubernetes.io/metadata.name": "kube-system"}}
+
+
+@pytest.mark.parametrize("overlay", _ALL_OVERLAYS)
+def test_every_selector_in_the_namespace_matches_the_pod(overlay: str) -> None:
+    """The opposite failure: a selector that matches NOTHING renders and applies cleanly.
+
+    A Service with no endpoints, a PDB protecting no pod, and a NetworkPolicy
+    whose podSelector matches no pod all report success on apply. Each is
+    checked against the labels the Deployment actually stamps on its pods.
+    """
+    documents = _build(OVERLAYS / overlay)
+    deployment = next(d for d in documents if d["kind"] == "Deployment")
+    pod_labels = deployment["spec"]["template"]["metadata"]["labels"]
+
+    def _selects_the_pod(selector: dict[str, str]) -> bool:
+        return all(pod_labels.get(key) == value for key, value in selector.items())
+
+    checked = 0
+    for doc in documents:
+        kind, name, spec = doc["kind"], doc["metadata"]["name"], doc.get("spec") or {}
+        if kind in ("Deployment", "PodDisruptionBudget"):
+            selector = spec["selector"]["matchLabels"]
+        elif kind == "Service":
+            selector = spec.get("selector") or {}
+        elif kind == "NetworkPolicy":
+            selector = (spec.get("podSelector") or {}).get("matchLabels") or {}
+            if not selector:
+                continue  # `{}` selects every pod in the namespace by design
+        else:
+            continue
+        checked += 1
+        assert _selects_the_pod(selector), f"{overlay}: {kind}/{name} selects {selector}, pod carries {pod_labels}"
+    assert checked >= 3, f"{overlay}: only {checked} selector(s) examined — the rendering changed shape"

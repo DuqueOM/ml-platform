@@ -266,6 +266,41 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Fixed
 
+- **Every cloud overlay denied DNS, and the only assertion checked a name.**
+  All seven kustomizations — and the base — used `commonLabels`, which adds
+  labels to SELECTORS as well as to resources, including selectors that point
+  at pods the kustomization does not own. `allow-dns`'s peer selector
+  `{k8s-app: kube-dns}` therefore rendered as `{cloud, environment, k8s-app}`,
+  which no CoreDNS pod carries, so under `default-deny` every lookup in all six
+  cloud overlays timed out. QA-4 round ten found it by rendering; round eleven
+  proved it on a live kind cluster — `;; connection timed out; no servers could
+  be reached` with the rendered policies, resolution restored with the selector
+  as written. `tests/test_gitops_manifests.py` asserted that a policy NAMED
+  `allow-dns` existed, which it did.
+
+  Replaced with `labels:` using `includeSelectors: false` and
+  `includeTemplates: true`, in the base and every overlay. Rendered before and
+  after, field by field: the only changes are selectors — the DNS peer, the two
+  serving policies, and the Deployment, Service and PDB, all now `{app:
+  demand-forecast}` — while resource metadata and pod-template labels are
+  unchanged, so anything selecting pods by `environment` or `cloud` still
+  matches.
+
+  **The Deployment selector changed, and `spec.selector` is immutable.** On a
+  cluster running the old manifests an apply is rejected and the Deployment has
+  to be recreated. Nothing has been deployed (L4 evidence is zero), so this is
+  the cheapest moment this change will ever have; it is stated because the next
+  one will not be.
+
+  Three tests, each watched failing: a ban on `commonLabels` anywhere under
+  `platform/`, parsed rather than grepped; exact equality on the rendered DNS
+  peer, because containment would accept the extra keys that were the defect;
+  and every workload and policy selector checked against the labels the pod
+  actually carries — the opposite failure, a selector matching nothing, which
+  applies cleanly. The first two fail on the previous tree; the third passed
+  there, because commonLabels kept selectors aligned with their own pods, so it
+  was proven separately against a mistyped policy selector.
+
 An independent audit found three defects that every existing gate passed over.
 All three are closed here, each watched failing before and passing after.
 

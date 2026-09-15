@@ -14,6 +14,15 @@ patches:
   - path: replicas.yaml
     target: { kind: Deployment, name: demand-forecast }
 
-commonLabels:
-  environment: dev
-  cloud: aws
+# `labels`, not `commonLabels`. commonLabels also rewrites every SELECTOR it
+# can reach — including NetworkPolicy peer selectors that point at pods this
+# kustomization does not own. It turned allow-dns's `{k8s-app: kube-dns}` into a
+# selector no CoreDNS pod carries, denying DNS under default-deny in every cloud
+# overlay (QA-4 rounds ten and eleven). Selectors stay as written; the labels
+# still reach resource metadata and the pod template.
+labels:
+  - includeSelectors: false
+    includeTemplates: true
+    pairs:
+      environment: dev
+      cloud: aws
