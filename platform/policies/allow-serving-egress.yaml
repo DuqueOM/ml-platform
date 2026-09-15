@@ -27,11 +27,16 @@ spec:
     # Scoped to the single address rather than the link-local /16: the rest of
     # 169.254.0.0/16 is not the metadata service and has no reason to be
     # reachable from a serving pod.
+    #
+    # Port 80 only. GCP's metadata server, AWS IMDS (v1 and v2) and Azure IMDS
+    # all serve plain HTTP on 80. This rule also admitted 443, which none of
+    # them uses, and the test asserted 443 while nothing asserted 80 — so it
+    # checked the port that did not matter and not the one that did (QA-4
+    # rounds ten and eleven).
     - to:
         - ipBlock: { cidr: 169.254.169.254/32 }
       ports:
         - { protocol: TCP, port: 80 }
-        - { protocol: TCP, port: 443 }
 
     # Object storage: the model artifact and the Iceberg table.
     #

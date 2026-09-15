@@ -496,21 +496,37 @@ def test_the_pod_can_reach_what_it_needs_to_start(cloud: str, env: str) -> None:
     ]
     assert egress, f"{cloud}-{env}: every egress is denied, so the pod cannot start"
 
-    def _permits(match: str, port: int) -> bool:
-        return any(
-            any(int(entry.get("port", -1)) == port for entry in rule.get("ports", []))
-            for rule in egress
-            if match in str(rule.get("to", []))
-        )
+    def _permits(port: int, *, cidr: str | None = None, namespace: str | None = None) -> bool:
+        """Whether one egress rule names exactly this peer and admits exactly this port.
 
-    assert _permits("169.254.169.254", 443), (
-        f"{cloud}-{env}: no egress to the metadata server. Workload Identity and IRSA mint tokens there, "
-        f"so the identity cannot authenticate and the symptom appears as a storage permission error"
+        Structural, never a substring of the serialised rule. The previous
+        version matched `"ipBlock"` anywhere in `str(rule["to"])`, so the
+        metadata server's ipBlock satisfied the HTTPS assertion and deleting the
+        0.0.0.0/0 rule left the test green (QA-4 round eleven).
+        """
+        for rule in egress:
+            if not any(int(entry.get("port", -1)) == port for entry in rule.get("ports", [])):
+                continue
+            for peer in rule.get("to", []):
+                if cidr is not None and peer.get("ipBlock", {}).get("cidr") == cidr:
+                    return True
+                selector = peer.get("namespaceSelector", {}).get("matchLabels", {})
+                if namespace is not None and namespace in selector.values():
+                    return True
+        return False
+
+    assert _permits(80, cidr="169.254.169.254/32"), (
+        f"{cloud}-{env}: no egress to the metadata server on port 80. Workload Identity and IRSA mint tokens "
+        f"there over plain HTTP, so the identity cannot authenticate and the symptom appears as a storage "
+        f"permission error"
     )
-    assert _permits("0.0.0.0/0", 443) or _permits("ipBlock", 443), (
+    assert not _permits(443, cidr="169.254.169.254/32"), (
+        f"{cloud}-{env}: the metadata server is admitted on 443, which no cloud metadata service uses"
+    )
+    assert _permits(443, cidr="0.0.0.0/0"), (
         f"{cloud}-{env}: no HTTPS egress, so the model artifact and the Iceberg table are unreachable"
     )
-    assert _permits("monitoring", 4317), (
+    assert _permits(4317, namespace="monitoring"), (
         f"{cloud}-{env}: no egress to the OTLP collector, so spans are dropped silently — nothing errors "
         f"and the trace is simply absent"
     )

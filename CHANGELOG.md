@@ -263,6 +263,19 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Fixed
 
+- **The egress test could not fail, and it checked the wrong port.** QA-4
+  rounds ten and eleven, P2. `_permits` matched a substring of the serialised
+  rule, so the metadata server's `ipBlock` satisfied the HTTPS assertion:
+  deleting the `0.0.0.0/0` rule left the test green. And it asserted the
+  metadata server on 443, which no cloud metadata service uses, while nothing
+  asserted 80, which GCP's metadata server, AWS IMDS and Azure IMDS all serve.
+
+  The assertion is now structural — exact CIDR or namespace, exact port — and
+  checks 80 is admitted and 443 is not. The policy itself dropped 443 on the
+  metadata server, which admitted a port nothing needs. Watched failing in a
+  throwaway worktree: removing the HTTPS rule fails all six cloud cells, and so
+  does moving the metadata server back to 443.
+
 - **One subprocess in twenty-five had a bound, and no CI job but one had a
   timeout.** QA-4 round eleven, P3. A gate waiting on a wedged git or a hung
   verification command does not fail; it holds the runner until GitHub's
