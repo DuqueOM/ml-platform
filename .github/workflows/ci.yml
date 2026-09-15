@@ -196,9 +196,10 @@ jobs:
         # joblib load across an incompatible numpy does not raise — it returns
         # arrays it has misread, and the service serves predictions from them.
         #
-        # Three straddles exist today and are exempted by name against ADR-008,
-        # so this step is green on the known and red on a fourth. The exemption
-        # lifts mechanically when that ADR stops saying Proposed.
+        # Three straddles exist today and are exempted by name against ADR-008.
+        # This step goes red when that ADR stops saying Proposed or an exemption
+        # outlives its straddle. It does NOT go red on a new straddle outside
+        # numpy/scikit-learn/joblib: those are the only packages it compares.
         run: uv run python scripts/check_artifact_compatibility.py
 
       - name: The project generator still renders (Copier render root parses)

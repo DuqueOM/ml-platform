@@ -37,8 +37,20 @@ Why this gate ships red
 It does not, quite. Three straddles exist today and all three are the subject
 of ADR-008, whose interface half needs a human decision. An exemption records
 them by name with the ADR that closes it, so the gate is green on the straddles
-that are *known* and red the moment a fourth appears or an exemption outlives
-its cause. Shipping it red would mean shipping a red CI step, and a red step is
+that are *known* and red when the ADR is decided or an exemption outlives its
+straddle.
+
+**What it cannot report, stated because the first version promised it.** This
+docstring said the gate turns red "the moment a fourth appears". It cannot:
+`SEAM` names three packages and all three are exempt, so no straddle in the
+seam is unexempted, and a straddle OUTSIDE the seam — scipy, pandas — is not
+looked at (QA-4 round eleven put both in the container's requirements and got
+OK). A new straddle becomes reportable only by adding its package to `SEAM`
+without an exemption, and `SEAM` is still a hand-written list rather than the
+module roots the pickled object graph actually references. Nor does it check
+that those roots are importable in the container at all: the artifact pickles
+`ml_core` types and the image installs no workspace library — recorded against
+ADR-008, whose interface decision owns it. Shipping it red would mean shipping a red CI step, and a red step is
 one people learn to skip; shipping it with no exemption mechanism would mean
 deleting the finding to get green, which is worse.
 
@@ -75,10 +87,13 @@ GOVERNING_ADR = REPO_ROOT / "docs" / "decisions" / "ADR-008-serving-a-forecast-f
 SEAM = ("numpy", "scikit-learn", "joblib")
 
 #: Straddles that exist and are already the subject of a recorded decision.
-#: Each names what closes it. A straddle absent from this mapping fails the
-#: gate; an entry here whose straddle has been fixed also fails it, because an
-#: exemption that outlives its cause is how a list like this becomes the place
-#: findings go to die.
+#: Each names what closes it. A straddling `SEAM` package absent from this
+#: mapping fails the gate — which today means none can, since every `SEAM`
+#: package is listed; see the module docstring. An entry whose straddle has been
+#: fixed also fails it, because an exemption that outlives its cause is how a
+#: list like this becomes the place findings go to die. Every key must be in
+#: `SEAM`: an exemption for a package the gate never compares can never be
+#: reported as outlived.
 EXEMPT: dict[str, str] = {
     "numpy": "ADR-008: the container pins 1.x against joblib corruption while the workspace resolves 2.x.",
     "scikit-learn": "ADR-008: the scaffold was generated for a classifier and its pin was never re-derived.",
@@ -156,6 +171,11 @@ def straddles() -> list[Straddle]:
     return found
 
 
+#: The status line in an ADR header, in both bold placements seen in markdown:
+#: `**Status**: Proposed` and `**Status:** Proposed`.
+_STATUS = re.compile(r"^-?\s*\*\*Status(?:\*\*:|:\*\*)\s*(?P<value>[A-Za-z]+)", re.M)
+
+
 def adr_is_still_open() -> bool:
     """Whether the decision that exempts these straddles is still undecided.
 
@@ -163,10 +183,20 @@ def adr_is_still_open() -> bool:
     `Status: Proposed`, every exemption below lifts on the next run and the
     gate reports the straddles as findings — which is the point of tying an
     exemption to a condition instead of a date.
+
+    Only the HEADER is read — everything before the first `## ` heading. The
+    first version searched the whole document, so an accepted ADR quoting its
+    own history (`- **Status**: Proposed` under a changelog heading) kept the
+    exemption forever, and a reformatted `**Status:** Proposed` lifted it while
+    the ADR was still undecided, with a message saying it no longer was (QA-4
+    round eleven). A header with no readable status fails safe: the exemption
+    lifts and the straddles are reported.
     """
     if not GOVERNING_ADR.is_file():
         return False
-    return bool(re.search(r"^-\s*\*\*Status\*\*:\s*Proposed\s*$", GOVERNING_ADR.read_text(encoding="utf-8"), re.M))
+    header = re.split(r"^## ", GOVERNING_ADR.read_text(encoding="utf-8"), maxsplit=1, flags=re.M)[0]
+    match = _STATUS.search(header)
+    return match is not None and match.group("value") == "Proposed"
 
 
 def main() -> int:
@@ -183,7 +213,11 @@ def main() -> int:
 
     found = straddles()
     open_adr = adr_is_still_open()
-    failures: list[str] = []
+    failures: list[str] = [
+        f"{package} is exempted but is not in SEAM, so the gate never compares it — its exemption can never be "
+        f"reported as outlived"
+        for package in sorted(set(EXEMPT) - set(SEAM))
+    ]
 
     for straddle in found:
         if straddle.package in EXEMPT and open_adr:

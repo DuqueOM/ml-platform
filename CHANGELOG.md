@@ -263,6 +263,36 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Fixed
 
+- **The serving-seam gate made a promise it could not keep, read its ADR from
+  the wrong place, and had no test.** QA-4 round eleven, P2 and P3, in P14.
+
+  It said it goes red "the moment a fourth straddle appears". It cannot:
+  `SEAM` compares numpy, scikit-learn and joblib, all three are exempt, and a
+  straddle in any other package is never compared — the audit added scipy and
+  pandas straddles to the container's requirements and got OK. The docstring,
+  the CI comment and the P14 row now state what turns it red (the ADR being
+  decided, or an exemption outliving its straddle) and what it does not see.
+  An exemption for a package outside `SEAM` is now itself a failure, since it
+  could never be reported as outlived.
+
+  Its ADR status check searched the whole document, so an accepted ADR quoting
+  `- **Status**: Proposed` in its history kept the exemption, and a
+  reformatted `**Status:** Proposed` lifted it while the ADR was undecided.
+  Only the header is read now, in both bold placements, failing safe when no
+  status is readable.
+
+  `tests/test_artifact_compatibility.py` covers every path against temporary
+  lock, requirements and ADR files. Five of its tests fail against the previous
+  script and pass against this one; the other eleven cover paths it already
+  honoured.
+
+  Round eleven also found the container cannot import the artifact at all: it
+  pickles `ml_core` types and the image installs no workspace library. That is
+  not a version question, so it is not P14's to catch; it is recorded in
+  ADR-008, whose Context also carried three statements the repository
+  contradicts — that nothing calls `joblib.dump`, an image tagged `:latest`,
+  and readiness on `/health/ready`. All three are corrected there.
+
 - **The render-safety gate was justified by a claim that was false, and could
   pass over nothing.** Three findings from QA-4 round eleven, all in P15.
 
