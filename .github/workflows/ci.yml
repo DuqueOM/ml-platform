@@ -21,6 +21,9 @@ jobs:
   invariants:
     name: Repository invariants
     runs-on: ubuntu-latest
+    # A bound, not a budget: measured 46.5 min median, 47.4 max, over the last five green runs; ~1.6x the max. Without it a hung step holds
+    # the runner for GitHub's six-hour default and reports nothing (QA-4 round eleven).
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -364,6 +367,9 @@ jobs:
   iac-security:
     name: IaC and Kubernetes security
     runs-on: ubuntu-latest
+    # A bound, not a budget: measured under 1 min over the last five green runs. Without it a hung step holds
+    # the runner for GitHub's six-hour default and reports nothing (QA-4 round eleven).
+    timeout-minutes: 10
     # The two layers this repository lacked while adding 268 lines of Terraform
     # and six Kubernetes overlays in a single session. Everything else — bandit,
     # ruff, dependabot, gitleaks, trivy — covers Python, dependencies, secrets
@@ -399,6 +405,9 @@ jobs:
   supply-chain:
     name: Supply chain
     runs-on: ubuntu-latest
+    # A bound, not a budget: measured under 1 min over the last five green runs. Without it a hung step holds
+    # the runner for GitHub's six-hour default and reports nothing (QA-4 round eleven).
+    timeout-minutes: 10
     permissions:
       contents: read
       security-events: write
@@ -437,6 +446,9 @@ jobs:
   secrets:
     name: Secret scan
     runs-on: ubuntu-latest
+    # A bound, not a budget: measured under 1 min over the last five green runs. Without it a hung step holds
+    # the runner for GitHub's six-hour default and reports nothing (QA-4 round eleven).
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

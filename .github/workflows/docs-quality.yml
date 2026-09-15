@@ -19,6 +19,9 @@ permissions:
 jobs:
   markdownlint:
     runs-on: ubuntu-latest
+    # A bound, not a budget: measured under 1 min over the last five green runs. Without it a hung step holds
+    # the runner for GitHub's six-hour default and reports nothing (QA-4 round eleven).
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff # v24.2.0

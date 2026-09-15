@@ -263,6 +263,36 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Fixed
 
+- **One subprocess in twenty-five had a bound, and no CI job but one had a
+  timeout.** QA-4 round eleven, P3. A gate waiting on a wedged git or a hung
+  verification command does not fail; it holds the runner until GitHub's
+  six-hour default and reports nothing about why.
+
+  Every call in `scripts/` is now bounded. Git and grep calls take a
+  per-script `SUBPROCESS_TIMEOUT_SECONDS` and fail closed — a gate that could
+  not finish must not read as one that passed. The local preflight treats a
+  probe that times out as "not running", because `docker info` against a
+  wedged daemon never returns, which is common under WSL.
+  `tests/test_subprocess_bounds.py` checks every call from the AST, so the next
+  unbounded one is a red test.
+
+  **The status generator needed more than a keyword, and the first
+  explanation of why was wrong.** `subprocess.run(shell=True, timeout=)`
+  kills only the shell. The comment first claimed the call then blocks on the
+  pipe the grandchild holds open; measured, it returns on time and the
+  grandchild keeps running. Here that grandchild is `uv run pytest`, an orphan
+  still writing probes into the repository after the document recorded it as
+  timed out. `_verify` now runs each command in its own process group and
+  kills the group; the test demonstrates both halves — `run` leaving a
+  survivor, `_verify` leaving none. Its comments no longer describe the
+  verification pool removed in d0744e0 as current.
+
+  Every CI job carries `timeout-minutes`, sized from the last five green runs
+  rather than guessed: 75 for repository invariants (47.4 min measured at its
+  slowest), 10 to 20 for the rest. The Scorecard job was bounded only after
+  reading the verifier that decides whether its published results are
+  accepted.
+
 - **The residue guard watched a hand-written list, and the list was already
   stale.** QA-4 round eleven, P2. `tests/test_gate_scripts.py` checked that it
   restored seven named paths. Removing the ADR restore from a test's `finally`

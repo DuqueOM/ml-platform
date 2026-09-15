@@ -21,12 +21,27 @@ import argparse
 import difflib
 import os
 import re
+import signal
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+#: Upper bound on every short subprocess this script runs (git, grep). A bound,
+#: not a performance budget: nothing here legitimately takes more than seconds,
+#: and without one a wedged git — an index lock, a network filesystem — hangs CI
+#: until the job's own limit, reporting nothing. On expiry `TimeoutExpired`
+#: propagates and the script exits non-zero: a gate that could not finish must
+#: not read as a gate that passed (QA-4 round eleven).
+SUBPROCESS_TIMEOUT_SECONDS = 120
+
+#: Upper bound on ONE verification command. Twenty times the whole serial pass
+#: as measured (56s): it exists to end a hang, never to police speed, so a
+#: command nearing it is a finding about that command rather than a threshold
+#: to raise. A timed-out command renders its row FAILS with the reason recorded.
+VERIFY_TIMEOUT_SECONDS = 1200
 DOC = REPO_ROOT / "docs" / "architecture" / "implementation-status.md"
 BEGIN = "<!-- BEGIN GENERATED -->"
 END = "<!-- END GENERATED -->"
@@ -584,6 +599,7 @@ def _tracked_files() -> frozenset[str]:
         capture_output=True,
         text=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     return frozenset(result.stdout.splitlines())
 
@@ -634,23 +650,43 @@ def _verify(command: str) -> bool:
     # shell=True is safe here: every command is a literal defined in
     # COMPONENTS above, never derived from input.
     #
-    # `UV_NO_SYNC=1` because these run CONCURRENTLY. Every `uv run` re-syncs
-    # the environment before executing, and several of these commands do that
-    # against the same virtualenv at the same time — a write race whose only
-    # symptom is a command failing for no reason it can explain.
-    #
-    # It was observed exactly once, in a pre-commit run, and did not reproduce
-    # in three sequential attempts. That is the honest state of the evidence:
-    # this removes the one piece of shared mutable state the pool touches,
-    # and `test_the_generated_document_is_deterministic` is what actually
-    # holds the property. Reverting to serial execution would also fix it, at
-    # seventeen minutes per CI run.
-    #
-    # The environment is already synced by the time this script runs — every
-    # caller reaches it through `uv run` itself.
+    # `UV_NO_SYNC=1` was added when these ran CONCURRENTLY, against a write
+    # race on the shared virtualenv. The pool is gone (d0744e0), so that race
+    # cannot occur — this comment said otherwise until QA-4 round eleven. It is
+    # kept for the reason that survives: a verification command re-syncing the
+    # environment would mutate the interpreter this generator is itself running
+    # in, halfway through producing a document from it. Every caller reaches
+    # this script through `uv run`, so the environment is already synced.
     environment = {**os.environ, "UV_NO_SYNC": "1"}
-    result = subprocess.run(command, shell=True, cwd=REPO_ROOT, capture_output=True, text=True, env=environment)
-    if result.returncode != 0:
+    # Popen in its own session rather than `subprocess.run(..., timeout=)`,
+    # because on expiry `run` kills only the SHELL. Measured on this machine
+    # (CPython 3.11, dash): `run` raised on time, after 1.0s, and the command's
+    # grandchild was still alive afterwards. Here that grandchild is `uv run
+    # pytest`, an orphan that keeps executing tests which write probes into
+    # this repository — the shared-state defect this file has been fixed for
+    # four times — while the document records the command as timed out.
+    # Killing the process group leaves nothing running; the same measurement
+    # found no survivor. `tests/test_subprocess_bounds.py` repeats it.
+    process = subprocess.Popen(
+        command,
+        shell=True,
+        cwd=REPO_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=environment,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=VERIFY_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        os.killpg(process.pid, signal.SIGKILL)
+        stdout, stderr = process.communicate()
+        _FAILURES[command] = (
+            f"TIMED OUT after {VERIFY_TIMEOUT_SECONDS}s; its process group was killed.\n{stdout}{stderr}"
+        ).strip()
+        return False
+    if process.returncode != 0:
         # Keep WHY, not just THAT. The document records a failure as
         # "`<command>` FAILS" and stops there, so a red row costs a full
         # re-investigation — and the investigation is run from a different
@@ -658,17 +694,19 @@ def _verify(command: str) -> bool:
         # reproducible.
         #
         # That cost was paid in full once already: a test writing a probe file
-        # into the repository made a CONCURRENT test fail, and the only visible
+        # into the repository made another test fail, and the only visible
         # symptom was a stale document naming a gate on a branch that had not
         # touched it. Three steps from the cause, with the output that named it
         # captured and discarded here.
-        _FAILURES[command] = (result.stdout + result.stderr).strip()
-    return result.returncode == 0
+        _FAILURES[command] = (stdout + stderr).strip()
+    return process.returncode == 0
 
 
-#: Verification commands run concurrently. They are independent subprocesses
-#: that only READ the tree, so the only thing serial execution bought was
-#: seventeen minutes of CI.
+#: Verification commands USED to run concurrently, on the argument that they
+#: are independent subprocesses that only read the tree and serial execution
+#: cost seventeen minutes of CI. Both halves were wrong, as measured below, and
+#: they now run one at a time — this paragraph kept stating the old design as
+#: current until QA-4 round eleven.
 #:
 #: Measured: seven tests invoke this script, each paying ~50s while ~35 verify
 #: commands ran one after another — and most of them are `uv run pytest`, so it

@@ -53,6 +53,14 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+#: Upper bound on every short subprocess this script runs (git, grep). A bound,
+#: not a performance budget: nothing here legitimately takes more than seconds,
+#: and without one a wedged git — an index lock, a network filesystem — hangs CI
+#: until the job's own limit, reporting nothing. On expiry `TimeoutExpired`
+#: propagates and the script exits non-zero: a gate that could not finish must
+#: not read as a gate that passed (QA-4 round eleven).
+SUBPROCESS_TIMEOUT_SECONDS = 120
+
 SUFFIXES = (".yaml", ".yml")
 
 #: Un-rendered generator source. Jinja tokens are not YAML; the directory is
@@ -116,6 +124,7 @@ def repository_yaml_files() -> list[str]:
         capture_output=True,
         text=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     return sorted(
         line

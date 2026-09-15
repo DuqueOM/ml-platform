@@ -44,6 +44,14 @@ from pathlib import Path
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+#: Upper bound on every short subprocess this script runs (git, grep). A bound,
+#: not a performance budget: nothing here legitimately takes more than seconds,
+#: and without one a wedged git — an index lock, a network filesystem — hangs CI
+#: until the job's own limit, reporting nothing. On expiry `TimeoutExpired`
+#: propagates and the script exits non-zero: a gate that could not finish must
+#: not read as a gate that passed (QA-4 round eleven).
+SUBPROCESS_TIMEOUT_SECONDS = 120
 LEDGER = REPO_ROOT / "docs" / "governance" / "upstream-parity.yaml"
 
 #: Where the template is checked out when it is. Absent in CI, and that must
@@ -165,6 +173,7 @@ def _upstream_files() -> set[str] | None:
         text=True,
         check=False,
         env=_detached_environment(),
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     return {
         line
@@ -244,6 +253,7 @@ def check_against_upstream(entries: list[dict]) -> None:  # type: ignore[type-ar
             text=True,
             check=False,
             env=_detached_environment(),
+            timeout=SUBPROCESS_TIMEOUT_SECONDS,
         ).stdout.splitlines()
     )
     decided = {entry.get("path") for entry in entries}
@@ -282,6 +292,7 @@ def main() -> int:
                 text=True,
                 check=False,
                 env=_detached_environment(),
+                timeout=SUBPROCESS_TIMEOUT_SECONDS,
             ).stdout.splitlines()
         )
         undecided = sorted(upstream - here - {e.get("path") for e in entries})

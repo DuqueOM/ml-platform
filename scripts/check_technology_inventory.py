@@ -28,6 +28,14 @@ from typing import Any
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+#: Upper bound on every short subprocess this script runs (git, grep). A bound,
+#: not a performance budget: nothing here legitimately takes more than seconds,
+#: and without one a wedged git — an index lock, a network filesystem — hangs CI
+#: until the job's own limit, reporting nothing. On expiry `TimeoutExpired`
+#: propagates and the script exits non-zero: a gate that could not finish must
+#: not read as a gate that passed (QA-4 round eleven).
+SUBPROCESS_TIMEOUT_SECONDS = 120
 INVENTORY = REPO_ROOT / "docs" / "architecture" / "technology-inventory.yaml"
 REPORT = REPO_ROOT / "docs" / "architecture" / "technology-inventory.md"
 BEGIN, END = "<!-- BEGIN GENERATED -->", "<!-- END GENERATED -->"
@@ -79,7 +87,13 @@ def _tracked_files() -> frozenset[str]:
     fixes one instance and leaves the class open: every future build artifact
     has to be discovered the same way, through a red CI on a green working copy.
     """
-    result = subprocess.run(["git", "-C", str(REPO_ROOT), "ls-files"], capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "ls-files"],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
+    )
     return frozenset(result.stdout.splitlines())
 
 
@@ -202,6 +216,7 @@ def _content_matches(pattern: str, scope: str) -> bool:
         ["grep", "-ril", "--", pattern, str(root)],
         capture_output=True,
         text=True,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     if result.returncode != 0:
         return False

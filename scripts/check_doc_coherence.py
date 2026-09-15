@@ -28,6 +28,14 @@ from datetime import date, datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+#: Upper bound on every short subprocess this script runs (git, grep). A bound,
+#: not a performance budget: nothing here legitimately takes more than seconds,
+#: and without one a wedged git — an index lock, a network filesystem — hangs CI
+#: until the job's own limit, reporting nothing. On expiry `TimeoutExpired`
+#: propagates and the script exits non-zero: a gate that could not finish must
+#: not read as a gate that passed (QA-4 round eleven).
+SUBPROCESS_TIMEOUT_SECONDS = 120
 DECISIONS = REPO_ROOT / "docs" / "decisions"
 ADR_INDEX = DECISIONS / "README.md"
 PLAN = REPO_ROOT / "docs" / "architecture" / "technical-plan.md"
@@ -129,6 +137,7 @@ def _adrs_at_head() -> set[str]:
         capture_output=True,
         text=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     numbers = set()
     for line in result.stdout.splitlines():
@@ -514,6 +523,7 @@ def _scannable_files() -> list[Path]:
         capture_output=True,
         text=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     return [REPO_ROOT / rel for rel in sorted(set(result.stdout.splitlines())) if (REPO_ROOT / rel).is_file()]
 
@@ -539,6 +549,7 @@ def _check_forbidden_names() -> None:
         ["git", "-C", str(REPO_ROOT), "ls-files", "--cached", "--others", "--exclude-standard"],
         capture_output=True,
         text=True,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     for rel in tracked.stdout.splitlines():
         path = REPO_ROOT / rel
@@ -816,6 +827,7 @@ def _commits_since_ref(ref: str) -> int | None:
         capture_output=True,
         text=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     if resolved.returncode != 0:
         return None
@@ -843,6 +855,7 @@ def _commits_since_ref(ref: str) -> int | None:
         capture_output=True,
         text=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     if reachable.returncode != 0:
         # UNREACHABLE, not None: None means "cannot measure, fall back to
@@ -857,6 +870,7 @@ def _commits_since_ref(ref: str) -> int | None:
         capture_output=True,
         text=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     if counted.returncode != 0:
         return None
@@ -894,6 +908,7 @@ def _commits_since(when: date) -> int:
         capture_output=True,
         text=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     cutoff = when.isoformat()
     return sum(1 for line in result.stdout.splitlines() if line.strip() > cutoff)
@@ -1040,6 +1055,7 @@ def _commit_count() -> int:
         ["git", "-C", str(REPO_ROOT), "rev-list", "--count", "HEAD"],
         capture_output=True,
         text=True,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     return int(result.stdout.strip()) if result.returncode == 0 else 0
 
@@ -1050,6 +1066,7 @@ def _commits_since_last_tag() -> int:
         ["git", "-C", str(REPO_ROOT), "describe", "--tags", "--abbrev=0"],
         capture_output=True,
         text=True,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     if describe.returncode != 0:
         return _commit_count()
@@ -1057,6 +1074,7 @@ def _commits_since_last_tag() -> int:
         ["git", "-C", str(REPO_ROOT), "rev-list", "--count", f"{describe.stdout.strip()}..HEAD"],
         capture_output=True,
         text=True,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     return int(result.stdout.strip() or 0)
 
