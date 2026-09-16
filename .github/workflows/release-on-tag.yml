@@ -17,6 +17,9 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    # A bound, not a budget: ONE green run to measure (0.1 min); generous because it builds, signs and uploads evidence. Without it a hung step holds
+    # the runner for GitHub's six-hour default and reports nothing (QA-4 round eleven).
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

@@ -23,6 +23,30 @@
 # Adopting a list closes the gap once. This ledger closes it every time: an
 # artifact present upstream with no entry here fails the gate whenever the
 # template checkout is reachable.
+#
+# SCOPE, AND WHERE A DECISION MAY LIVE INSTEAD.
+# `_UNCOMPARED_PREFIXES` in scripts/check_upstream_parity.py removes whole
+# directories from comparison — generated tool surfaces, scaffolding source,
+# service internals — so "zero pending" is true within that scope and not
+# outside it. QA-4 round four found the prefix list hiding two governance
+# documents and the entry was removed; round five found four upstream paths
+# that are still excluded AND are cited by name in this repository's own
+# agentic bodies.
+#
+# Those four are a deliberate no-entry. Each citation states inline which
+# repository owns the file and what the local equivalent is, so the decision
+# is recorded where a reader meets it rather than in a row they would have to
+# go looking for:
+#
+#   agentic/skills/incident-postmortem/SKILL.md  -> docs/audit/AUDIT_R8_STAFF_LEAD.md
+#   agentic/skills/cost-audit/SKILL.md           -> docs/observability/business-kpis.md
+#   agentic/skills/security-audit/SKILL.md       -> templates/k8s/policies/kyverno-image-verification.yaml
+#   agentic/rules/11-kubernetes.md               -> templates/k8s/policies/pod-security-standards.yaml
+#
+# Duplicating those four arguments here would give each of them two homes and
+# one of the two would go stale. An auditor re-deriving the excluded set should
+# check the citing body before reporting an omission — and should report one
+# when a prefix hides a path that NOTHING explains.
 version: 1
 upstream: ml-service-template
 
@@ -432,3 +456,116 @@ artifacts:
     status: rejected
     reason: >-
       Smoke-tests a rendered SERVICE. The equivalent here renders templates/project and asserts the project contract: tests/test_project_generator.py.
+  # --- QA-4 round nine: five artifacts upstream gained since the last sweep ---
+  # Decided together because four of them are one mechanism in four files, and
+  # deciding them apart would have adopted a gate without the baseline it reads.
+  - path: scripts/check_doc_path_refs.py
+    status: pending
+    reason: >-
+      Decided to adopt. It verifies that every repo-relative path named in documentation or in a code comment resolves, and this repository has two live instances of exactly that defect, both found by audit rather than by any gate. Three technology-inventory detectors scope docs/governance/compliance-mapping.md, a path that has never existed at any commit — so eu-ai-act, iso-42001 and nist-ai-rmf can never report built no matter what work is done. And the remediation work order's W-7 instructs adding a component whose detector is libs/ml-core/src/ml_core/drift.py, while the contract that landed is the package drift/; executing W-7 literally would create a fourth. Upstream's own rationale is the same class one level over: a Copier migration relocated the scaffolder payload, updated everything that executes because it breaks loudly, and left thirty documents pointing at deleted directories. Closes by porting the script, its baseline and its governance document together, then wiring the pre-commit hook and the CI job.
+  - path: .doc-path-baseline.yml
+    status: pending
+    reason: >-
+      Decided to adopt, as the file check_doc_path_refs.py reads. Adopting the gate without it would fail on every pre-existing dangling path at once with no way to stage the cleanup, which is how a gate gets marked continue-on-error in its first week. Its design earns its place independently: it separates "the documentation promises something never built" — which requires an `expiry:` and fails once past it — from a path that is simply wrong, because those are different claims and only one of them is honestly deferrable.
+  - path: docs/governance/doc-path-references.md
+    status: pending
+    reason: >-
+      Decided to adopt, as the third file of the same mechanism. It records what the gate enforces and, more usefully, what it did NOT enforce for its first weeks: the gate shipped scanning .md and .txt only, which left a security baseline justifying three suppressed HIGH findings against a directory that had been deleted. That is the kind of scoping hole this repository keeps rediscovering under its own names, documented by the people who hit it first.
+  - path: scripts/generate_adr_index.py
+    status: pending
+    reason: >-
+      Decided to adopt. docs/decisions/README.md is maintained by hand here, and this session demonstrated the cost twice in one commit: the index row for ADR-009 was written by hand, and llms.txt asserted "9 ADRs" against ten on disk. The second was caught, but only because test_llms_txt.py happens to test that one count; nothing guards the index itself, so an ADR added without its row is invisible. Upstream wrote this after finding a compliance mapping that cited an ADR index which did not exist and miscounted the directory it pointed at. Closes by porting the script with --check wired into CI, and replacing the hand-maintained index.
+  - path: .security-baselines/trivy-config.trivyignore
+    status: rejected
+    reason: >-
+      Rejected after establishing that it suppresses findings this repository has never produced. Upstream's file is for `trivy config` over Terraform, running at CRITICAL,HIGH,MEDIUM, and its entries are specific determinations about upstream's own access-log buckets. This repository runs `trivy fs` for VULNERABILITIES at CRITICAL,HIGH with its own .security-baselines/.trivyignore (ci.yml, trivyignores:) and does not scan IaC with trivy at all — checkov and kubescape cover that surface here. Importing another repository's suppression list would mean carrying accepted risk for findings nobody here has seen, against infrastructure that is not the same infrastructure, at a severity this repository does not scan. A suppression is earned per repository against its own output or it is not a suppression, it is a blindfold. Reverses to adopted the day `trivy config` runs on platform/terraform here, and then each entry is earned against what it actually reports.
+  - path: scripts/check_control_claims.py
+    status: pending
+    reason: >-
+      Decided to adopt, and it arrived mid-sweep: upstream gained it while the five above were being decided, which is the ledger demonstrating its own argument. It asserts that an "Enforced by X" claim names a file that exists and that the file actually references what it claims to enforce, over the D-NN anti-pattern table. QA-4 round nine found this repository's two P0s in exactly that class — a docstring requiring a field "see tests/test_status_components.py", a file that had never existed, and five places citing "ADR-001 rule 3" for a claim that ADR does not make. Both were found by a human reading, which is the method upstream's own rationale says cannot work: a comment cannot be verified, only believed. Adoption needs adapting rather than copying: this repository has eleven D-NN rows but only two "Enforced by" clauses, and its equivalent claims live in quality-gates.md, which validate_quality_gates.py already covers in part, and in module docstrings, which nothing covers. Closes by porting the traversal and re-aiming it at those two surfaces.
+  # --- QA-4 round ten sweep: nine artifacts, decided together -----------------
+  # Four of them are about `templates/service/`, upstream's render root, which
+  # has no counterpart here: this repository renders `templates/project/`, nine
+  # files shipping a pyproject.toml rather than a service with a Dockerfile and
+  # several requirements files. Deciding them apart would have repeated that
+  # finding four times.
+  - path: scripts/check_template_render_safety.py
+    status: adopted
+    reason: >-
+      Adopted, and it lands on a real gap. `copier.yml` here sets `_templates_suffix: ""`, exactly the condition
+      upstream wrote it for: EVERY file under the render root is a Jinja template, so any file that happens to
+      contain Jinja delimiters aborts `copier copy` entirely rather than rendering oddly. This entry first argued
+      that tests/test_project_generator.py renders a single answer set. That was false — it renders three of the
+      four project kinds and omitted only agent, which it now renders too — and QA-4 round eleven caught it after
+      the claim had been copied into three other documents. The case that survives: a render exercises only the
+      branches its answers select, while a parse examines every branch of every file for any answers, including
+      values nobody enumerates, and costs milliseconds, so it runs in pre-commit on every payload edit. Ported with
+      three deliberate changes. (1) Path SEGMENTS are parsed as well as file bodies, walked separately from the
+      parsed files so a malformed directory holding only binaries is still reported; this render root has one,
+      `src/{@ project_slug @}/`. (2) The function was decomposed and `--root` added, so each defect class is watched
+      failing against a temporary tree rather than by breaking a payload other checks read. (3) jinja2 is a declared
+      dependency rather than a transitive of the orchestration extra. Round eleven also found it could print OK over
+      zero files — an empty root, or a checkout under a directory named like a cache — and both are now failures.
+      Wired as P15, in make verify, in CI, in pre-commit and in the bare-environment sandbox.
+  - path: scripts/resolve_python_dependencies.py
+    status: rejected
+    reason: >-
+      Rejected on a measurement rather than an assumption, because the assumption was worth checking: upstream wrote this after finding its Trivy filesystem scan had never examined a single Python dependency, and this repository's Trivy step is blocking at CRITICAL,HIGH with a comment claiming zero findings — which is equally consistent with clean and with blind. Measured with `trivy fs . --scanners vuln`: it reports `uv.lock` as `type=uv` and found three HIGH CVEs in sqlparse, all with fixes, none baselined. So the scanner is not blind here and needs no requirements files resolved for it; uv.lock is read natively. The finding it surfaced is fixed in its own commit. Reverses if this repository ever ships a requirements.txt that Trivy cannot resolve — the generated service under services/ has one, and it is upstream's to scan.
+  - path: scripts/check_dependency_partition.py
+    status: rejected
+    reason: >-
+      Rejected: it verifies that nothing a served IMAGE runs imports a training-only package, against `templates/service/requirements.txt` and the Dockerfile that installs it. Nothing here builds an image — S4 and C1 in quality-gates.md are both PENDING for that reason — and the payload ships a pyproject.toml, not a requirements file destined for a container. Reverses the day Phase 2 publishes an image, at which point the partition it checks becomes a real boundary rather than a hypothetical one.
+  - path: scripts/check_dependency_pin_coherence.py
+    status: rejected
+    reason: >-
+      Rejected: it checks that several requirements files installed into ONE environment agree on their pins, a hazard upstream's generated service has because its tutorial walks an adopter through installing more than one. The payload here ships a single pyproject.toml, so there is no second file to disagree with. The equivalent hazard in this repository is a version straddle across the SERVING seam, which is a different comparison — writer versus reader rather than two readers — and is gated by scripts/check_artifact_compatibility.py (P14). Reverses if templates/project ever ships more than one requirements file.
+  - path: scripts/check_payload_test_scope.py
+    status: rejected
+    reason: >-
+      Rejected: it separates tests that ship WITH a generated service from tests that are about the template, which had come to share `templates/service/tests/`. Checked rather than assumed — `templates/project/tests/test_contracts.py` opens with `{@ project_name @}`, so it is templated and unambiguously about the generated project, and the tests about the template live in tests/test_project_generator.py outside the render root. The separation upstream had to enforce is structural here. Reverses if a test about the template ever lands inside templates/project.
+  - path: scripts/check_markdownlint_parity.py
+    status: rejected
+    reason: >-
+      Rejected: it asserts that upstream's own markdownlint rule block matches the one it ships to generated services, which requires two configurations. This repository ships NONE to generated projects — `find templates/ -name ".markdownlint*"` returns nothing — so there is no second config to diverge from. Reverses the day templates/project ships one, and the reason it would matter is upstream's: a template holding itself to a stricter bar than it prescribes has the same credibility problem as a gate that reports green without running.
+  - path: .markdownlint-cli2.jsonc
+    status: rejected
+    reason: >-
+      Rejected as present under a different extension. This repository carries `.markdownlint-cli2.yaml`, the same tool and the same mechanism, with four rules relaxed and a reason written beside each — MD013 for tables and commands, MD024 scoped to siblings because every ADR repeats Context/Decision/Consequences, MD033 for the HTML markers the derived documents depend on, and the first-line rule for the generated files that open with a banner. Adopting upstream's file would mean two configurations for one linter, which is the shape this repository refuses everywhere else.
+  - path: .security-baselines/trivy-fs.trivyignore
+    status: rejected
+    reason: >-
+      Rejected as present in a merged form. Upstream splits its baseline by scanner — trivy-config for IaC, trivy-fs for Python dependencies — because it runs both. This repository runs `trivy fs` only, and `.security-baselines/.trivyignore` accepts both kinds of identifier, which its own header states. The discipline that makes upstream's file worth having is already here and enforced: entries carry `# expiry: YYYY-MM-DD`, three do today, and scripts/check_baselines_expiry.py fails the build once past that date. Adopting a second file would split one reviewed list in two without adding a control. Reverses alongside trivy-config.trivyignore, if `trivy config` is ever run here.
+  - path: scripts/validate_k8s_manifests.sh
+    status: rejected
+    reason: >-
+      Rejected: the equivalent exists and is better placed. `tests/test_gitops_manifests.py` validates base and every overlay across seven of them, and asserts properties a shell validator cannot reach — that an advertised scrape port is admitted by a NetworkPolicy, that the pod has egress to the metadata server, that a 0.0.0.0/0 egress rule carves out the private ranges. Those are cross-document invariants, which is where this repository's manifest defects have actually been. Adopting a second validator would mean two things to keep current and one of them going stale.
+  - path: scripts/check_deploy_contract_documented.py
+    status: rejected
+    reason: >-
+      Rejected on a measurement. It compares every `vars.NAME` and `secrets.NAME` a SHIPPED deploy workflow reads
+      against what the runbooks tell an adopter to set, in the right channel — GitHub does not fall back from
+      `secrets.X` to `vars.X`, so a value in the wrong place arrives as an empty string and fails exactly as
+      silently as a missing one. There is no deploy workflow to check here, in either place it could be: the Copier
+      payload ships nine files and none is a workflow, and this repository's own five workflows reference two names
+      in total, `secrets.GITHUB_TOKEN`, which GitHub provides, and `secrets.CODECOV_TOKEN`. The second IS
+      undocumented — `grep -rl CODECOV_TOKEN --include='*.md'` returns nothing — and it is recorded here rather
+      than left as a silent finding: its step carries `fail_ci_if_error: false`, so an unset token degrades to no
+      coverage upload rather than a failed deployment, which is the whole reason this gate's class is dangerous and
+      this instance is not. Reverses the day a deploy workflow lands, in the payload or here, which Phase 2 and 3
+      both imply.
+  - path: scripts/check_config_is_read.py
+    status: pending
+    reason: >-
+      Decided to adopt, and measured before deciding rather than assumed either way. It catches the class where a
+      field is declared, loaded from YAML, validated, and read by NOTHING — a config that answers "where do my runs
+      go?" with a value that is not the answer, and the adopter cannot tell from the outside. Upstream found 24 of
+      51 fields in that state. The obvious rejection here is that this repository ships no `configs/` tree and no
+      pydantic settings class, and it is wrong: `libs/llm-core/src/llm_core/config.py` declares `UsecaseConfig`,
+      loaded from a use-case `config.yaml`, and that is the documented extension seam — a new domain is a new
+      `usecases/<name>/`, so the surface grows by design. Measured across 29 declared fields in 2 classes, ONE is
+      read by nothing outside the declaring module: `UsecaseConfig.language`. It is documented in the class
+      docstring as the ISO code of the customer-facing surface, it is loaded with a default of `en`, and
+      `projects/store-assistant/src/store_assistant/config.yaml` sets it to `es` — so a user who set the language
+      got no language. That is the upstream defect exactly, at one instance instead of twenty-four. Closes by
+      fixing `language` first, since a gate landing red teaches people to skip it, then porting the AST analysis
+      pointed at llm-core's config module with a ratchet on the unwired count.

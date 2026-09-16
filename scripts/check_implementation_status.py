@@ -21,13 +21,27 @@ import argparse
 import difflib
 import os
 import re
+import signal
 import subprocess
 import sys
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+#: Upper bound on every short subprocess this script runs (git, grep). A bound,
+#: not a performance budget: nothing here legitimately takes more than seconds,
+#: and without one a wedged git — an index lock, a network filesystem — hangs CI
+#: until the job's own limit, reporting nothing. On expiry `TimeoutExpired`
+#: propagates and the script exits non-zero: a gate that could not finish must
+#: not read as a gate that passed (QA-4 round eleven).
+SUBPROCESS_TIMEOUT_SECONDS = 120
+
+#: Upper bound on ONE verification command. Twenty times the whole serial pass
+#: as measured (56s): it exists to end a hang, never to police speed, so a
+#: command nearing it is a finding about that command rather than a threshold
+#: to raise. A timed-out command renders its row FAILS with the reason recorded.
+VERIFY_TIMEOUT_SECONDS = 1200
 DOC = REPO_ROOT / "docs" / "architecture" / "implementation-status.md"
 BEGIN = "<!-- BEGIN GENERATED -->"
 END = "<!-- END GENERATED -->"
@@ -60,6 +74,26 @@ class Component:
     #: document can say "evidence exists at L3, here is how to produce it"
     #: instead of either claiming it or hiding it.
     evidence: str | None = None
+    #: Why this component has no `verify`, when the absence is a DECISION.
+    #:
+    #: Two components sat at 🟡 with the detail "no verification command" while
+    #: their reasons — a preflight that reads host state, and a package that is
+    #: empty on purpose — were written only as comments in this file. A reader
+    #: of the generated document saw two yellow rows and could not tell a
+    #: decision from an oversight, which is the distinction the whole document
+    #: exists to make.
+    #:
+    #: **Required of any component that renders 🟡** — files present, no verify
+    #: command — and enforced by `tests/test_status_components.py`. NOT required
+    #: of a ⬜ component: "why is there no verification command" has no content
+    #: for a thing with no files, and demanding prose there would produce five
+    #: ceremonial strings and teach everyone the field is boilerplate.
+    #:
+    #: This comment claimed the wider requirement, and named that test file,
+    #: for four commits during which the file did not exist. QA-4 round eight
+    #: found it — the same shape round five found in `check_library_reuse.py`,
+    #: which is why `tests/test_empty_libraries_say_so.py` exists.
+    why_unverifiable: str | None = None
     #: Files matching these are scaffolding, not implementation.
     ignore: list[str] = field(default_factory=lambda: ["__init__.py", ".gitkeep", "README.md"])
 
@@ -137,6 +171,10 @@ COMPONENTS: list[Component] = [
         # `make local-verify` is the assertion that it functions, and it is a
         # human-run command for exactly that reason.
         evidence="make local-up && uv run pytest tests/local/test_local_stack.py -q -m local",
+        why_unverifiable=(
+            "the only candidate command inspects HOST state (free ports, free memory), so it "
+            "returns a different marker from the same commit depending on the machine"
+        ),
     ),
     Component(
         "1",
@@ -154,7 +192,29 @@ COMPONENTS: list[Component] = [
     # something to verify: zero modules, zero tests. `pytest` over an empty
     # package exits 0, so wiring one here would turn "nothing exists" into a
     # green tick — the exact inversion the status document exists to prevent.
-    Component("1", "libs/serving-core implementation", ["libs/serving-core/src"]),
+    # W-7: drift had no row at all, so its absence was invisible rather than ⬜.
+    # The work order named `drift.py`; the contract landed as the package
+    # `drift/`, and a detector pointing at the module would have matched nothing
+    # — the defect QA-4 round nine found in `_as_word`, reintroduced by the
+    # instruction meant to prevent its class. The path is the package.
+    Component(
+        "1",
+        "Drift contract (ADR-007)",
+        ["libs/ml-core/src/ml_core/drift"],
+        "uv run pytest libs/ml-core/tests/test_drift.py -q",
+    ),
+    Component(
+        "1",
+        "libs/serving-core implementation",
+        ["libs/serving-core/src"],
+        why_unverifiable=(
+            "deliberately empty: there is one serving consumer, and a library shaped by one caller "
+            "is a library the second caller bends around. `pytest` over an empty "
+            "package exits 0, so a verify command here would render 'nothing exists' as a green "
+            "tick. That the emptiness is DECLARED rather than accidental is proven separately by "
+            "`uv run pytest tests/test_empty_libraries_say_so.py -q`"
+        ),
+    ),
     Component(
         "1",
         "projects/demand-forecast",
@@ -326,6 +386,12 @@ COMPONENTS: list[Component] = [
             "scripts/ci_verify_yaml.py",
             "scripts/ci_classify_failure.py",
             "scripts/ci_collect_context.py",
+            # Ported after the parity sweep left it the one PENDING entry of
+            # nine. It guards the generator every future project comes from:
+            # `_templates_suffix: ""` makes every payload file a template, so
+            # a stray delimiter aborts `copier copy` rather than rendering
+            # oddly.
+            "scripts/check_template_render_safety.py",
         ],
         # `scripts/mcp_doctor.py` was here and is gone deliberately: the ledger
         # records it REJECTED, because three of its four checks resolve against
@@ -342,7 +408,7 @@ COMPONENTS: list[Component] = [
         "uv run pytest tests/test_clock_isolation.py tests/test_gitleaks_pin.py "
         "tests/test_yaml_verification.py tests/test_dashboard_inventory.py "
         "tests/test_quality_gates.py tests/test_baselines_expiry.py "
-        "tests/test_ci_triage.py -q",
+        "tests/test_ci_triage.py tests/test_template_render_safety.py -q",
     ),
     # --- Phase 1e: retrieval over this platform's own documentation ---------
     # No verify command until there is something to verify. A gate that passes
@@ -533,6 +599,7 @@ def _tracked_files() -> frozenset[str]:
         capture_output=True,
         text=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     return frozenset(result.stdout.splitlines())
 
@@ -583,23 +650,44 @@ def _verify(command: str) -> bool:
     # shell=True is safe here: every command is a literal defined in
     # COMPONENTS above, never derived from input.
     #
-    # `UV_NO_SYNC=1` because these run CONCURRENTLY. Every `uv run` re-syncs
-    # the environment before executing, and several of these commands do that
-    # against the same virtualenv at the same time — a write race whose only
-    # symptom is a command failing for no reason it can explain.
-    #
-    # It was observed exactly once, in a pre-commit run, and did not reproduce
-    # in three sequential attempts. That is the honest state of the evidence:
-    # this removes the one piece of shared mutable state the pool touches,
-    # and `test_the_generated_document_is_deterministic` is what actually
-    # holds the property. Reverting to serial execution would also fix it, at
-    # seventeen minutes per CI run.
-    #
-    # The environment is already synced by the time this script runs — every
-    # caller reaches it through `uv run` itself.
+    # `UV_NO_SYNC=1` was added when these ran CONCURRENTLY, against a write
+    # race on the shared virtualenv. The pool is gone (commit "perf(status):
+    # remove the verification pool"), so that race cannot occur — this comment
+    # said otherwise until QA-4 round eleven. It is kept for the reason that
+    # survives: a verification command re-syncing the environment would mutate
+    # the interpreter this generator is itself running in, halfway through
+    # producing a document from it. Every caller reaches this script through
+    # `uv run`, so the environment is already synced.
     environment = {**os.environ, "UV_NO_SYNC": "1"}
-    result = subprocess.run(command, shell=True, cwd=REPO_ROOT, capture_output=True, text=True, env=environment)
-    if result.returncode != 0:
+    # Popen in its own session rather than `subprocess.run(..., timeout=)`,
+    # because on expiry `run` kills only the SHELL. Measured on this machine
+    # (CPython 3.11, dash): `run` raised on time, after 1.0s, and the command's
+    # grandchild was still alive afterwards. Here that grandchild is `uv run
+    # pytest`, an orphan that keeps executing tests which write probes into
+    # this repository — the shared-state defect this file has been fixed for
+    # four times — while the document records the command as timed out.
+    # Killing the process group leaves nothing running; the same measurement
+    # found no survivor. `tests/test_subprocess_bounds.py` repeats it.
+    process = subprocess.Popen(
+        command,
+        shell=True,
+        cwd=REPO_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=environment,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = process.communicate(timeout=VERIFY_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        os.killpg(process.pid, signal.SIGKILL)
+        stdout, stderr = process.communicate()
+        _FAILURES[command] = (
+            f"TIMED OUT after {VERIFY_TIMEOUT_SECONDS}s; its process group was killed.\n{stdout}{stderr}"
+        ).strip()
+        return False
+    if process.returncode != 0:
         # Keep WHY, not just THAT. The document records a failure as
         # "`<command>` FAILS" and stops there, so a red row costs a full
         # re-investigation — and the investigation is run from a different
@@ -607,44 +695,63 @@ def _verify(command: str) -> bool:
         # reproducible.
         #
         # That cost was paid in full once already: a test writing a probe file
-        # into the repository made a CONCURRENT test fail, and the only visible
+        # into the repository made another test fail, and the only visible
         # symptom was a stale document naming a gate on a branch that had not
         # touched it. Three steps from the cause, with the output that named it
         # captured and discarded here.
-        _FAILURES[command] = (result.stdout + result.stderr).strip()
-    return result.returncode == 0
+        _FAILURES[command] = (stdout + stderr).strip()
+    return process.returncode == 0
 
 
-#: Verification commands run concurrently. They are independent subprocesses
-#: that only READ the tree, so the only thing serial execution bought was
-#: seventeen minutes of CI.
+#: Verification commands USED to run concurrently, on the argument that they
+#: are independent subprocesses that only read the tree and serial execution
+#: cost seventeen minutes of CI. Both halves were wrong, as measured below, and
+#: they now run one at a time — this paragraph kept stating the old design as
+#: current until QA-4 round eleven.
 #:
 #: Measured: seven tests invoke this script, each paying ~50s while ~35 verify
 #: commands ran one after another — and most of them are `uv run pytest`, so it
 #: was pytest inside pytest inside pytest. The step took 886 of the job's 1021
 #: seconds.
 #:
-#: Eight, not "as many as there are". Several commands are `uv run pytest`,
-#: which contend on the same virtualenv and `.pytest_cache`; a wider pool
-#: trades wall time for a class of flake that would be blamed on the tests.
-VERIFY_WORKERS = 8
+#: **The concurrency is gone; the deduplication is what saved the time.**
+#: 1e359bd did both at once and attributed the saving to the pool. Measured on
+#: this tree, counterbalanced 1,8,8,1 twice on an idle 12-core machine:
+#:
+#:     serial (1 worker)      55.48  56.34  56.47  55.88   mean 56.0s
+#:     concurrent (8 workers) 77.10  77.14  73.89  78.42   mean 76.6s
+#:
+#: Concurrency costs 37% MORE wall time. Twelve cores means this is not CPU
+#: oversubscription — the commands are `uv run pytest`, and what they contend
+#: on is serialised anyway: one virtualenv, one `.pytest_cache`, one disk.
+#:
+#: So the pool bought nothing and charged for it twice. 1e359bd's own message
+#: records the second charge: it introduced a flake its author could not
+#: reproduce, mitigated with `UV_NO_SYNC=1` and guarded by a determinism test
+#: rather than by a fix. Running serially removes the shared mutable state
+#: instead of managing it — the same move `--only` and `--document` make on the
+#: gates this script runs.
+#:
+#: Re-measure before reintroducing a pool. The saving 1e359bd is remembered for
+#: came from keying by COMMAND, which is kept below.
 
 
 def _verify_all(components: list[Component]) -> dict[str, bool]:
-    """Run every verification command at once, keyed by the command itself.
+    """Run every verification command once, keyed by the command itself.
 
     Keyed by COMMAND rather than by component: several components share one —
     `validate_agentic_surface.py --strict` backs three — and running it once
     is both faster and more honest, since a command cannot pass for one
-    component and fail for another in the same instant.
+    component and fail for another in the same instant. That deduplication is
+    the half of 1e359bd that earned its place.
+
+    Serially, in sorted order. Two independent subprocesses that only read the
+    tree can still disagree about it when one of them writes a probe, and this
+    generator's output is COMMITTED and diffed — so a document that depends on
+    an interleaving makes every later `--check` diff ambiguous.
     """
     commands = {c.verify for c in components if c.verify}
-    if not commands:
-        return {}
-
-    with ThreadPoolExecutor(max_workers=VERIFY_WORKERS) as pool:
-        futures = {pool.submit(_verify, command): command for command in sorted(commands)}
-        return {futures[future]: future.result() for future in as_completed(futures)}
+    return {command: _verify(command) for command in sorted(commands)}
 
 
 def evaluate() -> list[tuple[Component, str, str, str]]:
@@ -662,6 +769,11 @@ def evaluate() -> list[tuple[Component, str, str, str]]:
             # L3 command entirely, and under-reporting is the same dishonesty
             # as over-reporting, just easier to miss because it errs modestly.
             detail = f"{count} file(s), no verification command"
+            if component.why_unverifiable:
+                # The reason travels INTO the document. A 🟡 carrying its
+                # rationale is a decision; the same 🟡 without one reads as
+                # work somebody forgot.
+                detail += f" — {component.why_unverifiable}"
             if component.evidence:
                 detail += f" · {evidence_layer(component.evidence)} evidence, not run here: `{component.evidence}`"
             rows.append((component, "🟡", "—", detail))
@@ -716,7 +828,20 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--write", action="store_true", help="update the status document")
     parser.add_argument("--check", action="store_true", help="fail if the document is stale")
+    parser.add_argument(
+        "--document",
+        type=Path,
+        default=DOC,
+        help=(
+            "the document to write or check, instead of the committed one. For tests: proving that the "
+            "staleness check fires requires a stale document, and mutating the real one makes it stale "
+            "for every OTHER process reading it at that moment — a concurrent `--check` then reports "
+            "STALE correctly, about a mutation nobody made. Point this at a copy and the shared state "
+            "goes away, the same reason `--only` exists on the coherence gate."
+        ),
+    )
     args = parser.parse_args()
+    document: Path = args.document
 
     rows = evaluate()
     generated = render(rows)
@@ -725,13 +850,13 @@ def main() -> int:
         print(generated)
         return 0
 
-    if not DOC.is_file():
-        sys.exit(f"missing {DOC.relative_to(REPO_ROOT)}")
+    if not document.is_file():
+        sys.exit(f"missing {document}")
 
-    current = DOC.read_text(encoding="utf-8")
+    current = document.read_text(encoding="utf-8")
     pattern = re.compile(re.escape(BEGIN) + r".*?" + re.escape(END), re.DOTALL)
     if not pattern.search(current):
-        sys.exit(f"{DOC.relative_to(REPO_ROOT)} has no generated block")
+        sys.exit(f"{document} has no generated block")
 
     updated = pattern.sub(lambda _: generated, current)
 
@@ -767,8 +892,14 @@ def main() -> int:
         print("[status] OK — implementation status matches the filesystem")
         return 0
 
-    DOC.write_text(updated, encoding="utf-8")
-    print(f"[status] wrote {DOC.relative_to(REPO_ROOT)}")
+    document.write_text(updated, encoding="utf-8")
+    # Relative when it is inside the repository, absolute when `--document`
+    # points elsewhere: a test writing to a scratch copy should say so.
+    try:
+        shown = document.relative_to(REPO_ROOT)
+    except ValueError:
+        shown = document
+    print(f"[status] wrote {shown}")
     return 0
 
 

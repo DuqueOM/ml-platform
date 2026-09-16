@@ -27,6 +27,14 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+#: Upper bound on every short subprocess this script runs (git, grep). A bound,
+#: not a performance budget: nothing here legitimately takes more than seconds,
+#: and without one a wedged git — an index lock, a network filesystem — hangs CI
+#: until the job's own limit, reporting nothing. On expiry `TimeoutExpired`
+#: propagates and the script exits non-zero: a gate that could not finish must
+#: not read as a gate that passed (QA-4 round eleven).
+SUBPROCESS_TIMEOUT_SECONDS = 120
 TRAIL = REPO_ROOT / "ops" / "audit.jsonl"
 
 VALID_MODES = ("AUTO", "CONSULT", "STOP")
@@ -97,6 +105,7 @@ def _committed_entries() -> list[str] | None:
         ["git", "-C", str(REPO_ROOT), "show", f"HEAD:{TRAIL.relative_to(REPO_ROOT).as_posix()}"],
         capture_output=True,
         text=True,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     if result.returncode != 0:
         return None

@@ -12,6 +12,7 @@ run in a read-only phase, what a tool must declare, and what happens to an
 unregistered tool or to arguments that fail validation.
 """
 
+import json
 from typing import Any
 
 import pytest
@@ -177,3 +178,64 @@ def test_agent_registers_all_tools(store_agent: Any) -> None:
     ]
     for name in expected:
         assert name in agent.registry, f"Tool {name} not registered"
+
+
+# --- capability manifest (ADR-006 read as data) ---------------------------
+# The registry populates itself by import side effect, so the capability
+# contract used to be answerable only by running the program. `manifest()`
+# makes it readable, which is what lets these assertions exist at all.
+def test_manifest_covers_every_registered_tool(registry: Any) -> None:
+    """A tool missing from the manifest is a capability nobody reviews."""
+    manifest = registry.manifest()
+    assert [entry["name"] for entry in manifest] == registry.names()
+
+
+def test_manifest_is_json_serialisable(registry: Any) -> None:
+    """It is only reviewable data if it can leave the process.
+
+    Failure looks like: the manifest carries the tool callable, an audit tries
+    to write it to a file, and the capability surface stays trapped in memory —
+    exactly where it was before.
+    """
+    assert json.loads(json.dumps(registry.manifest()))
+
+
+def test_manifest_describes_every_tool(registry: Any) -> None:
+    """A named capability with no stated purpose.
+
+    Descriptions default to the tool's docstring summary, so this fails only
+    when a tool ships with neither — which is the case worth catching.
+    """
+    undescribed = [entry["name"] for entry in registry.manifest() if not entry["description"]]
+    assert not undescribed, f"registered with no description and no docstring: {undescribed}"
+
+
+def test_manifest_reports_capability_flags_not_just_names(registry: Any) -> None:
+    """The flags are the point; a manifest of names is a list.
+
+    `order_create` is the invariant this project is built around: dry-run in
+    Phase 1, never read-only, and it must say so in the data.
+    """
+    by_name = {entry["name"]: entry for entry in registry.manifest()}
+    order_create = by_name["order_create"]
+    assert order_create["dry_run_only"] is True
+    assert order_create["read_only"] is False
+    assert order_create["args_schema"] is not None, "order_create validates its args; the manifest must show it"
+
+
+def test_this_phase_exposes_no_mutating_tool(registry: Any) -> None:
+    """The Phase-1 invariant, asserted over the set rather than call by call.
+
+    `test_tool_contract_phase_one_blocks_a_mutating_tool` proves the gate
+    works. This proves there is nothing for it to block — a different claim,
+    and the one that would silently stop being true when a tool is added.
+    """
+    assert registry.mutating_tools() == []
+
+
+def test_mutating_tools_names_a_tool_that_declares_nothing() -> None:
+    """Fail-closed, restated as data: silence is not a claim of safety."""
+    reg = ToolRegistry(read_only_mode=True)
+    reg.register("undeclared", lambda **k: _ok())
+    reg.register("declared", lambda **k: _ok(), read_only=True)
+    assert reg.mutating_tools() == ["undeclared"]

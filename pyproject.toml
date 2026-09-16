@@ -14,6 +14,18 @@ dependencies = [
     # `# nosec` for a small risk is how a scanner becomes decorative, and
     # `.security-baselines/` holds zero suppressions on purpose.
     "defusedxml~=0.7",
+    # `scripts/check_artifact_compatibility.py` compares a resolved version
+    # against a requirement specifier. Hand-parsing `~=` is how a gate quietly
+    # gets the compatible-release rule wrong in the permissive direction, and
+    # this was available transitively — which is not the same as declared.
+    "packaging>=24.0",
+    # `scripts/check_template_render_safety.py` parses every payload file with
+    # Copier's own delimiters. Jinja2 was already resolving here — as a
+    # transitive of the `orchestration` extra — which means the gate would have
+    # worked on a machine that had run `uv sync --all-extras` and failed on a
+    # base sync, with an ImportError rather than a verdict. Same argument as
+    # `packaging` above: available is not declared.
+    "jinja2>=3.1",
 ]
 
 [project.optional-dependencies]
@@ -195,6 +207,24 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "pre-commit>=4.6.2",
+]
+# DVC owns exactly one class of data (ADR-009): datasets with no authoritative
+# URL — generated, derived, curated or labelled here. Third-party downloads are
+# pinned by SHA-256 in `docs/datasets/datasets.lock.json` instead, because a
+# source that can re-serve the same bytes does not need a second copy of them.
+#
+# A dependency GROUP, not an extra, and the distinction is load-bearing: CI runs
+# `uv sync --all-packages --all-extras`, so an extra would install ~40 packages
+# on every build. `orchestration` earns that because a CI test imports the DAGs;
+# nothing in CI imports dvc. The inventory detector matches `.dvc/` — a path, not
+# an import — and `tests/test_dataset_lock.py` reads only the registry.
+#
+# The `[s3]` marker is what lets the remote address MinIO locally and the same
+# object store in cloud: one protocol, one code path, only the endpoint moves.
+#
+#     uv sync --group data-versioning
+data-versioning = [
+    "dvc[s3]~=3.62",
 ]
 
 [tool.hatch.build.targets.wheel]

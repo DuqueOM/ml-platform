@@ -18,9 +18,12 @@ program.
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = REPO_ROOT / "scripts" / "check_action_pins.py"
@@ -178,3 +181,61 @@ def test_every_scanner_is_pinned() -> None:
         )
 
     assert seen, "no scanner action was found in any workflow, so this test asserted nothing"
+
+
+# --- object type: the half the offline gate cannot see -----------------------
+
+#: `owner/repo[/subpath]@<40-hex> # <tag>`, subpath included so an action like
+#: `github/codeql-action/upload-sarif` is not missed — the shape an earlier
+#: manual sweep skipped for exactly that reason.
+_PIN = re.compile(r"uses:\s*([A-Za-z0-9._-]+/[A-Za-z0-9._/-]+)@([0-9a-f]{40})\s*#\s*(\S+)")
+
+
+def _pins() -> list[tuple[str, str, str]]:
+    """Every third-party pin in the workflows, as (owner/repo, sha, tag)."""
+    found = []
+    for path in sorted(WORKFLOWS.glob("*.yml")):
+        for full, sha, tag in _PIN.findall(path.read_text(encoding="utf-8")):
+            owner_repo = "/".join(full.split("/")[:2])
+            found.append((owner_repo, sha, tag))
+    return sorted(set(found))
+
+
+def _gh(endpoint: str) -> str | None:
+    """One GitHub API field, or None when the call does not resolve."""
+    result = subprocess.run(["gh", "api", endpoint, "-q", ".sha"], capture_output=True, text=True, timeout=30)
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+@pytest.mark.integration
+def test_every_pin_is_a_commit_object() -> None:
+    """A digest may be a commit or an annotated tag object, and only one is wanted.
+
+    Both are immutable, so this is not a supply-chain finding — it is a
+    tooling one. Dependabot's action updater is documented against commit
+    shas, so a tag-object pin can silently stop receiving upgrade proposals,
+    and the comment beside it then rots with nothing proposing a fix.
+
+    QA-4 round five found four such pins while `check_action_pins.py` claimed
+    every pin was a commit. The offline gate cannot tell the two apart from
+    the hex alone, which is why this test exists and why it needs the network.
+    """
+    if shutil.which("gh") is None:
+        pytest.skip("gh CLI not available; object type cannot be resolved")
+
+    pins = _pins()
+    assert pins, "no pins parsed from the workflows — the regex is broken, not the tree"
+
+    tag_objects = []
+    for owner_repo, sha, tag in pins:
+        if _gh(f"repos/{owner_repo}/git/commits/{sha}") == sha:
+            continue
+        if _gh(f"repos/{owner_repo}/git/tags/{sha}") is not None:
+            tag_objects.append(f"{owner_repo}@{sha[:8]} ({tag})")
+
+    assert not tag_objects, (
+        "pinned to an annotated tag object rather than a commit: "
+        + ", ".join(tag_objects)
+        + ". Resolve the tag to the COMMIT it names — `gh api repos/<repo>/git/tags/<sha> -q .object.sha` — "
+        "so Dependabot keeps proposing upgrades for it."
+    )

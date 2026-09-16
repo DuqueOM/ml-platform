@@ -16,16 +16,26 @@ Exit code 1 on any failure. Run before declaring a round complete.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import itertools
 import json
 import re
 import subprocess
 import sys
+from collections.abc import Callable
 from datetime import date, datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+#: Upper bound on every short subprocess this script runs (git, grep). A bound,
+#: not a performance budget: nothing here legitimately takes more than seconds,
+#: and without one a wedged git — an index lock, a network filesystem — hangs CI
+#: until the job's own limit, reporting nothing. On expiry `TimeoutExpired`
+#: propagates and the script exits non-zero: a gate that could not finish must
+#: not read as a gate that passed (QA-4 round eleven).
+SUBPROCESS_TIMEOUT_SECONDS = 120
 DECISIONS = REPO_ROOT / "docs" / "decisions"
 ADR_INDEX = DECISIONS / "README.md"
 PLAN = REPO_ROOT / "docs" / "architecture" / "technical-plan.md"
@@ -127,6 +137,7 @@ def _adrs_at_head() -> set[str]:
         capture_output=True,
         text=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     numbers = set()
     for line in result.stdout.splitlines():
@@ -512,6 +523,7 @@ def _scannable_files() -> list[Path]:
         capture_output=True,
         text=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     return [REPO_ROOT / rel for rel in sorted(set(result.stdout.splitlines())) if (REPO_ROOT / rel).is_file()]
 
@@ -537,6 +549,7 @@ def _check_forbidden_names() -> None:
         ["git", "-C", str(REPO_ROOT), "ls-files", "--cached", "--others", "--exclude-standard"],
         capture_output=True,
         text=True,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     for rel in tracked.stdout.splitlines():
         path = REPO_ROOT / rel
@@ -590,8 +603,12 @@ def check_language_and_privacy() -> None:
     repo_link = re.compile(r"github\.com/([A-Za-z0-9_-]+)/([A-Za-z0-9_.-]+)")
     scanned = 0
 
-    _check_forbidden_names()
+    # Snapshotted BEFORE either scan runs. Taking it after
+    # `_check_forbidden_names` left the guard below able to see only what the
+    # link scan added, so a denylisted-name failure — the standing absolute
+    # constraint — still printed `ok` above its own `FAIL`.
     before = len(failures)
+    _check_forbidden_names()
 
     # Every committed or untracked-but-present file, exactly the set
     # `_check_forbidden_names` reads. This half used to scan `*.md` with
@@ -810,6 +827,7 @@ def _commits_since_ref(ref: str) -> int | None:
         capture_output=True,
         text=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     if resolved.returncode != 0:
         return None
@@ -837,6 +855,7 @@ def _commits_since_ref(ref: str) -> int | None:
         capture_output=True,
         text=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     if reachable.returncode != 0:
         # UNREACHABLE, not None: None means "cannot measure, fall back to
@@ -851,6 +870,7 @@ def _commits_since_ref(ref: str) -> int | None:
         capture_output=True,
         text=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     if counted.returncode != 0:
         return None
@@ -888,6 +908,7 @@ def _commits_since(when: date) -> int:
         capture_output=True,
         text=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     cutoff = when.isoformat()
     return sum(1 for line in result.stdout.splitlines() if line.strip() > cutoff)
@@ -1034,6 +1055,7 @@ def _commit_count() -> int:
         ["git", "-C", str(REPO_ROOT), "rev-list", "--count", "HEAD"],
         capture_output=True,
         text=True,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     return int(result.stdout.strip()) if result.returncode == 0 else 0
 
@@ -1044,6 +1066,7 @@ def _commits_since_last_tag() -> int:
         ["git", "-C", str(REPO_ROOT), "describe", "--tags", "--abbrev=0"],
         capture_output=True,
         text=True,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     if describe.returncode != 0:
         return _commit_count()
@@ -1051,6 +1074,7 @@ def _commits_since_last_tag() -> int:
         ["git", "-C", str(REPO_ROOT), "rev-list", "--count", f"{describe.stdout.strip()}..HEAD"],
         capture_output=True,
         text=True,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     return int(result.stdout.strip() or 0)
 
@@ -1102,17 +1126,68 @@ def check_changelog_covers_the_commit_range() -> None:
     fail("C8", "[Unreleased] is effectively empty while commits have accumulated")
 
 
+def _registry(adrs: dict[str, Path]) -> dict[str, Callable[[], None]]:
+    """Every check, keyed by the id it reports under, in run order.
+
+    The single source for both the full run and `--only`. A check reachable one
+    way and not the other would be a check that cannot be exercised in
+    isolation, which is the whole reason this mapping exists —
+    `tests/test_gate_scripts.py` asserts it covers every `check_*` function in
+    this module, because a hand-written registry is exactly the shape of defect
+    W-7 describes one level up.
+
+    Order is the reporting order and is deliberate: C7 last, because its
+    staleness counter is the one most likely to be red for reasons unrelated to
+    whatever a reader is looking at.
+    """
+    return {
+        "C1": lambda: check_adr_index(adrs),
+        "C2": lambda: check_no_dangling_refs(adrs),
+        "C3": lambda: check_adrs_are_integrated(adrs),
+        "C4": check_gate_traceability,
+        "C5": check_agentic_surface,
+        "C6": check_language_and_privacy,
+        "C8": check_changelog_covers_the_commit_range,
+        "C9": check_copier_commands_are_pinned,
+        "C7": check_audit_freshness,
+    }
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Documentation coherence gate (ADR-005).")
+    parser.add_argument(
+        "--only",
+        metavar="CHECK",
+        help=(
+            "run one check by id (C1..C9) instead of all of them. For negative controls: "
+            "a test asserting that C6 does not fire should not also assert that C7's audit "
+            "counter is green, and one that does reports a false cause when it is not."
+        ),
+    )
+    args = parser.parse_args()
+
     adrs = _adr_files()
-    check_adr_index(adrs)
-    check_no_dangling_refs(adrs)
-    check_adrs_are_integrated(adrs)
-    check_gate_traceability()
-    check_agentic_surface()
-    check_language_and_privacy()
-    check_changelog_covers_the_commit_range()
-    check_copier_commands_are_pinned()
-    check_audit_freshness()
+    registry = _registry(adrs)
+
+    if args.only:
+        selected = args.only.upper()
+        if selected not in registry:
+            # Exit 2, not 1: an unknown id is a usage error, and returning 0
+            # here would make `--only C99` a command that runs nothing and
+            # reports success — the dead-gate shape this flag exists to let
+            # tests avoid.
+            print(f"[coherence] unknown check {args.only!r}; known: {', '.join(registry)}", file=sys.stderr)
+            return 2
+        registry[selected]()
+        if not failures and not notes:
+            # A check that reports neither a pass nor a failure has verified
+            # nothing, and a control asserting "C6 did not fire" would pass on
+            # that silence. Same defect as the one this flag fixes, one level in.
+            print(f"[coherence] {selected} reported neither a pass nor a failure", file=sys.stderr)
+            return 2
+    else:
+        for check in registry.values():
+            check()
 
     for note in notes:
         print(f"  ok  {note}")

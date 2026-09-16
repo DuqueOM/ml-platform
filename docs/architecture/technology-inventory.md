@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**49 of 119 committed technologies implemented (41%)** — plus 15 studied and 10 rejected, which are decisions rather than gaps.
+**55 of 121 committed technologies implemented (45%)** — plus 15 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 | :-: | --- |
@@ -15,7 +15,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | 📓 | Studied: deliberately not wired in (ADR-004) |
 | 🚫 | Rejected, with the reason recorded |
 
-## Python toolchain — 5 built, 1 pending
+## Python toolchain — 6 built, 0 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
@@ -24,7 +24,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ✅ | `ruff` | core | |
 | ✅ | `mypy` | core | |
 | ✅ | `pytest` | core | |
-| ⬜ | `coverage` | core | |
+| ✅ | `coverage` | core | |
 | 🚫 | `black` | rejected | Superseded by ruff format (ADR-004). Keeping both is two formatters disagreeing. |
 | 🚫 | `isort` | rejected | Superseded by ruff's I rules (ADR-004). |
 | 🚫 | `poetry` | rejected | uv chosen (ADR-004); two resolvers is two lockfiles. |
@@ -54,13 +54,13 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | 📓 | `docker-compose` | studied | kind used instead: the local stack must exercise Kubernetes manifests, which compose cannot. |
 | ✅ | `devcontainers` | demonstrated | |
 
-## CI/CD — 8 built, 1 pending
+## CI/CD — 9 built, 0 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
 | ✅ | `github-actions` | core | |
 | ✅ | `codecov` | core | |
-| ⬜ | `coverage-gate` | core | |
+| ✅ | `coverage-gate` | core | |
 | ✅ | `release-on-tag` | core | |
 | ✅ | `openssf-scorecard` | core | |
 | ✅ | `docs-quality-lint` | core | |
@@ -165,12 +165,12 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `triton` | demonstrated | |
 | ⬜ | `onnx` | demonstrated | |
 
-## ML lifecycle — 0 built, 3 pending
+## ML lifecycle — 1 built, 2 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
 | ⬜ | `mlflow` | core | |
-| ⬜ | `dvc` | core | |
+| ✅ | `dvc` | core | |
 | ⬜ | `ray-tune` | demonstrated | |
 | 🚫 | `katib` | rejected | Ray Tune chosen; Katib requires operating Kubeflow. |
 
@@ -207,11 +207,11 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `test-clock-isolation` | core | A test depending on wall-clock time fails at midnight, in another timezone, or on a leap day — always far from the change that introduced it. |
 | ✅ | `mcp-registry` | core | |
 
-## Drift detection — 0 built, 10 pending
+## Drift detection — 1 built, 9 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
-| ⬜ | `drift-contract` | core | DriftSignal / DriftVerdict / ReferenceWindow. A signal carries the METHOD and the dated reference window that produced it. |
+| ✅ | `drift-contract` | core | |
 | ⬜ | `drift-tabular-psi` | core | PSI with quantile bins. The inherited playbook, used where it actually fits. |
 | ⬜ | `drift-tabular-sliced-performance` | core | Concept drift against ground truth. Scheduled by LABEL LATENCY — months for credit risk. |
 | ⬜ | `drift-embedding-space` | core | PSI over raw pixels is noise; the signal lives in embedding space. |
@@ -268,7 +268,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ✅ | `copier-project-generator` | core | |
 | 📓 | `pants` | studied | Correct at a build-time threshold not yet reached (ADR-001 revisit trigger). |
 
-## Governance — 3 built, 3 pending
+## Governance — 5 built, 3 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
@@ -278,5 +278,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ✅ | `model-cards` | core | |
 | ✅ | `adrs` | core | |
 | ✅ | `quality-gates` | core | |
+| ✅ | `fairness-metrics` | core | |
+| ✅ | `fairness-four-fifths-margin` | core | |
 
 <!-- END GENERATED -->

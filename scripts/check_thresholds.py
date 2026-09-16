@@ -36,6 +36,14 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+#: Upper bound on every short subprocess this script runs (git, grep). A bound,
+#: not a performance budget: nothing here legitimately takes more than seconds,
+#: and without one a wedged git — an index lock, a network filesystem — hangs CI
+#: until the job's own limit, reporting nothing. On expiry `TimeoutExpired`
+#: propagates and the script exits non-zero: a gate that could not finish must
+#: not read as a gate that passed (QA-4 round eleven).
+SUBPROCESS_TIMEOUT_SECONDS = 120
+
 
 @dataclass(frozen=True)
 class Threshold:
@@ -148,7 +156,13 @@ def _git(*args: str) -> str:
     turning those into exceptions would make the gate fail where it should fall
     back.
     """
-    result = subprocess.run(["git", "-C", str(REPO_ROOT), *args], capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), *args],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
+    )
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
@@ -199,6 +213,7 @@ def _baseline_ref(path: str) -> str:
         capture_output=True,
         text=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     if dirty.stdout.strip():
         return "HEAD"
@@ -225,6 +240,7 @@ def _at_head(path: str) -> str | None:
         capture_output=True,
         text=True,
         check=False,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     return result.stdout if result.returncode == 0 else None
 

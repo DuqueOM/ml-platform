@@ -27,6 +27,7 @@ exit code.
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -36,6 +37,27 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 import check_technology_inventory as inventory  # noqa: E402
+
+
+def _declared_content_patterns() -> list[str]:
+    """Every `pattern:` detector in the committed inventory, deduplicated.
+
+    Read from the YAML rather than restated here: a list maintained beside the
+    thing it describes is a second copy that goes stale, and a sweep over a
+    stale copy passes for the same reason an empty one does.
+    """
+    import yaml
+
+    document = yaml.safe_load((REPO_ROOT / "docs" / "architecture" / "technology-inventory.yaml").read_text())
+    patterns = {
+        detector.split("pattern:", 1)[1].split("|", 1)[0]
+        for category in document["categories"]
+        for item in category["items"]
+        for detector in item.get("detect", [])
+        if detector.startswith("pattern:")
+    }
+    assert len(patterns) > 20, f"only {len(patterns)} content detectors parsed — the reader stopped matching"
+    return sorted(patterns)
 
 
 @pytest.fixture
@@ -114,3 +136,60 @@ def test_requirements_txt_is_still_evidence() -> None:
     """
     assert ".txt" not in inventory._PROSE_SUFFIXES
     assert ".md" in inventory._PROSE_SUFFIXES
+
+
+# --- word boundaries, on patterns that are not words ------------------------
+# QA-4 round eight: `_as_word` accepted a leading hyphen and wrapped it in `\b`,
+# producing a regex that could not match its own literal text. Two core
+# technologies reported NOT BUILT while their flags sat in `ci.yml`. Everything
+# above exercised the function with the bare word `feast`, which anchors fine.
+@pytest.mark.parametrize("pattern", ["--cov-branch", "--cov-fail-under", "-x", "--strict"])
+def test_a_flag_shaped_pattern_matches_its_own_text(pattern: str) -> None:
+    """The minimum a detector must do: find the string it is looking for.
+
+    Failure looks like: `\\b--cov-branch\\b`, which is unsatisfiable because a
+    hyphen is not a word character and no boundary exists before it. The
+    technology reports absent, and an absent detector is indistinguishable from
+    an honestly missing artifact — the direction of error nobody investigates.
+    """
+    assert re.search(inventory._as_word(pattern), pattern), (
+        f"the detector for {pattern!r} cannot match {pattern!r}; it can never report built"
+    )
+
+
+def test_a_flag_shaped_pattern_is_still_bounded_where_a_boundary_exists() -> None:
+    """The fix must not buy matching by dropping the protection that motivated it."""
+    assert not re.search(inventory._as_word("--cov"), "--coverage"), (
+        "the trailing boundary was dropped; `--cov` now matches inside `--coverage`"
+    )
+
+
+def test_a_bare_word_keeps_both_boundaries() -> None:
+    """The original guarantee: `ray` must not match inside `NDArray`.
+
+    This is the regression the conditional anchoring could have introduced, and
+    the reason `_as_word` exists at all — `pattern:ray` once reported Ray Tune
+    implemented on the strength of a numpy import.
+    """
+    assert not re.search(inventory._as_word("ray"), "NDArray")
+    assert not re.search(inventory._as_word("ray"), "array_split")
+    assert re.search(inventory._as_word("ray"), "import ray")
+
+
+def test_every_detector_pattern_in_the_inventory_can_match_itself() -> None:
+    """Swept across the committed inventory, not only over invented examples.
+
+    A detector that cannot match its own text is unsatisfiable regardless of the
+    tree, so this needs no filesystem — and it would have caught both round-eight
+    entries on the commit that introduced them.
+    """
+    unsatisfiable = []
+    for pattern in _declared_content_patterns():
+        try:
+            compiled = re.compile(inventory._as_word(pattern))
+        except re.error as exc:  # pragma: no cover - a malformed pattern is its own finding
+            unsatisfiable.append(f"{pattern!r} does not compile: {exc}")
+            continue
+        if not compiled.search(pattern):
+            unsatisfiable.append(f"{pattern!r} -> {compiled.pattern!r} cannot match its own text")
+    assert not unsatisfiable, "unsatisfiable detector(s):\n  " + "\n  ".join(unsatisfiable)

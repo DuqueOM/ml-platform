@@ -19,6 +19,7 @@ blast radius, matching the library decomposition rule in
 | [ADR-006](ADR-006-edge-protection.md) | Cloudflare as the single edge control plane, with a gated origin lock | Accepted |
 | [ADR-007](ADR-007-drift-detection-per-project-kind.md) | Drift is one contract and four detectors, not one implementation | Accepted |
 | [ADR-008](ADR-008-serving-a-forecast-from-a-classification-scaffold.md) | The generated service cannot serve this platform's first project | Proposed |
+| [ADR-009](ADR-009-data-versioning-ownership.md) | Three data-versioning mechanisms, one criterion each | Accepted |
 
 ## Format
 
