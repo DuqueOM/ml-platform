@@ -263,6 +263,26 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Fixed
 
+- **A maintainer's personal email address was hard-coded in a public
+  repository.** QA-4 finding F-22. `rag_assistant.ingest` sent it to EDGAR as
+  the `User-Agent` SEC requires. The address now comes from
+  `EDGAR_USER_AGENT`, resolved before the first request or directory is
+  created, and there is no default: SEC blocks the IP of a scraper sending a
+  generic contact, so a plausible-looking default would either publish
+  somebody's address or earn a ban that surfaces later as a network error.
+
+  `projects/rag-assistant/tests/test_ingest_contact.py` covers the refusal
+  (unset, blank, whitespace), the configured value, and that the message says
+  which variable to export. It also greps the module for any address at all,
+  which fails against the previous revision. Addresses at the domains RFC 2606
+  reserves for documentation are exempt — the error message carries one so the
+  fix can be copied — and that exemption exists because the guard flagged it on
+  its first run.
+
+  Unchanged, and deliberately: the security contact published in `SECURITY.md`.
+  A reporting channel has to be reachable; an address baked into code that runs
+  is a different thing.
+
 - **Five documents stated closed gaps as open, or a possible check as
   impossible.** QA-4 round eleven, P2 and P3. `docs/COMPLIANCE_MAPPING.md`
   reported the cloud overlays as carrying no Pod Security label, the image as
