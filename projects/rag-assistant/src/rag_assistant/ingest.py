@@ -9,10 +9,15 @@ defects in the sibling project until real data arrived.
 `User-Agent` naming a real contact and rate-limits to 10 requests per second.
 A scraper that ignores either gets the IP blocked, so the delay is not
 politeness — it is the difference between a corpus and a ban.
+
+The contact comes from ``EDGAR_USER_AGENT`` and has no default. It was a
+maintainer's personal email address, written into a public repository, until
+QA-4 found it.
 """
 
 from __future__ import annotations
 
+import os
 import time
 import urllib.request
 from dataclasses import dataclass
@@ -24,8 +29,37 @@ from rag_assistant.contracts import FILING_INDEX
 
 EDGAR = "https://www.sec.gov"
 
-#: SEC requires a contact address. A generic string is a blocked IP.
-USER_AGENT = "ml-platform-research DuqueOM (queenhollycruz@gmail.com)"
+#: Environment variable carrying the SEC contact. Read at call time, never
+#: baked in: the previous value was a maintainer's personal email address,
+#: hard-coded in a public repository (QA-4 finding F-22). SEC requires a real
+#: contact, so the answer is not a fake default — it is refusing to fetch until
+#: somebody supplies theirs.
+USER_AGENT_VARIABLE = "EDGAR_USER_AGENT"
+
+
+def user_agent() -> str:
+    """The `User-Agent` EDGAR requires, from the environment.
+
+    Returns:
+        The contact string, exactly as configured.
+
+    Raises:
+        RuntimeError: When the variable is unset or blank. Failing closed is
+            deliberate: a default would either publish somebody's address or
+            send SEC a contact that reaches nobody, and SEC blocks the IP for
+            the second — so the failure belongs before the first request, not
+            in a ban that arrives later and looks like a network problem.
+    """
+    value = os.environ.get(USER_AGENT_VARIABLE, "").strip()
+    if not value:
+        raise RuntimeError(
+            f"{USER_AGENT_VARIABLE} is unset. EDGAR requires a User-Agent naming a real contact "
+            f"(https://www.sec.gov/os/webmaster-faq#developers), and this repository ships no default "
+            f"because a default is either somebody's private address or a contact that reaches nobody. "
+            f'Set it, for example: export {USER_AGENT_VARIABLE}="Your Project you@example.com"'
+        )
+    return value
+
 
 #: SEC allows 10 requests per second. Sitting at the limit is how a shared
 #: address gets throttled for everyone behind it, so this runs at half.
@@ -123,6 +157,9 @@ def fetch_filings(filings: list[Filing], destination: Path, *, limit: int = 10) 
         Paths written. Already-present files are not re-fetched, so a rerun
         after a failure resumes rather than starting over.
     """
+    # Resolved before anything is created or requested: an unset contact must
+    # fail before the first byte, not halfway through a corpus.
+    contact = user_agent()
     destination.mkdir(parents=True, exist_ok=True)
     written = []
 
@@ -133,7 +170,7 @@ def fetch_filings(filings: list[Filing], destination: Path, *, limit: int = 10) 
             continue
 
         _require_https(filing.url)
-        request = urllib.request.Request(filing.url, headers={"User-Agent": USER_AGENT})
+        request = urllib.request.Request(filing.url, headers={"User-Agent": contact})
         with urllib.request.urlopen(request, timeout=60) as response:  # nosec B310
             target.write_bytes(response.read())
         written.append(target)
