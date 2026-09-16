@@ -5,3 +5,4 @@ resources:
   - default-deny.yaml
   - allow-dns.yaml
   - allow-serving-ingress.yaml
+  - allow-serving-egress.yaml

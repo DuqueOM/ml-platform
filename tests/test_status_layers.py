@@ -190,20 +190,28 @@ def test_a_shared_verification_command_runs_once() -> None:
 
 
 def test_the_generated_document_is_deterministic() -> None:
-    """Three runs, one answer. This is the property parallelism put at risk.
+    """Three runs, one answer — for a generator that no longer races itself.
 
-    The verification commands now run concurrently, and concurrency in a
-    generator whose output is COMMITTED and diffed is a correctness question
-    before it is a performance one: a document that differs between runs makes
-    every `--check` failure ambiguous, and this repository has already paid for
-    that once with `preflight` reading host state.
+    This test used to guard a thread pool, and its previous docstring called
+    three samples "what holds the property". They do not: with a race of rate
+    p, three samples catch it with probability 1-(1-p)**3 — fourteen percent at
+    p=0.05. A test calibrated below the rate of the defect it watches is not a
+    gate that cannot fail, it is one that usually does not, and QA-4 round ten's
+    non-determinism finding is what sent somebody to look at it.
 
-    A flake appeared exactly once — a command reported failing in a pool run
-    and passing in isolation — and did not reproduce. The suspected cause was
-    concurrent `uv run` re-syncing one virtualenv, which `_verify` now
-    disables. This test is what holds the property rather than that reasoning:
-    if the pool ever produces two different documents, it fails here instead of
-    in a confusing `--check` diff on somebody's branch.
+    The answer was not more samples. Measured counterbalanced on an idle
+    machine, the pool cost 37% MORE wall time than running serially, so it was
+    removed — see the comment above `_verify_all`. Sampling cannot establish the
+    absence of a race; removing the shared state can, and did.
+
+    What remains worth three runs is the class `preflight` taught this
+    repository: a generator that reads HOST state — free memory, open ports, a
+    clock — produces a different committed document on a different machine, and
+    every `--check` failure afterwards is ambiguous. That is not a race, so
+    repeated sampling on one host is a weak instrument against it too, and this
+    test says so rather than implying otherwise. The strong instrument is the
+    rule that a verification command must be reproducible, which
+    `Component.verify` states and `why_unverifiable` exists to enforce.
     """
     outputs = set()
     for _ in range(3):
@@ -212,13 +220,14 @@ def test_the_generated_document_is_deterministic() -> None:
             capture_output=True,
             text=True,
             cwd=REPO_ROOT,
-            timeout=300,
+            timeout=600,
         )
         assert result.returncode == 0, result.stderr
         outputs.add(result.stdout)
 
     assert len(outputs) == 1, (
-        f"the generator produced {len(outputs)} different documents across three runs. "
-        f"A derived file that is not deterministic cannot be diffed, and every stale-check "
-        f"failure it causes will be blamed on the wrong change."
+        f"the generator produced {len(outputs)} different documents across three runs. A derived file "
+        f"that is not deterministic cannot be diffed, and every stale-check failure it causes will be "
+        f"blamed on the wrong change. With the pool gone, suspect a verification command that reads host "
+        f"state rather than an interleaving."
     )

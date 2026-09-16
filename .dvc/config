@@ -1,0 +1,27 @@
+# DVC remote. Read ADR-009 before changing anything here.
+#
+# DVC owns ONE class of data: datasets with no authoritative URL — generated,
+# derived, curated or labelled here. Third-party downloads are pinned by
+# SHA-256 in docs/datasets/datasets.lock.json instead, and pipeline tables live
+# in Iceberg. Three mechanisms, one criterion each, no overlap.
+#
+# The remote speaks S3 so MinIO locally and cloud object storage share one code
+# path, exactly as libs/../lakehouse.py already does — only the endpoint moves.
+# localhost:19000 is the kind cluster's MinIO API (platform/local/kind-cluster.yaml).
+#
+# CREDENTIALS ARE NOT IN THIS FILE and must never be. This file is committed;
+# .dvc/config.local is gitignored and is where a machine-specific override
+# belongs. For the local stack, export the values MinIO is started with:
+#
+#     export AWS_ACCESS_KEY_ID=mlplatform
+#     export AWS_SECRET_ACCESS_KEY=local-only-not-a-secret
+#
+# In cloud there is no key to export: Workload Identity Federation on GCP and
+# IRSA on AWS supply the credential, which is the whole reason the origin is
+# S3-protocol rather than a bespoke transport.
+[core]
+    analytics = false
+    remote = local-minio
+['remote "local-minio"']
+    url = s3://ml-platform-data/dvc
+    endpointurl = http://localhost:19000

@@ -20,6 +20,165 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Added
 
+- **The Copier render root is parsed, so a stray delimiter cannot break the
+  generator for everyone.** `scripts/check_template_render_safety.py`, gate P15,
+  ported from `ml-service-template`. `copier.yml` sets `_templates_suffix: ""`,
+  which makes **every** file under `templates/project/` a Jinja template — not
+  only the ones that look like one. A file that happens to contain the
+  delimiters therefore does not render oddly; it aborts `copier copy`, and
+  whoever ran the generator gets nothing at all.
+
+  **What it adds to the render test — corrected, see Fixed.**
+  `tests/test_project_generator.py` renders the payload for real and remains
+  the authority on behaviour. A render exercises only the branches its answers
+  select; a parse examines every branch of every file for any answers, and costs
+  milliseconds rather than a render — which is why it can also run in
+  pre-commit.
+
+  **Three deliberate departures from upstream, recorded rather than silent.**
+  Path *segments* are parsed as well as file bodies: copier renders those too,
+  and this render root has one, `src/{@ project_slug @}/`, which the original
+  would not have examined. The single function was decomposed and a `--root`
+  flag added, so each defect class is watched failing against a temporary tree
+  — breaking the real payload to prove the gate works would put shared state
+  under three other checks and a concurrent render test, which is the defect
+  class this repository has now found four times. And `jinja2` moved from a
+  transitive of the `orchestration` extra to a declared dependency: the gate
+  would otherwise have worked on a machine that had run `uv sync --all-extras`
+  and raised `ImportError` on a base sync, which is a verdict replaced by an
+  environment error.
+
+  The delimiters are read from `copier.yml` `_envops`, never hardcoded, and
+  they are not Jinja's defaults — this repository uses `{@ … @}` so a generated
+  project's GitHub Actions `${{ … }}` does not collide. That choice removes the
+  Actions hazard and introduces a quieter one the gate now names in its failure
+  output: bash's `"${@}"` contains `{@`, and `${#array[@]}` opens `{#`, the
+  comment token. Both are reproduced in
+  `tests/test_template_render_safety.py`.
+
+- **Fairness metrics promoted to `libs/ml-core`, rewritten rather than copied.**
+  `ml_core.fairness` — disparate impact ratio, equal opportunity difference,
+  demographic parity difference and the equalized-odds FPR gap, over
+  `GroupOutcome` counts. The platform had **no fairness implementation at all**
+  while Phase 4 promises fairness gates and `AGENTS.md` carries an escalation
+  trigger keyed to a disparate impact ratio — a governance rule with nothing to
+  govern. Nothing in the inventory tracked it either, so nothing could report
+  it absent.
+
+  **Rewritten, and the distinction matters.** `ml-service-template`'s version
+  was correct arithmetic wrapped in things ADR-001 excludes from `ml-core`:
+  `PROTECTED_ATTRIBUTES` TODOs naming features, pandas DataFrames, JSON file
+  output, logging, and a second `calibration_error` beside the one
+  `ml_core.decision` already exports. ADR-003 makes the template authoritative
+  on **service-level** concerns and its point 3 assigns multi-project libraries
+  here, so this is not a local patch of upstream.
+
+  **The design problem was never the arithmetic.** Every one of these metrics
+  has inputs on which it cannot be computed, and the dangerous outcome is
+  `None` reaching a gate that reads absence as absence-of-finding. So an
+  undefined ratio **escalates rather than passing**: a model that selects
+  nobody has no defined disparate impact, and the obvious implementations
+  either return 1.0 or omit the key — both report the most discriminatory
+  possible model as the fairest. `demand-forecast`'s gates file already named
+  that failure in prose ("a gate that passes by being uncomputable") as its
+  reason for deleting a fairness gate rather than keeping a plausible one; it
+  is now executable.
+
+  A group too small to be reliable is **reported and does not escalate** —
+  making a rare category a STOP blocks every audit that has one, and the
+  blocked party's cheapest fix is deleting the category, which destroys the
+  evidence rather than the disparity.
+
+  `Action` is imported from `ml_core.drift` rather than redefined: a fairness
+  finding and a drift finding both end in a human decision or they do not, and
+  `agent-ops` consumes them through one enum. 32 tests, 100% line and branch
+  coverage.
+
+- **The drift contract exists, four months after ADR-007 specified it.**
+  `libs/ml-core/src/ml_core/drift/` — `ReferenceWindow`, `DriftSignal`,
+  `DriftResponse`, `Verdict`, `Action`, `Direction`, `worst_action`. The
+  inventory declared `drift-contract` at Core tier with a detector pointing at
+  that path; the path did not exist, which is the same defect DVC carried.
+
+  The module computes almost nothing. Its value is that four ways of producing
+  a worthless drift number are now impossible to express: a measurement with no
+  method (ADR-005 rule A, refused); a baseline that moved with no record
+  (`ReferenceWindow.roll` links what it replaced, because ADR-007 permits
+  rolling and forbids rolling *silently*); a verdict with no declared response
+  (`DriftResponse` has no defaults — a field with a default is a field nobody
+  fills in); and a direction left implicit.
+
+  **`Direction` is the one that would have bitten.** PSI, embedding distance
+  and cost-per-request drift upward; recall@5, accuracy and interval coverage
+  drift downward. A contract assuming one silently inverts the verdict for
+  every metric of the other kind — toward "stable", which is the half nobody
+  checks. 0.55 is a WARNING against a recall floor and DRIFTED against a PSI
+  ceiling, and a test asserts exactly that.
+
+  **AGENTS.md's escalation trigger is encoded, not restated.** "Drift PSI above
+  TWICE the configured threshold" becomes `escalate_at`, defaulting to
+  `2 x drifted_at` for an upward metric and **refused** for a downward one:
+  doubling a recall floor of 0.5 gives 1.0, putting the STOP boundary at
+  perfect performance where it can never fire. Escalation only ever raises, so
+  a project declaring a milder response does not opt out of a STOP.
+
+  35 tests, 100% line and branch coverage. The four detectors remain
+  per-project and absent, correctly: their inventory rows point at
+  `projects/credit-risk`, `projects/doc-intelligence` and `projects/agent-ops`.
+
+- **The tool registry publishes its capability surface as data.**
+  `ToolRegistry.manifest()` and `mutating_tools()` — tools register by import
+  side effect, so "what can this agent do, and what may it mutate" was
+  answerable only by running the program, which is the one method unavailable
+  to a reviewer or an audit. It is the move this repository already made twice:
+  thresholds became data in `evals/gates.yaml`, dataset bytes in
+  `datasets.lock.json`.
+
+  Descriptions default to the tool's docstring summary, so the five existing
+  store tools gained descriptions with zero changes at any call site — and a
+  tool with neither shows as an empty string in the manifest rather than being
+  absent from it. The idea is adapted from the plugin-manifest convention in
+  `deepseek-ai/deepseek-harness`, evaluated and **not** forked: a
+  TypeScript/pnpm runtime in a uv workspace is the second-toolchain argument
+  ADR-004 has already rejected five times.
+
+- **Data versioning got an owner per class of data, and the pin got
+  committed** ([ADR-009](docs/decisions/ADR-009-data-versioning-ownership.md)).
+  `dvc` sat at Core tier in the technology inventory with `detect: [".dvc",
+  "dvc.yaml"]` matching nothing, `AGENTS.md` carried a permissions row for a
+  tool no checkout could run, and `docs/datasets/register.md` claimed datasets
+  were versioned by "a download script plus a DVC pointer". Half of that was
+  true.
+
+  **The defect was narrower and worse than "DVC is missing".** `fetch.py` has
+  computed a SHA-256 per file since it was written — into `manifest.json`,
+  which lives under `data/`, which is gitignored. `git ls-files data/` returned
+  nothing. The digests proved *this machine keeps getting the same bytes* and
+  could not prove *everyone gets the same bytes*, which is the entire value of
+  a pin. A source re-publishing different content under a stable URL would have
+  moved every downstream number with no diff anywhere.
+
+  **Three mechanisms, one mechanical criterion each**, so assignment is not a
+  judgement call: Iceberg owns pipeline tables; `docs/datasets/datasets.lock.json`
+  owns third-party downloads, because an authoritative URL can re-serve the
+  bytes and a digest is therefore sufficient; DVC owns data with no such URL —
+  generated, derived, curated or labelled here — because for those a digest
+  records with cryptographic precision that the data was lost.
+
+  Built: the committed lock (263 MB across 3 files pinned), `fetch.py --verify`
+  and `--write-lock`, `tests/test_dataset_lock.py` (8 tests), and `.dvc/` with
+  an S3-protocol remote and analytics disabled. `--verify` was **proven able to
+  fail** by falsifying a pin, which is the check ADR-005 rule K asks for and the
+  one most often skipped. The inventory now reports `dvc` Built because the
+  artifacts exist — the YAML was not edited to make that happen.
+
+  **A correction this work forced.** An earlier reading of this area claimed
+  the retrieval gold set was unversioned data gating promotion. It is not: it
+  is `libs/llm-core/src/llm_core/doc_questions.py`, Python source in git,
+  labelled by `path#heading` so a heading added elsewhere cannot silently
+  re-point it, with `test_doc_retrieval.py` failing when a label stops
+  resolving. Moving it to DVC would have made it less reviewable, not more.
+
 - **The agent core landed, four months after ADR-002 decided it.**
   `agent-local` — multi-tier routing, a deterministic policy gate whose rules
   are versioned data, a fail-closed tool capability contract, cross-tier
@@ -103,6 +262,170 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   151,891-row panel, so the correction added history rather than rewriting it.
 
 ### Fixed
+
+- **Five documents stated closed gaps as open, or a possible check as
+  impossible.** QA-4 round eleven, P2 and P3. `docs/COMPLIANCE_MAPPING.md`
+  reported the cloud overlays as carrying no Pod Security label, the image as
+  `:latest` and the policies README as describing Kyverno — all three closed.
+  It and three other places — the policies README, the local overlay's comment
+  and the manifest tests' docstrings — said kind cannot enforce NetworkPolicy,
+  which round eleven disproved on a live cluster. The policies README omitted
+  the egress policy beside it. The audit brief listed five shipped Phase 1
+  components as not done, restated a figure its own rule says not to restate,
+  and its round-eleven draft omitted open findings.
+
+  All are corrected, and what remains open is no longer implicit:
+  `docs/governance/remediation-work-order.md` gains a *Round eleven* section
+  giving each open item its mode, what it waits on and its closing condition —
+  the namespace-label contract, local enforcement evidence, the artifact the
+  container cannot import, the hand-written serving seam, the model card, an
+  unread configuration field and three small items. W-3 and W-4 are marked done
+  with the commits that did them.
+
+- **The egress test could not fail, and it checked the wrong port.** QA-4
+  rounds ten and eleven, P2. `_permits` matched a substring of the serialised
+  rule, so the metadata server's `ipBlock` satisfied the HTTPS assertion:
+  deleting the `0.0.0.0/0` rule left the test green. And it asserted the
+  metadata server on 443, which no cloud metadata service uses, while nothing
+  asserted 80, which GCP's metadata server, AWS IMDS and Azure IMDS all serve.
+
+  The assertion is now structural — exact CIDR or namespace, exact port — and
+  checks 80 is admitted and 443 is not. The policy itself dropped 443 on the
+  metadata server, which admitted a port nothing needs. Watched failing in a
+  throwaway worktree: removing the HTTPS rule fails all six cloud cells, and so
+  does moving the metadata server back to 443.
+
+- **One subprocess in twenty-five had a bound, and no CI job but one had a
+  timeout.** QA-4 round eleven, P3. A gate waiting on a wedged git or a hung
+  verification command does not fail; it holds the runner until GitHub's
+  six-hour default and reports nothing about why.
+
+  Every call in `scripts/` is now bounded. Git and grep calls take a
+  per-script `SUBPROCESS_TIMEOUT_SECONDS` and fail closed — a gate that could
+  not finish must not read as one that passed. The local preflight treats a
+  probe that times out as "not running", because `docker info` against a
+  wedged daemon never returns, which is common under WSL.
+  `tests/test_subprocess_bounds.py` checks every call from the AST, so the next
+  unbounded one is a red test.
+
+  **The status generator needed more than a keyword, and the first
+  explanation of why was wrong.** `subprocess.run(shell=True, timeout=)`
+  kills only the shell. The comment first claimed the call then blocks on the
+  pipe the grandchild holds open; measured, it returns on time and the
+  grandchild keeps running. Here that grandchild is `uv run pytest`, an orphan
+  still writing probes into the repository after the document recorded it as
+  timed out. `_verify` now runs each command in its own process group and
+  kills the group; the test demonstrates both halves — `run` leaving a
+  survivor, `_verify` leaving none. Its comments no longer describe the
+  verification pool removed in *perf(status): remove the verification pool, which cost 37% and bought nothing* as current.
+
+  Every CI job carries `timeout-minutes`, sized from the last five green runs
+  rather than guessed: 75 for repository invariants (47.4 min measured at its
+  slowest), 10 to 20 for the rest. The Scorecard job was bounded only after
+  reading the verifier that decides whether its published results are
+  accepted.
+
+- **The residue guard watched a hand-written list, and the list was already
+  stale.** QA-4 round eleven, P2. `tests/test_gate_scripts.py` checked that it
+  restored seven named paths. Removing the ADR restore from a test's `finally`
+  left `docs/decisions/ADR-007-*.md` deleted on disk and the module passed —
+  that path was never listed, and neither were five others the module writes.
+  A list of what a module touches goes stale exactly when a probe is added,
+  which is when it is needed.
+
+  The helpers now record every write: `temporarily()` stores each path's bytes
+  before the first write and removes every directory it had to create, and a
+  new `temporarily_absent()` covers deletion. The four probes that wrote
+  directly now go through them. That also fixes a leak the hand-written
+  cleanup had: it removed `probe/` and left `.terraform/` behind. Three tests
+  guard the guard: `_residue()` as a pure function against every shape of
+  unrestored write, the helpers leaving no directory behind, and an AST check
+  that fails on any write in the module that bypasses them — so an unrecorded
+  probe is now a red test rather than an unwatched path. The auditor's
+  reproduction was re-run in a throwaway worktree with the restore sabotaged:
+  the module fails naming the deleted ADR.
+
+- **The serving-seam gate made a promise it could not keep, read its ADR from
+  the wrong place, and had no test.** QA-4 round eleven, P2 and P3, in P14.
+
+  It said it goes red "the moment a fourth straddle appears". It cannot:
+  `SEAM` compares numpy, scikit-learn and joblib, all three are exempt, and a
+  straddle in any other package is never compared — the audit added scipy and
+  pandas straddles to the container's requirements and got OK. The docstring,
+  the CI comment and the P14 row now state what turns it red (the ADR being
+  decided, or an exemption outliving its straddle) and what it does not see.
+  An exemption for a package outside `SEAM` is now itself a failure, since it
+  could never be reported as outlived.
+
+  Its ADR status check searched the whole document, so an accepted ADR quoting
+  `- **Status**: Proposed` in its history kept the exemption, and a
+  reformatted `**Status:** Proposed` lifted it while the ADR was undecided.
+  Only the header is read now, in both bold placements, failing safe when no
+  status is readable.
+
+  `tests/test_artifact_compatibility.py` covers every path against temporary
+  lock, requirements and ADR files. Five of its tests fail against the previous
+  script and pass against this one; the other eleven cover paths it already
+  honoured.
+
+  Round eleven also found the container cannot import the artifact at all: it
+  pickles `ml_core` types and the image installs no workspace library. That is
+  not a version question, so it is not P14's to catch; it is recorded in
+  ADR-008, whose Context also carried three statements the repository
+  contradicts — that nothing calls `joblib.dump`, an image tagged `:latest`,
+  and readiness on `/health/ready`. All three are corrected there.
+
+- **The render-safety gate was justified by a claim that was false, and could
+  pass over nothing.** Three findings from QA-4 round eleven, all in P15.
+
+  Its justification — in the script, the gate row, the parity ledger and this
+  CHANGELOG — said `tests/test_project_generator.py` renders a single answer
+  set. It renders three of the four project kinds; the claim came from a grep
+  that found the default `ANSWERS` and missed the parametrize overriding
+  `project_kind`. The kind it really omitted, `agent`, is now rendered, and the
+  four documents now make the argument that survives: a parse covers every
+  branch for any answers, a render only the branches its answers select.
+
+  It printed `OK — 0 file(s)` with exit 0 for an empty render root, and for a
+  checkout living under any directory named like a cache, because `SKIP_DIRS`
+  was matched against absolute path components. A render root with no payload
+  file is now a setup error, and skip rules apply only inside the root. Both
+  are reproduced in `tests/test_template_render_safety.py`.
+
+- **Every cloud overlay denied DNS, and the only assertion checked a name.**
+  All seven kustomizations — and the base — used `commonLabels`, which adds
+  labels to SELECTORS as well as to resources, including selectors that point
+  at pods the kustomization does not own. `allow-dns`'s peer selector
+  `{k8s-app: kube-dns}` therefore rendered as `{cloud, environment, k8s-app}`,
+  which no CoreDNS pod carries, so under `default-deny` every lookup in all six
+  cloud overlays timed out. QA-4 round ten found it by rendering; round eleven
+  proved it on a live kind cluster — `;; connection timed out; no servers could
+  be reached` with the rendered policies, resolution restored with the selector
+  as written. `tests/test_gitops_manifests.py` asserted that a policy NAMED
+  `allow-dns` existed, which it did.
+
+  Replaced with `labels:` using `includeSelectors: false` and
+  `includeTemplates: true`, in the base and every overlay. Rendered before and
+  after, field by field: the only changes are selectors — the DNS peer, the two
+  serving policies, and the Deployment, Service and PDB, all now `{app:
+  demand-forecast}` — while resource metadata and pod-template labels are
+  unchanged, so anything selecting pods by `environment` or `cloud` still
+  matches.
+
+  **The Deployment selector changed, and `spec.selector` is immutable.** On a
+  cluster running the old manifests an apply is rejected and the Deployment has
+  to be recreated. Nothing has been deployed (L4 evidence is zero), so this is
+  the cheapest moment this change will ever have; it is stated because the next
+  one will not be.
+
+  Three tests, each watched failing: a ban on `commonLabels` anywhere under
+  `platform/`, parsed rather than grepped; exact equality on the rendered DNS
+  peer, because containment would accept the extra keys that were the defect;
+  and every workload and policy selector checked against the labels the pod
+  actually carries — the opposite failure, a selector matching nothing, which
+  applies cleanly. The first two fail on the previous tree; the third passed
+  there, because commonLabels kept selectors aligned with their own pods, so it
+  was proven separately against a mistyped policy selector.
 
 An independent audit found three defects that every existing gate passed over.
 All three are closed here, each watched failing before and passing after.
@@ -207,6 +530,26 @@ All three are closed here, each watched failing before and passing after.
   actually runs the code reported 92.70%. The floors did not move; which runs
   count did, and the alternative — a library suite duplicating a project's — is
   the duplication ADR-001 exists to avoid.
+- **C6 suppressed its `ok` line for one of its two failures, and the test could
+  not tell.** The round-seven fix made a denylisted-name FAIL and a
+  non-public-link FAIL both suppress the reassuring summary above them. Only
+  the link half did: `before = len(failures)` was snapshotted AFTER
+  `_check_forbidden_names`, so the guard could see only what the link scan
+  added, and the denylisted name — the standing absolute constraint, and the
+  more serious of the two — kept printing `ok` directly above its own `FAIL`.
+
+  It shipped green because the regression test used a link probe: **the same
+  half the fix touched**. That is the finding worth keeping. The one-line
+  reorder is closed by a sibling test that probes the denylist half instead,
+  confirmed failing before it and passing after.
+
+  Writing that test found a second instance of the same shape. C6 tokenises
+  every file git knows about, this repository's own tests included, so a probe
+  token spelled out in the test source made the gate report the TEST FILE —
+  and the vacuity guard, which asked only whether some FAIL appeared, was then
+  satisfied by the fixture rather than by the probe. The token is assembled
+  across two statements so the pair never forms, and the guard now requires
+  the probe file to be named.
 - **C2 read a project's own ADR numbering as dangling references.** The twelve
   migrated records are `store-ADR-NNN` now, with the mapping and the reasoning
   in their index, and the check was generalised from "a `template-` prefix" to
@@ -608,6 +951,51 @@ minutes of pointing the backtest at the real feed:
   defects deliberately reintroduced. `calibration_split` was extracted to be
   callable, and both tests were then confirmed failing against each bug.
 
+- **QA-4 round eight: two published claims of enforcement that enforced
+  nothing.** Both were found by an independent session, neither by a gate.
+
+  **`Component.why_unverifiable` was required by a docstring and a CHANGELOG
+  entry, and by nothing that runs.** The comment said *"Required whenever
+  `verify` is None; see `test_status_components.py`"* — a file that had never
+  existed — and 5 of the 7 such components lacked the field. This is a verbatim
+  recurrence: `tests/test_empty_libraries_say_so.py` exists because round five
+  found the same shape in `check_library_reuse.py`, and the recurrence landed
+  four commits after that test was cited as precedent.
+
+  The test now exists, and the invariant is **narrower than the docstring
+  claimed**: a component that renders 🟡 must say why. Requiring it of ⬜ rows
+  would demand a reason from three projects that do not exist — "why is there
+  no verification command" has no content for a thing with no files — and would
+  produce five ceremonial strings that teach everyone the field is boilerplate.
+  Proven able to fail by stripping the reason from `serving-core`.
+
+  **A detector regex that could not match its own text.** `_as_word` accepted a
+  leading hyphen and wrapped it in `\b`, and `\b-` is unsatisfiable: a hyphen
+  is not a word character. `\b--cov-fail-under\b` never matched
+  `--cov-fail-under`, so `coverage` and `coverage-gate` reported NOT BUILT while
+  both flags sat in `ci.yml`. **The headline understated the built count by
+  two: 53 of 121 was really 55.** Anchoring is now conditional on the first and
+  last character, and `ray` still does not match inside `NDArray` — the
+  false-positive this function was written for.
+
+  The gap that let it through was the test suite: it exercised the function
+  with the bare word `feast` only. There is now a sweep over every `pattern:`
+  detector in the committed inventory, asserting each can match its own literal
+  text, which fails on the old implementation.
+
+  **A weaker exemption list than the one it cited as its model.**
+  `datasets.lock.json`'s `unfetched` section carried a reason and nothing that
+  could expire it, while `test_project_contract.py` — named in its own docstring
+  as the model — re-evaluates each deviation's condition. Lock version 2 pairs
+  the reason with `blocked_on`, the repo-relative path whose appearance ends the
+  exemption, so the condition is machine-checkable in CI with no data present.
+  `load_lock` migrates v1 in memory: a format bump that forced everyone to
+  re-download 263 MB to regenerate their pins would be a lockfile working
+  against the reproducibility it exists for.
+
+  Also corrected: the drift CHANGELOG entry said 34 tests where `pytest`
+  collects 35. Wrong when written.
+
 ## [0.1.0] - 2026-08-07
 
 First tagged release. Cut deliberately early, and not because the platform is
@@ -704,6 +1092,21 @@ rather than reading it:
   a test.
 
 ### Changed
+
+- **A yellow marker in the implementation status now has to say why it is
+  yellow.** `Component.why_unverifiable` is required whenever a component has
+  no verify command. Two rows — the local validation stack, whose only
+  candidate command reads host state and so returns different markers from the
+  same commit, and `libs/serving-core`, deliberately empty with one serving
+  consumer — carried their reasons as comments in the generator, where no
+  reader of the generated document could see them. Both markers were correct;
+  the document could not distinguish either from an oversight.
+
+  One of those comments also cited "ADR-001 rule 3" for a claim that ADR does
+  not make — rule 3 is *"`libs/` packages may depend on each other,
+  acyclically"*. The citation is dropped rather than corrected to another
+  number, because no ADR states the premature-abstraction rule that three other
+  places also attribute to it.
 
 - Corrections are **appended, never applied in place**. A wrong claim in an
   accepted ADR stays, with a dated `## Correction` section — the error is

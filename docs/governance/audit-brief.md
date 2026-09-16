@@ -289,18 +289,22 @@ Listed so their absence is not reported as a discovery — and so that anything
 - `ml-service-template` has not been deployed. It must go first, and it is
   blocked on the user choosing a GCP project — the currently authenticated
   one must not be reused (greenfield constraint).
-- Phase 1 remainder: Great Expectations at the warehouse boundary, KFP v2
-  training pipeline, expanding-window backtesting, serving generated from the
-  template, end-to-end OTel traces.
-- Phase 2+ entirely: LLM and agent projects, multi-cloud infrastructure.
-- Four verticals named in the plan and absent: `store-assistant`,
-  `credit-risk`, `doc-intelligence`, `agent-ops`.
+- **Component state is derived, not listed here.** Read it from
+  `docs/architecture/implementation-status.md`. This list named Great
+  Expectations, the KFP pipeline, expanding-window backtesting, OTel traces and
+  `store-assistant` as not done long after each shipped at L1, and called the
+  LLM and agent projects "Phase 2+ entirely" while two existed (QA-4 round
+  eleven). What genuinely is not done: serving this project — the service is
+  generated and cannot serve a regression (ADR-008) — and applying any
+  multi-cloud infrastructure.
+- Three verticals named in the plan and absent: `credit-risk`,
+  `doc-intelligence`, `agent-ops`.
 - Two absences that are decisions, recorded as such and not gaps: a shared
   lakehouse module, and a documentation retrieval index.
-- `rag-assistant` reuses **2** shared libraries where charter criterion C1
-  asks for ≥3 with no fork. The gate reports the number and does not fail on
-  it, deliberately: a project mid-phase has a low count legitimately. The
-  precondition is still unmet and the plan still says Phase 4 waits on it.
+- `rag-assistant`'s shared-library reuse count sits below what charter
+  criterion C1 asks for. The number is not restated here; read it from
+  `uv run python scripts/check_library_reuse.py`, which reports it and
+  deliberately does not fail on it mid-phase.
 
 ---
 
@@ -378,96 +382,70 @@ avoid, and it has already occurred here once.
 
 ---
 
-## 11. Since the previous audit — round seven's delta
+## 11. Since the previous audit — round twelve's starting point
 
-Round six audited `5c02411` on 2026-08-19 and reported **0 P0, 0 P1, 2 P2,
-1 P3** — the first round to find no broken control. What it found instead were
-the seams: an exemption phrase broad enough to cover ordinary prose, a command
-parser that split on whitespace, and two paths through C7 that were commented
-but untested.
+Round eleven audited `0fe7343` on 2026-09-14 and reported **1 P1, 5 P2, 6 P3**.
+That tree was rebased onto `main` as `8897281` before landing, and the marker in
+`AGENTS.md` follows whatever it lands as.
+It was handed this section as a staged, uncommitted draft, and found the draft
+itself wrong in three places: it omitted two open round-ten findings, reported
+a closed Pod Security gap as open by leaving it out, and said no CI job set
+`timeout-minutes` when one did. The draft never landed; this replaces it.
 
-Nine commits since. List them rather than trusting this paragraph:
+List what changed rather than trusting this paragraph. The range is read from
+the marker rather than written here, because a squash or a rebase rewrites
+the commit, and a SHA restated in a document goes stale when it does:
 
 ```bash
-git log --no-merges --oneline 5c02411..HEAD
+git log --no-merges --oneline "$(grep -oE 'Last independent audit: [0-9-]+ \(([0-9a-f]+)\)' AGENTS.md | grep -oE '[0-9a-f]{7,}')..HEAD"
 ```
 
-### What landed, and what each thing was
+### What round eleven found, and where each one went
 
-| Commit | What it was |
+| Finding | State |
 | --- | --- |
-| `cdef6ab` | Round six's three findings closed |
-| `ac852ab` | `rag-assistant`'s index parser silently dropped rows it could not read — a data-loss defect, found by the cloud review, not by a gate |
-| `c8fdcee` | Charter C1's **"with no fork"** half was never measured. The count was the only half computed, so a project could import every library and reimplement their contents beside them |
-| `#38`/`#39`/`#40` | Three Dependabot action bumps, SHA-pinned |
-| `021d2cd` | `strict = true` sat in a per-module mypy override; mypy applies it globally and marks the module list unused, so a documented strict/loose split never existed |
-| `242b5c6` | Three checks that misreported: a residue check watching 3 of 5 files and failing on unrelated edits, a probe measuring the shape of the history, a duplicated CI step |
-| `35ffdec` | mypy `~=1.13` → `~=2.3`, reviewed with a negative control rather than merged on green |
-| *(this branch)* | C7's marker must now be corroborated by the hash-chained trail |
+| **P1** — `commonLabels` rewrote the DNS policy's peer selector; DNS denied in all six cloud overlays, proven on a live cluster | Closed, *fix(k8s): stop commonLabels rewriting the DNS policy's peer selector* |
+| **P2** — kind does enforce NetworkPolicy; four documents said it could not | Claim corrected everywhere it appeared; the enforcement evidence itself is open as **R11-2** |
+| **P2** — the residue guard's hand-written list was stale; a deleted ADR passed | Closed, *fix(tests): record what the gate probes write instead of listing it by hand* |
+| **P2** — the container cannot import the model artifact at all | Open as **R11-3**, a CONSULT decision under ADR-008 |
+| **P2** — P14 could never report "a fourth straddle", and had no test | Closed, *fix(gates): P14 promised a red it could not give and read its ADR wrongly*; the hand-written `SEAM` is **R11-4** |
+| **P2** — the brief's delta omitted open findings | This section |
+| **P3** — the status document was stale at HEAD | Closed in the round's record, *chore(governance): record QA-4 round eleven* |
+| **P3** — P15 justified by a false claim; OK over zero files | Closed, *fix(gates): P15 was justified by a false claim and could pass over nothing* |
+| **P3** — P14's ADR status regex read the whole document | Closed, *fix(gates): P14 promised a red it could not give and read its ADR wrongly* |
+| **P3** — ADR-008 stated three facts the repository contradicts | Closed, *fix(gates): P14 promised a red it could not give and read its ADR wrongly* |
+| **P3** — 1 of 25 subprocesses bounded; CI jobs unbounded | Closed, *fix(gates): bound every subprocess and every CI job* |
+| **P3** — round ten's remaining P3s | Policies README and compliance mapping corrected; the egress assertion closed in *fix(k8s): the egress test could not fail, and asserted the wrong metadata port*; namespace labels open as **R11-1**; model card open as **R11-5** |
 
-### New checks to attack first
-
-A gate written by the author of the thing it checks is where a hole lives.
-These are the newest, and therefore the least weathered:
-
-| Check | What it claims |
-| --- | --- |
-| `tests/test_type_gate_enforces_its_config.py` | Runs known-bad code through the real `pyproject.toml` and asserts six diagnostics fire. **Does it still fail if a diagnostic is silently downgraded rather than removed?** |
-| `_audit_trail_names` in `check_doc_coherence.py` | Matches shas out of free text in the trail. **A sha appearing in an entry for an unrelated reason would corroborate a marker that names it.** That is the obvious weakness and it is stated here rather than waited for |
-| `_probe_residue` in `tests/test_version_consistency.py` | Derives the watched files from `--show`. **If the parser stops matching, does the floor of 5 really catch it?** |
-| `reimplemented()` in `check_library_reuse.py` | Module-level definitions only, after two false positives on methods. **The narrowing that removed the false positives may have removed true ones** |
+Everything open carries a mode, what it waits on, and its closing condition in
+`docs/governance/remediation-work-order.md` under *Round eleven*. Finding one of
+those again is not a finding; finding one described there as closed that is
+not, is.
 
 ### Where the author's confidence proved wrong this round
 
-The most useful section, stated plainly:
+- **The render-safety gate was justified by a claim a grep produced.** It said
+  the render test covered one answer set; it covered three of four. The grep
+  found the default answers and missed the parametrize — and the claim was
+  copied into four documents before an auditor ran the test.
+- **The first explanation of why `_verify` needed a process group was wrong.**
+  It said `subprocess.run(shell=True, timeout=)` then blocks on a pipe.
+  Measured, it returns on time and orphans the grandchild. The fix was right;
+  the mechanism written beside it was not, and would have shipped unmeasured.
+- **Fixing the residue guard's allowlist failed silently once.** The formatter
+  had re-wrapped the line an exact-match edit targeted; the assertion stopped
+  the script before writing, and the output was read as success until the test
+  failed the same way again.
+- **Eleven commits of new gates went in while a P1 sat open** — the
+  distribution the round-eleven question asked about. Nothing reported the age
+  of an open finding, which the work order's round-eleven section now does by
+  hand.
 
-- I nearly filed **Dependabot's action-SHA change as a supply-chain finding**.
-  The old pin was the **annotated tag object**; the new one is the **commit it
-  dereferences to**. Both are `v0.36.0`. `git ls-remote --tags` shows both refs
-  and settled it in one command, after I had spent several reasoning about it.
-- I diagnosed a blocked pull request as **needing its branch updated**. It had
-  been updated; the real cause was that the second update produced **no
-  workflow run at all**, so four required checks had no result rather than a
-  failing one. The fix was to force a synchronize event, and the symptom
-  ("BLOCKED") is identical for both causes.
-- I asserted the mypy strict override **narrowed scope to `libs/`**. It never
-  did — and my own earlier fix, which added `feature_defs.*` to that list and
-  was recorded in the CHANGELOG as closing a gap in strict coverage, **changed
-  nothing**. The list was never what was in force.
-- I read a `type-arg` diagnostic out of a **shared `.mypy_cache`** and nearly
-  wrote down a conclusion the cache had produced, not the run. The probe now
-  uses its own cache directory, and that is written into the test.
+### The question round twelve exists to answer
 
-### Explicitly still open, and not defects to report
-
-Finding these again is not a finding. Verified at the time of writing, with
-the command that verifies them:
-
-- **P7 (Checkov) and P8 (Kubescape) are advisory, not blocking.** The CI steps
-  carry `soft_fail: true` and `continue-on-error: true`. `quality-gates.md`
-  published both as blocking thresholds until this round; the rows are now
-  marked ⚠️ with the reason. Promoting them is a triage commit against a
-  standing backlog, not a flag flip. **What IS a finding**: any other row in
-  that table whose CI step cannot fail.
-- **Branch protection requires 4 checks, `strict: true`, admins included, and
-  0 approving reviews** (`gh api repos/{owner}/{repo}/branches/main/protection`).
-  A single-maintainer repository cannot require a second approver; the second
-  party is C7, not a reviewer.
-- **`no-commit-to-branch` blocks direct commits to `main`** while the history
-  contains them from before it was added.
-- **`tests/local/`** needs a cluster, so CI never runs it. Still the
-  least-executed code here.
-- **Deployment has not started**, by the user's explicit sequencing, and the
-  old template deploys first.
-
-### The one question round seven exists to answer
-
-Round six found no broken control and reported seams. Rounds four and five
-found the same shape. **The hypothesis worth attacking is that this repository
-has stopped producing gates that cannot fail and started producing gates that
-fail for the wrong reason** — three of them were fixed this round alone, all
-found by CI rather than by review, and each had been green on the commit that
-introduced it.
-
-If that hypothesis is right, the useful audit is not another sweep for
-P-09. It is: take the checks that have never gone red in anger, and make them.
+Round eleven's hypothesis held: every new defect surfaced only when something
+was rendered, run or built. This round's fixes are therefore themselves the
+least-executed code in the tree — each was watched failing once, in a
+throwaway worktree, by the author. **Attack the negative controls**: re-run
+each against a mutation the author did not choose, and report any fix that
+passes a mutation it should have caught.

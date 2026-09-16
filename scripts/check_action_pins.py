@@ -26,6 +26,21 @@ GitHub is unreachable is a gate that gets marked `continue-on-error`. The
 comment is a claim by whoever wrote the pin; Dependabot updates both halves
 together, which is the mechanism that keeps them honest.
 
+Nor does it check the git OBJECT TYPE of the digest. `_DIGEST` accepts any
+40-hex object, and a tag can be resolved to either the commit it names or to
+the annotated tag object that names it. Both are immutable — re-pointing `v7`
+creates a NEW tag object with a NEW sha and cannot reach an existing pin — so
+neither form is a supply-chain hole. They are not interchangeable to tooling,
+though: Dependabot's action updater is documented against commit shas, so a
+tag-object pin may quietly stop receiving upgrade proposals, which is the
+mechanism the paragraph above relies on to keep the comment honest.
+
+Telling the two apart requires asking GitHub what the object is, so it lives
+in `tests/test_action_pins.py::test_every_pin_is_a_commit_object`, marked
+`integration` and deselected by default. QA-4 round five found four pins in
+this repository that were annotated tag objects while this docstring said
+every pin was a commit; that gap is what these two paragraphs close.
+
     python scripts/check_action_pins.py
 """
 

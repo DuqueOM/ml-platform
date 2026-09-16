@@ -55,7 +55,7 @@ documents restate which facts; a hand edit fixes the copy you remembered.
 ## Independent audit
 
 ```text
-Last independent audit: 2026-08-29 (c7131a1)
+Last independent audit: 2026-09-14 (8897281)
 ```
 
 The commit in parentheses is the tree the auditor read, and it is what C7
@@ -177,6 +177,9 @@ Platform-scoped additions:
 | Operation | Mode | Notes |
 | --- | --- | --- |
 | Read a lakehouse table, any snapshot | AUTO | Time travel is read-only |
+| `dvc push` to a remote | AUTO | Content-addressed and additive; a push cannot overwrite a differing object |
+| Re-pin a dataset after `--verify` reports a MISMATCH | **CONSULT** | A mismatch means the source changed what it serves under a stable URL. Re-running `--write-lock` makes that finding disappear, so the pin must not move until somebody has decided the new bytes are the ones we want |
+| `dvc gc`, or delete objects from a DVC remote | **STOP** | The remote holds data with no authoritative URL — that is the criterion for putting it there (ADR-009). Deleting it destroys the only copy |
 | Write or compact a lakehouse table in dev | AUTO | Snapshots are revertible |
 | Expire snapshots, or rewrite table history | **STOP** | Destroys the reproducibility guarantee time travel exists to provide |
 | Materialise features to the **offline** store | AUTO | Recomputable |

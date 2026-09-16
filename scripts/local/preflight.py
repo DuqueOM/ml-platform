@@ -31,6 +31,11 @@ from typing import Any
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+
+#: Upper bound on each tool probe. `docker info` against a wedged daemon — common
+#: under WSL when Docker Desktop is stopping or starting — never returns, and a
+#: preflight that hangs is worse than one that says the daemon is not usable.
+PROBE_TIMEOUT_SECONDS = 30
 BUDGET = REPO_ROOT / "platform" / "local" / "budget.yaml"
 
 REQUIRED_TOOLS = ("docker", "kind", "kubectl")
@@ -39,7 +44,12 @@ CLUSTER_NAME = "ml-platform-local"
 
 def cluster_exists() -> bool:
     """True when the local cluster is already created."""
-    result = subprocess.run(["kind", "get", "clusters"], capture_output=True, text=True)
+    try:
+        result = subprocess.run(
+            ["kind", "get", "clusters"], capture_output=True, text=True, timeout=PROBE_TIMEOUT_SECONDS
+        )
+    except subprocess.TimeoutExpired:
+        return False  # kind shells out to docker; a wedged daemon is not a cluster
     return result.returncode == 0 and CLUSTER_NAME in result.stdout.split()
 
 
@@ -94,7 +104,10 @@ def check_tools() -> list[str]:
 
 
 def docker_running() -> bool:
-    result = subprocess.run(["docker", "info"], capture_output=True, text=True)
+    try:
+        result = subprocess.run(["docker", "info"], capture_output=True, text=True, timeout=PROBE_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        return False  # a daemon that cannot answer `info` cannot run a cluster either
     return result.returncode == 0
 
 

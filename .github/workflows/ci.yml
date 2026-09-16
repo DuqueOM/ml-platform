@@ -21,6 +21,9 @@ jobs:
   invariants:
     name: Repository invariants
     runs-on: ubuntu-latest
+    # A bound, not a budget: measured 46.5 min median, 47.4 max, over the last five green runs; ~1.6x the max. Without it a hung step holds
+    # the runner for GitHub's six-hour default and reports nothing (QA-4 round eleven).
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -189,6 +192,31 @@ jobs:
         # eight actions on tags, three of them scanners.
         run: uv run python scripts/check_action_pins.py
 
+      - name: Model artifact crosses the serving seam intact
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        # The workspace pickles a model with the versions uv.lock resolves; the
+        # container unpickles it with what its requirements.txt installs. A
+        # joblib load across an incompatible numpy does not raise — it returns
+        # arrays it has misread, and the service serves predictions from them.
+        #
+        # Three straddles exist today and are exempted by name against ADR-008.
+        # This step goes red when that ADR stops saying Proposed or an exemption
+        # outlives its straddle. It does NOT go red on a new straddle outside
+        # numpy/scikit-learn/joblib: those are the only packages it compares.
+        run: uv run python scripts/check_artifact_compatibility.py
+
+      - name: The project generator still renders (Copier render root parses)
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        # `_templates_suffix: ""` makes EVERY file under templates/project a
+        # Jinja template, so a stray delimiter aborts `copier copy` entirely —
+        # the adopter gets no project, not a project with an odd line in it.
+        #
+        # tests/test_project_generator.py renders for real and is the authority
+        # on behaviour, but it renders one answer set out of the four kinds
+        # copier.yml offers. Parsing is answer-independent and costs
+        # milliseconds, so it covers the other three.
+        run: uv run python scripts/check_template_render_safety.py
+
       - name: Shared library reuse (charter C1)
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         # Reports the reuse count per project and FAILS on a manifest that
@@ -339,6 +367,9 @@ jobs:
   iac-security:
     name: IaC and Kubernetes security
     runs-on: ubuntu-latest
+    # A bound, not a budget: measured under 1 min over the last five green runs. Without it a hung step holds
+    # the runner for GitHub's six-hour default and reports nothing (QA-4 round eleven).
+    timeout-minutes: 10
     # The two layers this repository lacked while adding 268 lines of Terraform
     # and six Kubernetes overlays in a single session. Everything else — bandit,
     # ruff, dependabot, gitleaks, trivy — covers Python, dependencies, secrets
@@ -351,7 +382,7 @@ jobs:
         # no credentials, so it runs while the cloud work is deliberately
         # paused. soft_fail on the FIRST run only — an unread wall of findings
         # is a gate people switch off, and the triage is a separate commit.
-        uses: bridgecrewio/checkov-action@a8664e3a0549367977f0cda990a34311835c87c0 # v12
+        uses: bridgecrewio/checkov-action@a8664e3a0549367977f0cda990a34311835c87c0 # v12.3123.0
         with:
           directory: platform/
           framework: terraform,kubernetes
@@ -374,6 +405,9 @@ jobs:
   supply-chain:
     name: Supply chain
     runs-on: ubuntu-latest
+    # A bound, not a budget: measured under 1 min over the last five green runs. Without it a hung step holds
+    # the runner for GitHub's six-hour default and reports nothing (QA-4 round eleven).
+    timeout-minutes: 10
     permissions:
       contents: read
       security-events: write
@@ -405,13 +439,16 @@ jobs:
           # written.
           trivyignores: .security-baselines/.trivyignore
 
-      - uses: github/codeql-action/upload-sarif@988661ebb5e81487b3fb31b2185d2856c0a10679 # v4
+      - uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4.37.7
         with:
           sarif_file: trivy.sarif
 
   secrets:
     name: Secret scan
     runs-on: ubuntu-latest
+    # A bound, not a budget: measured under 1 min over the last five green runs. Without it a hung step holds
+    # the runner for GitHub's six-hour default and reports nothing (QA-4 round eleven).
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

@@ -283,6 +283,19 @@ repos:
         pass_filenames: false
         files: '^\.github/workflows/.*\.ya?ml$'
 
+      - id: template-render-safety
+        name: the Copier render root parses as templates
+        description: >
+          `_templates_suffix: ""` makes every file under templates/project a
+          Jinja template, so a stray delimiter aborts `copier copy` and the
+          adopter gets nothing. Caught here rather than only in CI because the
+          full render test takes minutes and this is the same class of defect
+          reduced to a parse — under a second, naming the file and the line.
+        entry: uv run python scripts/check_template_render_safety.py
+        language: system
+        pass_filenames: false
+        files: '^(templates/project/|copier\.yml|scripts/check_template_render_safety\.py)'
+
       - id: implementation-status
         name: implementation status is derived, not declared
         description: >

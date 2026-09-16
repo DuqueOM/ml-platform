@@ -15,15 +15,25 @@ is the part worth keeping.
 | `default-deny.yaml` | Denies all ingress and egress in the namespace. Everything below is an exception to it |
 | `allow-dns.yaml` | Egress to kube-dns. Without it a default-deny namespace cannot resolve a single name, and every failure looks like an application bug |
 | `allow-serving-ingress.yaml` | Ingress to the serving port, from where the traffic is meant to come |
+| `allow-serving-egress.yaml` | Egress the pod needs to start: the metadata server on 80, public HTTPS with the private ranges excluded, and the OTLP collector. Missing from this table until QA-4 round eleven, one commit after the file landed beside it |
 
 Ordering is the whole design: a default-deny that arrives after its exceptions
 is a window during which nothing is denied.
 
-**Rendered and asserted offline**, by `tests/test_gitops_manifests.py`. Note
-what that does and does not prove: kind's default CNI is kindnet, which does
-**not** enforce NetworkPolicies. The manifests are valid and their intent is
-checked; a cluster actually dropping a packet because of them is L4 evidence
-and nothing here has produced it.
+**Rendered and asserted offline**, by `tests/test_gitops_manifests.py`: every
+rendered selector is checked against the pod it should select, and the DNS peer
+by exact equality. That proves intent, not enforcement.
+
+**This paragraph said kind cannot enforce them, and that was false.** QA-4 round
+eleven applied the rendered `gcp-dev` policies to a throwaway kind v0.30
+cluster: kindnetd enforced the default-deny, lookups timed out under the
+selector `commonLabels` had rewritten, and resolution returned with the
+selector as written. So local enforcement evidence is obtainable. The local
+overlay does not apply these policies yet, and two things block it — the
+`monitoring` and `ingress-nginx` namespace labels the serving policies select
+exist nowhere in this repository, so applying them would cut Prometheus off
+the pod; and the enforcement probe needs a running cluster. Both are recorded
+in `docs/governance/remediation-work-order.md`, round eleven.
 
 ## What is not here
 

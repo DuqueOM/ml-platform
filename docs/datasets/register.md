@@ -6,12 +6,40 @@ has an entry here.
 
 Two rules:
 
-- **Raw data is never committed.** Datasets are versioned by reference — a
-  download script plus a DVC pointer to object storage. Several sources below
-  permit use but not redistribution, and the distinction matters.
+- **Raw data is never committed.** Datasets are versioned by reference, and
+  which reference depends on whether the source can hand the bytes back — see
+  below. Several sources permit use but not redistribution, and the distinction
+  matters.
 - **The reason for selection is recorded.** "It was convenient" is a valid
   reason; leaving it unstated is not, because the next person cannot tell a
   deliberate choice from an accident.
+
+## Which mechanism versions which data
+
+Fixed by [ADR-009](../decisions/ADR-009-data-versioning-ownership.md). The
+criterion is mechanical, so assignment is not a judgement call:
+
+| Mechanism | Owns | Criterion |
+| --- | --- | --- |
+| **Iceberg** | Pipeline tables | Has a schema, grows by append, is queried by snapshot |
+| **`datasets.lock.json`** | Third-party downloads | An authoritative URL exists that can re-serve the same bytes |
+| **DVC** | Data we produce | No authoritative URL exists — generated, derived, curated or labelled here |
+
+For a third-party source a digest is enough: the bytes can be re-fetched and
+checked, and a second copy would buy nothing. For data nobody else can serve, a
+digest is worthless — it records with cryptographic precision that the data was
+lost — so DVC stores the content.
+
+Everything small enough stays in git as source. The retrieval gold set is
+`libs/llm-core/src/llm_core/doc_questions.py` for exactly this reason: git is
+the only mechanism that makes a change reviewable line by line, and data leaves
+it only when size or licence forces the issue.
+
+Verify what is on disk against the committed pin:
+
+```bash
+uv run python scripts/datasets/fetch.py --verify
+```
 
 ---
 

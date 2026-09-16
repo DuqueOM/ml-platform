@@ -27,13 +27,24 @@ count, and `risk_level` has no meaning for it.
 
 Two further facts, both verifiable:
 
-- **No model artifact exists.** `train.py` backtests and returns a
-  `BacktestReport`; nothing calls `joblib.dump`. `MODEL_PATH` has nothing to
-  point at, so the service could not start against this project even if the
-  schema agreed.
+- **A model artifact exists, and the container cannot load it.** This bullet
+  said nothing calls `joblib.dump`; `projects/demand-forecast/src/demand_forecast/persist.py`
+  does, pickling a `ForecastModel` that wraps
+  `ml_core.conformal.SplitConformalRegressor`. The service image installs no
+  workspace library — `services/demand-forecast-serving/requirements.txt`
+  names no `ml-core` — so loading fails with `ModuleNotFoundError: No module
+  named 'ml_core'` before any version is compared. QA-4 round eleven
+  reproduced it against an image built from the service's own Dockerfile.
+  This is a second, independent reason the service cannot serve this project,
+  and it belongs to the interface decision below: either the image installs
+  the workspace libraries the artifact references, or the artifact stops
+  pickling workspace types. `scripts/check_artifact_compatibility.py` (gate
+  P14) compares versions across that seam and does not detect it.
 - **The manifests already name the image.** `platform/kubernetes/base/deployment.yaml`
-  deploys `ghcr.io/duqueom/ml-platform/demand-forecast:latest` with readiness
-  on `/health/ready`, across six overlays. All of it renders. None of it has
+  deploys `ghcr.io/duqueom/ml-platform/demand-forecast:set-by-deploy-pipeline`
+  — a placeholder tag, not an image — with readiness on `/ready` and liveness
+  on `/health`, across six overlays. This bullet said `:latest` and
+  `/health/ready`, neither of which the base Deployment carries. All of it renders. None of it has
   ever run.
 
 This is the shape every audit of this repository has found: the declared
@@ -83,7 +94,7 @@ that is a CONSULT-class decision.** What follows is the recommendation.
 
 - The `local` validation stack and the Dockerfile remain useful work, and both
   are reachable before the upstream change — an image that starts and reports
-  `/health/ready` against a stub is still the first time anything here starts.
+  `/ready` against a stub is still the first time anything here starts.
 
 ## Alternatives considered
 

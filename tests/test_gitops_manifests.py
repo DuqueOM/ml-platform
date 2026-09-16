@@ -4,10 +4,12 @@
 runs while the cloud work is deliberately paused (constraint S3).
 
 One thing these tests deliberately do NOT claim: that the NetworkPolicies
-work. The local cluster runs kindnet, which accepts a NetworkPolicy and
-enforces nothing — see `test_the_local_cluster_cannot_validate_networkpolicies`.
-Applying one here and watching it succeed would be the most convincing kind of
-false evidence, because the API server reports success.
+work. Rendering proves intent — selectors, peers, ports — and nothing about a
+packet being dropped. This paragraph used to add that kind cannot provide that
+evidence because kindnet enforces nothing; QA-4 round eleven showed kindnetd
+enforcing a default-deny on a live kind cluster. Local enforcement evidence is
+obtainable and not yet collected — see
+`docs/governance/remediation-work-order.md`, round eleven.
 """
 
 from __future__ import annotations
@@ -208,16 +210,17 @@ def test_nothing_prunes_automatically() -> None:
 
 @pytest.mark.local
 def test_the_local_cluster_cannot_validate_networkpolicies() -> None:
-    """States what local validation CANNOT prove, and checks the reason holds.
+    """Asserts the local CNI is kindnet — and nothing more, which is the open item.
 
-    kind's default CNI is kindnet, which has no NetworkPolicy implementation:
-    the API server accepts the object and nothing enforces it. Applying a
-    default-deny here and watching traffic still flow — or watching the apply
-    succeed and concluding it works — is the most convincing false evidence
-    available, because every command reports success.
-
-    If this ever fails, kind has gained a policy-capable CNI and the local
-    stack CAN start proving something it currently cannot.
+    Its docstring claimed kindnet has no NetworkPolicy implementation, so a
+    default-deny applied locally would enforce nothing. QA-4 round eleven
+    disproved that on a live kind v0.30 cluster: kindnetd timed DNS out under
+    the rendered policies. What this test should become is an enforcement
+    probe — DNS allowed under the policies as written, denied when the peer
+    selector is wrong — and that waits on a running cluster and on the
+    namespace-label decision recorded in the remediation work order, round
+    eleven. Until then it is kept, renamed in intent rather than in name so
+    the history of the claim stays findable.
     """
     result = subprocess.run(
         ["kubectl", "get", "daemonset", "-n", "kube-system", "-o", "name"],
@@ -227,7 +230,7 @@ def test_the_local_cluster_cannot_validate_networkpolicies() -> None:
         pytest.skip("no cluster reachable")
 
     assert "kindnet" in result.stdout, (
-        "the CNI is no longer kindnet; NetworkPolicy enforcement may now be testable locally"
+        "the CNI is no longer kindnet; the enforcement probe planned as R11-2 must be re-validated against it"
     )
 
 
@@ -468,3 +471,172 @@ def test_an_advertised_scrape_port_is_reachable(cloud: str, env: str) -> None:
         f"{cloud}-{env}: port {port} is advertised for scraping and no NetworkPolicy admits the monitoring "
         f"namespace to it, so the metrics the SLO rules depend on never arrive"
     )
+
+
+@pytest.mark.parametrize("cloud", CLOUDS)
+@pytest.mark.parametrize("env", ENVIRONMENTS)
+def test_the_pod_can_reach_what_it_needs_to_start(cloud: str, env: str) -> None:
+    """Egress the pod depends on, asserted against the policies that permit it.
+
+    `default-deny` plus `allow-dns` left the pod able to resolve a name and
+    reach nothing, so it could not fetch its model, read the lakehouse,
+    authenticate, or export a span. Each failure surfaces as a timeout, which
+    reads as the dependency being down — the same shape as the scrape port
+    above, in the other direction.
+
+    The metadata address is the one worth naming explicitly. Workload Identity
+    and IRSA both mint tokens at 169.254.169.254, and without egress to it the
+    identity fails to authenticate — surfacing as a permission error against
+    object storage, which sends whoever debugs it to an IAM binding that is
+    correct.
+    """
+    documents = _build(OVERLAYS / f"{cloud}-{env}")
+    egress = [
+        rule
+        for doc in documents
+        if doc["kind"] == "NetworkPolicy" and "Egress" in doc["spec"].get("policyTypes", [])
+        for rule in doc["spec"].get("egress", [])
+    ]
+    assert egress, f"{cloud}-{env}: every egress is denied, so the pod cannot start"
+
+    def _permits(port: int, *, cidr: str | None = None, namespace: str | None = None) -> bool:
+        """Whether one egress rule names exactly this peer and admits exactly this port.
+
+        Structural, never a substring of the serialised rule. The previous
+        version matched `"ipBlock"` anywhere in `str(rule["to"])`, so the
+        metadata server's ipBlock satisfied the HTTPS assertion and deleting the
+        0.0.0.0/0 rule left the test green (QA-4 round eleven).
+        """
+        for rule in egress:
+            if not any(int(entry.get("port", -1)) == port for entry in rule.get("ports", [])):
+                continue
+            for peer in rule.get("to", []):
+                if cidr is not None and peer.get("ipBlock", {}).get("cidr") == cidr:
+                    return True
+                selector = peer.get("namespaceSelector", {}).get("matchLabels", {})
+                if namespace is not None and namespace in selector.values():
+                    return True
+        return False
+
+    assert _permits(80, cidr="169.254.169.254/32"), (
+        f"{cloud}-{env}: no egress to the metadata server on port 80. Workload Identity and IRSA mint tokens "
+        f"there over plain HTTP, so the identity cannot authenticate and the symptom appears as a storage "
+        f"permission error"
+    )
+    assert not _permits(443, cidr="169.254.169.254/32"), (
+        f"{cloud}-{env}: the metadata server is admitted on 443, which no cloud metadata service uses"
+    )
+    assert _permits(443, cidr="0.0.0.0/0"), (
+        f"{cloud}-{env}: no HTTPS egress, so the model artifact and the Iceberg table are unreachable"
+    )
+    assert _permits(4317, namespace="monitoring"), (
+        f"{cloud}-{env}: no egress to the OTLP collector, so spans are dropped silently — nothing errors "
+        f"and the trace is simply absent"
+    )
+
+
+@pytest.mark.parametrize("cloud", CLOUDS)
+@pytest.mark.parametrize("env", ENVIRONMENTS)
+def test_broad_https_egress_cannot_reach_back_into_the_cluster(cloud: str, env: str) -> None:
+    """The carve-out is what makes a 0.0.0.0/0 rule acceptable.
+
+    NetworkPolicy cannot match a hostname and the public object-storage ranges
+    change without notice, so HTTPS egress is broad by necessity. Broad egress
+    to the internet is a cost; broad egress that also reaches the VPC and the
+    cluster is lateral movement, and the difference is entirely in `except`.
+    """
+    documents = _build(OVERLAYS / f"{cloud}-{env}")
+    for doc in documents:
+        if doc["kind"] != "NetworkPolicy":
+            continue
+        for rule in doc["spec"].get("egress", []):
+            for target in rule.get("to", []):
+                block = target.get("ipBlock", {})
+                if block.get("cidr") != "0.0.0.0/0":
+                    continue
+                excluded = set(block.get("except", []))
+                missing = {"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"} - excluded
+                assert not missing, (
+                    f"{cloud}-{env}: {doc['metadata']['name']} permits egress to 0.0.0.0/0 without "
+                    f"excluding {sorted(missing)}, so it reaches the VPC and the cluster as well as "
+                    f"the internet"
+                )
+
+
+# --- selectors are not rewritten ----------------------------------------------
+#
+# QA-4 round ten found, and round eleven proved on a live cluster, that every
+# cloud overlay denied DNS. `commonLabels` rewrites selectors as well as labels,
+# so allow-dns's peer selector `{k8s-app: kube-dns}` rendered as
+# `{cloud, environment, k8s-app}` — a selector no CoreDNS pod carries. The only
+# existing assertion checked that a policy NAMED allow-dns was present, which
+# it was.
+
+_ALL_OVERLAYS = sorted(p.name for p in OVERLAYS.iterdir() if (p / "kustomization.yaml").is_file())
+
+
+def test_no_kustomization_uses_common_labels() -> None:
+    """The mechanism, banned — so the next policy cannot be broken the same way.
+
+    Checked as parsed YAML rather than grep, because the explanatory comment in
+    each kustomization names the key it replaced.
+    """
+    offenders = [
+        path.relative_to(REPO_ROOT).as_posix()
+        for path in sorted((REPO_ROOT / "platform").rglob("kustomization.yaml"))
+        if "commonLabels" in (yaml.safe_load(path.read_text(encoding="utf-8")) or {})
+    ]
+    assert not offenders, (
+        f"commonLabels rewrites selectors it does not own, including NetworkPolicy peers: {offenders}. "
+        f"Use `labels:` with includeSelectors: false"
+    )
+
+
+@pytest.mark.parametrize("cloud", CLOUDS)
+@pytest.mark.parametrize("env", ENVIRONMENTS)
+def test_dns_egress_selects_the_cluster_dns_pods_exactly(cloud: str, env: str) -> None:
+    """Exact equality, not containment: an extra key is precisely the defect."""
+    documents = _build(OVERLAYS / f"{cloud}-{env}")
+    policy = next((d for d in documents if d["kind"] == "NetworkPolicy" and d["metadata"]["name"] == "allow-dns"), None)
+    assert policy is not None, f"{cloud}-{env}: allow-dns is missing"
+    peers = [peer for rule in policy["spec"]["egress"] for peer in rule.get("to", [])]
+    assert peers, f"{cloud}-{env}: allow-dns names no peer"
+    for peer in peers:
+        assert peer.get("podSelector") == {"matchLabels": {"k8s-app": "kube-dns"}}, (
+            f"{cloud}-{env}: allow-dns selects {peer.get('podSelector')}, which no CoreDNS pod carries — "
+            f"DNS is denied under default-deny"
+        )
+        assert peer.get("namespaceSelector") == {"matchLabels": {"kubernetes.io/metadata.name": "kube-system"}}
+
+
+@pytest.mark.parametrize("overlay", _ALL_OVERLAYS)
+def test_every_selector_in_the_namespace_matches_the_pod(overlay: str) -> None:
+    """The opposite failure: a selector that matches NOTHING renders and applies cleanly.
+
+    A Service with no endpoints, a PDB protecting no pod, and a NetworkPolicy
+    whose podSelector matches no pod all report success on apply. Each is
+    checked against the labels the Deployment actually stamps on its pods.
+    """
+    documents = _build(OVERLAYS / overlay)
+    deployment = next(d for d in documents if d["kind"] == "Deployment")
+    pod_labels = deployment["spec"]["template"]["metadata"]["labels"]
+
+    def _selects_the_pod(selector: dict[str, str]) -> bool:
+        return all(pod_labels.get(key) == value for key, value in selector.items())
+
+    checked = 0
+    for doc in documents:
+        kind, name, spec = doc["kind"], doc["metadata"]["name"], doc.get("spec") or {}
+        if kind in ("Deployment", "PodDisruptionBudget"):
+            selector = spec["selector"]["matchLabels"]
+        elif kind == "Service":
+            selector = spec.get("selector") or {}
+        elif kind == "NetworkPolicy":
+            selector = (spec.get("podSelector") or {}).get("matchLabels") or {}
+            if not selector:
+                continue  # `{}` selects every pod in the namespace by design
+        else:
+            continue
+        checked += 1
+        assert _selects_the_pod(selector), f"{overlay}: {kind}/{name} selects {selector}, pod carries {pod_labels}"
+    assert checked >= 3, f"{overlay}: only {checked} selector(s) examined — the rendering changed shape"

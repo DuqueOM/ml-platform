@@ -28,6 +28,14 @@ from typing import Any
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+#: Upper bound on every short subprocess this script runs (git, grep). A bound,
+#: not a performance budget: nothing here legitimately takes more than seconds,
+#: and without one a wedged git — an index lock, a network filesystem — hangs CI
+#: until the job's own limit, reporting nothing. On expiry `TimeoutExpired`
+#: propagates and the script exits non-zero: a gate that could not finish must
+#: not read as a gate that passed (QA-4 round eleven).
+SUBPROCESS_TIMEOUT_SECONDS = 120
 INVENTORY = REPO_ROOT / "docs" / "architecture" / "technology-inventory.yaml"
 REPORT = REPO_ROOT / "docs" / "architecture" / "technology-inventory.md"
 BEGIN, END = "<!-- BEGIN GENERATED -->", "<!-- END GENERATED -->"
@@ -79,7 +87,13 @@ def _tracked_files() -> frozenset[str]:
     fixes one instance and leaves the class open: every future build artifact
     has to be discovered the same way, through a red CI on a green working copy.
     """
-    result = subprocess.run(["git", "-C", str(REPO_ROOT), "ls-files"], capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "ls-files"],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
+    )
     return frozenset(result.stdout.splitlines())
 
 
@@ -167,8 +181,29 @@ def _as_word(pattern: str) -> str:
 
     Only applied to patterns that ARE a bare word. Anything carrying regex
     syntax was written deliberately and is left alone.
+
+    **Each boundary is anchored only where one can exist.** `\b` sits between a
+    word character and a non-word character, so `\b-` can never match anything:
+    a hyphen is not a word character, and there is no boundary before it at the
+    start of a token. The first version wrapped every accepted pattern
+    unconditionally, and the accepted set included a leading `-`. The result was
+    a regex that could not match its own literal text — `\b--cov-fail-under\b`
+    against the string `--cov-fail-under` is False — so `coverage` and
+    `coverage-gate` reported NOT BUILT while both flags sat in `ci.yml`, and the
+    headline understated the built count by two.
+
+    That is the inverse of the failure this function was written for: not a
+    detector matching prose, a detector matching nothing. It is the worse
+    direction, because an over-matching detector shows up as a technology
+    nobody recognises, while an under-matching one is indistinguishable from
+    honest absence. Found by QA-4 round eight, not by a test — the test suite
+    exercised this function with the bare word `feast` only.
     """
-    return rf"\b{pattern}\b" if re.fullmatch(r"[A-Za-z0-9_-]+", pattern) else pattern
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", pattern):
+        return pattern
+    prefix = r"\b" if re.match(r"\w", pattern) else ""
+    suffix = r"\b" if re.search(r"\w$", pattern) else ""
+    return f"{prefix}{pattern}{suffix}"
 
 
 def _content_matches(pattern: str, scope: str) -> bool:
@@ -181,6 +216,7 @@ def _content_matches(pattern: str, scope: str) -> bool:
         ["grep", "-ril", "--", pattern, str(root)],
         capture_output=True,
         text=True,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
     if result.returncode != 0:
         return False

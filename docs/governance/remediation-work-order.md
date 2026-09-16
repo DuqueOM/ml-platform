@@ -169,6 +169,10 @@ repository. Both are authoring work needing no cluster.
 
 ### W-3 — Give the pod the egress it needs, including the metadata server
 
+> **Status: done** on `fix/c6-ok-above-name-failure` — *feat(k8s): give the serving pod the egress it needs, including the metadata server* added the policy; *fix(k8s): stop commonLabels rewriting the DNS policy's peer selector* fixed the rendered DNS
+> selector (round eleven P1); *fix(k8s): the egress test could not fail, and asserted the wrong metadata port* made the egress assertion able to fail and dropped the unused 443 on the
+> metadata server. The `monitoring` namespace selector it relies on is round-eleven item R11-1.
+
 **Mode**: AUTO · **Closes**: F-04 · **Size**: ~2h
 
 The Prometheus half was fixed — `allow-serving-ingress` now admits the
@@ -211,6 +215,9 @@ deleting one rule; `uv run pytest tests/test_gitops_manifests.py -q` passes
 across all seven overlays.
 
 ### W-4 — Gate the version straddle across the serving seam
+
+> **Status: done** on `fix/c6-ok-above-name-failure` — *feat(gates): gate the version straddle across the serving seam* added P14; *fix(gates): P14 promised a red it could not give and read its ADR wrongly* gave it tests, scoped its ADR
+> status check to the header, and withdrew a promise it could not keep. What it cannot see is R11-3 and R11-4.
 
 **Mode**: AUTO · **Closes**: the unblocked half of F-06 · **Size**: ~2h
 
@@ -318,16 +325,29 @@ from that list is not marked ⬜; it is invisible. Drift detection — the
 [ADR-007](../decisions/ADR-007-drift-detection-per-project-kind.md) and Phase 1
 both name as deliverables — has **no row at all**.
 
-1. Add the missing row, so the absence becomes visible:
+> **Correction, 2026-09-05.** This step was written when the contract did not
+> exist, and both of its particulars have since stopped being true. It named
+> `libs/ml-core/src/ml_core/drift.py`; what landed is the package
+> `libs/ml-core/src/ml_core/drift/`, so the original path would have created a
+> detector matching nothing — the same defect QA-4 round nine found in
+> `_as_word`, reintroduced by the instruction written to prevent its class. And
+> the row no longer renders ⬜: the contract has 35 tests, so it carries a
+> verify command and renders ✅. Step 1 is done in the commit carrying this
+> correction. **Step 2 is untouched and is the valuable half.**
+
+1. ~~Add the missing row, so the absence becomes visible~~ — done:
 
    ```python
    COMPONENTS = [
        # ...
-       Component("1", "Drift detection (DriftSignal + PSI)", ["libs/ml-core/src/ml_core/drift.py"]),
+       Component(
+           "1",
+           "Drift contract (ADR-007)",
+           ["libs/ml-core/src/ml_core/drift"],
+           "uv run pytest libs/ml-core/tests/test_drift.py -q",
+       ),
    ]
    ```
-
-   With no files present it renders ⬜, which is the correct and honest state.
 
 2. Then close the class: add a test asserting that every deliverable bullet in
    the technical plan maps to a `COMPONENTS` row. This is the same defect the
@@ -482,6 +502,132 @@ connection reuse and shared breaker state (F-16) need a benchmark and a
 decision about the replica count; the policy gate's keyword matching (F-24) is
 a design question about detection efficacy rather than a defect. Both belong in
 a round with a human in it.
+
+---
+
+## Round eleven — what stays open, and why each one waits
+
+QA-4 round eleven audited `0fe7343` — rebased onto `main` as `8897281` — and
+reported 1 P1, 5 P2 and 6 P3. Commits below are cited by subject, not SHA:
+this repository merges by squash, which rewrites every SHA on a branch, and
+ten SHAs this section first cited stopped resolving at the rebase before the
+merge had even happened. What closed, on `fix/c6-ok-above-name-failure`: the P1 (*fix(k8s): stop commonLabels rewriting the DNS policy's peer selector*), the render-safety
+gate's false justification and zero-file pass (*fix(gates): P15 was justified by a false claim and could pass over nothing*), the serving-seam
+gate's untested paths and ADR parsing (*fix(gates): P14 promised a red it could not give and read its ADR wrongly*), the hand-written residue
+list (*fix(tests): record what the gate probes write instead of listing it by hand*), unbounded subprocesses and CI jobs (*fix(gates): bound every subprocess and every CI job*), the egress
+assertion (*fix(k8s): the egress test could not fail, and asserted the wrong metadata port*), and the compliance mapping, policies README, local
+overlay comment and audit brief, which stated closed gaps as open or open ones
+as impossible.
+
+What follows did not close. None is urgent in the sense of harming anything
+running — nothing is deployed — and each waits on something named. Where the
+wait is a decision, the mode is CONSULT and the decision is the user's.
+
+### R11-1 — The serving policies select namespaces nothing provisions
+
+**Mode**: CONSULT · **Source**: round ten P2, open through round eleven · **Size**: ~2h once decided
+
+`allow-serving-ingress` admits `app.kubernetes.io/name: ingress-nginx` and
+`monitoring`; `allow-serving-egress` admits `monitoring` for OTLP. No Namespace
+in this repository carries either label — the local stack runs entirely in
+`ml-platform` and has no ingress controller, and no cloud namespace is
+provisioned. Under `default-deny` the pod can therefore be neither reached nor
+scraped, and every render and test passes.
+
+**Waits on**: choosing the selector contract.
+
+| Option | Trade-off |
+| --- | --- |
+| **A. Label contract (recommended)** — the platform declares the namespaces it provides and their labels; the local stack creates `monitoring` with it; a test asserts every `namespaceSelector` matches a Namespace this repository provisions | Agnostic: the label is the platform's, the namespace name is the provider's. Requires the platform to provision those namespaces, which Phase 2 must do anyway |
+| B. Select by `kubernetes.io/metadata.name`, as `allow-dns` does | Set by Kubernetes itself and impossible to forget, but couples policy to names that differ per provider (`gmp-system` on GKE, others on EKS) |
+| C. Per-overlay patches with each cloud's real names | Most exact today; adds cloud-specific surface that gate P6 counts |
+
+**Closes when**: a test fails for any `namespaceSelector` with no provisioned match, and passes.
+
+### R11-2 — Local enforcement evidence for the NetworkPolicies
+
+**Mode**: AUTO after R11-1 · **Source**: round eleven P2 · **Size**: ~3h
+
+Round eleven proved kindnetd enforces NetworkPolicy, disproving the claim four
+documents made. The claim is corrected; the evidence is not collected. The local
+overlay does not apply the policies, and
+`test_the_local_cluster_cannot_validate_networkpolicies` asserts only that a
+kindnet daemonset exists.
+
+**Waits on**: R11-1 (applying the policies locally without a labelled
+`monitoring` namespace cuts Prometheus off the pod), and a running Docker —
+unavailable on the machine where this was written.
+
+**Closes when**: the local overlay includes the policies, and a `local`-marked
+test resolves DNS under them, fails to when the peer selector is mutated, and
+Prometheus still scrapes the pod.
+
+### R11-3 — The container cannot import the model artifact at all
+
+**Mode**: CONSULT · **Source**: round eleven P2 · **Size**: depends on the decision
+
+`persist.py` pickles `ml_core` types; the service image installs no workspace
+library; loading fails with `ModuleNotFoundError: No module named 'ml_core'`
+before any version is compared. Recorded in ADR-008.
+
+**Waits on**: ADR-008's interface decision — the image installs the workspace
+libraries the artifact references, or the artifact stops pickling workspace
+types (for example, exporting to a format that carries no project classes).
+
+**Closes when**: ADR-008 is decided, and gate P14 also asserts that every
+module root the pickle references is importable in the image.
+
+### R11-4 — The serving-seam gate compares a hand-written package list
+
+**Mode**: AUTO after R11-3 · **Source**: round eleven P2 · **Size**: ~2h
+
+`SEAM` names numpy, scikit-learn and joblib. A straddle in any other package
+the artifact pulls in — scipy under scikit-learn, for one — is not compared.
+The gate now says so instead of promising otherwise.
+
+**Waits on**: R11-3, because the object graph to derive it from changes with
+that decision.
+
+**Closes when**: `SEAM` is derived from the module roots of a real pickled
+artifact, and a straddle in a package that is not listed by hand fails the gate.
+
+### R11-5 — The demand-forecast model card is four TODO sections
+
+**Mode**: AUTO to draft, CONSULT to sign · **Source**: round ten P2 · **Size**: ~2h
+
+Intended use, fairness, failure modes and human oversight all read TODO, while
+the model cards skill renders from `store-assistant`.
+
+**Waits on**: nothing to draft — conformal intervals, the expanding-window
+backtest and `ml_core.fairness` supply the facts, with zones as the natural
+subgroup. Signing it waits on the model's owner.
+
+**Closes when**: no section reads TODO, each claim cites the test or report
+that measures it, and the owner has reviewed it.
+
+### R11-6 — A configured language that nothing reads
+
+**Mode**: AUTO · **Source**: parity ledger, `check_config_is_read.py` pending · **Size**: ~3h
+
+`UsecaseConfig.language` is declared, documented, loaded from YAML and set to
+`es` by store-assistant, and read by nothing outside its module.
+
+**Closes when**: `language` reaches the customer-facing surface, then
+`check_config_is_read.py` is ported against llm-core's config with a ratchet
+on unwired fields, and the ledger entry moves to `adopted`.
+
+### R11-7 — Small items, one pass
+
+**Mode**: AUTO · **Size**: under 1h together
+
+- `CODECOV_TOKEN` is read by CI and documented nowhere. Its step cannot fail a
+  build, so an unset token silently means no coverage upload.
+- `tests/test_gates_in_a_bare_environment.py::test_the_sandbox_really_lacks_the_sibling_checkout`
+  fails when run alone (`ModuleNotFoundError: No module named 'scripts'`) and
+  passes in the full suite by collection order.
+- **Observation, not a finding**: the Repository invariants job takes 46.5 min
+  median over five green runs. `timeout-minutes: 75` bounds it; nothing yet
+  measures where those minutes go.
 
 ---
 
