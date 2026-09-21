@@ -224,7 +224,7 @@ dev = [
 #
 #     uv sync --group data-versioning
 data-versioning = [
-    "dvc[s3]~=3.62",
+    "dvc[s3]~=3.67",
 ]
 
 [tool.hatch.build.targets.wheel]
