@@ -21,7 +21,7 @@ dependencies = [
     # Imported directly by `persist`, so declared directly. It arrives as a
     # scikit-learn transitive today, and a transitive dependency is one
     # upstream release away from not arriving at all.
-    "joblib~=1.4",
+    "joblib~=1.6",
     "ml-core",
     "data-contracts",
     # `serving-core` and `feature-defs` were declared here and imported by

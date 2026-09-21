@@ -7,7 +7,7 @@ dependencies = [
     # Compatible-release pinning (~=): numpy 2.x has broken joblib-persisted
     # models in practice, and a bare >= would let that in silently.
     "numpy~=2.1",
-    "polars~=1.17",
+    "polars~=1.44",
     "duckdb~=1.1",
     "scikit-learn~=1.6",
 ]

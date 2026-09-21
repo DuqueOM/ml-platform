@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Point-in-time correct feature retrieval, and the definitions it operates on"
 requires-python = ">=3.11"
 dependencies = [
-    "polars~=1.17",
+    "polars~=1.44",
 ]
 
 [build-system]

@@ -15,7 +15,7 @@ dependencies = [
     # tier response against a model before anything acts on it. Structured
     # tool calling is the whole reason the loop is safe to run: a model that
     # names a tool cannot also decide what its arguments mean.
-    "pydantic~=2.9",
+    "pydantic~=2.13",
     "PyYAML~=6.0",
     "httpx~=0.28",
     # BM25 lexical retrieval, the agent core's in-context document tool.
