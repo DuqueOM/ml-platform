@@ -25,7 +25,7 @@ dependencies = [
     # worked on a machine that had run `uv sync --all-extras` and failed on a
     # base sync, with an ImportError rather than a verdict. Same argument as
     # `packaging` above: available is not declared.
-    "jinja2>=3.1",
+    "jinja2>=3.1.6",
 ]
 
 [project.optional-dependencies]
