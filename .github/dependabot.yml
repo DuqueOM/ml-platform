@@ -17,7 +17,13 @@ updates:
   # uv workspaces resolve to one lockfile at the root, so a single ecosystem
   # entry covers libs/ and projects/ together. Splitting per member would
   # produce PRs that cannot be merged independently anyway.
-  - package-ecosystem: pip
+  # `uv`, not `pip`: this repo locks with uv.lock and CI runs
+  # `uv sync --locked` + `uv lock --check`. The pip ecosystem edits
+  # pyproject.toml and leaves the lockfile behind, so every PR it opened
+  # failed `Repository invariants` with "the lockfile at `uv.lock` needs to
+  # be updated, but `--locked` was provided" — three were open at once
+  # (#61, #62, #63), each red for a reason no reviewer could fix in the PR.
+  - package-ecosystem: uv
     directory: /
     schedule:
       interval: weekly
