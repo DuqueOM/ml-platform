@@ -18,7 +18,7 @@ dependencies = [
     # against a requirement specifier. Hand-parsing `~=` is how a gate quietly
     # gets the compatible-release rule wrong in the permissive direction, and
     # this was available transitively — which is not the same as declared.
-    "packaging>=24.0",
+    "packaging>=26.3",
     # `scripts/check_template_render_safety.py` parses every payload file with
     # Copier's own delimiters. Jinja2 was already resolving here — as a
     # transitive of the `orchestration` extra — which means the gate would have
