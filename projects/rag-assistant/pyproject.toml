@@ -14,7 +14,7 @@ dependencies = [
     # Declared because `contracts.py` imports it: `parse_index` used to
     # validate EDGAR's index inline and skip bad rows without recording why.
     "data-contracts",
-    "polars~=1.20",
+    "polars~=1.44",
 ]
 
 [build-system]
