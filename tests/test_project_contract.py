@@ -34,7 +34,7 @@ KNOWN_DEVIATIONS: dict[tuple[str, str], str] = {
         "Migrated from `agent-local` with its history (ADR-002), not generated, so there is no "
         "answers file and `copier update` cannot reach it. Closing it means adopting a working "
         "project into the generator, which rewrites its files — CONSULT, and recorded rather than "
-        "done quietly. The 31 original commits are on the `history/agent-local` branch, which is "
+        "done quietly. The 31 original commits are on the `archive/agent-local` tag, which is "
         "the provenance an answers file would otherwise carry."
     ),
     ("rag-assistant", "P1"): (

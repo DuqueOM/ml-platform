@@ -4,7 +4,7 @@ The agent platform ADR-002 describes has landed: tier routing, a deterministic
 policy gate whose rules are versioned data, a fail-closed tool capability
 contract, cross-tier verification, decision telemetry and per-tier circuit
 breakers. This docstring named those before they existed and said so; it names
-them now because they are here, and `git log history/agent-local` carries the
+them now because they are here, and `git log archive/agent-local` carries the
 31 commits that built them.
 
 Alongside them, the instrument Phase 1e needed: `retrieval_eval` (recall@k, MRR
