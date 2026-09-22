@@ -57,7 +57,7 @@ Twelve, in `docs/decisions/`, numbered `store-ADR-NNN`. They were written in
 `agent-local` before the migration and renumbered into this project's namespace
 because their blast radius is this project, not the platform. The mapping and
 the reasoning are in [that directory's README](docs/decisions/README.md), and
-the original commits are on the `history/agent-local` branch.
+the original commits are on the `archive/agent-local` tag (`git log archive/agent-local`).
 
 ## Language
 

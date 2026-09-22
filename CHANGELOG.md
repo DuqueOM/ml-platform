@@ -18,6 +18,19 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Changed — the agent-local history is a tag now, not a branch
+
+- The 31 rewritten commits moved from the `history/agent-local` **branch** to
+  the `archive/agent-local` annotated **tag**, and the branch is deleted. The
+  ref is as immutable and as reachable as before — `git log archive/agent-local`
+  — without a long-lived branch that reads as work in progress next to `main`.
+  ADR-002's requirement is unchanged: the commits are evidence and they are
+  kept.
+- The command documented in `projects/store-assistant/docs/decisions/README.md`
+  was wrong in two ways and returned nothing: it named the branch, and it looked
+  under `docs/decisions/` when `git-filter-repo` had rewritten those paths onto
+  this repository's topology, under `projects/store-assistant/`. Both corrected.
+
 ### Added
 
 - **The Copier render root is parsed, so a stray delimiter cannot break the

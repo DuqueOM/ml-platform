@@ -13,8 +13,13 @@ mapping.
 
 The mapping is the number: record 006 became `store-ADR-006`, and so on for all
 twelve, with the slug untouched. Nothing was reordered, merged or dropped, so
-`git log history/agent-local -- docs/decisions/` reads against this table
-directly.
+`git log archive/agent-local -- projects/store-assistant/docs/decisions/` reads
+against this table directly. Two things about that command are worth stating,
+because both were wrong before: the history lives on an annotated **tag**, not a
+branch, and the paths inside it were rewritten onto this repository's topology
+by `git-filter-repo`, so the ADRs are under `projects/store-assistant/`, not at
+the root. The previous form named a branch and a path that no longer exist
+there, and returned nothing.
 
 A prefix rather than a new sequence, for a reason worth stating: renumbering
 them into the platform's sequence would have made project-scope decisions look
