@@ -33,6 +33,32 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Added
 
+- **The namespaces the NetworkPolicies depend on are declared as data.**
+  `platform/policies/namespace-contract.yaml` (QA-4 R11-1). The serving
+  policies admitted traffic from and to namespaces selected by
+  `app.kubernetes.io/name: monitoring` and `ingress-nginx` — labels no
+  namespace this repository provisions or requires ever carried. Under
+  `default-deny` the pod could therefore be neither scraped nor reached, while
+  every render, every overlay build and every manifest test passed: a selector
+  that matches nothing is syntactically perfect.
+
+  The contract states, per role, what it is for, which policies select it, who
+  provisions it in cloud and locally, and whether the local stack fulfils it.
+  The policies select `role.ml-platform.io/<role>: "true"` instead.
+  **Boolean role labels rather than an application name**, because
+  `app.kubernetes.io/name` means "the name of the application" and one label
+  cannot hold two values — the local stack runs Prometheus, Grafana, Jaeger and
+  the collector in a SINGLE namespace, which therefore declares the monitoring
+  role and, honestly, not the ingress role it cannot fulfil without a
+  controller. **Not by namespace name**, which `allow-dns` can use for
+  `kube-system` because a distribution fixes it: monitoring lives in
+  `gmp-system` on GKE and `monitoring` under kube-prometheus-stack, and a
+  template cannot know which.
+
+  `tests/test_namespace_contract.py` fails on a policy selecting a role nobody
+  declared, a role with no provisioner, a local claim no Namespace manifest
+  backs, and a role no policy selects any more.
+
 - **The Copier render root is parsed, so a stray delimiter cannot break the
   generator for everyone.** `scripts/check_template_render_safety.py`, gate P15,
   ported from `ml-service-template`. `copier.yml` sets `_templates_suffix: ""`,
