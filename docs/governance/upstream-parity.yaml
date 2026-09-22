@@ -71,6 +71,10 @@ artifacts:
     status: rejected
     reason: >-
       Rejected after looking for the commit it would have listed, and finding none. The pending entry assumed this repository had upstream's ruff migration; it never did. ruff is configured in pyproject.toml at the founding commit f6defbd, black, isort and flake8 were never wired here — the technology inventory records black as Rejected, superseded before use — and no formatting-only revision exists across the 88 commits. The black and flake8 strings that do appear live under services/, which is generated from the template where the migration actually happened. Inventing a SHA, or shipping a file whose only content is a comment, would teach the next reader something false about this history. Reverses to adopted the day a mechanical reformat lands, with its own SHA.
+  - path: .github/workflows/dependabot-auto-merge.yml
+    status: adopted
+    reason: >-
+      Adopted as-is, same SHA-pinned fetch-metadata and the same rule: patch, minor and digest queue `gh pr merge --auto`, a MAJOR never does. The precondition upstream states is met here — `main` requires four status checks, so `--auto` queues behind them rather than merging on arrival. The measurement that motivated it applies here too: three Dependabot PRs sat red for days because the pip ecosystem left uv.lock behind, and reviewing each one added no judgement. What reaches a person now is a major, or a red check. Upstream's ADR-052 is the rationale; this repository's equivalent obligation is that the quality of the automation is the quality of its gates, which is why `Repository invariants` stays required.
   - path: .github/workflows/pr-evidence-check.yml
     status: adopted
     reason: >-
@@ -333,6 +337,10 @@ artifacts:
     status: rejected
     reason: >-
       Serving executor sizing is a service-level concern, authoritative upstream under ADR-003 section 2. Duplicating the analysis here invites the two to disagree.
+  - path: scripts/check_pin_shape.py
+    status: rejected
+    reason: >-
+      Rejected: it asserts `~=` on every declared dependency, which is upstream's reproducibility contract because its payload ships requirements.txt files and no lockfile. Here the contract is uv.lock — CI runs `uv sync --all-packages --all-extras --locked` and `uv lock --check`, so the exact resolution is pinned by the lockfile and the manifests carry floors (`packaging>=26.3`, `jinja2>=3.1.6`) on purpose: a floor plus a lockfile is reproducible, while `~=` plus a lockfile would only narrow what the resolver may pick next time. Adopting it would fail on every manifest in this repository and would be asking for a shape that buys nothing on top of the lock. Reverses the day this repository ships a dependency set without a lockfile.
   - path: scripts/check_adopter_scaffold_ref.py
     status: rejected
     reason: >-
