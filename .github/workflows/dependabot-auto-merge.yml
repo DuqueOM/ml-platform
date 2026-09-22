@@ -23,6 +23,12 @@ permissions:
 jobs:
   auto-merge:
     name: Queue merge for non-major updates
+    # A bound, not a budget. Two API calls and no checkout: seconds, not
+    # minutes. Without it a hung step holds a runner for GitHub's six-hour
+    # default while reporting nothing — and this job was the one that showed
+    # the convention was not enforced anywhere (QA-4 round eleven bounded the
+    # other eight by hand; nothing stopped the ninth from arriving unbounded).
+    timeout-minutes: 5
     # Dependabot-authored PRs only. `github.actor` would also match a human
     # who pushed to a dependabot/* branch; the PR author does not.
     if: github.event.pull_request.user.login == 'dependabot[bot]'
