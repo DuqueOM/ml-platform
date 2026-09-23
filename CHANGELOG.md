@@ -18,6 +18,41 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Added — ADR-010: this repository is authoritative for the agent core, and exports it
+
+- **The authority question ADR-002's correction left open is answered.**
+  `libs/llm-core` is authoritative; `DuqueOM/agent-local` is a one-way export of
+  it, produced only by the new `scripts/export_llm_core.py`. Measured first,
+  because the correction's own trigger said the answer was overdue once the two
+  copies diverged in behaviour — and they had: nine commits here against none
+  there since 2026-08-05, eleven of twelve shared files different, four modules
+  only here. The policy gate is still byte-identical in both, which made now the
+  cheapest moment to pick one source of truth.
+- **The exporter is an allowlist, not the package.** Twelve modules — exactly
+  the set agent-local already ships. `doc_corpus` and `doc_questions` stay here
+  because they enumerate this repository's documentation by path; exported,
+  they would describe files agent-local does not have. That coupling is also why
+  the dependency-direction test was credited with more than it guarantees: it
+  sees imports, not data.
+- **Citations are re-namespaced on the way out, in one pass.** `store-ADR-NNN`
+  becomes bare `ADR-NNN` downstream, where those are native; a bare reference to
+  one of *our* decisions becomes `platform-ADR-NNN`, because left bare it would
+  resolve to agent-local's decision of the same number. One pass is
+  load-bearing: two sequential substitutions map a store citation twice.
+- **Provenance without a timestamp.** `core/EXPORTED_FROM.json` records the
+  source commit and a SHA-256 of every file, so one commit exports
+  byte-identical output and `--check` means something. The script refuses
+  uncommitted source.
+- `tests/test_export_llm_core.py` pins every transform against the inputs that
+  are easy to get wrong, and turns ADR-010's third revisit trigger — an
+  allowlisted module naming this repository's files — into a failing test
+  rather than a thing to remember.
+- ADR-002 gains a second dated correction: "the business-agnostic upstream" was
+  inaccurate — nothing flowed from agent-local — and the revisit trigger that
+  should have caught it was written without measuring.
+- `llm_core/agent.py` told readers to construct an agent with `load_agent`,
+  which no longer exists here. It now names `build_agent`.
+
 ### Fixed — the agent core cited another repository's decisions, and C2 could not see code
 
 - **48 references in `libs/llm-core` and `projects/store-assistant` pointed at

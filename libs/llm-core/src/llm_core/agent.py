@@ -37,7 +37,8 @@ _DEFAULT_PROMPTS = {
 class Agent:
     """Reusable agent bound to a single use-case configuration.
 
-    Construct via :func:`load_agent` which also wires the use-case tools.
+    Construct via :func:`build_agent`, given a loaded use-case and the caller's
+    tool registry.
 
     Args:
         config: The active :class:`UsecaseConfig`.
