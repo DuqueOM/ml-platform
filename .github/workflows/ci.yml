@@ -389,14 +389,43 @@ jobs:
           soft_fail: true
           output_format: cli
 
+      - name: Install kubescape — pinned version, verified bytes
+        # NOT continue-on-error, and that split is the point. The tool is not a
+        # finding: if the download or the checksum fails, this job must go red.
+        #
+        # It was one step, advisory, fetching
+        # `releases/latest/download/kubescape-ubuntu-latest`. That asset does
+        # not exist in v4 — the request 404s — so the scan ran against a file
+        # that was not a binary and the job stayed green anyway. A scanner that
+        # never ran reports no findings, which looks exactly like a clean tree
+        # (QA-4 W-8).
+        #
+        # The version is pinned and the bytes are checked against the digest
+        # published with that release. A tag can be re-pointed; the digest
+        # cannot, which is the same argument this repository applies to every
+        # `uses:` reference.
+        env:
+          KUBESCAPE_VERSION: v4.0.14
+          KUBESCAPE_SHA256: 5d987374013ae5b6d9508146d51d5ee62c0d4c638313154f69be35123269badf
+        run: |
+          set -euo pipefail
+          asset="kubescape_${KUBESCAPE_VERSION#v}_linux_amd64"
+          curl -sSLf -o kubescape \
+            "https://github.com/kubescape/kubescape/releases/download/${KUBESCAPE_VERSION}/${asset}"
+          echo "${KUBESCAPE_SHA256}  kubescape" | sha256sum -c -
+          chmod +x kubescape
+          ./kubescape version
+
       - name: Kubescape — cluster posture against NSA and CIS baselines
         # Scans the MANIFESTS, not a live cluster. The overlays declare
         # restricted Pod Security and default-deny NetworkPolicies; this checks
         # whether the declaration survives contact with a published baseline.
+        #
+        # Advisory, per gate P8: the FINDINGS do not block while the standing
+        # backlog is untriaged. The tool running at all is not advisory, and
+        # lives in the step above.
         continue-on-error: true
         run: |
-          curl -sSL https://github.com/kubescape/kubescape/releases/latest/download/kubescape-ubuntu-latest -o kubescape
-          chmod +x kubescape
           for overlay in platform/kubernetes/overlays/*/; do
             kubectl kustomize "$overlay" > /tmp/rendered.yaml
             ./kubescape scan framework nsa,cis-v1.10.0 /tmp/rendered.yaml --format pretty-printer || true
