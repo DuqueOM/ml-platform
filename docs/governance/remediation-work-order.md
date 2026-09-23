@@ -418,6 +418,11 @@ they are under a day.
 
 ### W-10 — Verify the digest the model artifact already records
 
+> **Status: done** — *feat(demand-forecast): verify the digest the artifact already recorded*. The sidecar now
+> carries the FULL sha256 (`version` carried a 12-character label), `load` verifies it before unpickling, and an
+> artifact without its sidecar is refused — the pair is the artifact. Watched failing: a flipped byte, a
+> truncation and a missing sidecar all load cleanly on the previous revision.
+
 **Mode**: AUTO · **Closes**: F-14 · **Size**: ~30min
 
 `persist.save()` computes `sha256` over the artifact's bytes and writes it into
