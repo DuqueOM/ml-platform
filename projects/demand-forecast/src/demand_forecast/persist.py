@@ -234,9 +234,14 @@ def save(model: ForecastModel, path: Path) -> dict[str, Any]:
     # Version derived from the artifact's BYTES. A hand-set version string is
     # one edit away from labelling two different models the same, and the first
     # symptom is a rollback that changes nothing.
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()[:12]
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
     metadata = {
-        "version": f"{model.trained_through}+{digest}",
+        "version": f"{model.trained_through}+{digest[:12]}",
+        # The FULL digest, recorded so `load` can verify it. `version` carried
+        # a 12-character prefix, which is a label — good for telling two
+        # artifacts apart in a runbook, and not what an integrity check should
+        # compare (QA-4 W-10).
+        "sha256": digest,
         "schema": model.schema,
         "trained_through": model.trained_through,
         "calibrated_from": model.calibrated_from,
@@ -250,8 +255,52 @@ def save(model: ForecastModel, path: Path) -> dict[str, Any]:
     return metadata
 
 
+def _verify_digest(path: Path) -> None:
+    """Refuse an artifact whose bytes do not match what was recorded beside it.
+
+    `save` has always computed a sha256 of the file and written it into the
+    sidecar. Nothing read it back, so the digest documented the artifact
+    without defending it: a truncated copy, a partial download or an edited
+    file loaded exactly like an intact one (QA-4 W-10).
+
+    The sidecar is not optional. A `.joblib` on its own is half an artifact —
+    the half that cannot say what it is or prove it is unaltered — and loading
+    it blind is the situation this check exists to end. `save` writes both.
+
+    Raises:
+        ValueError: If the sidecar is absent, unreadable, records no digest, or
+            records one the file does not match.
+    """
+    sidecar = path.with_suffix(".json")
+    if not sidecar.is_file():
+        raise ValueError(
+            f"{path.name} has no metadata sidecar at {sidecar.name}, so its digest cannot be verified. "
+            f"The artifact is the PAIR; `save` writes both. Re-fit, or copy the sidecar alongside it."
+        )
+    try:
+        recorded = json.loads(sidecar.read_text(encoding="utf-8")).get("sha256")
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{sidecar.name} is not readable JSON, so the digest cannot be verified: {exc}") from exc
+    if not recorded:
+        raise ValueError(
+            f"{sidecar.name} records no sha256. Artifacts written before this field existed carry a truncated "
+            f"digest inside `version`, which labels but does not verify — re-fit rather than trusting it."
+        )
+    actual = hashlib.sha256(path.read_bytes()).hexdigest()
+    if actual != recorded:
+        raise ValueError(
+            f"{path.name} does not match the digest recorded beside it.\n  recorded: {recorded}\n  actual:   "
+            f"{actual}\nThe file has changed since it was written — truncated, edited, or a different artifact "
+            f"under the same name. Nothing is loaded."
+        )
+
+
 def load(path: Path) -> ForecastModel:
     """Read an artifact back, refusing one written by a different schema.
+
+    The artifact's bytes are verified against the digest in its sidecar before
+    anything is unpickled (see :func:`_verify_digest`), so a truncated or
+    edited file fails on the digest rather than somewhere inside joblib.
 
     The file carries data, not objects of this package (see :func:`_payload`),
     so the model is rebuilt here rather than unpickled. A reader that only
@@ -269,6 +318,7 @@ def load(path: Path) -> ForecastModel:
         ValueError: If the file is not an artifact payload, or its schema is
             not :data:`ARTIFACT_SCHEMA`.
     """
+    _verify_digest(path)
     payload = joblib.load(path)
     if not isinstance(payload, dict):
         raise ValueError(
