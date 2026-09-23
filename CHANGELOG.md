@@ -33,6 +33,31 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Added
 
+- **The NetworkPolicies are now proven enforced, on a cluster rather than in a
+  renderer.** `tests/local/test_network_policies.py` and the local overlay,
+  which includes `platform/policies/` (QA-4 R11-2). Until now every claim about
+  these policies was about YAML: they rendered, `kubectl kustomize` exited
+  zero, and no packet had ever been dropped because of them — while two
+  documents asserted this could not be measured locally at all.
+
+  Measured on kindnetd v20250512: under `default-deny` a probe pod's DNS is
+  denied; `allow-dns` restores it; rewriting its peer selector the way
+  `commonLabels` once did denies it again; and Prometheus scrapes the serving
+  pod through `allow-serving-ingress` once the monitoring role label is on its
+  namespace. That is the round-ten P1 reproduced and then closed, against a
+  cluster.
+
+  **The test polls instead of sleeping, and that is a finding too.**
+  Propagation took 3s on one transition and 41s on another, so the first
+  attempt at this measurement — three-second waits — reported a denial that was
+  really a policy not yet in force, and would have shipped as proof of
+  something it had not shown.
+
+  Re-applying against a cluster created before the selector change is refused
+  for one resource: `spec.selector` is immutable. `platform/local/README.md`
+  carries the remedy, and records that the earlier entry claiming no cluster
+  ran the old manifests was wrong — the local one did.
+
 - **The namespaces the NetworkPolicies depend on are declared as data.**
   `platform/policies/namespace-contract.yaml` (QA-4 R11-1). The serving
   policies admitted traffic from and to namespaces selected by
