@@ -28,7 +28,10 @@ The identifier now carries its own scope. Foreign references keep the
 convention this repository already had — `template-ADR-018` is
 `ml-service-template`'s — and `scripts/check_doc_coherence.py` check C2 was
 generalised from "a `template-` prefix" to "any namespace prefix" so a third
-set never needs the gate edited again.
+set never needs the gate edited again. A namespaced reference is also
+*resolved*, not merely exempted: a store reference to a number this directory
+never recorded fails, and the index is discovered from the file names here, so
+that still needs no edit to the gate.
 
 | ADR | Title | Status |
 | ----- | ------- | -------- |

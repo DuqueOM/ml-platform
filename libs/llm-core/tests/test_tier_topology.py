@@ -1,4 +1,4 @@
-"""Tier topology and resident-memory invariant (ADR-011).
+"""Tier topology and resident-memory invariant (store-ADR-011).
 
 These tests cover the config layer rather than the HTTP layer: which tiers a
 given environment ends up with, whether the resident-memory cap is enforced,

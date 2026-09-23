@@ -18,6 +18,49 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Fixed — the agent core cited another repository's decisions, and C2 could not see code
+
+- **48 references in `libs/llm-core` and `projects/store-assistant` pointed at
+  agent-local's ADRs by bare number.** The code was migrated from agent-local
+  (ADR-002), where the bare number for *hybrid tier topology* was eleven —
+  `store-ADR-011` here. This index runs 000 to 009, so every citation of an
+  agent-local number above nine pointed at nothing: 26 of them. The other 22
+  were worse: they **resolved, silently, to a different decision**.
+  `test_controller.py` cited `ADR-009` for "the reflection note leaked into the
+  verifier's evidence" — agent-local's reflection-channel decision — and it
+  resolved to this repository's ADR-009, *data versioning*. `ADR-006` (tool
+  capability contract) resolved to *edge protection*; `ADR-004` (cross-tier
+  verification) to *tooling triage*.
+- **Qualified as `store-ADR-NNN`**, the convention the store decisions README
+  already defines. Classified line by line rather than by search-and-replace,
+  because the same number means this repository's decision on one line and
+  agent-local's on the next: 43 by exact match against agent-local's original
+  source, 5 by reading lines that were rewritten after migration but still cite
+  the original decision, and 12 left bare because they genuinely mean ours.
+- **Why it survived: C2 scanned markdown only.** Extended to Python under
+  `libs/` and `projects/`, where a comment documents a design decision.
+  `scripts/` and `tests/` stay out — every reference there already resolves
+  here, and tests write a deliberately nonexistent reference on purpose, to
+  prove the gate can fail.
+- **A namespaced reference is now checked, not just skipped.** The lookbehind
+  that stopped `store-ADR-006` reading as our ADR-006 also stopped it being
+  checked at all, so a store reference to a number the store never recorded
+  passed. Namespaces are discovered from
+  `projects/*/docs/decisions/<ns>-ADR-NNN-*.md`, so no project is named in the
+  gate — the reason the generalisation was made in the first place. Only a
+  *known* namespace is a claim: the first version failed on a `pre-` prefix
+  in a real store ADR, which is English for "before that decision", not a
+  namespace called `pre`.
+- **What this cannot catch, stated rather than implied.** C2 checks that a
+  number exists, not that it means what the sentence says. The 22 silent
+  mis-resolutions would have passed any existence check. The protection against
+  that class is the namespace prefix itself; the gate only guards its louder
+  half.
+- Watched failing: against the pre-fix tree the extended C2 reports 11 distinct
+  dangling references in code; after, it passes and resolves 69 project-scope
+  references against their own index. Three regression tests in
+  `tests/test_gate_scripts.py` hold it there.
+
 ### Fixed — the link checker was configured but never run, and it had 17 dead links to find
 
 - **`.github/markdown-link-check.json` has existed since August and nothing

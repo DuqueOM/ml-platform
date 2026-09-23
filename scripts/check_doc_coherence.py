@@ -72,6 +72,17 @@ _ADR_REF = re.compile(r"(?<![A-Za-z_/-])ADR-(\d{3})")
 # Inherited bodies use ml-service-template's numbering, namespaced so a
 # reference can never silently resolve against the wrong index (ADR-002).
 _INHERITED_ADR_REF = re.compile(r"\btemplate-ADR-(\d{3})")
+# A project-scope reference: `store-ADR-006`. The prefix is the namespace and
+# the file name is the index — `projects/*/docs/decisions/store-ADR-006-*.md`
+# — so no project is named here. `template-` is excluded: its index lives in
+# another repository and is resolved separately, above.
+_NAMESPACED_ADR_REF = re.compile(r"(?<![A-Za-z0-9_/-])([a-z][a-z0-9]*)-ADR-(\d{3})(?!\d)")
+_NAMESPACED_ADR_FILE = re.compile(r"^([a-z][a-z0-9]*)-ADR-(\d{3})-[a-z0-9-]+\.md$")
+#: Where a citation documents a design decision in CODE. `scripts/` and
+#: `tests/` are deliberately out: every bare reference in them resolves to this
+#: repository's own index, and tests write references that do NOT exist on
+#: purpose — `See ADR-999` is how the suite proves this very check can fail.
+_CODE_ROOTS = ("libs", "projects")
 
 failures: list[str] = []
 notes: list[str] = []
@@ -196,6 +207,21 @@ def _template_adr_numbers() -> set[str]:
     return {match.group(1) for path in decisions.glob("ADR-*.md") if (match := _ADR_FILE.match(path.name))}
 
 
+def _namespaced_adr_index() -> dict[str, set[str]]:
+    """Namespace -> ADR numbers, discovered from project decision directories.
+
+    Before this existed a namespaced reference was skipped rather than checked:
+    the lookbehind that stops `store-ADR-006` reading as OUR ADR-006 also
+    stopped it being checked at all. `store-ADR-099` passed.
+    """
+    index: dict[str, set[str]] = {}
+    for path in sorted(REPO_ROOT.glob("projects/*/docs/decisions/*.md")):
+        match = _NAMESPACED_ADR_FILE.match(path.name)
+        if match:
+            index.setdefault(match.group(1), set()).add(match.group(2))
+    return index
+
+
 def check_no_dangling_refs(adrs: dict[str, Path]) -> None:
     """C2 — no document points at an ADR number that does not exist.
 
@@ -204,9 +230,31 @@ def check_no_dangling_refs(adrs: dict[str, Path]) -> None:
     """
     on_disk = set(adrs)
     template_adrs = _template_adr_numbers()
+    namespaced = _namespaced_adr_index()
     scanned = 0
+    code_scanned = 0
     foreign = 0
+    resolved_namespaced = 0
     unresolvable = 0
+
+    def check_namespaced(path: Path, text: str) -> None:
+        nonlocal resolved_namespaced
+        for ns, ref in set(_NAMESPACED_ADR_REF.findall(text)):
+            # Only a KNOWN namespace is a claim. `pre-ADR-011` is English for
+            # "before ADR-011", not a namespace called `pre`, and the first
+            # version of this check failed on exactly that. Validating the
+            # namespaces that exist catches `store-ADR-099` — the case worth
+            # catching — without inventing references out of prose.
+            if ns == "template" or ns not in namespaced:
+                continue
+            if ref in namespaced[ns]:
+                resolved_namespaced += 1
+            else:
+                fail(
+                    "C2",
+                    f"{path.relative_to(REPO_ROOT)} references {ns}-ADR-{ref}, which no "
+                    f"projects/*/docs/decisions/ directory contains",
+                )
 
     for path in sorted(REPO_ROOT.rglob("*.md")):
         if not _is_scannable(path):
@@ -248,7 +296,30 @@ def check_no_dangling_refs(adrs: dict[str, Path]) -> None:
             if ref not in on_disk:
                 fail("C2", f"{path.relative_to(REPO_ROOT)} references ADR-{ref}, which does not exist")
 
-    note = f"{scanned} markdown files scanned for dangling ADR references"
+        if not generated:
+            check_namespaced(path, _read(path))
+
+    # Code cites decisions too, and markdown-only scanning is why the agent
+    # core carried 48 references to ANOTHER repository's ADRs for six weeks:
+    # `ADR-009` in a comment about reflection notes meant agent-local's
+    # reflection-channel decision and resolved, silently, to this repository's
+    # data-versioning one. Existence cannot catch that — only the namespace
+    # prefix can — but existence catches its louder half, and a qualified
+    # reference is now checked instead of merely skipped.
+    for root in _CODE_ROOTS:
+        for path in sorted((REPO_ROOT / root).rglob("*.py")):
+            if not _is_scannable(path):
+                continue
+            code_scanned += 1
+            text = _read(path)
+            for ref in set(_ADR_REF.findall(text)):
+                if ref not in on_disk:
+                    fail("C2", f"{path.relative_to(REPO_ROOT)} references ADR-{ref}, which does not exist")
+            check_namespaced(path, text)
+
+    note = f"{scanned} markdown and {code_scanned} Python files scanned for dangling ADR references"
+    if resolved_namespaced:
+        note += f"; {resolved_namespaced} project-scope references resolved against their own index"
     if foreign:
         note += f"; {foreign} resolved against the template's index"
     if unresolvable:

@@ -267,6 +267,50 @@ def test_doc_coherence_fails_on_a_dangling_adr_reference() -> None:
     assert "ADR-999" in result.stdout
 
 
+def test_doc_coherence_fails_on_a_dangling_adr_reference_in_code() -> None:
+    """Code cites decisions too, and C2 read only markdown.
+
+    The agent core carried references like `ADR-011` in its comments for six
+    weeks: agent-local's hybrid-tier decision, and no such ADR here. Markdown-
+    only scanning never saw them. The probe is a Python file under `libs/`,
+    where a citation documents a design decision.
+    """
+    probe = REPO_ROOT / "libs" / "ml-core" / "src" / "ml_core" / "_gate_probe.py"
+    with temporarily(probe, '"""Probe."""\n\n# See ADR-999 for the reasoning.\n'):
+        result = _run(GATES["doc-coherence"])
+
+    assert result.returncode == 1
+    assert "_gate_probe.py references ADR-999" in result.stdout
+
+
+def test_doc_coherence_fails_on_a_dangling_namespaced_reference() -> None:
+    """A namespace prefix is a claim about another index, and is now checked.
+
+    The lookbehind that stops `store-ADR-006` reading as THIS repository's
+    ADR-006 used to stop it being checked at all, so `store-ADR-099` passed.
+    """
+    probe = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.md"
+    with temporarily(probe, "# probe\n\nSee store-ADR-099 for details.\n"):
+        result = _run(GATES["doc-coherence"])
+
+    assert result.returncode == 1
+    assert "store-ADR-099" in result.stdout
+
+
+def test_doc_coherence_does_not_read_prose_as_a_namespace() -> None:
+    """`pre-ADR-011` is English for "before ADR-011", not a namespace `pre`.
+
+    The first version of the namespaced check failed on exactly that phrase,
+    in a real ADR. Only a namespace that has an index is a claim.
+    """
+    probe = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.md"
+    with temporarily(probe, "# probe\n\nThe pre-ADR-005 layout, and a non-ADR-003 path.\n"):
+        result = _run(GATES["doc-coherence"])
+
+    assert "pre-ADR-005" not in result.stdout, result.stdout
+    assert "non-ADR-003" not in result.stdout, result.stdout
+
+
 def test_doc_coherence_fails_on_a_private_repository_link() -> None:
     """The repository is public; a private reference must not survive review.
 

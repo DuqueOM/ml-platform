@@ -244,7 +244,7 @@ class RunContext:
             remaining = self.deadline - time.time()
             kwargs["timeout"] = max(1, int(remaining) + 1)
         # Collapse the requested tier onto the topology that is actually
-        # configured BEFORE consulting the breaker (ADR-011): in a local-only
+        # configured BEFORE consulting the breaker (store-ADR-011): in a local-only
         # profile every tier resolves to 0, and breaker state plus token
         # accounting must name the tier that really served the call.
         configured, _ = self.agent.tiers.resolve(tier)
@@ -275,7 +275,7 @@ class RunContext:
             {"role": "user", "content": user},
         ]
         kwargs: dict[str, Any] = {"max_tokens": 256, "temperature": 0}
-        # Constrain the planner to the structured tool-call envelope (ADR-007),
+        # Constrain the planner to the structured tool-call envelope (store-ADR-007),
         # mirroring how the router is constrained by its GBNF grammar.
         if self.agent.config.structured_tool_calls:
             kwargs["json_schema"] = self.agent.registry.planner_json_schema()
@@ -284,7 +284,7 @@ class RunContext:
     def extract_tool_calls(self, plan_response: dict[str, Any]) -> list[ToolCall]:
         """Parse the planner output into validated :class:`ToolCall` objects.
 
-        Tries the structured JSON envelope first (ADR-007); falls back to the
+        Tries the structured JSON envelope first (store-ADR-007); falls back to the
         legacy ``tool(arg="…")`` text format so the change cannot regress a
         server without ``json_schema`` support. Unknown tools are dropped here;
         per-tool argument validation happens later in ``ToolRegistry.run``.
@@ -296,7 +296,7 @@ class RunContext:
         return calls[: self.budget.max_tool_calls]
 
     def _parse_structured_calls(self, content: str) -> list[ToolCall] | None:
-        """Parse the ADR-007 JSON envelope, or ``None`` if it is not that shape.
+        """Parse the store-ADR-007 JSON envelope, or ``None`` if it is not that shape.
 
         Returning ``None`` (as opposed to ``[]``) signals the caller to fall
         back to the legacy text parser; an empty list is a valid "no tools".
@@ -357,7 +357,7 @@ class RunContext:
         return any(not obs.ok for obs in self.observations)
 
     def reflect(self, tier: int) -> None:
-        """Run the reflection station and KEEP its output (ADR-009).
+        """Run the reflection station and KEEP its output (store-ADR-009).
 
         The note is stored on a channel separate from ``observations`` on
         purpose: observations are tool ground truth and feed the verifier as
@@ -393,7 +393,7 @@ class RunContext:
         obs_context = "\n".join(
             self._cap(f"{obs.tool}: {obs.data if obs.ok else f'ERROR: {obs.error}'}") for obs in self.observations
         )
-        # Reflection notes ride along as extra generator context (ADR-009) —
+        # Reflection notes ride along as extra generator context (store-ADR-009) —
         # clearly labelled so they read as reasoning, never as a tool result.
         if self.reflection_notes:
             notes = "\n".join(f"reflection_note: {note}" for note in self.reflection_notes)

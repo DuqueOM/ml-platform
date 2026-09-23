@@ -1,6 +1,6 @@
 """Tier-topology behaviour of the use-case's OWN committed configuration.
 
-ADR-011: one config serves the local-only, hybrid and all-remote profiles, and
+store-ADR-011: one config serves the local-only, hybrid and all-remote profiles, and
 the environment decides which is active. These cases drive that through this
 project's `config.yaml` — they are assertions about the configuration this
 project ships, so they live with it. The profile MECHANISM is exercised against
@@ -106,7 +106,7 @@ def test_all_remote_profile_has_no_resident_model(monkeypatch: pytest.MonkeyPatc
 
     assert config.topology_profile == "all-remote"
     assert config.local_tiers == []
-    # GBNF is unavailable off llama.cpp — the router must fall back (ADR-011).
+    # GBNF is unavailable off llama.cpp — the router must fall back (store-ADR-011).
     assert config.tier_endpoints[0].supports_grammar is False
 
 

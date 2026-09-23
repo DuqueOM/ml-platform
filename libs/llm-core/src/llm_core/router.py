@@ -36,7 +36,7 @@ class Router:
         self._retry = RetryPolicy.from_config(config.tier_retry)
 
     def _constraint(self) -> dict[str, Any]:
-        """Output constraint appropriate to the Tier-0 endpoint (ADR-011).
+        """Output constraint appropriate to the Tier-0 endpoint (store-ADR-011).
 
         A local llama.cpp server takes the GBNF grammar, which makes malformed
         routing JSON structurally impossible. A remote provider cannot, so it

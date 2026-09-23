@@ -15,7 +15,7 @@ from llm_core import Agent, ToolRegistry, build_agent, load_usecase
 class TierResolutionStub:
     """Gives a tier-client double the resolution half of the client contract.
 
-    Since ADR-011 the controller asks the tier client to collapse a requested
+    Since store-ADR-011 the controller asks the tier client to collapse a requested
     tier onto the topology that is actually configured before consulting the
     circuit breaker. A double has no topology, so it resolves every tier to
     itself — leaving existing call/tier assertions meaningful.
@@ -87,7 +87,7 @@ def probe_usecase(tmp_path: Path) -> Path:
                 "name": "probe",
                 "allowed_intents": ["smalltalk", "lookup", "unknown"],
                 "phase": 1,
-                # The four-tier shape ADR-011 describes — one local router and
+                # The four-tier shape store-ADR-011 describes — one local router and
                 # three remote reasoning tiers — because that TOPOLOGY is
                 # platform structure, not domain content. A single-tier probe
                 # made every escalation resolve back to tier 0, and six
@@ -100,7 +100,7 @@ def probe_usecase(tmp_path: Path) -> Path:
                     3: {"url": "http://127.0.0.1:8094/v1", "kind": "remote", "model": "probe-verify"},
                 },
                 "retrieval": {"dir": "docs"},
-                # Cross-tier verification is platform behaviour (ADR-004), so
+                # Cross-tier verification is platform behaviour (store-ADR-004), so
                 # the probe declares it: without the block, four verification
                 # tests failed against a default that disables the judge.
                 "verification": {

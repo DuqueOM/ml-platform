@@ -35,7 +35,7 @@ from .tiers import LOCAL, REMOTE, TierEndpoint
 # temporary directory rather than depending on whichever one happens to exist.
 
 # ``${VAR}`` / ``${VAR:-default}`` substitution for endpoint URLs and model ids,
-# so one committed config serves every topology profile (ADR-011) and no
+# so one committed config serves every topology profile (store-ADR-011) and no
 # deployment-specific value has to be edited into version control.
 _ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
 
@@ -82,7 +82,7 @@ class UsecaseConfig:
         root: Absolute path to ``usecases/<name>/``.
         language: ISO language code of the customer-facing surface.
         allowed_intents: Closed set of intents the router may emit.
-        tier_endpoints: Map of tier number to :class:`TierEndpoint` (ADR-011).
+        tier_endpoints: Map of tier number to :class:`TierEndpoint` (store-ADR-011).
         router_prompt: System prompt for the Tier-0 router.
         router_grammar: GBNF grammar constraining the router JSON.
         budgets: Per-intent request budgets (raw dict, typed by RequestBudget).
@@ -103,10 +103,10 @@ class UsecaseConfig:
             into a prompt (bounds small-model context).
         retrieval_max_chars: Per-document cap for BM25 retrieval results.
         structured_tool_calls: When True (default), the planner is constrained to
-            emit the schema-validated JSON tool-call envelope (ADR-007). Set to
+            emit the schema-validated JSON tool-call envelope (store-ADR-007). Set to
             False only for a model server lacking ``json_schema`` support; the
             text-format fallback parser still works either way.
-        max_local_tiers: Resident-memory invariant (ADR-011) — how many tiers
+        max_local_tiers: Resident-memory invariant (store-ADR-011) — how many tiers
             may be ``kind: local`` at once. Enforced at load time.
     """
 
@@ -136,7 +136,7 @@ class UsecaseConfig:
         """True while the use-case is read-only (Phase 1). Fail-closed default.
 
         The tool registry refuses to execute a non-read-only, non-dry-run tool
-        while this holds (see ADR-006). Phase 2 (real mutating backends) sets
+        while this holds (see store-ADR-006). Phase 2 (real mutating backends) sets
         ``phase: 2`` in ``config.yaml`` to lift the gate per tool contract.
         """
         return self.phase < 2
@@ -148,7 +148,7 @@ class UsecaseConfig:
 
     @property
     def topology_profile(self) -> str:
-        """Name the ADR-011 profile this configuration represents.
+        """Name the store-ADR-011 profile this configuration represents.
 
         Returns:
             ``"local-only"`` (no remote tiers), ``"all-remote"`` (no local
@@ -258,7 +258,7 @@ def load_usecase(root: Path) -> UsecaseConfig:
 
         # A tier whose URL expands to nothing is *not configured* in this
         # environment — drop it rather than fail. This is what lets one
-        # committed config serve every ADR-011 profile: with no provider
+        # committed config serve every store-ADR-011 profile: with no provider
         # variables exported the higher tiers vanish and `TierClient.resolve`
         # collapses the topology onto Tier 0 (local-only).
         if not declared_url:
@@ -275,10 +275,10 @@ def load_usecase(root: Path) -> UsecaseConfig:
     if 0 not in tier_endpoints:
         raise ValueError(
             f"use-case {name!r} has no Tier 0 endpoint after environment expansion. "
-            "Tier 0 is required — it is the router and the degradation floor (ADR-011)."
+            "Tier 0 is required — it is the router and the degradation floor (store-ADR-011)."
         )
 
-    # Resident-memory invariant (ADR-011). A workstation cannot hold several
+    # Resident-memory invariant (store-ADR-011). A workstation cannot hold several
     # GGUF models at once, so exceeding the cap is a configuration error, not a
     # runtime surprise discovered when the OOM killer fires.
     limits = raw.get("limits", {})
@@ -287,12 +287,12 @@ def load_usecase(root: Path) -> UsecaseConfig:
     if len(local_tiers) > max_local_tiers:
         raise ValueError(
             f"use-case {name!r} declares {len(local_tiers)} local tiers {local_tiers} "
-            f"but limits.max_local_tiers is {max_local_tiers} (ADR-011). "
+            f"but limits.max_local_tiers is {max_local_tiers} (store-ADR-011). "
             f"Switch the surplus tiers from kind: {LOCAL} to kind: {REMOTE}, "
             f"or raise limits.max_local_tiers deliberately."
         )
 
-    # Per-device memory budget (ADR-012). Counting resident tiers is not enough:
+    # Per-device memory budget (store-ADR-012). Counting resident tiers is not enough:
     # the same model that fits in VRAM may not fit in system RAM, and the two
     # paths fail differently — VRAM overflow degrades to partial offload, system
     # RAM overflow swaps or invokes the OOM killer. Declaring weights and
@@ -307,7 +307,7 @@ def load_usecase(root: Path) -> UsecaseConfig:
         if budget is not None and required > budget:
             raise ValueError(
                 f"use-case {name!r} places {required:.1f} GiB of weights on device {device!r} "
-                f"but limits.memory_budget_gb.{device} is {budget:.1f} GiB (ADR-012). "
+                f"but limits.memory_budget_gb.{device} is {budget:.1f} GiB (store-ADR-012). "
                 f"Move the tier to another device, use a smaller quantisation, "
                 f"or raise the budget after re-measuring the machine."
             )

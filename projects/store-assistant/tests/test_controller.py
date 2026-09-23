@@ -138,7 +138,7 @@ def test_coerce_types() -> None:
     assert _coerce('[{"k": 1}]') == [{"k": 1}]
 
 
-# --- structured tool-calling contract (ADR-007) ---------------------------
+# --- structured tool-calling contract (store-ADR-007) ---------------------------
 def _ctx(agent: Any) -> Any:
     ctx = RunContext(agent, "msg", "", agent.controller.breaker)
     ctx.budget = agent.budget_for("product_lookup")
@@ -234,7 +234,7 @@ def test_plan_omits_json_schema_when_disabled(agent: Any) -> None:
     assert "json_schema" not in rec.last_kwargs
 
 
-# --- reflection notes channel (ADR-009, AUDIT R8-03) -----------------------
+# --- reflection notes channel (store-ADR-009, AUDIT R8-03) -----------------------
 class _TranscriptTiers(TierResolutionStub):
     """Queued contents like FakeTiers, but records every (tier, user_content)."""
 
@@ -278,5 +278,6 @@ def test_reflection_is_not_verifier_evidence(agent: Any, monkeypatch: pytest.Mon
     critic_prompts = [c for c in tiers.transcript if "Respuesta final" in c]
     assert critic_prompts, "critic never ran for a medium-risk route"
     assert all(note not in c for c in critic_prompts), (
-        "the reflection note leaked into the verifier's evidence — reflection is reasoning, not observation (ADR-009)"
+        "the reflection note leaked into the verifier's evidence — "
+        "reflection is reasoning, not observation (store-ADR-009)"
     )
