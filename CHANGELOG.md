@@ -276,6 +276,17 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Fixed
 
+- **"Every CI job carries `timeout-minutes`" stopped being true a week after
+  it was written.** The auto-merge workflow arrived with no bound, which is not
+  a slow build: GitHub cancels a job after six hours, so a wedged step holds a
+  runner that long and the log ends without saying why.
+
+  The job is bounded at five minutes — two API calls, no checkout — and
+  `tests/test_workflow_bounds.py` now reads every workflow as data and fails on
+  any job without a bound, or with one outside the range GitHub can apply. The
+  previous round bounded eight jobs by hand and wrote the claim down; nothing
+  kept it true, which is the difference between a convention and a gate.
+
 - **A maintainer's personal email address was hard-coded in a public
   repository.** QA-4 finding F-22. `rag_assistant.ingest` sent it to EDGAR as
   the `User-Agent` SEC requires. The address now comes from
