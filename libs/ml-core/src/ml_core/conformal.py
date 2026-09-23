@@ -138,6 +138,71 @@ class SplitConformalRegressor:
         self._n_calibration = n
         return self._quantile
 
+    @property
+    def quantile(self) -> float:
+        """The calibrated residual quantile — half the interval width.
+
+        Read-only and public because an artifact has to carry it. Persisting a
+        calibrated regressor by pickling the OBJECT makes the artifact depend
+        on this package being importable wherever it is read, which for a
+        serving image means installing a workspace library (ADR-008, R11-3).
+        Two numbers travel; a class does not.
+
+        Raises:
+            RuntimeError: If called before :meth:`calibrate`.
+        """
+        if self._quantile is None:
+            raise RuntimeError("the regressor is not calibrated, so it has no quantile to report")
+        return self._quantile
+
+    @property
+    def n_calibration(self) -> int:
+        """How many residuals the quantile was taken over.
+
+        Carried alongside the quantile because coverage is a property of the
+        calibration set's size as much as its spread: the same quantile from
+        twelve residuals and from twelve thousand are not the same claim.
+
+        Raises:
+            RuntimeError: If called before :meth:`calibrate`.
+        """
+        if self._n_calibration is None:
+            raise RuntimeError("the regressor is not calibrated, so it has no calibration size to report")
+        return self._n_calibration
+
+    @classmethod
+    def from_calibration(cls, *, alpha: float, quantile: float, n_calibration: int) -> SplitConformalRegressor:
+        """Restore a calibrated regressor from what calibration produced.
+
+        The inverse of reading :attr:`quantile` and :attr:`n_calibration`, and
+        the reason both are public: an artifact stores those numbers and
+        reconstructs the regressor on load, so nothing has to unpickle an
+        instance of this class.
+
+        Args:
+            alpha: Miscoverage rate the quantile was taken at.
+            quantile: The calibrated residual quantile.
+            n_calibration: Residuals it was taken over.
+
+        Returns:
+            A calibrated :class:`SplitConformalRegressor`.
+
+        Raises:
+            ValueError: If ``alpha`` is outside (0, 1), the quantile is
+                negative, or the calibration size is not positive. A negative
+                quantile would produce an interval whose lower bound exceeds
+                its upper one, and a restored regressor is exactly where such
+                a value arrives unnoticed.
+        """
+        restored = cls(alpha=alpha)
+        if quantile < 0.0:
+            raise ValueError(f"quantile must be non-negative, got {quantile}")
+        if n_calibration < 1:
+            raise ValueError(f"n_calibration must be positive, got {n_calibration}")
+        restored._quantile = float(quantile)
+        restored._n_calibration = int(n_calibration)
+        return restored
+
     def interval(self, y_pred: NDArray[np.float64]) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
         """Return ``(lower, upper)`` bounds for predictions.
 
