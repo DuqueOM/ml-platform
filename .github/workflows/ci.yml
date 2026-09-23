@@ -21,10 +21,11 @@ jobs:
   gates:
     name: Fast gates
     runs-on: ubuntu-latest
-    # Measured against the lane this job was split out of: the 25 checks below
-    # completed in the first ~4 minutes of a 63-minute run, then waited for a
-    # test suite they do not depend on. 15 is ~3x that, bounded for the same
-    # reason every other job is (QA-4 round eleven).
+    # Measured on the pull request that split this lane out: 2m28s, against the
+    # 1h2m40s the combined job took on the change immediately before it. These
+    # checks never depended on the test suite they used to wait for. 15 is ~6x
+    # the measurement, left deliberately loose because one run is one run —
+    # tighten it when there are five, the way the bound below was set.
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

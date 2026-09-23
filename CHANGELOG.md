@@ -54,6 +54,7 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   behavioural divergence between `libs/llm-core/` and `agent-local`'s `core/`;
   a consumer of `agent-local` that is not a human reading it; twelve months
   without a commit there.
+
 ### Changed — the invariants lane is split, and the status document stops calling a decision a constraint
 
 - **`Repository invariants` was one job with 39 steps, and it measured 1h 2m
