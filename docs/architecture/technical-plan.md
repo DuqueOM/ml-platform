@@ -393,12 +393,12 @@ obvious trigger.
 
 #### Still open
 
-- **`no-commit-to-branch` contradicts the actual flow.** The hook blocks
-  commits to `main` while this repository's history is direct commits to
-  `main`. Every commit since it was armed has skipped it by name. Either the
-  flow moves to pull requests or the hook goes; leaving both is a rule
-  everyone routes around, which is how the habit of skipping hooks starts.
-
+- **~~`no-commit-to-branch` contradicts the actual flow.~~ Resolved, and kept
+  as the record.** It did: the hook blocked commits to `main` while the
+  history was direct commits to `main`. Main's history is now squash-merged
+  pull requests, so the hook matches the flow it guards. This item asserted
+  otherwise long after it stopped being true — the plan's own rule that status
+  markers expire, applied to the plan (QA-4 W-12).
 - **Checkov reports 114 findings and does not block.** Roughly 36 are a
   scan-scope artifact — the overlay patches are strategic merges and Checkov
   reads each raw file as a complete Deployment — and the rest are real gaps in

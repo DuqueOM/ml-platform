@@ -276,6 +276,34 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Fixed
 
+- **Four documents disagreed with the machinery they describe.** QA-4 W-12.
+
+  `docs/PROJECT_CONTRACT.md` declared `KNOWN_DEVIATIONS` authoritative and then
+  narrated **one** deviation while that dictionary held **four**, across two
+  projects — in the document a reader consults to decide whether their own
+  project complies. The table is generated from the dictionary now
+  (`scripts/check_contract_deviations.py`, gate **P16**), read by AST rather
+  than imported so a gate script does not execute test code. The dictionary
+  stays in the test, because that is what makes an exemption self-cleaning.
+
+  The technical plan still led its "Still open" list with
+  `no-commit-to-branch` contradicting a flow of direct commits to `main`.
+  Main's history is squash-merged pull requests; the item is struck through and
+  kept as the record, which is the plan's own rule about expiring status
+  markers applied to the plan.
+
+  The technology inventory marked `pgvector` ✅ at Core tier on the strength of
+  an image name in a local manifest, while the plan lists pgvector retrieval as
+  open Phase 3 work. The detector vocabulary now separates `environment:` —
+  declared in an image or a manifest — from detectors that mean a code path
+  here uses it. `pgvector` renders 🧩, the headline moved from 55 to 54 of 121,
+  and category headings name the new state rather than dropping those rows from
+  both counts.
+
+  `SECURITY.md` labelled its Trivy row "Dependency **and image**
+  vulnerabilities" while nothing here builds an image. One word, in the one
+  document whose subject is not overstating what scanners do.
+
 - **A maintainer's personal email address was hard-coded in a public
   repository.** QA-4 finding F-22. `rag_assistant.ingest` sent it to EDGAR as
   the `User-Agent` SEC requires. The address now comes from

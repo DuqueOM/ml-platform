@@ -459,6 +459,11 @@ rather than `skip` or being deselected.
 
 ### W-12 — Four documents that have drifted from their own machinery
 
+> **Status: done** — *fix(docs): four documents that disagreed with their own machinery*. The contract's deviation
+> table is generated from `KNOWN_DEVIATIONS` (gate P16); the plan's `no-commit-to-branch` item is marked resolved
+> and kept as the record; the inventory distinguishes `environment:` from code detectors, so `pgvector` renders 🧩
+> rather than ✅ and the headline moved 55→54; SECURITY.md no longer claims image scanning.
+
 **Mode**: AUTO · **Closes**: F-18 and F-20 · **Size**: ~1.5h
 
 - **[PROJECT_CONTRACT.md](../PROJECT_CONTRACT.md)** says the test is the

@@ -217,6 +217,15 @@ jobs:
         # milliseconds, so it covers the other three.
         run: uv run python scripts/check_template_render_safety.py
 
+      - name: The contract's deviations are derived, not retyped
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        # docs/PROJECT_CONTRACT.md declares KNOWN_DEVIATIONS authoritative and
+        # then narrated ONE deviation while the dictionary held four, in the
+        # document a reader consults to decide whether their project complies.
+        # The table is generated from that dictionary now, and this fails when
+        # the committed text no longer matches it.
+        run: uv run python scripts/check_contract_deviations.py --check
+
       - name: Shared library reuse (charter C1)
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         # Reports the reuse count per project and FAILS on a manifest that

@@ -6,11 +6,12 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**55 of 121 committed technologies implemented (45%)** — plus 15 studied and 10 rejected, which are decisions rather than gaps.
+**54 of 121 committed technologies implemented (44%)** — plus 15 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 | :-: | --- |
-| ✅ | A real artifact exists. Documentation alone never counts |
+| ✅ | A real artifact exists and CODE here uses it. Documentation alone never counts |
+| 🧩 | Declared in an environment — an image, a manifest — and used by no code path here. Reachable if someone writes that code; not built |
 | ⬜ | Committed to, not built. **Not** "nearly done" |
 | 📓 | Studied: deliberately not wired in (ADR-004) |
 | 🚫 | Rejected, with the reason recorded |
@@ -137,12 +138,12 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `feast` | core | Not wired in. libs/feature-defs holds point-in-time joins, which is not a feature store. |
 | ✅ | `point-in-time-joins` | core | |
 
-## Databases — 2 built, 2 pending
+## Databases — 1 built, 1 available, 2 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
 | ✅ | `postgres` | core | |
-| ✅ | `pgvector` | core | |
+| 🧩 | `pgvector` | core | |
 | ⬜ | `bigquery` | core | |
 | ⬜ | `athena` | core | |
 
