@@ -17,6 +17,52 @@ permissions:
   contents: read
 
 jobs:
+  link-check:
+    name: Link check
+    runs-on: ubuntu-latest
+    # `.github/markdown-link-check.json` has existed since August with eight
+    # argued ignore patterns, and `tests/test_governance_files.py` asserted it
+    # parses — so `implementation-status.md` rendered "Repository governance
+    # (CODEOWNERS, PR template, link check)" as ✅ at L1 while NOTHING EVER
+    # RAN THE CHECKER. The component proved that a config file is valid
+    # configuration, which is not the claim its name makes.
+    #
+    # That is the failure mode this repository keeps finding in other forms:
+    # "a mypy override matching zero modules, and a coherence filter examining
+    # zero files, both stayed green". Wiring it is the fix; renaming the
+    # component would only have made the gap honest.
+    #
+    # A bound, not a budget: the checker makes real network requests, so it is
+    # bounded well above the local measurement rather than near it.
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Run markdown-link-check
+        # Same action, same commit pin as ml-service-template's own link-check
+        # lane (ADR-003: the template is upstream for what it already solved).
+        # Dependabot bumps it via .github/dependabot.yml.
+        uses: gaurav-nelson/github-action-markdown-link-check@5c5dfc0ac2e225883c0e5f03a85311ec2830d368 # v1
+        with:
+          use-quiet-mode: "yes"
+          use-verbose-mode: "no"
+          config-file: ".github/markdown-link-check.json"
+          # On a pull request, only files in the diff — a full external-link
+          # sweep on every push turns third-party flakiness into this
+          # repository's red build. The scheduled run below is the one that
+          # sweeps everything.
+          check-modified-files-only: ${{ github.event_name == 'pull_request' && 'yes' || 'no' }}
+          # The action defaults to `master`; this repository's default branch
+          # is `main`, and without the override the diff resolution fails with
+          # `fatal: couldn't find remote ref master`. Recorded because the
+          # template hit exactly this and wrote it down.
+          base-branch: "main"
+          # Generated surfaces mirror canonical bodies; checking them reports
+          # every canonical finding four times over. Same exclusion set as the
+          # markdownlint job below, for the same reason.
+          folder-path: "docs, projects, platform, orchestration, agentic"
+          file-path: "./README.md, ./CONTRIBUTING.md, ./AGENTS.md, ./CHANGELOG.md, ./QUICK_START.md, ./RUNBOOK.md, ./SECURITY.md, ./MIGRATION.md, ./VALIDATION_LOG.md"
+
   markdownlint:
     runs-on: ubuntu-latest
     # A bound, not a budget: measured under 1 min over the last five green runs. Without it a hung step holds

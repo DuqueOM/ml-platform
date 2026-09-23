@@ -18,6 +18,42 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Fixed — the link checker was configured but never run, and it had 17 dead links to find
+
+- **`.github/markdown-link-check.json` has existed since August and nothing
+  ever invoked it.** `tests/test_governance_files.py` asserts the config parses
+  and that every ignore pattern carries an argued comment — it does, and it
+  passes — so `implementation-status.md` rendered "Repository governance
+  (CODEOWNERS, PR template, **link check**)" as ✅ at L1. What was proven is
+  that a configuration file is valid configuration. **No link had ever been
+  checked.** The same failure this repository has already recorded twice: "a
+  mypy override matching zero modules, and a coherence filter examining zero
+  files, both stayed green."
+- **`docs-quality.yml` asserted the capability in its own header** — "A broken
+  link or a malformed table in an ADR is a defect in the thing the ADR exists
+  to be" — while running markdownlint only.
+- **Wired it**, reusing the config that was already written and the same
+  action at the same commit pin as `ml-service-template`'s link-check lane
+  (ADR-003: upstream owns what it already solved). Diff-scoped on pull
+  requests, full sweep on push to `main`, so third-party flakiness does not
+  become this repository's red build.
+- **It failed on first run, against real content: 17 dead links**, one in each
+  of `agentic/rules/10` through `25`. Every one pointed at
+  `ml-service-template/blob/main/docs/decisions/ADR-003-service-template-consumption.md`
+  → **404**. That document is *this repository's* ADR-003; the template's
+  ADR-003 is `ADR-003-feast-integration-pattern.md`, an unrelated decision. The
+  two numbering namespaces had been conflated, and the link was labelled
+  `template-ADR-003`.
+- **Why it survived both existing gates, which is the part worth keeping.**
+  Check C2 resolves ADR *identifiers* against the template's index, and
+  `template-ADR-003` resolves — the template does have an ADR-003. Nothing
+  validated that the *URL* resolved. The defect lived in the gap between a
+  gate that checks names and a gate that checks addresses, and only the second
+  kind finds it.
+- Corrected to `[ADR-003](../../docs/decisions/ADR-003-service-template-consumption.md)`,
+  the convention already used correctly by one file in the same directory, and
+  propagated to the four tool surfaces by `sync_agentic_adapters.py`.
+
 ### Changed — `agent-local` stays public; ADR-002's archival is reversed
 
 - **[ADR-002](docs/decisions/ADR-002-absorbing-agent-local.md) carried a false
