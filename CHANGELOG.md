@@ -299,6 +299,23 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Fixed
 
+- **The artifact recorded its own digest and nothing ever checked it.** QA-4
+  W-10. `save` has always written a sha256 of the file into the metadata
+  sidecar, so the digest documented the artifact without defending it: a
+  truncated copy, a partial download or an edited file loaded exactly like an
+  intact one.
+
+  The sidecar now carries the **full** digest — `version` carried a
+  12-character prefix, which is a label for telling two artifacts apart in a
+  runbook, not something an integrity check should compare — and `load`
+  verifies the bytes before unpickling anything, so a damaged file fails on the
+  digest rather than somewhere inside joblib.
+
+  An artifact without its sidecar is refused: a `.joblib` alone is the half
+  that cannot say what it is or prove it is unaltered. Watched failing — a
+  flipped byte, a truncation and a missing sidecar all load cleanly on the
+  previous revision.
+
 - **A maintainer's personal email address was hard-coded in a public
   repository.** QA-4 finding F-22. `rag_assistant.ingest` sent it to EDGAR as
   the `User-Agent` SEC requires. The address now comes from
