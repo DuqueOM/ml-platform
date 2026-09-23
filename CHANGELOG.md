@@ -227,6 +227,29 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Changed
 
+- **The model artifact stopped carrying workspace objects, so a container can
+  read it.** `ARTIFACT_SCHEMA` is 2 (QA-4 R11-3). Schema 1 pickled
+  `ForecastModel` wrapping `SplitConformalRegressor`, which meant loading it
+  required `demand_forecast` and `ml_core` installed. The serving image
+  installs neither, so the artifact could not be read there at all — before any
+  numpy or scikit-learn version was compared, which is why gate P14 could not
+  see it.
+
+  The file now holds a scikit-learn estimator and data. The conformal regressor
+  travels as the two numbers calibration produces — its quantile and the size
+  of the calibration set, both now public on the class — and `load` rebuilds it
+  through `SplitConformalRegressor.from_calibration`. A reader needs
+  scikit-learn, numpy and joblib; `test_artifact_portability.py` asserts the
+  artifact's bytes name no workspace package, and separately that a
+  container-shaped reader gets predictions and intervals without importing
+  anything from this repository.
+
+  A schema-1 file is refused with a message saying why rather than converted:
+  a conversion would have to trust fields whose meaning is what changed.
+  ADR-008 keeps `Status: Proposed` — the classification-schema half is
+  untouched, and flipping it would lift P14's exemptions over version straddles
+  nobody has fixed.
+
 - **The headline forecast metric was re-measured, and it fell by more than half.**
   Densifying the panel fixed the P0 but nothing re-ran the backtest, so
   **+55.8% skill** — published against the mis-specified baseline — stood as

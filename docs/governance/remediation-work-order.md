@@ -564,6 +564,12 @@ Prometheus still scrapes the pod.
 
 ### R11-3 — The container cannot import the model artifact at all
 
+> **Status: done** — *feat(demand-forecast): the artifact carries data, not workspace objects*. Option A as
+> recommended: the estimator stays a scikit-learn object, the conformal regressor becomes the two numbers
+> calibration produces, and `load` rebuilds it. The artifact's bytes name no workspace package, asserted per
+> package. ADR-008 stays `Proposed` — the classification-schema half is untouched, and flipping the status would
+> lift gate P14's exemptions over straddles nobody has fixed.
+
 **Mode**: CONSULT · **Source**: round eleven P2 · **Size**: depends on the decision
 
 `persist.py` pickles `ml_core` types; the service image installs no workspace
