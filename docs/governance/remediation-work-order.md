@@ -553,6 +553,11 @@ scraped, and every render and test passes.
 
 ### R11-2 — Local enforcement evidence for the NetworkPolicies
 
+> **Status: done** — *feat(k8s): prove the NetworkPolicies are enforced, on a cluster*. The local overlay includes
+> `../../../policies`; `tests/local/test_network_policies.py` asserts the four policies are in force, DNS resolves
+> under them, a rewritten peer selector denies DNS, and Prometheus scrapes the pod through the monitoring role.
+> Measured on kindnetd v20250512, polling rather than sleeping: propagation took 3s once and 41s another time.
+
 **Mode**: AUTO after R11-1 · **Source**: round eleven P2 · **Size**: ~3h
 
 Round eleven proved kindnetd enforces NetworkPolicy, disproving the claim four
