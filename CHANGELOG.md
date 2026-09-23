@@ -227,6 +227,23 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Changed
 
+- **The demand-forecast model card no longer has four TODO sections.** Intended
+  use, fairness, failure modes and human oversight (QA-4 R11-5), written from
+  what this repository already measures rather than from what a model card
+  usually says.
+
+  The fairness section records that fairness is **not measured**, which is the
+  finding: the subgroup that matters is geographic, a staffing decision is
+  taken per zone, and 89.6% marginal interval coverage is an average over 255
+  zones that cannot answer whether any particular one is systematically
+  under-covered. It names what would close it, and that six zones receive no
+  forecast at all.
+
+  The failure-modes table separates the failures with a mechanism — an unknown
+  zone raises, a schema mismatch refuses to load, a gate below threshold blocks
+  promotion — from the ones with none, which is where the drift contract's
+  absence and the unmeasured conditional coverage are listed.
+
 - **The model artifact stopped carrying workspace objects, so a container can
   read it.** `ARTIFACT_SCHEMA` is 2 (QA-4 R11-3). Schema 1 pickled
   `ForecastModel` wrapping `SplitConformalRegressor`, which meant loading it

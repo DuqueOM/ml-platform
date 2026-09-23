@@ -599,6 +599,11 @@ artifact, and a straddle in a package that is not listed by hand fails the gate.
 
 ### R11-5 — The demand-forecast model card is four TODO sections
 
+> **Status: done** — *docs(demand-forecast): write the four model-card sections that read TODO*. Intended use,
+> fairness, failure modes and human oversight, written from what the repository already measures. Fairness is
+> recorded as NOT measured, with the subgroup that matters (zone, borough, volume decile), why the marginal
+> coverage figure cannot answer it, and what would close it (F-19). The owner still has to review it.
+
 **Mode**: AUTO to draft, CONSULT to sign · **Source**: round ten P2 · **Size**: ~2h
 
 Intended use, fairness, failure modes and human oversight all read TODO, while
