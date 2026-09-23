@@ -18,6 +18,43 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Changed — `agent-local` stays public; ADR-002's archival is reversed
+
+- **[ADR-002](docs/decisions/ADR-002-absorbing-agent-local.md) carried a false
+  claim and now carries a dated correction.** Its § Disposition said the source
+  repository was "archived on GitHub — read-only with a banner". It was never
+  archived, and `DuqueOM/agent-local` is public today. Under
+  [ADR-005](docs/decisions/ADR-005-agentic-governance.md) rule H that made the
+  ADR itself a defect while every line of code it governs was correct — which
+  is exactly the class of failure rule H exists to name.
+- **The decision it reverses was never argued.** The alternatives table
+  evaluated "keep both repositories" exactly once, in the form *publish
+  `llm-core` to a registry* — a packaging question. Whether a business-agnostic
+  agent core serves a reader that this platform's single governed use does not
+  is a scope question, and it was never asked. Absorbing the code and retiring
+  the repository were bundled as one decision; only the first had reasoning
+  behind it.
+- **The migration itself stands** and the correction says so explicitly: the 31
+  commits on `archive/agent-local`, the `core/` → `libs/llm-core/` placement,
+  the `usecases/tienda/` → `projects/store-assistant/` move and the
+  renumbering all happened as written. Only the disposition changed.
+- **Authority between the two is deliberately left open.** ADR-003 fixed the
+  analogous question for `ml-service-template` in one line — the template wins
+  for service-level concerns — and no equivalent line exists for the agent
+  core. Deciding it inside a correction, without its own alternatives and
+  revisit triggers, would repeat the failure the correction is about. It needs
+  its own ADR.
+- **A second, smaller falsehood in the same document**: § Related points at
+  `docs/architecture/adr-migration-map.md`, "written during the migration".
+  That file does not exist and nothing replaced it at that path. The mapping
+  shipped as the identifier itself — record `006` became `store-ADR-006` —
+  documented in `projects/store-assistant/docs/decisions/README.md`. The
+  mapping is real; only its address was wrong.
+- Three revisit triggers added, all observable rather than dispositional:
+  behavioural divergence between `libs/llm-core/` and `agent-local`'s `core/`;
+  a consumer of `agent-local` that is not a human reading it; twelve months
+  without a commit there.
+
 ### Changed — the agent-local history is a tag now, not a branch
 
 - The 31 rewritten commits moved from the `history/agent-local` **branch** to
