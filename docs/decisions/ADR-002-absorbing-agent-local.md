@@ -1,7 +1,10 @@
 # ADR-002 — Absorbing `agent-local` with history, rather than coordinating with it
 
-- **Status**: Accepted
+- **Status**: Accepted, amended
 - **Date**: 2026-08-05
+- **Amended**: 2026-09-22 — the disposition of the source repository was
+  reversed; see [Correction, 2026-09-22](#correction-2026-09-22). The migration
+  itself stands.
 
 ## Context
 
@@ -132,3 +135,107 @@ the new location before archiving.
 - [ADR-001](ADR-001-monorepo-topology.md) — the layering the placement follows.
 - `docs/architecture/adr-migration-map.md` — source-to-destination ADR
   numbering, written during the migration.
+
+## Correction, 2026-09-22
+
+**The migration stands. The archival did not happen, and should not.**
+
+[§ Disposition of the source repository](#disposition-of-the-source-repository)
+says the source repository is "archived on GitHub — read-only with a banner".
+As of this date `DuqueOM/agent-local` is public and **not** archived. It was
+never archived. Every other particular of this ADR was executed as written: the
+history migrated (the 31 original commits are on the annotated
+`archive/agent-local` tag), `core/` became `libs/llm-core/`,
+`usecases/tienda/` became `projects/store-assistant/`, and the ADRs were
+renumbered under a preserved mapping.
+
+### Why the original was wrong
+
+The error is in the alternatives table, not in the decision. "Keep both
+repositories" was evaluated exactly once, in the form *publish `llm-core` to a
+registry*, and rejected on version skew and release overhead. That is a
+**packaging** question. The question never asked was a **scope** one: whether a
+business-agnostic agent core serves a reader that this platform's single
+governed use does not.
+
+Absorbing the code and retiring the repository were bundled as one decision.
+They are two, and only the first was argued. The second inherited the first's
+conclusion without its own reasoning — which is the same defect class as a
+number reported without its method ([ADR-005](ADR-005-agentic-governance.md)
+rule A), applied to a decision instead of a measurement.
+
+The tell was on the page. This ADR's own opening sentence calls `agent-local`
+"a business-agnostic multi-tier LLM agent platform", and
+[ADR-001](ADR-001-monorepo-topology.md) places business-agnostic code in
+`libs/` precisely because it does not know its consumers. An artefact whose
+defining property is not knowing its consumers cannot have its audience settled
+by counting the consumers inside one repository.
+
+### What is true instead
+
+- **`ml-platform` holds one particular, governed use** of that core:
+  `libs/llm-core/` plus `projects/store-assistant/`, under this repository's
+  gates, contracts and audit trail.
+- **`agent-local` stays public and unarchived** as the business-agnostic
+  upstream — for the reader who wants the agent core without a platform around
+  it. Its README pointer to this repository (promised in § Disposition) is
+  therefore a pointer to a *sibling*, not to a successor.
+
+### What this costs, stated rather than waved away
+
+The coordination cost this ADR exists to remove partially returns: two
+repositories now carry the same lineage of code, and they will drift.
+
+What does **not** return is the part actually targeted — the cross-repository
+*contract*. No plan document in one repository governs the other, nothing here
+waits on anything there, and this repository's LLM track has one CI, one
+changelog and one ADR set. The dissolved contract stays dissolved; only the
+duplication came back.
+
+### The unresolved half
+
+This section records a fact; it does not settle authority.
+[ADR-003](ADR-003-service-template-consumption.md) fixed the analogous question
+for `ml-service-template` in one line — where the two describe the same thing
+differently, the template wins for service-level concerns — and **no equivalent
+line exists for the agent core.** Until one does, a fix made in either place has
+no defined path to the other.
+
+That needs its own ADR. It is deliberately not decided here: deciding it inside
+a correction, without its own alternatives and revisit triggers, would repeat
+exactly the failure this correction is about.
+
+### Scope of this amendment
+
+| Claim | Status |
+| --- | --- |
+| § Disposition of the source repository | **Reversed** by this section |
+| Alternatives — "Keep both repositories; publish `llm-core` to a registry" | **Superseded**: it answered a packaging question, not a scope one |
+| Alternatives — "Delete `agent-local`" and "Make it private" | **Stand**, for the reasons given |
+| The migration, placement, method and renumbering | **Stand**, executed as written |
+
+`docs/governance/audit-brief.md` §4 records "absorb the `agent-local` side
+project, then archive it" as part of the founding brief. That record is history
+and stays as written; this section is what reverses the instruction, not an
+edit to the account of it having been given.
+
+### A second, smaller falsehood in the same document
+
+§ Related points at `docs/architecture/adr-migration-map.md`, "written during
+the migration". **That file does not exist and no file replaced it at that
+path.** The mapping was instead implemented as the identifier itself — record
+`006` became `store-ADR-006`, documented in
+[`projects/store-assistant/docs/decisions/README.md`](../../projects/store-assistant/docs/decisions/README.md).
+The mapping is real; only its address is wrong, which is the failure mode
+[ADR-005](ADR-005-agentic-governance.md) rule H names: the code was correct and
+the document was not.
+
+### Revisit triggers added by this correction
+
+- `libs/llm-core/` and `agent-local`'s `core/` diverge in **behaviour** rather
+  than only in packaging — the authority ADR is then overdue, not optional.
+- `agent-local` acquires a consumer other than a human reading it — the
+  registry question rejected above becomes live again, on its original terms.
+- `agent-local` goes twelve months without a commit — the "independent value"
+  claim this correction rests on stops being observable, and archival returns
+  to the table with the reasoning it never received.
