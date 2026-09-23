@@ -55,6 +55,40 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   a consumer of `agent-local` that is not a human reading it; twelve months
   without a commit there.
 
+### Changed — the invariants lane is split, and the status document stops calling a decision a constraint
+
+- **`Repository invariants` was one job with 39 steps, and it measured 1h 2m
+  48s on a two-file documentation change.** The 25 fast gates — lint, types,
+  coherence, action pins, inventory checks — completed in roughly the first
+  four minutes and then waited on a test suite none of them depend on. With
+  `strict: true` on `main`, every time `main` moves the whole hour is paid
+  again. Split into **`Fast gates`** (bounded at 15 min) and **`Tests and
+  coverage`** (bounded at 75, unchanged, because nothing was removed from that
+  half and a tighter bound would need re-measuring).
+- **`Repository invariants` survives as an aggregator, and keeps its name.**
+  That string is a required status check on `main`; renaming it would mean
+  editing branch protection, which `AGENTS.md` classes as STOP and which needs
+  a PR amending `docs/governance/branch-protection.md`. Splitting a lane for
+  faster feedback does not need that, so it does not take it. The job runs
+  `if: always()` and asserts both halves succeeded by name, rather than relying
+  on bare `needs` — a skipped required check reads differently from a failed
+  one in the merge box, and this one says which half broke.
+- **`docs/architecture/implementation-status.md` claimed CI *cannot* reach
+  L3.** It read: "CI has no cluster and no cloud — so no row here can ever
+  display L3 or L4, whatever anyone believes about it." That states a choice as
+  a law of nature, and `ml-service-template` — this repository's own upstream —
+  disproves it: `golden-path.yml`, `golden-path-extended.yml` and
+  `kyverno-smoke.yml` each stand up `helm/kind-action` on a hosted runner and
+  reach L3 there.
+- **The decision itself was already recorded and is unchanged.**
+  `docs/governance/upstream-parity.yaml` rejects all three of those lanes,
+  because the equivalent here is `make local-serve` plus `tests/local` and a
+  cluster smoke belongs to Phase 2. That reasoning never needed the stronger
+  claim. The document now says no row displays L3 **because no lane provisions
+  a cluster, by decision** — revisitable at Phase 2, and pointing at the ledger
+  that holds the decision. L4 stays constrained by the four ordering rules, and
+  stays printed at zero.
+
 ### Changed — the agent-local history is a tag now, not a branch
 
 - The 31 rewritten commits moved from the `history/agent-local` **branch** to

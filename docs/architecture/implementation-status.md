@@ -45,13 +45,37 @@ adapted from the deployment-evidence guide in `ml-service-template`.
 | --- | --- | --- |
 | **L1** | Contract: the test suite passes | CI |
 | **L2** | Component: the thing itself executes — a generator renders, a gate runs, a build completes | CI |
-| **L3** | Cluster: it starts and answers in kind | A machine with Docker |
+| **L3** | Cluster: it starts and answers in kind | A machine with Docker — including a CI runner, if a lane provisions one |
 | **L4** | Cloud: a real rollout on GKE or EKS | A cloud account |
 
 The layer is **derived from the command that ran**, never declared: a `pytest`
 proves the contract, anything else that executes proves the component. Neither
-can reach L3 or L4, because CI has no cluster and no cloud — so **no row here
-can ever display L3 or L4**, whatever anyone believes about it.
+reaches L3 or L4, so **no row here displays L3 or L4** — not because this
+repository's CI *cannot* reach L3, but because **no lane here provisions a
+cluster, by decision.**
+
+That distinction is load-bearing, and this document previously collapsed it.
+It read "CI has no cluster and no cloud — so no row here can ever display L3 or
+L4, whatever anyone believes about it", which states a choice as a law of
+nature. `ml-service-template`, this repository's own upstream, disproves it:
+`golden-path.yml`, `golden-path-extended.yml` and `kyverno-smoke.yml` each
+stand up `helm/kind-action` on a hosted runner and reach L3 there.
+
+The choice is recorded, and it is a reasonable one —
+[`docs/governance/upstream-parity.yaml`](../governance/upstream-parity.yaml)
+rejects all three of those lanes, on the grounds that the equivalent here is
+`make local-serve` plus `tests/local`, and that a cluster smoke belongs to
+Phase 2. Nothing about that reasoning needs the stronger claim, and the
+stronger claim is the kind of thing [ADR-005](../decisions/ADR-005-agentic-governance.md)
+rule H exists to catch: a document asserting something false while the code it
+describes is correct.
+
+**So the accurate statement is narrower.** No row here displays L3 or L4 today,
+because no lane provisions a cluster and no credential reaches a cloud. The
+first is revisitable at Phase 2 and the parity ledger says so; the second is
+constrained by the four ordering rules below. A row will display L3 on the day
+a lane runs a command that needs a cluster — never before, and never because
+someone ticked it.
 
 Where higher-layer evidence exists, the command that produces it is named and
 marked *not run here*. That is the whole discipline in one line: if the

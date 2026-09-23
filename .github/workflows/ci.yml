@@ -18,12 +18,15 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  invariants:
-    name: Repository invariants
+  gates:
+    name: Fast gates
     runs-on: ubuntu-latest
-    # A bound, not a budget: measured 46.5 min median, 47.4 max, over the last five green runs; ~1.6x the max. Without it a hung step holds
-    # the runner for GitHub's six-hour default and reports nothing (QA-4 round eleven).
-    timeout-minutes: 75
+    # Measured on the pull request that split this lane out: 2m28s, against the
+    # 1h2m40s the combined job took on the change immediately before it. These
+    # checks never depended on the test suite they used to wait for. 15 is ~6x
+    # the measurement, left deliberately loose because one run is one run —
+    # tighten it when there are five, the way the bound below was set.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -87,6 +90,7 @@ jobs:
         # names the invariant. Deleting it would leave the guarantee resting
         # on a flag nobody reads as a check.
         run: uv lock --check
+
 
       - name: Dependency direction (ADR-001)
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
@@ -237,6 +241,81 @@ jobs:
         # document asserting something false, which is itself a defect.
         run: uv run python scripts/check_implementation_status.py --check
 
+
+  tests:
+    name: Tests and coverage
+    runs-on: ubuntu-latest
+    # The slow half. 75 was the bound for the whole lane when it was one job,
+    # and the tests are what consumed it — 46.5 min median, 47.4 max over the
+    # five green runs measured then. Kept at 75 rather than lowered, because
+    # nothing was removed from this half and re-measuring is what would justify
+    # a tighter number.
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Secret scanning must see history: the working tree cannot show
+          # what a previous commit already published.
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        # The interpreter is pinned by .python-version, not left to whatever
+        # the runner image ships. Unpinned, CI resolved 3.12 while local
+        # resolved 3.11, and mypy — told to parse as 3.11 — choked on numpy
+        # stubs written in 3.12 syntax. Local green then meant nothing about
+        # CI, which is the failure mode this repository has already hit once.
+        #
+        # 3.11 specifically: it is the declared floor in requires-python, and
+        # the floor is the version most likely to break unnoticed.
+        with:
+          enable-cache: true
+
+      - name: Install Terraform
+        # Not optional. Without the binary, tests/test_cloud_surface.py skips
+        # ENTIRELY — so `terraform validate` never ran in CI for either
+        # adapter, and the coverage of measure_cloud_surface.py dropped below
+        # its floor. A test suite that silently skips its subject reports
+        # success for doing nothing, which is the failure this repository keeps
+        # finding in other forms.
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "1.15.5"
+          terraform_wrapper: false
+
+      - name: Sync workspace
+        id: sync
+        # --all-packages, not just --all-extras: without it uv installs the
+        # ROOT project's dependencies only, and every workspace member's
+        # dependencies are missing. mypy then reports "cannot find polars" for
+        # code that runs fine locally.
+        #
+        # This diverged for several commits because the local command was
+        # changed and the workflow was not — the exact class of drift this
+        # repository keeps finding, in the file that verifies everything else.
+        #
+        # `--locked` is what makes the step below able to fail. Without it,
+        # `uv sync` UPDATES the lockfile when it does not match
+        # `pyproject.toml`, and the next step then checks a file the previous
+        # step had just repaired — a gate that cannot fail, which is P-09
+        # wearing a two-step costume.
+        #
+        # Measured: Dependabot raised `pre-commit` in `pyproject.toml` and left
+        # `uv.lock` untouched (its pip ecosystem does not know about uv
+        # workspaces). Both pull requests went green and merged, and `main`
+        # then failed `uv lock --check` on a clean checkout — while CI kept
+        # reporting the lockfile current, because it was, by the time it was
+        # asked.
+        run: uv sync --all-packages --all-extras --locked
+
+      - name: Lockfile is current
+        # Kept even though `--locked` above now enforces it, because the two
+        # fail differently: sync fails at setup with a resolver error, this
+        # names the invariant. Deleting it would leave the guarantee resting
+        # on a flag nobody reads as a check.
+        run: uv lock --check
+
+
       - name: Tests with coverage (L1/L2 — libs)
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         # THE declared gate. quality-gates.md L1/L2 say >=90% lines and >=80%
@@ -363,6 +442,40 @@ jobs:
         # if something renders it — otherwise the generator is the one
         # directory nothing checks, and every future project comes from it.
         run: uv run pytest tests/test_project_generator.py -q
+
+  invariants:
+    name: Repository invariants
+    # Deliberately an aggregator, and deliberately still called "Repository
+    # invariants". That string is a REQUIRED status check on `main`, and
+    # renaming it would mean editing branch protection — a STOP-class
+    # operation under AGENTS.md that needs a PR amending
+    # docs/governance/branch-protection.md. Splitting the lane for faster
+    # feedback does not need that, so it does not take it.
+    #
+    # `if: always()` plus explicit result assertions, rather than bare `needs`:
+    # a skipped dependency makes this job skip too, and a skipped required
+    # check reads differently from a failed one in the merge box. This fails
+    # loudly and names which half broke.
+    needs: [gates, tests]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every lane passed
+        run: |
+          echo "Fast gates:         ${{ needs.gates.result }}"
+          echo "Tests and coverage: ${{ needs.tests.result }}"
+          failed=0
+          if [ "${{ needs.gates.result }}" != "success" ]; then
+            echo "::error::Fast gates did not succeed (${{ needs.gates.result }})"
+            failed=1
+          fi
+          if [ "${{ needs.tests.result }}" != "success" ]; then
+            echo "::error::Tests and coverage did not succeed (${{ needs.tests.result }})"
+            failed=1
+          fi
+          exit "$failed"
+
 
   iac-security:
     name: IaC and Kubernetes security
