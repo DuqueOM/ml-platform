@@ -9,9 +9,16 @@ name: Docs quality
 on:
   push:
     branches: [main]
-    paths: ["**/*.md"]
+    paths: ["**/*.md", ".github/workflows/docs-quality.yml", ".github/markdown-link-check.json"]
   pull_request:
-    paths: ["**/*.md"]
+    paths: ["**/*.md", ".github/workflows/docs-quality.yml", ".github/markdown-link-check.json"]
+  # External links rot without anyone pushing a markdown change. Until QA-4
+  # round twelve the comment in the link-check step promised "the scheduled
+  # run below" and there was none: the full sweep ran only when a push to
+  # main happened to touch a *.md file. Same cadence as ml-service-template.
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -49,8 +56,14 @@ jobs:
           config-file: ".github/markdown-link-check.json"
           # On a pull request, only files in the diff — a full external-link
           # sweep on every push turns third-party flakiness into this
-          # repository's red build. The scheduled run below is the one that
-          # sweeps everything.
+          # repository's red build. A push to main, the weekly schedule and a
+          # manual dispatch sweep everything.
+          #
+          # What this does NOT check: anchors. A link to an existing file with
+          # a heading that no longer exists passes (round twelve pointed one at
+          # `#no-such-heading` and the lane stayed green). Quiet mode also
+          # prints the per-file list only on failure, so a green log shows no
+          # count; the files are read.
           check-modified-files-only: ${{ github.event_name == 'pull_request' && 'yes' || 'no' }}
           # The action defaults to `master`; this repository's default branch
           # is `main`, and without the override the diff resolution fails with

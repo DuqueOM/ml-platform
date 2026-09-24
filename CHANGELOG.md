@@ -177,6 +177,19 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 - ADR-010 gains a dated correction. It gives the method for its commit count,
   and it corrects §5, §6 and §7.
 
+### Fixed — QA-4 round twelve: the link check promised a scheduled sweep it did not have
+
+- `docs-quality.yml` said "the scheduled run below is the one that sweeps
+  everything", and it had no `schedule:`. The full sweep ran only when a push to
+  `main` touched a markdown file, so external link rot was never looked for on
+  its own. It now also runs weekly (Mondays 06:00 UTC, the template's cadence)
+  and on manual dispatch. A change to the workflow or to the link-check config
+  now triggers it too.
+- The step now says what it does not check: anchors. The audit pointed a link
+  at a heading that does not exist and the lane stayed green. It also found one
+  real dead anchor, `RUNBOOK.md:95`, which is fixed separately with the other
+  findings outside this change.
+
 ### Fixed — the link checker was configured but never run, and it had 17 dead links to find
 
 - **`.github/markdown-link-check.json` has existed since August and nothing
@@ -212,6 +225,9 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 - Corrected to `[ADR-003](../../docs/decisions/ADR-003-service-template-consumption.md)`,
   the convention already used correctly by one file in the same directory, and
   propagated to the four tool surfaces by `sync_agentic_adapters.py`.
+- **Corrected by QA-4 round twelve** (entry above): the workflow's own comment
+  promised a scheduled sweep that did not exist, and the check never looked at
+  anchors — neither of which this entry said.
 
 ### Changed — `agent-local` stays public; ADR-002's archival is reversed
 
