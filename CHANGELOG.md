@@ -52,6 +52,12 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   should have caught it was written without measuring.
 - `llm_core/agent.py` told readers to construct an agent with `load_agent`,
   which no longer exists here. It now names `build_agent`.
+- **Corrected by QA-4 round twelve** (entry below): "The script refuses
+  uncommitted source" was false for the script itself, `--allow-dirty` wrote a
+  real export, and "one commit exports byte-identical output" held only for one
+  destination version. The "nine commits" counted every commit to the package
+  since its founding; 2 touched the exported modules after the core landed.
+  ADR-010 carries a dated correction.
 
 ### Fixed — the agent core cited another repository's decisions, and C2 could not see code
 
@@ -136,6 +142,40 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   mutations — M-C2a and M-C2b from the audit, plus one per new rule — each
   killed by the test written for it. The re-introduced defect now fails C2 on
   both files, naming the fix.
+
+### Fixed — QA-4 round twelve: the exporter's guarantees were written, not enforced
+
+- **Three of ADR-010's guarantees were false of the code that shipped with
+  them.** The exporter left itself out of its clean-tree check, so an
+  uncommitted edit to it was stamped with a clean commit — one commit, two
+  different exports. `--allow-dirty` wrote a real export stamped `-dirty`.
+  Nothing checked where the commit came from, and the first export ran from a
+  branch commit a squash would orphan. Now the script counts itself as source,
+  `--allow-dirty` is refused without `--check`, and a write is refused unless
+  `HEAD` is an ancestor of `origin/main`. `--check` still runs anywhere.
+- **The tests covered the transforms and never ran the script.** Five of the
+  auditor's mutations passed all 17. One of them, dropping `re.MULTILINE`, ships
+  a `core/__init__.py` that still imports `llm_core`, so it cannot be imported.
+  The suite now builds a scratch git repository with the exporter and the
+  twelve modules and runs the real script against it. It imports the export
+  with `llm_core` blocked and recomputes every provenance hash. It also checks
+  that `--check` passes on a fresh export and reports drift after a one-byte
+  edit, and that a stray module, uncommitted source, an uncommitted exporter,
+  `--allow-dirty` alone, a commit off `main` and an unknown `origin/main` are
+  each refused.
+- **The boundary test saw one way of naming a host file out of six.** It
+  matched a quoted string starting `docs/` and missed the other forms:
+  `Path("docs") / ...`, concatenation, f-strings, a bare `QUICK_START.md` and a
+  backtick-quoted path. It now walks every string literal in the exported
+  modules. It flags a `docs` path component or the name of a document at this
+  repository's root or in `docs/`. Its first draft also flagged the word "docs"
+  in prose, in two modules, so prose negatives are now pinned too.
+- **Watched failing against the auditor's mutations, not the author's.** Eleven
+  mutations, each killed: E1-E5 from the audit, the three new guards, and three
+  ways to weaken the boundary detector. The first run found a survivor: no
+  fixture named the `docs` directory alone. That fixture was then added.
+- ADR-010 gains a dated correction. It gives the method for its commit count,
+  and it corrects §5, §6 and §7.
 
 ### Fixed — the link checker was configured but never run, and it had 17 dead links to find
 

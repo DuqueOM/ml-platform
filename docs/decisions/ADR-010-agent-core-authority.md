@@ -1,6 +1,8 @@
 # ADR-010 — `libs/llm-core` is authoritative for the agent core; `agent-local` is a one-way export of it
 
-- **Status**: Accepted
+- **Status**: Accepted. Four of its claims were false when it was written —
+  one measurement and three guarantees; see
+  [Correction, 2026-09-23](#correction-2026-09-23). The decision stands.
 - **Date**: 2026-09-23
 
 ## Context
@@ -159,3 +161,85 @@ says that knowledge belongs.
 - [ADR-002](ADR-002-absorbing-agent-local.md) — the migration, and the correction whose open question this answers.
 - [ADR-003](ADR-003-service-template-consumption.md) — the same question for the template, answered the other way, for reasons that do not transfer.
 - `scripts/export_llm_core.py` — the only path code takes from here to `agent-local`.
+
+## Correction, 2026-09-23
+
+**The decision stands. One number had no method, and three of the guarantees
+in the Decision were not true of the code that shipped with it.** QA-4 round
+twelve found all four by execution. The text above is left as written; this
+section is what is true.
+
+### The measured table: "Commits since the migration — 9"
+
+No command was recorded next to the number, and none that fits its label
+reproduces it. 9 is the count of every commit on `main` that touches
+`libs/llm-core/src/llm_core`, whatever its date:
+
+```text
+$ git log --oneline origin/main -- libs/llm-core/src/llm_core | wc -l
+9
+```
+
+Six of those predate the agent core's arrival in `c7131a1` (2026-08-29) and
+went mostly to the retrieval-evaluation modules that are not exported; one is
+`c7131a1` itself. The count the row's label asks for is:
+
+```text
+$ git log --oneline c7131a1..origin/main -- libs/llm-core/src/llm_core/{__init__,agent,circuit,config,controller,policy,retrieval,router,schemas,telemetry,tiers,tools}.py
+7dfec65 chore: archive the agent-local history as a tag, and delete the branch (#73)
+01e122d fix: QA-4 rounds nine to eleven — DNS denied in every cloud overlay, and gates that could not fail (#58)
+```
+
+**2 commits to the exported modules since the core landed.** The conclusion
+does not rest on this row: the divergence is carried by the line counts and by
+one file of twelve being identical, both of which the audit reproduced.
+
+### §5: "The same commit exports byte-identical output"
+
+False as shipped, for two reasons. The script did not include itself in its
+own clean-tree check, so an uncommitted edit to the exporter was stamped with a
+clean commit — the audit produced two different exports of one commit that
+way. And the output depends on the destination's `__version__`, which §4
+preserves. What holds now: **the same commit, exported into a destination with
+the same version, produces byte-identical output.** `scripts/export_llm_core.py`
+counts itself as source, and its tests export twice from a scratch repository
+and compare.
+
+### §7: "Exports come from `main`. The script refuses uncommitted source outright"
+
+Neither was enforced. `--allow-dirty` wrote a real export stamped
+`<sha>-dirty`, and nothing checked where the commit came from; the first export
+ran from a branch commit that the squash merge would orphan. Both are enforced
+now: `--allow-dirty` is refused without `--check`, and a write is refused
+unless `HEAD` is an ancestor of `origin/main`. `--check` still runs anywhere,
+because comparing never publishes anything.
+
+### §6: "fails on a hand edit or a stray module"
+
+Overstated. `agent-local`'s test recomputes each hash against
+`EXPORTED_FROM.json` — a file in the directory it is validating. An edit to
+`policy.py` that also updates that file's hash passes, and so does a new module
+listed in it. That test detects **an edit that does not also update the
+manifest**, nothing more. The guard that binds runs in `agent-local`'s CI: it
+checks out this repository at the commit `EXPORTED_FROM.json` names and runs
+`export_llm_core.py --check` against the tree, so the verdict comes from the
+source rather than from the thing being judged. It lands with the first export.
+
+### Why these were missed
+
+Each claim was written from the design, and the tests covered only the pure
+transforms. Nothing ran `main()`. The audit's five mutations of the exporter
+(the multi-line import rewrite, the dirty check, the stray-module refusal,
+`--check`'s drift report, the provenance hashes) all passed the original 17
+tests. The present suite runs the script end to end against a scratch git
+repository, and it kills those five mutations and six more: the three guards
+above, and three weakenings of the boundary detector. That is the same defect
+[ADR-005](ADR-005-agentic-governance.md) rule A names for numbers: a claim with
+no execution behind it.
+
+The boundary test named in the third revisit trigger had the same gap. It
+recognised a host file only as a quoted string beginning `docs/`, which let
+five of six ways of naming one through. It now walks every string literal in
+the exported modules, f-string parts included, and flags a `docs` path
+component or the name of any document at the root of this repository or in
+`docs/`.

@@ -175,15 +175,54 @@ def _git(*args: str) -> str:
 
 
 def source_commit(*, allow_dirty: bool) -> str:
-    """The commit the export can honestly claim to come from."""
+    """The commit the export can honestly claim to come from.
+
+    The pathspec covers the exporter as well as the library. QA-4 round twelve
+    edited only this script, left the library clean, and got an export stamped
+    with a clean commit — which that commit could not reproduce: one commit,
+    two different outputs. What produces the bytes is the library AND the
+    transforms, so both must be committed for the stamp to mean anything.
+    """
     commit = _git("rev-parse", "HEAD")
-    dirty = _git("status", "--porcelain", "--", str(SOURCE.relative_to(REPO_ROOT)))
+    dirty = _git(
+        "status",
+        "--porcelain",
+        "--",
+        str(SOURCE.relative_to(REPO_ROOT)),
+        str(Path(__file__).resolve().relative_to(REPO_ROOT)),
+    )
     if dirty and not allow_dirty:
         raise ExportError(
-            "libs/llm-core has uncommitted changes, so no commit describes what would be "
-            "exported. Commit first, or pass --allow-dirty for a local dry run."
+            "libs/llm-core or this exporter has uncommitted changes, so no commit describes what "
+            "would be exported. Commit first, or use --check --allow-dirty for a dry run."
         )
     return f"{commit}-dirty" if dirty else commit
+
+
+def require_exportable_head() -> None:
+    """Refuse to WRITE an export from a commit a squash merge could orphan.
+
+    ADR-010 says exports come from main, and round twelve exported from a
+    feature branch with exit 0. A commit that is not an ancestor of
+    origin/main can be rewritten away, leaving the provenance naming a commit
+    nobody can check out. `--check` is exempt: comparing against any commit is
+    harmless, and it is how a branch is verified before it lands.
+    """
+    try:
+        _git("rev-parse", "--verify", "--quiet", "origin/main")
+    except subprocess.CalledProcessError as error:
+        raise ExportError("origin/main is unknown here — fetch it before exporting") from error
+    result = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "merge-base", "--is-ancestor", "HEAD", "origin/main"],
+        capture_output=True,
+        text=True,
+        timeout=SUBPROCESS_TIMEOUT_SECONDS,
+    )
+    if result.returncode != 0:
+        raise ExportError(
+            "HEAD is not an ancestor of origin/main. Export from main, after the change has "
+            "landed — a squash merge would orphan this commit and the provenance with it."
+        )
 
 
 def _version_of(init: Path) -> str:
@@ -231,12 +270,23 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Export libs/llm-core's agent core to agent-local.")
     parser.add_argument("--dest", type=Path, required=True, help="path to an agent-local checkout")
     parser.add_argument("--check", action="store_true", help="report drift and write nothing")
-    parser.add_argument("--allow-dirty", action="store_true", help="export uncommitted source (dry runs only)")
+    parser.add_argument(
+        "--allow-dirty", action="store_true", help="with --check only: compare against uncommitted source"
+    )
     args = parser.parse_args(argv)
+
+    # Round twelve: `--allow-dirty` without `--check` wrote a real export whose
+    # provenance read "<sha>-dirty" — an export nobody can ever reproduce. The
+    # help text said "dry runs only"; nothing enforced it.
+    if args.allow_dirty and not args.check:
+        print("[export] FAILED — --allow-dirty is only allowed with --check", file=sys.stderr)
+        return 1
 
     dest = args.dest.resolve()
     core = dest / "core"
     try:
+        if not args.check:
+            require_exportable_head()
         files, provenance = build(dest, allow_dirty=args.allow_dirty)
     except ExportError as error:
         print(f"[export] FAILED — {error}", file=sys.stderr)
