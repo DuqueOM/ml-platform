@@ -382,15 +382,13 @@ avoid, and it has already occurred here once.
 
 ---
 
-## 11. Since the previous audit — round twelve's starting point
+## 11. Since the previous audit — round thirteen's starting point
 
-Round eleven audited `0fe7343` on 2026-09-14 and reported **1 P1, 5 P2, 6 P3**.
-That tree was rebased onto `main` as `8897281` before landing, and the marker in
-`AGENTS.md` follows whatever it lands as.
-It was handed this section as a staged, uncommitted draft, and found the draft
-itself wrong in three places: it omitted two open round-ten findings, reported
-a closed Pod Security gap as open by leaving it out, and said no CI job set
-`timeout-minutes` when one did. The draft never landed; this replaces it.
+Round twelve audited `6a4bfe2` on 2026-09-23 and reported **1 P0, 7 P2, 6 P3**.
+That tree was `main` plus the two pull requests that qualified the agent core's
+foreign ADR citations (#86) and added ADR-010 (#87). Both landed as one squash,
+through #87, and the marker in `AGENTS.md` was re-pointed to the landed commit,
+with an audit-trail entry that says it is a re-point, not a round.
 
 List what changed rather than trusting this paragraph. The range is read from
 the marker rather than written here, because a squash or a rebase rewrites
@@ -400,160 +398,89 @@ the commit, and a SHA restated in a document goes stale when it does:
 git log --no-merges --oneline "$(grep -oE 'Last independent audit: [0-9-]+ \(([0-9a-f]+)\)' AGENTS.md | grep -oE '[0-9a-f]{7,}')..HEAD"
 ```
 
-### What round eleven found, and where each one went
+### What round twelve found, and where each one went
 
 | Finding | State |
 | --- | --- |
-| **P1** — `commonLabels` rewrote the DNS policy's peer selector; DNS denied in all six cloud overlays, proven on a live cluster | Closed, *fix(k8s): stop commonLabels rewriting the DNS policy's peer selector* |
-| **P2** — kind does enforce NetworkPolicy; four documents said it could not | Claim corrected everywhere it appeared; the enforcement evidence itself is open as **R11-2** |
-| **P2** — the residue guard's hand-written list was stale; a deleted ADR passed | Closed, *fix(tests): record what the gate probes write instead of listing it by hand* |
-| **P2** — the container cannot import the model artifact at all | Open as **R11-3**, a CONSULT decision under ADR-008 |
-| **P2** — P14 could never report "a fourth straddle", and had no test | Closed, *fix(gates): P14 promised a red it could not give and read its ADR wrongly*; the hand-written `SEAM` is **R11-4** |
-| **P2** — the brief's delta omitted open findings | This section |
-| **P3** — the status document was stale at HEAD | Closed in the round's record, *chore(governance): record QA-4 round eleven* |
-| **P3** — P15 justified by a false claim; OK over zero files | Closed, *fix(gates): P15 was justified by a false claim and could pass over nothing* |
-| **P3** — P14's ADR status regex read the whole document | Closed, *fix(gates): P14 promised a red it could not give and read its ADR wrongly* |
-| **P3** — ADR-008 stated three facts the repository contradicts | Closed, *fix(gates): P14 promised a red it could not give and read its ADR wrongly* |
-| **P3** — 1 of 25 subprocesses bounded; CI jobs unbounded | Closed, *fix(gates): bound every subprocess and every CI job* |
-| **P3** — round ten's remaining P3s | Policies README and compliance mapping corrected; the egress assertion closed in *fix(k8s): the egress test could not fail, and asserted the wrong metadata port*; namespace labels open as **R11-1**; model card open as **R11-5** |
+| **P0-1** — Claude Code registers none of the 29 skills; both surface validators green | Open as **R12-2**, a separate change |
+| **P2-1** — C2's extension: its tests missed both of the auditor's mutations, and the original defect could be re-introduced | Closed, *fix(gates): QA-4 round twelve, P2 — C2's new guards could not fail, and it could not read YAML* |
+| **P2-2** — nine agent-local citations still bare in YAML and JSONL | Closed, same commit |
+| **P2-3** — the exporter's provenance: `--allow-dirty` wrote, an uncommitted exporter was stamped clean, nothing required `main` | Closed, *fix(export): QA-4 round twelve, P2 — the exporter's guarantees were written, not enforced* |
+| **P2-4** — the exporter's tests covered only the transforms; five mutations survived | Closed, same commit |
+| **P2-5** — agent-local's drift test takes its verdict from the directory it checks | Open as **R12-1**, in agent-local, after the export is re-taken from `main` |
+| **P2-6** — the workflow-bounds negative control recomputes instead of calling the guard | Open as **R12-3** |
+| **P2-7** — `agentic/rules/23-doc-coherence.md` describes a different gate | Open as **R12-4** |
+| **P3-1** — the export boundary test recognised one form of host reference in six | Closed, the exporter commit |
+| **P3-2** — no anchor check, one dead anchor, a promised scheduled sweep that did not exist | Sweep closed, *fix(ci): QA-4 round twelve, P3 — the link check promised a scheduled sweep it did not have*; the anchor is in **R12-4**, the anchor check is **R12-6** |
+| **P3-3** — the ingest tests pin `user_agent()` but not that the request sends it | Open as **R12-3** |
+| **P3-4** — ADR-010's "9 commits" had no method | Closed by a dated correction in ADR-010, the exporter commit |
+| **P3-5** — the brief's stale facts; C2's descriptions overstated it | C2's RUNBOOK row closed in the C2 commit; the brief's two facts are in **R12-4** |
+| **P3-6** — C2 read each markdown file twice | Closed, the C2 commit |
 
 Everything open carries a mode, what it waits on, and its closing condition in
-`docs/governance/remediation-work-order.md` under *Round eleven*. Finding one of
+`docs/governance/remediation-work-order.md` under *Round twelve*. Finding one of
 those again is not a finding; finding one described there as closed that is
 not, is.
 
 ### Where the author's confidence proved wrong this round
 
-- **The render-safety gate was justified by a claim a grep produced.** It said
-  the render test covered one answer set; it covered three of four. The grep
-  found the default answers and missed the parametrize — and the claim was
-  copied into four documents before an auditor ran the test.
-- **The first explanation of why `_verify` needed a process group was wrong.**
-  It said `subprocess.run(shell=True, timeout=)` then blocks on a pipe.
-  Measured, it returns on time and orphans the grandchild. The fix was right;
-  the mechanism written beside it was not, and would have shipped unmeasured.
-- **Fixing the residue guard's allowlist failed silently once.** The formatter
-  had re-wrapped the line an exact-match edit targeted; the assertion stopped
-  the script before writing, and the output was read as success until the test
-  failed the same way again.
-- **Eleven commits of new gates went in while a P1 sat open** — the
-  distribution the round-eleven question asked about. Nothing reported the age
-  of an open finding, which the work order's round-eleven section now does by
-  hand.
+- **Four claims in ADR-010 were written from the design.** Three guarantees
+  in its Decision and one number in its table were not true of the code that
+  shipped with them. Nothing had run the exporter's `main()`.
+- **The first boundary detector reported zero false positives, and had
+  several.** The measurement script had an escaping bug, so it split on the
+  letter `s` rather than on whitespace. The real test then flagged the word
+  "docs" in prose in two modules.
+- **The first run of the auditor's mutations against the fixed exporter
+  found a survivor in the fix.** No fixture named the `docs` directory alone,
+  so the rule for it could be deleted with the suite green.
+- **The author's own prose failed the new C2 again.** An example quoted a
+  misspelt namespace to explain the rule. It is now described instead of
+  quoted.
+- **The author told the owner to run the cloud review on #87 only.** Both
+  pull requests needed it; the owner ran both.
 
-### The question round twelve exists to answer
+### The question round thirteen exists to answer
 
-Round eleven's hypothesis held: every new defect surfaced only when something
-was rendered, run or built. This round's fixes are therefore themselves the
-least-executed code in the tree — each was watched failing once, in a
-throwaway worktree, by the author. **Attack the negative controls**: re-run
-each against a mutation the author did not choose, and report any fix that
-passes a mutation it should have caught.
+Round twelve's hypothesis held: six of the eight negative controls it attacked
+failed under a mutation the author had not chosen. The corrections were
+verified against the **auditor's** mutations: 11 of 11 killed for C2, 11 of 11
+for the exporter. That is a second-order version of the same risk, because
+the tests are now tuned to two people's guesses instead of one. **Attack with
+mutations neither chose**, and report any fix that passes one it should have
+caught. The harnesses are not in the repository. The mutations are listed in
+the two CHANGELOG entries, so they can be rebuilt.
 
-### Since this section was written — the 2026-09-22/23 session
+### Where the author's confidence is weakest — attack these first
 
-One session did everything below. It is the author, so it did not audit any of
-it, and it did not draft, pre-fill or record this round's outcome. Part of the
-work reached `main` before C7's grace closed; the rest waits on this round.
+1. **The exporter's end-to-end tests run in a simulated world.** A temporary
+   git repository holds a copy of the exporter and the twelve modules, and
+   `origin/main` is set with `update-ref`. The ancestry check has never run
+   against the real remote after a squash. Confirm that exporting from `main`
+   succeeds, and that exporting from the pre-squash branch commit is refused.
+2. **C2's list of bare citations allowed in migrated trees is hand-written.**
+   `001`–`004` are allowed bare in `libs/llm-core` and
+   `projects/store-assistant` because round twelve checked that each means
+   this repository's decision. That list is the same class as round eleven's
+   hand-written `SEAM`. A new occurrence of one of those four numbers that
+   means agent-local's decision passes.
+3. **The boundary detector's host documents are derived, with exclusions.**
+   The list is built from the tracked `*.md` names at the root and in `docs/`,
+   minus generic names (`README.md`, `CHANGELOG.md` and others). A reference
+   to one of those passes by design. So does a path assembled from values that
+   are not literals.
+4. **The weekly link sweep has never run.** Its first scheduled run is after
+   this lands. Confirm it runs, and that a full external sweep is not
+   permanently red from third-party flakiness.
+5. **R12-1 did not exist when this was written.** If agent-local's CI check
+   has landed by the time you read this, attack it the way P2-5 attacked the
+   hash test. Edit `policy.py` and the manifest together and confirm it fails.
 
-| Where | What |
-| --- | --- |
-| `main`, #74 | ADR-002 gains a dated Correction: the source repository was never archived |
-| `main`, #83 | `Repository invariants` split into *Fast gates* and *Tests and coverage*, with the old name kept as an aggregator; `implementation-status.md` stops calling a CI decision a constraint |
-| `main`, #84 | The link checker, configured since August and never invoked, is wired into *Docs quality*; 17 dead links in `agentic/rules/` fixed |
-| #86, open | 48 citations of agent-local's ADRs qualified as `store-ADR-NNN`; C2 extended to Python and to namespaced citations |
-| #87, open, stacked on #86 | ADR-010 and `scripts/export_llm_core.py`; a second dated Correction on ADR-002; `llms.txt` ADR count |
-| DuqueOM/agent-local#1, draft | The downstream: `core/` replaced by an export, consumers adapted, a drift test added |
+### Deliberately not done by the author
 
-List the commits rather than trusting the table — the marker-range command
-above covers `main`, and `gh pr view 86 --json commits` and
-`gh pr view 87 --json commits` cover the rest.
-
-#### Defects the author found in its own work
-
-- ADR-002's first Correction set a revisit trigger — the two cores diverge in
-  behaviour — that had already fired when it was written. Nobody measured.
-- It called agent-local "the business-agnostic upstream" in eight places.
-  Nothing had flowed from agent-local since the migration.
-- It credited `tests/test_dependency_direction.py` with guaranteeing the agent
-  core is agnostic. The test sees imports, not data: `doc_corpus.py` and
-  `doc_questions.py` name this repository's documents by path.
-- The extended C2's first version read the English prefix `pre-` as a
-  namespace, and failed on a real store ADR.
-- The CHANGELOG and the store decisions README quoted invalid references as
-  examples, and the extended C2 failed on its own author's prose.
-- The status generator, run in a worktree without
-  `uv sync --all-packages --all-extras`, reported 31 done instead of 48, one
-  `git add` away from being committed.
-- A rebase landed on a branch another session had checked out in the same
-  repository. Restored to its remote state; it was never pushed.
-- `git rebase ... | tail && git push` pushed through a conflicted rebase,
-  because `tail` exits 0.
-- An agent-local test was named `test_the_provenance_names_a_real_commit` and
-  checked only that the SHA has forty hex digits. Renamed to what it checks.
-- The scratchpad holding every uncommitted change to #86 and #87 was wiped
-  mid-task. The work was recovered from the worktree's index under
-  `.git/worktrees/`, and the recovered status document — regenerated in a
-  broken state — was replaced by a fresh regeneration.
-- `test_derived_documents_ignore_untracked_files` failed once and did not
-  reproduce. Issue #85 records it, with a hypothesis about the test's design
-  rather than about the probe.
-
-#### Where the author's confidence is weakest — attack these first
-
-Ranked by what a reader would do wrongly if the author were wrong. Most of
-these are the round's question in miniature: a negative control the author
-watched fail once, with a mutation the author chose.
-
-1. **The CI link check may examine nothing.** #84 wired it with a
-   multi-folder `folder-path` of `docs, projects, platform, orchestration,
-   agentic` and `use-quiet-mode: yes`. The 17-then-0 result came from the
-   `markdown-link-check` CLI run locally, not from the action. In CI it has
-   only ever passed, and quiet mode prints no count of files read, so a green
-   run does not show that it read any. Confirm the action parses that
-   `folder-path`, then break a link in an *unchanged* file under `agentic/` and
-   confirm a push-to-`main` sweep goes red.
-2. **The `Repository invariants` aggregator has never been seen failing.** #83
-   made it `if: always()` with an assertion per half. #86 and #87 are the first
-   runs with *Fast gates* red; confirm the aggregator reports failure there, and
-   that a `cancelled` or `skipped` half fails it too.
-3. **The classification of the 48 citations.** 43 were assigned to
-   agent-local's namespace by a heuristic — the line exists verbatim in
-   agent-local's original source — and the rest by the author reading them. A
-   line kept verbatim whose meaning changed would be misfiled, and the twelve
-   left bare are only as right as that reading. For every citation in
-   `libs/llm-core` and `projects/store-assistant`, qualified or bare, compare the
-   cited ADR's title with the sentence. Twenty-two of the originals resolved to
-   the wrong decision without failing anything; the same can be true of what was
-   left bare.
-4. **The exporter rewrites code, not only comments.** `map_adr_references` runs
-   over the whole module, so an ADR number inside a runtime string — an error
-   message, a log line — changes downstream. Compare the exported modules'
-   syntax trees with the source's, masking comments and string literals:
-   anything else that differs is a defect. Then attack the transform tests with
-   inputs the author did not choose.
-5. **C2 now skips unknown namespaces on purpose.** A misspelt namespace — the
-   store prefix with two letters transposed — passes. The trade-off is stated in the CHANGELOG; check that
-   everything describing C2 states it, and judge whether it should stand.
-6. **The export boundary test matches one pattern.**
-   `test_no_exported_module_names_this_repositorys_files` looks for `"docs/`
-   and `.md#` in string literals. A path built with `Path(...) / "docs"` would
-   pass it. Its companion proves it fires only on the pattern the two excluded
-   modules happen to use.
-7. **agent-local's provenance names a commit a squash will orphan.** Stated in
-   agent-local#1 and in #87, and the drift test checks the SHA's form only.
-   Check that no document claims more.
-8. **The status document on #86 and #87 reads 47 done.** The claim is that its
-   one 🟡 row is caused by C7 alone. Regenerate after the marker moves, and
-   confirm it returns to 48.
-
-#### Deliberately not done by the author
-
-- Did not investigate any item above: each is listed instead of checked,
-  because checking it would be the author reviewing the author.
-- Did not root-cause #85.
-- Ran agent-local's CI commands locally only; agent-local#1 is a draft, and its
-  export must be re-taken from `main` once #87 lands.
-- Has no knowledge beyond the log of the commits in the marker range made by
-  other sessions — #72, #73, #75 and whatever else the range command lists.
-  They are in this round's scope on the same footing as everything above.
+- Did not fix the findings in code it did not write (R12-2 to R12-5). They go
+  in separate changes so each is reviewed on its own.
+- Did not add an anchor check (R12-6).
+- Did not commit the mutation harnesses. They were throwaway scripts.
+- Has no knowledge beyond the log of commits other sessions made in the
+  marker range. They are in scope on the same footing.
