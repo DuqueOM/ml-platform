@@ -95,6 +95,47 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   dangling references in code; after, it passes and resolves 69 project-scope
   references against their own index. Three regression tests in
   `tests/test_gate_scripts.py` hold it there.
+- **Corrected by QA-4 round twelve.** The count was 57, not 48: nine more
+  agent-local citations lived in a YAML config and a JSONL eval set that C2
+  never read. And "the gate only guards its louder half" was too generous —
+  its three tests passed with two of its own halves removed. See the entry
+  below.
+
+### Fixed — QA-4 round twelve: C2's new guards could not fail, and it could not read YAML
+
+- **Round twelve removed two halves of the C2 extension and its tests stayed
+  green.** Dropping `projects/` from the code scan passed, because the only
+  code probe lived under `libs/`; deleting the namespaced check from the code
+  loop passed, because the only namespaced probe was markdown. Each test
+  exercised the half its author had touched. The auditor also put #86's own
+  defect back — bare `ADR-009` and `ADR-006` in the store tests — and C2 stayed
+  green.
+- **Nine citations remained, one file type over.** `config.yaml` (7) and
+  `11_injection.jsonl` (2) in the store assistant still cited
+  `store-ADR-006`, `store-ADR-007`, `store-ADR-011` and `store-ADR-012` by bare
+  number — two resolving to the wrong decision here, the rest to nothing. Qualified. C2 now reads `.py`, `.yaml`,
+  `.yml`, `.jsonl` and `.toml` under `libs/` and `projects/`.
+- **A bare number in a tree migrated from agent-local is now ambiguous, not
+  valid.** agent-local's records 001-012 share numbers with this repository's,
+  so existence cannot tell the two apart — which is how 22 citations resolved
+  to the wrong decision without failing anything, and why a bare ADR-010,
+  which exists since ADR-010 landed, would have done the same. In
+  `libs/llm-core` and `projects/store-assistant` only the numbers checked to
+  mean ours may appear bare (001-004); any other fails and must be qualified.
+- **An unknown or malformed namespace now fails.** The earlier rule skipped any
+  namespace nobody had defined, so a misspelt one passed. English prefixes
+  (`pre-`, `non-`) are skipped case-insensitively, because `Pre-ADR-011` opens
+  a sentence in the agent core's own tests. A namespace must be lower-case and
+  a number three digits; the pattern is deliberately broader than a valid
+  citation so that a malformed one is seen and failed.
+- **C2 printed `ok` above its own FAIL lines** — the defect round seven removed
+  from C6. It now prints `ok` only when it found nothing. C3, C4, C5 and C9
+  still print it unconditionally; that is recorded for a separate change.
+- Each markdown file is now read once, not twice.
+- **Watched failing against the auditor's mutations, not the author's.** Eleven
+  mutations — M-C2a and M-C2b from the audit, plus one per new rule — each
+  killed by the test written for it. The re-introduced defect now fails C2 on
+  both files, naming the fix.
 
 ### Fixed — the link checker was configured but never run, and it had 17 dead links to find
 

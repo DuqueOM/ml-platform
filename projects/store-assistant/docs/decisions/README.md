@@ -31,7 +31,11 @@ generalised from "a `template-` prefix" to "any namespace prefix" so a third
 set never needs the gate edited again. A namespaced reference is also
 *resolved*, not merely exempted: a store reference to a number this directory
 never recorded fails, and the index is discovered from the file names here, so
-that still needs no edit to the gate.
+that still needs no edit to the gate. An unknown or malformed namespace fails
+too. And because these records share numbers 001-012 with the platform's, a
+bare number in this project or in `libs/llm-core` is ambiguous: only the
+platform numbers checked to be meant here may appear bare, and anything else
+must be written `store-ADR-NNN`.
 
 | ADR | Title | Status |
 | ----- | ------- | -------- |

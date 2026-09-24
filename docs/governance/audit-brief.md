@@ -532,8 +532,8 @@ watched fail once, with a mutation the author chose.
    syntax trees with the source's, masking comments and string literals:
    anything else that differs is a defect. Then attack the transform tests with
    inputs the author did not choose.
-5. **C2 now skips unknown namespaces on purpose.** A misspelt namespace such as
-   `stroe-ADR-006` passes. The trade-off is stated in the CHANGELOG; check that
+5. **C2 now skips unknown namespaces on purpose.** A misspelt namespace — the
+   store prefix with two letters transposed — passes. The trade-off is stated in the CHANGELOG; check that
    everything describing C2 states it, and judge whether it should stand.
 6. **The export boundary test matches one pattern.**
    `test_no_exported_module_names_this_repositorys_files` looks for `"docs/`
