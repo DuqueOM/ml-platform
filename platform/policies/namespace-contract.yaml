@@ -1,0 +1,77 @@
+# The namespaces this platform's NetworkPolicies depend on, declared as data.
+#
+# Why this file exists
+# --------------------
+# `allow-serving-ingress` and `allow-serving-egress` admit traffic from and to
+# OTHER namespaces. A NetworkPolicy names those by label, and until this file
+# existed the labels they named — `app.kubernetes.io/name: monitoring` and
+# `ingress-nginx` — were carried by no namespace this repository provisions or
+# requires. Every render passed, every test passed, and under `default-deny`
+# the pod could be neither scraped nor reached (QA-4 rounds ten and eleven).
+#
+# A selector that matches nothing fails OPEN in appearance and CLOSED in
+# effect: nothing errors, the traffic is simply dropped, and the symptom is a
+# dashboard with no series or an endpoint that times out.
+#
+# Why role labels rather than `app.kubernetes.io/name`
+# ----------------------------------------------------
+# `app.kubernetes.io/name` means "the name of the application". A namespace
+# running Prometheus, Grafana and Jaeger is not an application called
+# `monitoring`, and one label cannot hold two values — which matters here,
+# because the local stack runs every one of these roles in a SINGLE namespace.
+# A boolean role label composes: one namespace may declare as many roles as it
+# genuinely fulfils, and a cloud cluster may spread them across many.
+#
+# Why not select by namespace NAME
+# --------------------------------
+# `kubernetes.io/metadata.name` is set by Kubernetes itself and cannot be
+# forgotten, which is why `allow-dns` uses it for `kube-system` — a name fixed
+# by the distribution. The names of a monitoring or ingress namespace are not:
+# GKE's managed Prometheus lives in `gmp-system`, kube-prometheus-stack
+# installs into `monitoring`, and an adopter may use neither. A label this
+# platform owns keeps the policy portable; the namespace name stays the
+# cluster's business.
+#
+# Renaming the prefix
+# -------------------
+# `label_prefix` below is the one place to change it. The policies must then
+# carry the same key — `tests/test_namespace_contract.py` fails if they drift,
+# so the rename cannot be half-done.
+label_prefix: role.ml-platform.io
+
+roles:
+  - id: monitoring
+    purpose: >-
+      Scrapes the serving pod's /metrics on the port the Deployment advertises,
+      and receives OTLP spans on 4317. Without it the SLO rules, the dashboards
+      and every trace rest on a series that never arrives.
+    used_by:
+      - allow-serving-ingress   # ingress to 8000 from this role
+      - allow-serving-egress    # egress to 4317 to this role
+    provisioned_by:
+      cloud: >-
+        The cluster's platform stack, not this repository: a monitoring
+        namespace is shared infrastructure and predates any one workload.
+        Whoever installs it labels it — that is the contract this file states,
+        and it is checked at render time, not assumed.
+      local: platform/local/manifests/00-namespace.yaml
+    fulfilled_locally: true
+
+  - id: ingress
+    purpose: >-
+      Terminates north-south traffic and forwards to the serving port. The
+      policy admits 8000 from this role only; an inference endpoint reachable
+      from every pod in the cluster is one lateral step from any compromised
+      workload.
+    used_by:
+      - allow-serving-ingress
+    provisioned_by:
+      cloud: >-
+        The cluster's ingress controller namespace (ingress-nginx, or the
+        equivalent for whatever controller the cluster runs).
+      local: >-
+        NOT fulfilled. The local stack runs no ingress controller — `make
+        local-serve` reaches the pod by port-forward — so this rule admits
+        nothing locally, and that is recorded here rather than discovered as a
+        silent drop.
+    fulfilled_locally: false

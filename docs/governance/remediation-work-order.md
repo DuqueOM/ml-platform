@@ -525,6 +525,13 @@ wait is a decision, the mode is CONSULT and the decision is the user's.
 
 ### R11-1 — The serving policies select namespaces nothing provisions
 
+> **Status: done** — *feat(k8s): declare the namespace roles the policies depend on*. Option A as recommended:
+> `platform/policies/namespace-contract.yaml` declares each role, who provisions it in cloud and locally, and
+> whether the local stack fulfils it; the policies select `role.ml-platform.io/<role>`; the local namespace
+> carries the monitoring role it genuinely fulfils and not the ingress one it does not;
+> `tests/test_namespace_contract.py` fails on a selector nobody declared, a role nobody provisions, and a local
+> claim no manifest backs.
+
 **Mode**: CONSULT · **Source**: round ten P2, open through round eleven · **Size**: ~2h once decided
 
 `allow-serving-ingress` admits `app.kubernetes.io/name: ingress-nginx` and

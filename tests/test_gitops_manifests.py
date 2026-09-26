@@ -465,7 +465,7 @@ def test_an_advertised_scrape_port_is_reachable(cloud: str, env: str) -> None:
         if doc["kind"] == "NetworkPolicy" and "Ingress" in doc["spec"].get("policyTypes", [])
         for rule in doc["spec"].get("ingress", [])
         for source in rule.get("from", [])
-        if "monitoring" in str(source)
+        if "role.ml-platform.io/monitoring" in str(source)
     )
     assert allowed, (
         f"{cloud}-{env}: port {port} is advertised for scraping and no NetworkPolicy admits the monitoring "
@@ -514,7 +514,7 @@ def test_the_pod_can_reach_what_it_needs_to_start(cloud: str, env: str) -> None:
                 if cidr is not None and peer.get("ipBlock", {}).get("cidr") == cidr:
                     return True
                 selector = peer.get("namespaceSelector", {}).get("matchLabels", {})
-                if namespace is not None and namespace in selector.values():
+                if namespace is not None and namespace in selector:
                     return True
         return False
 
@@ -529,7 +529,7 @@ def test_the_pod_can_reach_what_it_needs_to_start(cloud: str, env: str) -> None:
     assert _permits(443, cidr="0.0.0.0/0"), (
         f"{cloud}-{env}: no HTTPS egress, so the model artifact and the Iceberg table are unreachable"
     )
-    assert _permits(4317, namespace="monitoring"), (
+    assert _permits(4317, namespace="role.ml-platform.io/monitoring"), (
         f"{cloud}-{env}: no egress to the OTLP collector, so spans are dropped silently — nothing errors "
         f"and the trace is simply absent"
     )
