@@ -1,3 +1,7 @@
+---
+description: Invoke the quality-metrics skill — keep every published quality claim tied to a command that can fail a build
+---
+
 # /metrics
 
 Invokes the `quality-metrics` skill.

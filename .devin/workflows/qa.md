@@ -2,6 +2,10 @@
 <!-- surface: devin | canonical: agentic/workflows/qa.md -->
 <!-- This is a MIRROR. Edit the canonical source, never this file. -->
 
+---
+description: Invoke the qa-procedure skill — run QA-1..QA-7 as executable steps with preconditions, evidence and STOP points
+---
+
 # /qa
 
 Invokes the `qa-procedure` skill.

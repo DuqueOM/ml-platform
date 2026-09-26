@@ -57,7 +57,7 @@ def test_every_relative_link_in_a_generated_surface_resolves() -> None:
     pass all four of them.
     """
     broken = []
-    for surface in (".claude", ".cursor", ".codex", ".devin"):
+    for surface in (".claude", ".cursor", ".codex", ".devin", ".agents"):
         for path in (REPO_ROOT / surface).rglob("*.md"):
             for link in _LINK.findall(path.read_text(encoding="utf-8")):
                 target = (path.parent / link.partition("#")[0]).resolve()

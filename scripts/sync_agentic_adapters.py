@@ -33,6 +33,7 @@ of writing, which is what CI uses.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -82,13 +83,53 @@ def collect(manifest: dict[str, Any]) -> list[Artifact]:
     return artifacts
 
 
-def render_pointer(artifact: Artifact, surface: str) -> str:
+def front_matter(text: str) -> dict[str, Any]:
+    """A canonical body's leading YAML front-matter, or an empty mapping."""
+    if not text.startswith("---"):
+        return {}
+    end = text.find("\n---", 3)
+    if end == -1:
+        return {}
+    loaded = yaml.safe_load(text[3:end])
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def render_front_matter(artifact: Artifact) -> str:
+    """The front-matter a tool reads to list and route an artifact.
+
+    A skill gets `name` and `description`, the two fields every tool that
+    discovers skills requires; its declared mode is appended to the
+    description, because the description is the one field a tool shows before
+    the body is read. A command gets `description` only — Claude rejects
+    `name` there. Nothing else is copied: `allowed-tools` in particular stays
+    in the canonical body, where pre-approving a tool is a reviewed decision
+    rather than a side effect of rendering.
+    """
+    declared = front_matter(artifact.body)
+    description = str(declared.get("description") or "").strip()
+    if not description:
+        sys.exit(
+            f"{artifact.source.relative_to(REPO_ROOT)} has no `description:` front-matter, and a surface lists "
+            "it by that field — without it the tool falls back to the pointer's first line"
+        )
+    lines = ["---"]
+    if artifact.kind == "skills":
+        lines.append(f"name: {artifact.name}")
+        if declared.get("mode"):
+            description = f"{description} (Mode: {declared['mode']})"
+    lines += [f"description: {json.dumps(description, ensure_ascii=False)}", "---", ""]
+    return "\n".join(lines)
+
+
+def render_pointer(artifact: Artifact, surfaces: list[str], with_front_matter: bool) -> str:
     """A file that names its source and refuses to restate it."""
     rel = artifact.source.relative_to(REPO_ROOT)
-    return f"""{GENERATED_MARKER}
+    head = render_front_matter(artifact) if with_front_matter else ""
+    named = ", ".join(f"`{surface}`" for surface in surfaces)
+    return f"""{head}{GENERATED_MARKER}
 # {artifact.name}
 
-**Adapter surface**: `{surface}`
+**Adapter surface{"s" if len(surfaces) > 1 else ""}**: {named}
 **Canonical source**: `{rel}`
 **Authority**: `AGENTS.md` + `agentic/manifest.yaml`
 
@@ -151,11 +192,11 @@ def rewrite_relative_links(body: str, source_dir: Path, target_dir: Path) -> str
     return _RELATIVE_LINK.sub(_fix, body)
 
 
-def render_mirror(artifact: Artifact, surface: str) -> str:
+def render_mirror(artifact: Artifact, surfaces: list[str]) -> str:
     """A full copy, for tools that cannot follow a pointer."""
     rel = artifact.source.relative_to(REPO_ROOT)
     return f"""{GENERATED_MARKER}
-<!-- surface: {surface} | canonical: {rel} -->
+<!-- surface: {", ".join(surfaces)} | canonical: {rel} -->
 <!-- This is a MIRROR. Edit the canonical source, never this file. -->
 
 {artifact.body}"""
@@ -294,7 +335,7 @@ def render_surface_context(
     kinds = list(manifest["stores"])
     counts = _counts(artifacts, kinds)
     layout = "\n".join(
-        f"| {kind} | `{cfg['root']}/{cfg['layout'][kind]}/*{cfg['extension']}` | {counts[kind]} |" for kind in kinds
+        f"| {kind} | `{cfg['layout'][kind].replace('{name}', '<id>')}` | {counts[kind]} |" for kind in kinds
     )
     discovery = "\n".join(f"- {item}" for item in ctx["discovery"])
     mcp = "\n".join(_mcp_lines(surface, registry))
@@ -367,54 +408,127 @@ def context_outputs(manifest: dict[str, Any], artifacts: list[Artifact]) -> dict
 
 
 def target_path(artifact: Artifact, surface_cfg: dict[str, Any]) -> Path:
-    subdir = str(surface_cfg["layout"][artifact.kind])
-    ext = str(surface_cfg["extension"])
-    return REPO_ROOT / str(surface_cfg["root"]) / subdir / f"{artifact.name}{ext}"
+    """Where one surface publishes one artifact: its layout pattern, filled in."""
+    return REPO_ROOT / str(surface_cfg["layout"][artifact.kind]).replace("{name}", artifact.name)
+
+
+def layout_bases(manifest: dict[str, Any]) -> set[Path]:
+    """Every directory a layout pattern renders into — the part before `{name}`.
+
+    Everything under one of these is generated, so anything there that the
+    render did not produce is an orphan. Scanning by directory rather than by
+    the pattern's glob is what removes a file left at an OLD layout: the flat
+    `.claude/skills/<id>.md` files matched no pattern once skills became
+    directories, and would otherwise have stayed forever.
+    """
+    return {
+        REPO_ROOT / pattern.split("{name}")[0]
+        for cfg in manifest["surfaces"].values()
+        for pattern in cfg["layout"].values()
+    }
+
+
+def render_all(manifest: dict[str, Any], artifacts: list[Artifact]) -> dict[Path, str]:
+    """Every surface file, keyed by path. A path two surfaces share is rendered once.
+
+    Sharing is only coherent when both surfaces would write the same bytes, so a
+    shared path whose surfaces disagree on render mode or front-matter is a
+    manifest error rather than a last-writer-wins race.
+    """
+    claims: dict[Path, list[tuple[str, Artifact, dict[str, Any]]]] = {}
+    for surface, cfg in manifest["surfaces"].items():
+        for artifact in artifacts:
+            claims.setdefault(target_path(artifact, cfg), []).append((surface, artifact, cfg))
+
+    outputs: dict[Path, str] = {}
+    for path, sharing in claims.items():
+        surfaces = [surface for surface, _, _ in sharing]
+        _, artifact, cfg = sharing[0]
+        with_front_matter = artifact.kind in cfg.get("front_matter", [])
+        for surface, other, other_cfg in sharing[1:]:
+            if (
+                other.source != artifact.source
+                or other_cfg["mode"] != cfg["mode"]
+                or (artifact.kind in other_cfg.get("front_matter", [])) != with_front_matter
+            ):
+                sys.exit(
+                    f"{path.relative_to(REPO_ROOT)} is claimed by {surfaces[0]!r} and {surface!r}, which would render "
+                    "it differently — a shared path needs the same source, mode and front-matter on every surface"
+                )
+        if cfg["mode"] == "mirror":
+            mirrored = render_mirror(artifact, surfaces)
+            outputs[path] = rewrite_relative_links(mirrored, artifact.source.parent, path.parent)
+        else:
+            outputs[path] = render_pointer(artifact, surfaces, with_front_matter)
+    return outputs
+
+
+def _surface_roots(manifest: dict[str, Any]) -> set[Path]:
+    return {REPO_ROOT / str(cfg["root"]) for cfg in manifest["surfaces"].values()}
+
+
+def orphans(manifest: dict[str, Any], outputs: dict[Path, str]) -> list[Path]:
+    """Generated files the current render does not produce.
+
+    Two nets, because a layout change leaves files in two kinds of place.
+    Everything under a layout directory is generated, so anything there the
+    render did not write is an orphan. A directory a layout STOPPED using is
+    no longer a layout directory — `.cursor/skills/` once skills moved to
+    `.agents/skills/` — so the surface roots are searched too, for files that
+    carry the generated marker. The marker is what keeps a committed,
+    hand-written file such as `.codex/mcp.example.json` out of it.
+    """
+    found: set[Path] = set()
+    for base in layout_bases(manifest):
+        if base.is_dir():
+            found.update(p for p in base.rglob("*") if p.is_file())
+    for root in _surface_roots(manifest):
+        if root.is_dir():
+            found.update(
+                p for p in root.rglob("*") if p.is_file() and GENERATED_MARKER in p.read_text(encoding="utf-8")
+            )
+    return sorted(p for p in found if p not in outputs)
+
+
+def _remove_empty_directories(manifest: dict[str, Any]) -> None:
+    for top in layout_bases(manifest) | _surface_roots(manifest):
+        if top.is_dir():
+            for directory in sorted((d for d in top.rglob("*") if d.is_dir()), reverse=True):
+                if not any(directory.iterdir()):
+                    directory.rmdir()
 
 
 def sync(check_only: bool) -> int:
     manifest = _load_manifest()
     artifacts = collect(manifest)
+    outputs = render_all(manifest, artifacts)
 
     stale: list[str] = []
     written = 0
 
-    for surface, cfg in manifest["surfaces"].items():
-        renderer = render_mirror if cfg["mode"] == "mirror" else render_pointer
-        expected: set[Path] = set()
+    for path, content in outputs.items():
+        current = path.read_text(encoding="utf-8") if path.is_file() else None
+        if current == content:
+            continue
+        if check_only:
+            state = "missing" if current is None else "stale"
+            stale.append(f"{state}: {path.relative_to(REPO_ROOT)}")
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        written += 1
 
-        for artifact in artifacts:
-            path = target_path(artifact, cfg)
-            expected.add(path)
-            content = renderer(artifact, surface)
-            if cfg["mode"] == "mirror":
-                content = rewrite_relative_links(content, artifact.source.parent, path.parent)
-
-            current = path.read_text(encoding="utf-8") if path.is_file() else None
-            if current == content:
-                continue
-            if check_only:
-                state = "missing" if current is None else "stale"
-                stale.append(f"{state}: {path.relative_to(REPO_ROOT)}")
-                continue
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content, encoding="utf-8")
+    # Remove orphans: a surface file whose canonical source was deleted or
+    # renamed, or that sits at a layout the manifest no longer uses. Left alone,
+    # it becomes policy nobody can find the origin of.
+    for path in orphans(manifest, outputs):
+        if check_only:
+            stale.append(f"orphan: {path.relative_to(REPO_ROOT)}")
+        else:
+            path.unlink()
             written += 1
-
-        # Remove orphans: a surface file whose canonical source was deleted or
-        # renamed. Left alone, it becomes policy nobody can find the origin of.
-        for subdir in set(cfg["layout"].values()):
-            directory = REPO_ROOT / cfg["root"] / subdir
-            if not directory.is_dir():
-                continue
-            for path in sorted(directory.glob(f"*{cfg['extension']}")):
-                if path in expected:
-                    continue
-                if check_only:
-                    stale.append(f"orphan: {path.relative_to(REPO_ROOT)}")
-                else:
-                    path.unlink()
-                    written += 1
+    if not check_only:
+        _remove_empty_directories(manifest)
 
     # Context files last: they REPORT the surface inventory, so rendering them
     # before the artifacts would describe the tree as it was, not as it is.
@@ -451,12 +565,15 @@ def sync(check_only: bool) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="fail if surfaces are out of date instead of writing")
-    parser.add_argument("--clean", action="store_true", help="remove every generated surface root first")
+    parser.add_argument("--clean", action="store_true", help="remove every generated surface directory first")
     args = parser.parse_args()
 
+    # The layout directories, not the surface roots: `.codex/` also holds the
+    # committed `mcp.example.json`, which nothing renders, and removing the
+    # whole root deleted it.
     if args.clean and not args.check:
-        for surface_cfg in _load_manifest()["surfaces"].values():
-            shutil.rmtree(REPO_ROOT / surface_cfg["root"], ignore_errors=True)
+        for base in layout_bases(_load_manifest()):
+            shutil.rmtree(base, ignore_errors=True)
 
     return sync(check_only=args.check)
 

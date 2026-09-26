@@ -18,6 +18,65 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Fixed — QA-4 round twelve, P0: no tool could find a single skill, and both surface checks were green
+
+- **Claude Code registered none of the 29 skills.** They were rendered as
+  `.claude/skills/<id>.md`; Claude Code reads `.claude/skills/<id>/SKILL.md`,
+  and lists a skill by its front-matter, which the pointers did not have. The
+  STOP-mode `secret-breach-response` was among them. The base template renders
+  this layout correctly; the port flattened it.
+- **Checking the other two tools against their documentation, as the audit
+  asked, found both broken the same way.** Codex discovers repository skills
+  only under `.agents/skills/<id>/SKILL.md` — never `.codex/skills/` — so it
+  saw none. Cursor reads skills as `<id>/SKILL.md` under `.cursor/skills/` or
+  `.agents/skills/`, and commands as plain `.md`; this repository gave it flat
+  `.mdc` files for both, so it saw no skill and no command.
+- **Rendered where each tool looks.** The manifest's layout is now a path
+  pattern per kind instead of one directory per surface, because the tools do
+  not agree on shape. Cursor and Codex share `.agents/skills/`, the open Agent
+  Skills directory both read, and each shared file is rendered once, naming
+  both. A second copy under `.cursor/skills/` would list every skill twice in
+  Cursor. Skills carry `name`, and `description` with their mode appended.
+  Claude's commands carry `description`: without it Claude listed all 22 by
+  their first line, the "generated — do not edit" marker. Nothing else is
+  copied. `allowed-tools` stays in the canonical body, where pre-approving a
+  tool is reviewed.
+- **Why both checks stayed green: they compared the surfaces with the manifest,
+  and the manifest was wrong.** New check V7 in `validate_agentic_surface.py`
+  compares them with the tools instead. It uses a table of what Claude Code,
+  Cursor and Codex read, each row citing that tool's documentation, kept
+  separate from the manifest on purpose. It fails:
+  - an artifact that is not where its tool looks;
+  - a surface whose own layout its tool does not read, even when another
+    surface's copy happens to be there;
+  - missing or mismatched front-matter, and a description over 1,024
+    characters;
+  - a new surface that arrives with no discovery contract.
+
+  With the shipped flat layout, V1 passes and V7 fails. That pair is pinned
+  as a test.
+- **Three canonical workflows had no `description`** (`/metrics`, `/qa`,
+  `/tests`). They have one now. The renderer refuses to render a body without
+  one, rather than publishing a command a tool would list by its first line.
+- **The renderer removes files a layout left behind.** Everything under a
+  layout directory is the render's. A file carrying the generated marker
+  anywhere under a surface root is the render's too, which is what removed the
+  flat skill files from directories no layout uses any more. `--clean` removes
+  the layout directories instead of the surface roots. It had been deleting
+  the committed `.codex/mcp.example.json`, which nothing renders.
+- **Watched failing against mutations, not only written.** Eighteen, each
+  killed:
+  - five manifest regressions, re-rendered and caught by the gate CI runs —
+    the flat Claude layout among them;
+  - thirteen weakenings of V7, V1 and the renderer, each caught by a test.
+
+  The first run found a survivor: V7 accepted Codex pointed at the wrong
+  directory, because Cursor's copy was there. The own-layout rule is the fix.
+- **Upstream, recorded and not acted on:** `ml-service-template` renders
+  Cursor's skills flat under `.cursor/skills/` and Codex's under
+  `.codex/skills/`, the same two defects. Changing that repository is the
+  maintainer's call.
+
 ### Added — ADR-010: this repository is authoritative for the agent core, and exports it
 
 - **The authority question ADR-002's correction left open is answered.**
