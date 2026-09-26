@@ -413,7 +413,7 @@ git log --no-merges --oneline "$(grep -oE 'Last independent audit: [0-9-]+ \(([0
 | **P2-6** — the workflow-bounds negative control recomputes instead of calling the guard | Closed, *fix: QA-4 round twelve — two negative controls that passed with the guard broken, and a rule describing another gate* |
 | **P2-7** — `agentic/rules/23-doc-coherence.md` describes a different gate | Closed, *fix: QA-4 round twelve — two negative controls that passed with the guard broken, and a rule describing another gate* |
 | **P3-1** — the export boundary test recognised one form of host reference in six | Closed, the exporter commit |
-| **P3-2** — no anchor check, one dead anchor, a promised scheduled sweep that did not exist | Sweep closed, *fix(ci): QA-4 round twelve, P3 — the link check promised a scheduled sweep it did not have*; the dead anchor closed in *fix: QA-4 round twelve — two negative controls that passed with the guard broken, and a rule describing another gate*; the anchor check is **R12-6** |
+| **P3-2** — no anchor check, one dead anchor, a promised scheduled sweep that did not exist | Sweep closed, *fix(ci): QA-4 round twelve, P3 — the link check promised a scheduled sweep it did not have*; the dead anchor closed in *fix: QA-4 round twelve — two negative controls that passed with the guard broken, and a rule describing another gate*; the anchor check closed in *fix(gates): QA-4 round twelve, R12-6 — C10 checks that every markdown anchor names a heading* |
 | **P3-3** — the ingest tests pin `user_agent()` but not that the request sends it | Closed, *fix: QA-4 round twelve — two negative controls that passed with the guard broken, and a rule describing another gate* |
 | **P3-4** — ADR-010's "9 commits" had no method | Closed by a dated correction in ADR-010, the exporter commit |
 | **P3-5** — the brief's stale facts; C2's descriptions overstated it | C2's RUNBOOK row closed in the C2 commit; the brief's two facts in *fix: QA-4 round twelve — two negative controls that passed with the guard broken, and a rule describing another gate* |
@@ -482,7 +482,7 @@ the two CHANGELOG entries, so they can be rebuilt.
 
 - Did not fix the findings in code it did not write (R12-2 to R12-5). They go
   in separate changes so each is reviewed on its own.
-- Did not add an anchor check (R12-6).
+- Did not add an anchor check (R12-6) in this round's own changes. It landed afterwards, in *fix(gates): QA-4 round twelve, R12-6 — C10 checks that every markdown anchor names a heading*.
 - Did not commit the mutation harnesses. They were throwaway scripts.
 - Has no knowledge beyond the log of commits other sessions made in the
   marker range. They are in scope on the same footing.

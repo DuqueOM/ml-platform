@@ -60,10 +60,11 @@ jobs:
           # manual dispatch sweep everything.
           #
           # What this does NOT check: anchors. A link to an existing file with
-          # a heading that no longer exists passes (round twelve pointed one at
-          # `#no-such-heading` and the lane stayed green). Quiet mode also
-          # prints the per-file list only on failure, so a green log shows no
-          # count; the files are read.
+          # a heading that no longer exists passes here (round twelve pointed
+          # one at `#no-such-heading` and the lane stayed green). Anchors are
+          # C10 of scripts/check_doc_coherence.py, offline, in Fast gates.
+          # Quiet mode also prints the per-file list only on failure, so a
+          # green log shows no count; the files are read.
           check-modified-files-only: ${{ github.event_name == 'pull_request' && 'yes' || 'no' }}
           # The action defaults to `master`; this repository's default branch
           # is `main`, and without the override the diff resolution fails with

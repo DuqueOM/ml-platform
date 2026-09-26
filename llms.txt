@@ -78,9 +78,9 @@ count and the full table live in `docs/governance/quality-gates.md`, which is
 where a number can be checked; this file is hand-written and a figure copied
 into it drifts the moment a gate is added. The ones worth knowing:
 
-- `scripts/check_doc_coherence.py` — C1–C9: ADR index integrity against git
+- `scripts/check_doc_coherence.py` — C1–C10: ADR index integrity against git
   history, dangling references, gate traceability, private-name denylist,
-  independent-audit freshness, copier pinning
+  independent-audit freshness, copier pinning, markdown anchors
 - `scripts/check_implementation_status.py` — derives status; `--check` fails on
   a stale committed copy
 - `scripts/check_thresholds.py` — 9 gated numbers, compared against git HEAD.
