@@ -409,7 +409,7 @@ git log --no-merges --oneline "$(grep -oE 'Last independent audit: [0-9-]+ \(([0
 | **P2-2** — nine agent-local citations still bare in YAML and JSONL | Closed, same commit |
 | **P2-3** — the exporter's provenance: `--allow-dirty` wrote, an uncommitted exporter was stamped clean, nothing required `main` | Closed, *fix(export): QA-4 round twelve, P2 — the exporter's guarantees were written, not enforced* |
 | **P2-4** — the exporter's tests covered only the transforms; five mutations survived | Closed, same commit |
-| **P2-5** — agent-local's drift test takes its verdict from the directory it checks | Open as **R12-1**, in agent-local, after the export is re-taken from `main` |
+| **P2-5** — agent-local's drift test takes its verdict from the directory it checks | Closed downstream, DuqueOM/agent-local#1 (`a40bf38`): CI job `export-provenance` re-runs the exporter at the recorded commit |
 | **P2-6** — the workflow-bounds negative control recomputes instead of calling the guard | Closed, *fix: QA-4 round twelve — two negative controls that passed with the guard broken, and a rule describing another gate* |
 | **P2-7** — `agentic/rules/23-doc-coherence.md` describes a different gate | Closed, *fix: QA-4 round twelve — two negative controls that passed with the guard broken, and a rule describing another gate* |
 | **P3-1** — the export boundary test recognised one form of host reference in six | Closed, the exporter commit |
