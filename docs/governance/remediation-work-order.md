@@ -659,7 +659,7 @@ kept to separate pull requests, so each is reviewed on its own.
 
 ### R12-1 — agent-local's drift guard takes its verdict from the directory it validates
 
-**Mode**: AUTO · **Source**: round twelve P2-5 · **Size**: ~1h
+**Mode**: AUTO · **Source**: round twelve P2-5 · **Size**: ~1h · **Closed** by DuqueOM/agent-local#1 (`a40bf38`): its CI job `export-provenance` re-runs this exporter at the recorded commit, refuses a commit not on `main`, and fails both of the audit's edits
 
 `tests/test_core_is_exported.py` in `agent-local` recomputes hashes against
 `EXPORTED_FROM.json`, which sits in the directory being checked. A hand edit to
