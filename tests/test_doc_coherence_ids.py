@@ -1,4 +1,4 @@
-"""The C1..C9 list agents read is the list the gate runs.
+"""The C1..C10 list agents read is the list the gate runs.
 
 `check_doc_coherence.py` reports by identifier — `FAIL [C7]` — and an agent
 learns what an identifier means from prose. Twice that prose described a

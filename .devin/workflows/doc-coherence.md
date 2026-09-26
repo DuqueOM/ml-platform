@@ -49,6 +49,7 @@ which is worse than no list.
 - **C7** the independent audit has not gone stale (ADR-005 rule B).
 - **C8** `[Unreleased]` in the CHANGELOG covers the commits since the last tag.
 - **C9** every documented `copier` command names a pinned template version.
+- **C10** every link to a markdown heading names a heading that exists.
 
 Version consistency across `VERSION`, `pyproject.toml`, `llms.txt`, the
 CHANGELOG and the plan header is a SEPARATE gate:

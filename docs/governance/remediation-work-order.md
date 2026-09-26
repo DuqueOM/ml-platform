@@ -724,7 +724,7 @@ per check that drives one failure and asserts no `ok` line for it.
 
 ### R12-6 — Nothing checks anchors
 
-**Mode**: AUTO · **Source**: round twelve P3-2 · **Size**: ~2h
+**Mode**: AUTO · **Source**: round twelve P3-2 · **Size**: ~2h · **Closed** by *fix(gates): QA-4 round twelve, R12-6 — C10 checks that every markdown anchor names a heading*, offline, in the coherence gate
 
 The link check reads every file and fails a dead file link, but a link to a
 heading that does not exist passes. The workflow now says so.

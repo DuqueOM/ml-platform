@@ -18,6 +18,33 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Added — C10: every markdown link to a heading names a heading that exists
+
+- **Nothing checked anchors** (QA-4 round twelve, P3-2; R12-6). The link
+  checker reads files and fails a dead one. It cannot see an anchor, so a link
+  to `#no-such-heading` passed, and `RUNBOOK.md` had linked to a heading
+  renamed months earlier.
+- **C10 in `check_doc_coherence.py`.** It resolves every relative link that
+  carries a fragment against the headings of the markdown file it names, using
+  GitHub's slug: rendered text, lower-cased, punctuation dropped, repeats
+  numbered. Explicit `<a id>` anchors count too. Links inside code are
+  examples and are skipped. It runs offline in Fast gates, because the anchors
+  are this repository's own headings and a network request would add only
+  flakiness. There are 19 such links today, and all resolve.
+- **Watched failing.** Round twelve's mutation B and the real `RUNBOOK.md`
+  anchor each fail it. Six weakenings of the check each fail a test:
+  - unregistered;
+  - never failing;
+  - repeated headings not numbered;
+  - code not skipped;
+  - explicit ids ignored;
+  - emphasis kept in the slug.
+
+  The emphasis weakening first survived: the only case used `*`, which the
+  punctuation filter drops anyway. An `_emphasised_` case now pins it.
+- `.agents/`, the skills directory Cursor and Codex share since #89, joins the
+  generated surfaces the coherence checks skip.
+
 ### Fixed — QA-4 round twelve: two negative controls that passed with the guard broken, and a rule describing another gate
 
 - **The workflow-bounds control recomputed what it checked** (P2-6). It
