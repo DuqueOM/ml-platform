@@ -129,6 +129,20 @@ def ok(check: str, message: str) -> None:
     notes.append(f"[{check}] {message}")
 
 
+def passing_notes() -> list[str]:
+    """The `ok` lines of checks that did not fail — decided once, at print time.
+
+    Round seven removed an `ok` printed above its own `FAIL` from C6, and round
+    twelve from C2; C3, C4, C5 and C9 still printed theirs, because the guard
+    lived inside each check and each new check had to remember it. Nor could
+    `ok()` guard itself: C5 records its `ok` BEFORE the loop that can fail it,
+    so at that moment nothing has failed yet. Filtering here is independent of
+    the order a check reports in, and a check added tomorrow gets it for free.
+    """
+    failed = {failure.split("]", 1)[0] for failure in failures}
+    return [note for note in notes if note.split("]", 1)[0] not in failed]
+
+
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8") if path.is_file() else ""
 
@@ -1319,7 +1333,7 @@ def main() -> int:
         for check in registry.values():
             check()
 
-    for note in notes:
+    for note in passing_notes():
         print(f"  ok  {note}")
 
     if failures:

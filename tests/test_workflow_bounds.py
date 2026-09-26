@@ -27,14 +27,45 @@ WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 GITHUB_MAXIMUM_MINUTES = 360
 
 
-def _jobs() -> list[tuple[str, str, dict[str, object]]]:
+def _jobs(workflows: Path = WORKFLOWS) -> list[tuple[str, str, dict[str, object]]]:
     found = []
-    for workflow in sorted(WORKFLOWS.glob("*.y*ml")):
+    for workflow in sorted(workflows.glob("*.y*ml")):
         document = yaml.safe_load(workflow.read_text(encoding="utf-8")) or {}
         for name, spec in (document.get("jobs") or {}).items():
             if isinstance(spec, dict):
                 found.append((workflow.name, name, spec))
     return found
+
+
+def problem(workflow: str, job: str, spec: dict[str, object]) -> str | None:
+    """Why one job's bound is not a bound, or None when it is.
+
+    The one definition the contract and its negative control share. QA-4 round
+    twelve found the control recomputing the selection instead of calling the
+    guard: with the contract weakened to a default of 60, an unbounded job
+    landed and all 15 tests passed. A control that re-derives what it checks
+    tests itself.
+    """
+    timeout = spec.get("timeout-minutes")
+    if timeout is None:
+        return (
+            f"{workflow}:{job} declares no timeout-minutes. GitHub cancels it after six hours, so a wedged "
+            f"step holds a runner for six hours and the log ends without saying why"
+        )
+    # `type(...) is int`, not isinstance: YAML `true` loads as a bool, bool is an
+    # int in Python, and `0 < True <= 360` holds — round twelve's second mutation.
+    if type(timeout) is not int:
+        return f"{workflow}:{job} declares timeout-minutes={timeout!r}, which is not a whole number of minutes"
+    if not 0 < timeout <= GITHUB_MAXIMUM_MINUTES:
+        return (
+            f"{workflow}:{job} declares timeout-minutes={timeout}, outside the range GitHub can apply "
+            f"(1..{GITHUB_MAXIMUM_MINUTES}); above the ceiling it is a number that never fires"
+        )
+    return None
+
+
+def offenders(workflows: Path) -> list[str]:
+    return [p for w, j, s in _jobs(workflows) if (p := problem(w, j, s)) is not None]
 
 
 def test_there_are_workflows_to_check() -> None:
@@ -47,30 +78,22 @@ def test_there_are_workflows_to_check() -> None:
 def test_every_job_declares_a_timeout(workflow: str, job: str) -> None:
     """The contract. Parametrised so a failure names the job, not a count."""
     spec = next(s for w, j, s in _jobs() if (w, j) == (workflow, job))
-    timeout = spec.get("timeout-minutes")
-    assert timeout is not None, (
-        f"{workflow}:{job} declares no timeout-minutes. GitHub cancels it after six hours, so a wedged "
-        f"step holds a runner for six hours and the log ends without saying why"
-    )
-    assert isinstance(timeout, int), f"{workflow}:{job} declares timeout-minutes={timeout!r}, which is not a number"
-    assert 0 < timeout <= GITHUB_MAXIMUM_MINUTES, (
-        f"{workflow}:{job} declares timeout-minutes={timeout}, outside the range GitHub can apply "
-        f"(1..{GITHUB_MAXIMUM_MINUTES}); above the ceiling it is a number that never fires"
-    )
+    assert problem(workflow, job, spec) is None, problem(workflow, job, spec)
 
 
-def test_a_job_without_a_timeout_is_reported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_the_guard_reports_every_way_a_bound_is_not_one(tmp_path: Path) -> None:
     """The guard, watched failing — against a temporary workflow tree, never the real one."""
-    workflows = tmp_path / "workflows"
-    workflows.mkdir()
-    (workflows / "probe.yml").write_text(
-        "name: probe\non: push\njobs:\n  bounded:\n    runs-on: ubuntu-latest\n    timeout-minutes: 5\n"
-        "  unbounded:\n    runs-on: ubuntu-latest\n",
-        encoding="utf-8",
+    jobs = {"bounded": "5", "unbounded": None, "boolean": "true", "zero": "0", "above": "361", "text": '"5"'}
+    body = "name: probe\non: push\njobs:\n" + "".join(
+        f"  {name}:\n    runs-on: ubuntu-latest\n" + (f"    timeout-minutes: {value}\n" if value else "")
+        for name, value in jobs.items()
     )
-    monkeypatch.setattr("tests.test_workflow_bounds.WORKFLOWS", workflows, raising=False)
-    import tests.test_workflow_bounds as module
+    (tmp_path / "probe.yml").write_text(body, encoding="utf-8")
 
-    monkeypatch.setattr(module, "WORKFLOWS", workflows)
-    offenders = [f"{w}:{j}" for w, j, s in module._jobs() if s.get("timeout-minutes") is None]
-    assert offenders == ["probe.yml:unbounded"], offenders
+    reported = {line.split()[0].split(":")[1] for line in offenders(tmp_path)}
+    assert reported == {"unbounded", "boolean", "zero", "above", "text"}, offenders(tmp_path)
+
+
+def test_the_real_tree_has_no_offenders() -> None:
+    """The same function over the real workflows — one call, so the two cannot diverge."""
+    assert offenders(WORKFLOWS) == []
