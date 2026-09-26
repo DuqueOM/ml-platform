@@ -1,3 +1,7 @@
+---
+description: Invoke the test-authoring skill — write tests that falsify rather than cover, each verified to fail without its fix
+---
+
 # /tests
 
 Invokes the `test-authoring` skill.

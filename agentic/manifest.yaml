@@ -83,55 +83,77 @@ context:
 # Adapter surfaces. Parity is the point: a rule that binds under one tool binds
 # under all of them. Adding a surface must never require editing a canonical
 # body.
+#
+# `layout` is a path pattern per kind, from the repository root, with `{name}`
+# for the artifact's identity. It is a pattern and not a directory because the
+# tools do not agree on shape: a skill is a DIRECTORY holding `SKILL.md` for
+# every tool that discovers skills, while a rule or a command is one file. Until
+# QA-4 round twelve this was `<root>/<dir>/<name><extension>` for every kind,
+# which put all 29 skills at `.claude/skills/<id>.md` — a path Claude Code does
+# not read — while both surface checks stayed green, because they compared the
+# renderer with this file and never with the tools.
+#
+# Two surfaces may name the same pattern. Cursor and Codex both read the open
+# Agent Skills directory `.agents/skills/`, and Codex reads nothing else at
+# repository scope; rendering Cursor's copy under `.cursor/skills/` as well
+# would list every skill twice there. A shared path is rendered once, naming
+# every surface that publishes it.
+#
+# `front_matter` lists the kinds whose files open with YAML front-matter: a
+# skill's `name` and `description`, a Claude command's `description`. The
+# tools read them to list and route; without it Claude described every command
+# by its first line — the "generated" marker.
 # -----------------------------------------------------------------------------
 surfaces:
   claude:
     root: .claude
     mode: pointer
     layout:
-      rules: rules
-      skills: skills
-      workflows: commands
-    extension: .md
+      rules: .claude/rules/{name}.md
+      skills: .claude/skills/{name}/SKILL.md
+      workflows: .claude/commands/{name}.md
+    front_matter: [skills, workflows]
     context:
       path: .claude_context.md
       tool: Claude Code
       discovery:
         - "`CLAUDE.md` at the root is loaded automatically. It is itself a pointer to `AGENTS.md`, so the authority chain has one root and no tool-specific fork."
         - "A rule under `.claude/rules/` is not auto-attached by path. Open the rules whose scope covers the files you are touching; the scope is stated in the canonical body, not in the pointer."
-        - "A file under `.claude/skills/` is listed as a skill, but its body is a pointer — read `agentic/skills/<id>/SKILL.md` before running the procedure, because the front-matter that declares the operation's mode lives there."
-        - "A file under `.claude/commands/` backs the `/<name>` slash command; the workflow body it names is canonical under `agentic/workflows/`."
+        - "Each directory under `.claude/skills/` is a registered skill: its `SKILL.md` carries the `name` and `description` Claude routes on, and the operation's mode at the end of the description. The body is a pointer — read `agentic/skills/<id>/SKILL.md` before running the procedure; the full front-matter, allowed tools included, lives there and is deliberately not copied."
+        - "A file under `.claude/commands/` backs the `/<name>` slash command, described by its own front-matter; the workflow body it names is canonical under `agentic/workflows/`."
 
   cursor:
     root: .cursor
     mode: pointer
     layout:
-      rules: rules
-      skills: skills
-      workflows: commands
-    extension: .mdc
+      rules: .cursor/rules/{name}.mdc
+      skills: .agents/skills/{name}/SKILL.md
+      workflows: .cursor/commands/{name}.md
+    front_matter: [skills]
     context:
       path: .cursor_context.md
       tool: Cursor
       discovery:
         - "`.cursor/rules/*.mdc` are rendered by the same generator as every other surface, so they carry **no `globs:` / `alwaysApply:` front-matter**. Cursor therefore attaches none of them automatically — a rule binds because `AGENTS.md` says it does, not because the editor injected it. Read the ones covering your files yourself."
-        - "A file under `.cursor/commands/` backs the `/<name>` command; a file under `.cursor/skills/` names a procedure. Both are pointers — the body they name under `agentic/` is the thing to read."
+        - "Skills are under `.agents/skills/<id>/SKILL.md`, the open Agent Skills directory Cursor reads alongside `.cursor/skills/`, shared with Codex so that each skill is listed once. Each is a pointer with `name` and `description`; the body it names under `agentic/skills/` is the thing to read."
+        - "A file under `.cursor/commands/` backs the `/<name>` command. Commands are plain markdown — Cursor does not read `.mdc` there — and each is a pointer to its canonical workflow under `agentic/workflows/`."
         - "Do not add front-matter to a `.mdc` file to make it auto-attach: it is generated output and the next `sync_agentic_adapters.py` run deletes the edit. Auto-attachment is a renderer change, in `scripts/sync_agentic_adapters.py`."
 
   codex:
     root: .codex
     mode: pointer
     layout:
-      rules: rules
-      skills: skills
-      workflows: automations
-    extension: .md
+      rules: .codex/rules/{name}.md
+      skills: .agents/skills/{name}/SKILL.md
+      workflows: .codex/automations/{name}.md
+    front_matter: [skills]
     context:
       path: .codex_context.md
       tool: Codex
       discovery:
         - "`AGENTS.md` at the repository root is read automatically and is the authority here, so this surface deliberately adds no second contract."
-        - "Workflows land under `.codex/automations/`, not `workflows/` — the same canonical bodies as every other surface, under the name this tool uses. A workflow missing from `agentic/workflows/` is missing here too; the reverse cannot happen, because an orphan is deleted on the next render."
+        - "Skills are under `.agents/skills/<id>/SKILL.md` — the only place Codex discovers skills inside a repository — and are shared with Cursor. Each carries the `name` and `description` Codex requires; the body is a pointer to `agentic/skills/<id>/SKILL.md`."
+        - "Workflows land under `.codex/automations/`, not `workflows/` — the same canonical bodies as every other surface, under the name this tool uses. Codex does not discover them on its own: they are read because `AGENTS.md` names them. A workflow missing from `agentic/workflows/` is missing here too; the reverse cannot happen, because an orphan is deleted on the next render."
         - "`.codex/mcp.example.json` is the committed example. The live `.codex/mcp.json` is adopter-owned, gitignored, and never rendered by the generator."
 
   devin:
@@ -141,10 +163,10 @@ surfaces:
     root: .devin
     mode: mirror
     layout:
-      rules: rules
-      skills: skills
-      workflows: workflows
-    extension: .md
+      rules: .devin/rules/{name}.md
+      skills: .devin/skills/{name}.md
+      workflows: .devin/workflows/{name}.md
+    front_matter: []
     context:
       path: .devin_context.md
       tool: Devin

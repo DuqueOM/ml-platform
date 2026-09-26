@@ -674,7 +674,7 @@ tree. The auditor's edit, with the manifest updated to match, must fail it.
 
 ### R12-2 — Claude Code registers none of the 29 skills
 
-**Mode**: AUTO · **Source**: round twelve P0-1 · **Size**: ~2h
+**Mode**: AUTO · **Source**: round twelve P0-1 · **Size**: ~2h · **Closed** by *fix(agentic): QA-4 round twelve, P0 — render every surface where its tool looks*, which found Cursor and Codex broken the same way and fixed all three
 
 The adapter renders `.claude/skills/<id>.md`; Claude Code discovers
 `.claude/skills/<id>/SKILL.md` with frontmatter. `sync_agentic_adapters.py

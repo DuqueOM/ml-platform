@@ -1,3 +1,7 @@
+---
+description: Invoke the qa-procedure skill — run QA-1..QA-7 as executable steps with preconditions, evidence and STOP points
+---
+
 # /qa
 
 Invokes the `qa-procedure` skill.

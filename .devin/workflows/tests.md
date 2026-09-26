@@ -2,6 +2,10 @@
 <!-- surface: devin | canonical: agentic/workflows/tests.md -->
 <!-- This is a MIRROR. Edit the canonical source, never this file. -->
 
+---
+description: Invoke the test-authoring skill — write tests that falsify rather than cover, each verified to fail without its fix
+---
+
 # /tests
 
 Invokes the `test-authoring` skill.

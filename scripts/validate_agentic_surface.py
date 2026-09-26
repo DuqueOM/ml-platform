@@ -17,6 +17,12 @@ Checks:
   V4  Mirror surfaces match their canonical body exactly.
   V5  Pointer surfaces contain no policy text — only the pointer.
   V6  Every rule declares its authority, and it resolves.
+  V7  Every artifact is where its TOOL looks for it, with the front-matter the
+      tool requires. V1 compares the surfaces with the manifest; V7 compares
+      them with the tools, from a table this file keeps apart from the
+      manifest. Without it, a manifest naming the wrong place passed V1 by
+      construction: all 29 skills sat where Claude Code never looks, and every
+      check here stayed green (QA-4 round twelve, P0-1).
 
 Exit 1 on any failure. `--strict` additionally fails on warnings.
 """
@@ -91,6 +97,45 @@ def _modes_in(text: str, modes: list[str]) -> set[str]:
     return found
 
 
+# What each tool discovers, from its own documentation, checked 2026-09-23:
+#   Claude Code  https://code.claude.com/docs/en/skills — `.claude/skills/<name>/SKILL.md`;
+#                commands `.claude/commands/<name>.md`, listed by `description`.
+#   Cursor       https://cursor.com/docs/skills — `.cursor/skills/` or
+#                `.agents/skills/<name>/SKILL.md`, `name` must equal the folder;
+#                commands are plain markdown in `.cursor/commands/`.
+#   Codex        https://learn.chatgpt.com/docs/build-skills — `.agents/skills/<name>/SKILL.md`
+#                from the working directory up to the repository root, and nowhere
+#                else in a repository; `name` and `description` required.
+# Deliberately NOT derived from `agentic/manifest.yaml`: this is the other side
+# of the comparison. A kind absent here is one whose discovery this repository
+# does not claim — rules everywhere, and every Devin path, reach the agent
+# because AGENTS.md names them, not because a tool indexed them.
+DISCOVERY: dict[str, dict[str, tuple[tuple[str, ...], tuple[str, ...]]]] = {
+    "claude": {
+        "skills": ((".claude/skills/{name}/SKILL.md",), ("name", "description")),
+        "workflows": ((".claude/commands/{name}.md",), ("description",)),
+    },
+    "cursor": {
+        "skills": ((".cursor/skills/{name}/SKILL.md", ".agents/skills/{name}/SKILL.md"), ("name", "description")),
+        "workflows": ((".cursor/commands/{name}.md",), ()),
+    },
+    "codex": {
+        "skills": ((".agents/skills/{name}/SKILL.md",), ("name", "description")),
+    },
+}
+# The open Agent Skills limit, which the three tools above share.
+MAX_DESCRIPTION = 1024
+
+
+def surface_path(cfg: dict[str, Any], kind: str, name: str) -> Path:
+    """Where the manifest says one surface publishes one artifact."""
+    return REPO_ROOT / str(cfg["layout"][kind]).replace("{name}", name)
+
+
+def _layout_regex(pattern: str) -> re.Pattern[str]:
+    return re.compile(re.escape(pattern).replace(re.escape("{name}"), "([^/]+)") + "$")
+
+
 def collect_canonical(manifest: dict[str, Any]) -> dict[str, dict[str, Path]]:
     out: dict[str, dict[str, Path]] = {}
     for kind, store in manifest["stores"].items():
@@ -104,18 +149,24 @@ def collect_canonical(manifest: dict[str, Any]) -> dict[str, dict[str, Path]]:
 
 
 def check_parity(manifest: dict[str, Any], canonical: dict[str, dict[str, Path]]) -> None:
-    """V1 — every canonical body reaches every surface."""
+    """V1 — every canonical body reaches every surface, and nothing else is there."""
     for surface, cfg in manifest["surfaces"].items():
         for kind, entries in canonical.items():
-            subdir = cfg["layout"][kind]
-            directory = REPO_ROOT / cfg["root"] / subdir
-            ext = cfg["extension"]
-            present = {p.stem for p in directory.glob(f"*{ext}")} if directory.is_dir() else set()
-            missing = set(entries) - present
-            orphan = present - set(entries)
-            for name in sorted(missing):
+            pattern = str(cfg["layout"][kind])
+            base = REPO_ROOT / pattern.split("{name}")[0]
+            matcher = _layout_regex(pattern)
+            present: set[str] = set()
+            if base.is_dir():
+                for path in sorted(p for p in base.rglob("*") if p.is_file()):
+                    rel = path.relative_to(REPO_ROOT).as_posix()
+                    match = matcher.match(rel)
+                    if match:
+                        present.add(match.group(1))
+                    elif not any(_layout_regex(str(p)).match(rel) for p in cfg["layout"].values()):
+                        fail("V1", f"{surface}: {rel} is not at a path the {kind} layout produces")
+            for name in sorted(set(entries) - present):
                 fail("V1", f"{surface}: {kind}/{name} is not published")
-            for name in sorted(orphan):
+            for name in sorted(present - set(entries)):
                 fail("V1", f"{surface}: {kind}/{name} has no canonical source (orphan)")
     total = sum(len(v) for v in canonical.values())
     ok("V1", f"{total} artifacts x {len(manifest['surfaces'])} surfaces")
@@ -152,7 +203,7 @@ def check_no_de_escalation(manifest: dict[str, Any], canonical: dict[str, dict[s
             continue  # pointers carry no policy text to weaken
         for kind, entries in canonical.items():
             for name, source in entries.items():
-                target = REPO_ROOT / cfg["root"] / cfg["layout"][kind] / f"{name}{cfg['extension']}"
+                target = surface_path(cfg, kind, name)
                 if not target.is_file():
                     continue  # already reported by V1
                 want = _modes_in(source.read_text(encoding="utf-8"), modes)
@@ -187,7 +238,7 @@ def check_mirror_fidelity(manifest: dict[str, Any], canonical: dict[str, dict[st
         drifted = 0
         for kind, entries in canonical.items():
             for name, source in entries.items():
-                target = REPO_ROOT / cfg["root"] / cfg["layout"][kind] / f"{name}{cfg['extension']}"
+                target = surface_path(cfg, kind, name)
                 if not target.is_file():
                     continue
                 expected = rewrite_relative_links(source.read_text(encoding="utf-8"), source.parent, target.parent)
@@ -208,11 +259,8 @@ def check_pointer_purity(manifest: dict[str, Any]) -> None:
     for _surface, cfg in manifest["surfaces"].items():
         if cfg["mode"] != "pointer":
             continue
-        for subdir in set(cfg["layout"].values()):
-            directory = REPO_ROOT / cfg["root"] / subdir
-            if not directory.is_dir():
-                continue
-            for path in sorted(directory.glob(f"*{cfg['extension']}")):
+        for pattern in cfg["layout"].values():
+            for path in sorted(REPO_ROOT.glob(str(pattern).replace("{name}", "*"))):
                 text = path.read_text(encoding="utf-8")
                 if GENERATED_MARKER not in text:
                     fail("V5", f"{path.relative_to(REPO_ROOT)} is not generated — hand-edited surface file")
@@ -238,6 +286,52 @@ def check_rule_authority(canonical: dict[str, dict[str, Path]], manifest: dict[s
     ok("V6", f"{len(canonical.get('rules', {}))} rules carry a resolvable authority")
 
 
+def check_discovery(manifest: dict[str, Any], canonical: dict[str, dict[str, Path]]) -> None:
+    """V7 — each artifact is where its tool looks, carrying what the tool reads.
+
+    A surface in the manifest with no entry in DISCOVERY is reported, so a new
+    tool cannot arrive with its discovery silently unverified; Devin is the one
+    surface that is deliberately absent, and says so.
+    """
+    for surface in manifest["surfaces"]:
+        if surface not in DISCOVERY and surface != "devin":
+            fail("V7", f"{surface}: no discovery contract recorded — add what the tool reads to DISCOVERY")
+    checked = 0
+    for surface, kinds in DISCOVERY.items():
+        if surface not in manifest["surfaces"]:
+            continue
+        for kind, (patterns, required) in kinds.items():
+            # The surface's OWN layout must be a place its tool reads. Finding
+            # the file is not enough: Cursor and Codex share `.agents/skills/`,
+            # so a Codex layout pointed elsewhere still "found" Cursor's copy,
+            # and would have gone blind the day Cursor's moved.
+            published = manifest["surfaces"][surface]["layout"].get(kind)
+            if published not in patterns:
+                fail("V7", f"{surface}: publishes {kind} to {published}, which the tool does not read")
+            for name in canonical.get(kind, {}):
+                found = [REPO_ROOT / p.replace("{name}", name) for p in patterns]
+                path = next((f for f in found if f.is_file()), None)
+                if path is None:
+                    fail("V7", f"{surface}: {kind}/{name} is not where the tool looks ({' or '.join(patterns)})")
+                    continue
+                checked += 1
+                if not required:
+                    continue
+                fm = _front_matter(path.read_text(encoding="utf-8"))
+                rel = path.relative_to(REPO_ROOT)
+                if fm is None:
+                    fail("V7", f"{rel} has no front-matter; the tool lists it by {', '.join(required)}")
+                    continue
+                for key in required:
+                    if not fm.get(key):
+                        fail("V7", f"{rel} front-matter is missing {key!r}")
+                if "name" in required and fm.get("name") and fm["name"] != path.parent.name:
+                    fail("V7", f"{rel} declares name {fm['name']!r}; the tool requires its folder name")
+                if len(str(fm.get("description", ""))) > MAX_DESCRIPTION:
+                    fail("V7", f"{rel} description exceeds {MAX_DESCRIPTION} characters")
+    ok("V7", f"{checked} artifacts are where Claude Code, Cursor and Codex look for them")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--strict", action="store_true", help="treat warnings as failures")
@@ -255,6 +349,7 @@ def main() -> int:
     check_mirror_fidelity(manifest, canonical)
     check_pointer_purity(manifest)
     check_rule_authority(canonical, manifest)
+    check_discovery(manifest, canonical)
 
     for note in notes:
         print(f"  ok   {note}")
