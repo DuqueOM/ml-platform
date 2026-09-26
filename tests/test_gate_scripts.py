@@ -770,6 +770,84 @@ def test_c5_prints_no_ok_above_its_own_failure() -> None:
     assert "ok  [C5]" not in result.stdout, result.stdout
 
 
+# --- C10: anchors -------------------------------------------------------------
+# QA-4 round twelve (P3-2) pointed a link at `#no-such-heading` and the link
+# checker stayed green, and found RUNBOOK.md linking to a heading renamed long
+# before. Each test below was watched failing with C10 removed.
+
+_RULE_14 = REPO_ROOT / "agentic" / "rules" / "14-github-actions.md"
+_ANCHOR_PROBE = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.md"
+
+
+def test_c10_fails_the_audits_dead_anchor() -> None:
+    """Round twelve's mutation B, verbatim."""
+    original = _RULE_14.read_text(encoding="utf-8")
+    mutated = original.replace(
+        "ADR-003-service-template-consumption.md)", "ADR-003-service-template-consumption.md#no-such-heading)", 1
+    )
+    assert mutated != original, "probe did not apply — the rule no longer links ADR-003"
+
+    with temporarily(_RULE_14, mutated):
+        result = _run(GATES["doc-coherence"], "--only", "C10")
+
+    assert result.returncode == 1
+    assert "14-github-actions.md links to #no-such-heading" in result.stdout
+
+
+def test_c10_fails_the_anchor_runbook_actually_had() -> None:
+    runbook = REPO_ROOT / "RUNBOOK.md"
+    original = runbook.read_text(encoding="utf-8")
+    mutated = original.replace(
+        "technical-plan.md#findings-from-the-parity-work)",
+        "technical-plan.md#open-findings-from-the-parity-work--measured-not-yet-fixed)",
+        1,
+    )
+    assert mutated != original, "probe did not apply — RUNBOOK no longer links the parity findings"
+
+    with temporarily(runbook, mutated):
+        result = _run(GATES["doc-coherence"], "--only", "C10")
+
+    assert result.returncode == 1
+    assert "RUNBOOK.md links to #open-findings-from-the-parity-work--measured-not-yet-fixed" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("heading", "slug"),
+    [
+        (
+            "Open findings from the parity work — measured, not yet fixed",
+            "open-findings-from-the-parity-work--measured-not-yet-fixed",
+        ),
+        ("`C7` — audit freshness", "c7--audit-freshness"),
+        ("What *this* does NOT claim", "what-this-does-not-claim"),
+        ("ADR-010: the [export](x.md)", "adr-010-the-export"),
+        ("snake_case names", "snake_case-names"),
+        ("An _emphasised_ word", "an-emphasised-word"),
+    ],
+)
+def test_c10_slugs_headings_the_way_github_does(heading: str, slug: str) -> None:
+    sys.path.insert(0, str(SCRIPTS))
+    import check_doc_coherence as coherence
+
+    assert coherence.heading_slug(heading) == slug
+
+
+def test_c10_reads_repeats_explicit_ids_and_skips_code() -> None:
+    body = (
+        '# probe\n\n## Same\n\n## Same\n\n<a id="Pinned"></a>\n\n'
+        "[a](#same) [b](#same-1) [c](#pinned) `[d](#nope-inline)`\n\n"
+        "```text\n[e](#nope-fenced)\n```\n"
+    )
+    with temporarily(_ANCHOR_PROBE, body):
+        clean = _run(GATES["doc-coherence"], "--only", "C10")
+    assert clean.returncode == 0, clean.stdout
+
+    with temporarily(_ANCHOR_PROBE, body + "\n[f](#same-2)\n"):
+        dead = _run(GATES["doc-coherence"], "--only", "C10")
+    assert dead.returncode == 1
+    assert "_gate_probe.md links to #same-2" in dead.stdout
+
+
 # --- the tree is left as it was found ---------------------------------------
 
 
