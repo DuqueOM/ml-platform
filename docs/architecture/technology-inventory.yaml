@@ -109,7 +109,11 @@ categories:
   - name: Databases
     items:
       - {id: postgres, tier: core, detect: ["platform/local/manifests/10-postgres.yaml"]}
-      - {id: pgvector, tier: core, detect: ["pattern:pgvector|platform/local"]}
+      # `environment:`, not `pattern:` — the match is an image name in a local
+      # manifest, and no code path here issues a vector query. This rendered ✅
+      # at Core tier while the technical plan listed pgvector retrieval as open
+      # Phase 3 work; both were right about different things (QA-4 W-12).
+      - {id: pgvector, tier: core, detect: ["environment:pgvector|platform/local"]}
       - {id: bigquery, tier: core, detect: ["pattern:bigquery|platform/terraform"]}
       - {id: athena, tier: core, detect: ["pattern:athena|platform/terraform"]}
   - name: Data quality

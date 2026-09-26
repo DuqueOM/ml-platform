@@ -46,6 +46,7 @@ verify: ## Run every repository gate (superset of CI's; see RUNBOOK for what it 
 	uv run python scripts/check_action_pins.py
 	uv run python scripts/check_artifact_compatibility.py
 	uv run python scripts/check_baselines_expiry.py
+	uv run python scripts/check_contract_deviations.py --check
 	uv run python scripts/check_dashboard_inventory.py
 	uv run python scripts/check_gitleaks_pin.py
 	uv run python scripts/check_library_reuse.py
@@ -65,6 +66,7 @@ verify: ## Run every repository gate (superset of CI's; see RUNBOOK for what it 
 sync: ## Re-render agentic surfaces and refresh derived docs
 	uv run python scripts/sync_agentic_adapters.py
 	uv run python scripts/check_technology_inventory.py --write
+	uv run python scripts/check_contract_deviations.py --write
 	uv run python scripts/check_implementation_status.py --write
 
 # --- local validation stack (Phase 1b) --------------------------------------
