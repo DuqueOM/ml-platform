@@ -60,7 +60,7 @@ def test_redact_preserves_machine_ids() -> None:
     """Machine IDs (UUIDs, timestamps, semver) must survive redaction intact.
 
     Their digit runs would otherwise be mangled by the phone pattern, which
-    would destroy traceability (regression guard — ADR-005).
+    would destroy traceability (regression guard — store-ADR-005).
     """
     obj = {
         "trace_id": "00000000-1111-2222-3333-444455556666",

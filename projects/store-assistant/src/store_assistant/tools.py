@@ -37,7 +37,7 @@ def build_registry(config: UsecaseConfig) -> ToolRegistry:
     """
     fixtures: Path = config.fixtures_dir
     # Fail-closed: the registry refuses non-read-only tools while the use-case is
-    # in a read-only phase (ADR-006). Phase is sourced from config (`phase:`).
+    # in a read-only phase (store-ADR-006). Phase is sourced from config (`phase:`).
     registry = ToolRegistry(read_only_mode=config.read_only_mode)
 
     def _load(name: str) -> dict[str, Any]:

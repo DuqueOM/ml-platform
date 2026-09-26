@@ -8,7 +8,7 @@ name: tienda
 language: es
 
 # Lifecycle phase. 1 = read-only (fixtures); the tool registry refuses mutating
-# tools (ADR-006). Set to 2 only once real mutating backends + their evals exist.
+# tools (store-ADR-006). Set to 2 only once real mutating backends + their evals exist.
 phase: 1
 
 # Closed set of intents the router may emit (enforced by the grammar AND
@@ -24,7 +24,7 @@ allowed_intents:
   - unknown
 
 # llama.cpp (OpenAI-compatible) endpoints per tier. Override via deployment.
-# Tier topology (ADR-011). ONE committed config serves all three profiles; the
+# Tier topology (store-ADR-011). ONE committed config serves all three profiles; the
 # environment decides which one is active:
 #
 #   local-only  export nothing -> tiers 1..3 expand to an empty URL and are
@@ -34,7 +34,7 @@ allowed_intents:
 #               for any environment that holds provider credentials.
 #   all-remote  additionally point AGENT_TIER0_URL at a remote endpoint and set
 #               AGENT_TIER0_KIND=remote. ~0 GB RAM (CI). Note that GBNF routing
-#               constraints are unavailable there — see ADR-011 Consequences.
+#               constraints are unavailable there — see store-ADR-011 Consequences.
 #
 # Credentials are named, never inlined: `api_key_env` is a VARIABLE NAME.
 tier_endpoints:
@@ -43,7 +43,7 @@ tier_endpoints:
     kind: "${AGENT_TIER0_KIND:-local}"
     model: "${AGENT_TIER0_MODEL:-}"
     api_key_env: "${AGENT_TIER0_API_KEY_ENV:-}"
-    # ADR-012: where the weights are resident decides which budget they are
+    # store-ADR-012: where the weights are resident decides which budget they are
     # charged against. The measured 43 tok/s (bench/RESULTS.md) is a GPU
     # number; the same model on CPU exceeds available system RAM and swaps.
     device: "${AGENT_TIER0_DEVICE:-gpu}"
@@ -76,7 +76,7 @@ tiers:
     jitter: 0.25
 
 # Size caps that protect the small-model context budget (I-4), plus the
-# resident-memory invariant (ADR-011).
+# resident-memory invariant (store-ADR-011).
 limits:
   observation_chars: 4000   # per tool result injected into a prompt
   retrieval_chars: 2000     # per BM25 document returned by semantic_retrieval
@@ -86,10 +86,10 @@ limits:
                             # and config load fails rather than let the OOM
                             # killer discover the overcommit at request time.
 
-  # Per-device budgets (ADR-012), measured on the reference workstation
+  # Per-device budgets (store-ADR-012), measured on the reference workstation
   # 2026-08-05. Each value records HOW it was obtained, because the first
   # version of these numbers came from single readings and was wrong — see
-  # the "Correction" section of ADR-012.
+  # the "Correction" section of store-ADR-012.
   #
   #   gpu: RTX 5070 Laptop, 8150 MiB total. The desktop's hold on the dGPU
   #        FLUCTUATES; sampled repeatedly it sits at 241-252 MiB, not the

@@ -31,7 +31,7 @@ is generated from it and not edited.
   acceptance commands
 - `docs/architecture/implementation-status.md` — **what exists**, derived from
   the filesystem. When the two disagree, this one is correct
-- `docs/decisions/` — 10 ADRs. Never deleted or renumbered; a wrong decision is
+- `docs/decisions/` — 11 ADRs. Never deleted or renumbered; a wrong decision is
   superseded so the reasoning survives
 - `SECURITY.md` — reporting, and which findings belong upstream instead
 

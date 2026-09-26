@@ -72,6 +72,50 @@ _ADR_REF = re.compile(r"(?<![A-Za-z_/-])ADR-(\d{3})")
 # Inherited bodies use ml-service-template's numbering, namespaced so a
 # reference can never silently resolve against the wrong index (ADR-002).
 _INHERITED_ADR_REF = re.compile(r"\btemplate-ADR-(\d{3})")
+# A project-scope reference: `store-ADR-006`. The prefix is the namespace and
+# the file name is the index — `projects/*/docs/decisions/store-ADR-006-*.md`
+# — so no project is named here. `template-` is excluded: its index lives in
+# another repository and is resolved separately, above.
+#
+# The pattern is deliberately BROADER than a valid citation — any case, any
+# number of digits — so that a malformed one is seen and failed rather than
+# silently not matched. QA-4 round twelve wrote `store-ADR-9` and
+# `Store-ADR-099` into code and C2 stayed green, because the narrow pattern
+# never saw them.
+_NAMESPACED_ADR_REF = re.compile(r"(?<![A-Za-z0-9_/-])([A-Za-z][A-Za-z0-9]*)-ADR-(\d+)(?!\d)")
+_NAMESPACED_ADR_FILE = re.compile(r"^([a-z][a-z0-9]*)-ADR-(\d{3})-[a-z0-9-]+\.md$")
+# A bare citation with the wrong number of digits, which `_ADR_REF` never sees.
+_MALFORMED_BARE_ADR_REF = re.compile(r"(?<![A-Za-z0-9_/-])ADR-(\d{1,2}|\d{4,})(?!\d)")
+#: English words that stand before "-ADR-NNN" as prose, not as a namespace:
+#: `pre-ADR-011` is "before ADR-011". Compared case-insensitively, because
+#: `Pre-ADR-011` opens a sentence in the agent core's tests. Everything else
+#: before "-ADR-" is a namespace claim, and an unknown one now FAILS: round
+#: twelve found the earlier rule — skip any namespace nobody defined — let a
+#: misspelt one pass silently. Add a word here only for prose that is not a
+#: citation.
+_ENGLISH_PREFIXES = frozenset({"non", "pre"})
+#: Where a citation documents a design decision outside markdown. `scripts/`
+#: and `tests/` are deliberately out: every bare reference in them resolves to
+#: this repository's own index, and tests write references that do NOT exist on
+#: purpose — `See ADR-999` is how the suite proves this very check can fail.
+_CODE_ROOTS = ("libs", "projects")
+#: Configuration and evaluation data cite decisions too. Round twelve found
+#: nine agent-local citations left bare in a YAML config and a JSONL eval set
+#: after every `.py` beside them had been qualified — the defect, surviving one
+#: file type over from where the fix stopped.
+_CODE_SUFFIXES = frozenset({".py", ".yaml", ".yml", ".jsonl", ".toml"})
+#: Trees migrated from agent-local (ADR-002), whose text was written in
+#: agent-local's numbering. agent-local's records 001-012 share numbers with
+#: this repository's 000-010, so a bare number here is AMBIGUOUS: existence
+#: cannot tell "our ADR-007" from "agent-local's ADR-007", and 22 citations once
+#: resolved to the wrong decision that way. Only the numbers below were checked
+#: to mean this repository's decision; any other bare number in these trees
+#: fails and must be written `store-ADR-NNN`, or added here after checking that
+#: it means ours. Naming directories is unavoidable for this rule — a
+#: migration is a fact about specific trees — and is why it lives apart from the
+#: namespace discovery above, which names none.
+_MIGRATED_TREES = ("libs/llm-core", "projects/store-assistant")
+_PLATFORM_CITATIONS_IN_MIGRATED_TREES = frozenset({"001", "002", "003", "004"})
 
 failures: list[str] = []
 notes: list[str] = []
@@ -196,22 +240,92 @@ def _template_adr_numbers() -> set[str]:
     return {match.group(1) for path in decisions.glob("ADR-*.md") if (match := _ADR_FILE.match(path.name))}
 
 
+def _namespaced_adr_index() -> dict[str, set[str]]:
+    """Namespace -> ADR numbers, discovered from project decision directories.
+
+    Before this existed a namespaced reference was skipped rather than checked:
+    the lookbehind that stops `store-ADR-006` reading as OUR ADR-006 also
+    stopped it being checked at all. `store-ADR-099` passed.
+    """
+    index: dict[str, set[str]] = {}
+    for path in sorted(REPO_ROOT.glob("projects/*/docs/decisions/*.md")):
+        match = _NAMESPACED_ADR_FILE.match(path.name)
+        if match:
+            index.setdefault(match.group(1), set()).add(match.group(2))
+    return index
+
+
+def _in_migrated_tree(path: Path) -> bool:
+    relative = path.relative_to(REPO_ROOT).as_posix()
+    return any(relative == tree or relative.startswith(tree + "/") for tree in _MIGRATED_TREES)
+
+
 def check_no_dangling_refs(adrs: dict[str, Path]) -> None:
     """C2 — no document points at an ADR number that does not exist.
 
     A reference that silently resolves to nothing is worse than a broken link:
     a reader assumes the decision exists and was considered.
     """
+    # Snapshot before scanning, as C6 does: this check printed `ok` above its
+    # own FAIL lines — the reassuring summary round seven removed from C6.
+    before = len(failures)
     on_disk = set(adrs)
     template_adrs = _template_adr_numbers()
+    namespaced = _namespaced_adr_index()
     scanned = 0
+    code_scanned = 0
     foreign = 0
+    resolved_namespaced = 0
     unresolvable = 0
+
+    def rel(path: Path) -> Path:
+        return path.relative_to(REPO_ROOT)
+
+    def check_namespaced(path: Path, text: str) -> None:
+        nonlocal resolved_namespaced
+        for ns, ref in set(_NAMESPACED_ADR_REF.findall(text)):
+            if ns.lower() in _ENGLISH_PREFIXES or ns == "template":
+                continue
+            if ns != ns.lower() or len(ref) != 3:
+                fail(
+                    "C2",
+                    f"{rel(path)} cites {ns}-ADR-{ref}, which is malformed — a namespace is "
+                    "lower-case and an ADR number has three digits",
+                )
+            elif ns not in namespaced:
+                fail(
+                    "C2",
+                    f"{rel(path)} cites {ns}-ADR-{ref}, but no projects/*/docs/decisions/ directory "
+                    f"defines a `{ns}` namespace — a misspelling, or prose this check should skip",
+                )
+            elif ref in namespaced[ns]:
+                resolved_namespaced += 1
+            else:
+                fail(
+                    "C2",
+                    f"{rel(path)} references {ns}-ADR-{ref}, which no projects/*/docs/decisions/ directory contains",
+                )
+
+    def check_bare(path: Path, text: str) -> None:
+        for ref in sorted(set(_ADR_REF.findall(text))):
+            if ref not in on_disk:
+                fail("C2", f"{rel(path)} references ADR-{ref}, which does not exist")
+            elif _in_migrated_tree(path) and ref not in _PLATFORM_CITATIONS_IN_MIGRATED_TREES:
+                fail(
+                    "C2",
+                    f"{rel(path)} cites bare ADR-{ref} in a tree migrated from agent-local, where the "
+                    f"number is ambiguous — write store-ADR-{ref} if it means agent-local's record, or "
+                    "add it to _PLATFORM_CITATIONS_IN_MIGRATED_TREES after checking it means ours",
+                )
+        for ref in sorted(set(_MALFORMED_BARE_ADR_REF.findall(text))):
+            fail("C2", f"{rel(path)} cites ADR-{ref}, which is malformed — an ADR number has three digits")
 
     for path in sorted(REPO_ROOT.rglob("*.md")):
         if not _is_scannable(path):
             continue
         scanned += 1
+        # Read once: round twelve found every markdown file read twice, once per scan.
+        text = _read(path)
 
         # `services/` holds code GENERATED from ml-service-template, and its
         # ADR numbers index the template's decisions rather than ours. They are
@@ -223,10 +337,8 @@ def check_no_dangling_refs(adrs: dict[str, Path]) -> None:
         # written by hand into a service, which is the case worth catching —
         # and reaching for a path exclusion is a reflex this repository has
         # already had to correct twice.
-        generated = "services" in _rel_parts(path)
-
-        for ref in set(_ADR_REF.findall(_read(path))):
-            if generated:
+        if "services" in _rel_parts(path):
+            for ref in set(_ADR_REF.findall(text)):
                 # The comment above promised this and the first version did not
                 # do it: with no template checkout — every CI runner — the
                 # index is EMPTY, so every foreign reference failed. A check
@@ -238,17 +350,34 @@ def check_no_dangling_refs(adrs: dict[str, Path]) -> None:
                 elif ref not in template_adrs:
                     fail(
                         "C2",
-                        f"{path.relative_to(REPO_ROOT)} references ADR-{ref}, absent from "
+                        f"{rel(path)} references ADR-{ref}, absent from "
                         "the template's index — it resolves against neither repository",
                     )
                 else:
                     foreign += 1
+            continue
+
+        check_bare(path, text)
+        check_namespaced(path, text)
+
+    # Code and configuration cite decisions too, and markdown-only scanning is
+    # why the agent core carried 57 references to ANOTHER repository's ADRs for
+    # six weeks: `ADR-009` in a comment about reflection notes meant
+    # agent-local's reflection-channel decision and resolved, silently, to this
+    # repository's data-versioning one. Existence cannot catch that; the
+    # migrated-tree rule in `check_bare` and the namespace prefix can.
+    for root in _CODE_ROOTS:
+        for path in sorted(p for p in (REPO_ROOT / root).rglob("*") if p.suffix in _CODE_SUFFIXES):
+            if not path.is_file() or not _is_scannable(path):
                 continue
+            code_scanned += 1
+            text = _read(path)
+            check_bare(path, text)
+            check_namespaced(path, text)
 
-            if ref not in on_disk:
-                fail("C2", f"{path.relative_to(REPO_ROOT)} references ADR-{ref}, which does not exist")
-
-    note = f"{scanned} markdown files scanned for dangling ADR references"
+    note = f"{scanned} markdown and {code_scanned} code/config files scanned for dangling ADR references"
+    if resolved_namespaced:
+        note += f"; {resolved_namespaced} project-scope references resolved against their own index"
     if foreign:
         note += f"; {foreign} resolved against the template's index"
     if unresolvable:
@@ -256,7 +385,8 @@ def check_no_dangling_refs(adrs: dict[str, Path]) -> None:
             f"; {unresolvable} in generated code NOT checked — no template checkout at "
             f"{TEMPLATE_CHECKOUT.name}/, so their index is unreachable here"
         )
-    ok("C2", note)
+    if len(failures) == before:
+        ok("C2", note)
 
 
 def check_adrs_are_integrated(adrs: dict[str, Path]) -> None:

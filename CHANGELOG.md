@@ -18,6 +18,178 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Added — ADR-010: this repository is authoritative for the agent core, and exports it
+
+- **The authority question ADR-002's correction left open is answered.**
+  `libs/llm-core` is authoritative; `DuqueOM/agent-local` is a one-way export of
+  it, produced only by the new `scripts/export_llm_core.py`. Measured first,
+  because the correction's own trigger said the answer was overdue once the two
+  copies diverged in behaviour — and they had: nine commits here against none
+  there since 2026-08-05, eleven of twelve shared files different, four modules
+  only here. The policy gate is still byte-identical in both, which made now the
+  cheapest moment to pick one source of truth.
+- **The exporter is an allowlist, not the package.** Twelve modules — exactly
+  the set agent-local already ships. `doc_corpus` and `doc_questions` stay here
+  because they enumerate this repository's documentation by path; exported,
+  they would describe files agent-local does not have. That coupling is also why
+  the dependency-direction test was credited with more than it guarantees: it
+  sees imports, not data.
+- **Citations are re-namespaced on the way out, in one pass.** `store-ADR-NNN`
+  becomes bare `ADR-NNN` downstream, where those are native; a bare reference to
+  one of *our* decisions becomes `platform-ADR-NNN`, because left bare it would
+  resolve to agent-local's decision of the same number. One pass is
+  load-bearing: two sequential substitutions map a store citation twice.
+- **Provenance without a timestamp.** `core/EXPORTED_FROM.json` records the
+  source commit and a SHA-256 of every file, so one commit exports
+  byte-identical output and `--check` means something. The script refuses
+  uncommitted source.
+- `tests/test_export_llm_core.py` pins every transform against the inputs that
+  are easy to get wrong, and turns ADR-010's third revisit trigger — an
+  allowlisted module naming this repository's files — into a failing test
+  rather than a thing to remember.
+- ADR-002 gains a second dated correction: "the business-agnostic upstream" was
+  inaccurate — nothing flowed from agent-local — and the revisit trigger that
+  should have caught it was written without measuring.
+- `llm_core/agent.py` told readers to construct an agent with `load_agent`,
+  which no longer exists here. It now names `build_agent`.
+- **Corrected by QA-4 round twelve** (entry below): "The script refuses
+  uncommitted source" was false for the script itself, `--allow-dirty` wrote a
+  real export, and "one commit exports byte-identical output" held only for one
+  destination version. The "nine commits" counted every commit to the package
+  since its founding; 2 touched the exported modules after the core landed.
+  ADR-010 carries a dated correction.
+
+### Fixed — the agent core cited another repository's decisions, and C2 could not see code
+
+- **48 references in `libs/llm-core` and `projects/store-assistant` pointed at
+  agent-local's ADRs by bare number.** The code was migrated from agent-local
+  (ADR-002), where the bare number for *hybrid tier topology* was eleven —
+  `store-ADR-011` here. This index runs 000 to 009, so every citation of an
+  agent-local number above nine pointed at nothing: 26 of them. The other 22
+  were worse: they **resolved, silently, to a different decision**.
+  `test_controller.py` cited `ADR-009` for "the reflection note leaked into the
+  verifier's evidence" — agent-local's reflection-channel decision — and it
+  resolved to this repository's ADR-009, *data versioning*. `ADR-006` (tool
+  capability contract) resolved to *edge protection*; `ADR-004` (cross-tier
+  verification) to *tooling triage*.
+- **Qualified as `store-ADR-NNN`**, the convention the store decisions README
+  already defines. Classified line by line rather than by search-and-replace,
+  because the same number means this repository's decision on one line and
+  agent-local's on the next: 43 by exact match against agent-local's original
+  source, 5 by reading lines that were rewritten after migration but still cite
+  the original decision, and 12 left bare because they genuinely mean ours.
+- **Why it survived: C2 scanned markdown only.** Extended to Python under
+  `libs/` and `projects/`, where a comment documents a design decision.
+  `scripts/` and `tests/` stay out — every reference there already resolves
+  here, and tests write a deliberately nonexistent reference on purpose, to
+  prove the gate can fail.
+- **A namespaced reference is now checked, not just skipped.** The lookbehind
+  that stopped `store-ADR-006` reading as our ADR-006 also stopped it being
+  checked at all, so a store reference to a number the store never recorded
+  passed. Namespaces are discovered from
+  `projects/*/docs/decisions/<ns>-ADR-NNN-*.md`, so no project is named in the
+  gate — the reason the generalisation was made in the first place. Only a
+  *known* namespace is a claim: the first version failed on a `pre-` prefix
+  in a real store ADR, which is English for "before that decision", not a
+  namespace called `pre`.
+- **What this cannot catch, stated rather than implied.** C2 checks that a
+  number exists, not that it means what the sentence says. The 22 silent
+  mis-resolutions would have passed any existence check. The protection against
+  that class is the namespace prefix itself; the gate only guards its louder
+  half.
+- Watched failing: against the pre-fix tree the extended C2 reports 11 distinct
+  dangling references in code; after, it passes and resolves 69 project-scope
+  references against their own index. Three regression tests in
+  `tests/test_gate_scripts.py` hold it there.
+- **Corrected by QA-4 round twelve.** The count was 57, not 48: nine more
+  agent-local citations lived in a YAML config and a JSONL eval set that C2
+  never read. And "the gate only guards its louder half" was too generous —
+  its three tests passed with two of its own halves removed. See the entry
+  below.
+
+### Fixed — QA-4 round twelve: C2's new guards could not fail, and it could not read YAML
+
+- **Round twelve removed two halves of the C2 extension and its tests stayed
+  green.** Dropping `projects/` from the code scan passed, because the only
+  code probe lived under `libs/`; deleting the namespaced check from the code
+  loop passed, because the only namespaced probe was markdown. Each test
+  exercised the half its author had touched. The auditor also put #86's own
+  defect back — bare `ADR-009` and `ADR-006` in the store tests — and C2 stayed
+  green.
+- **Nine citations remained, one file type over.** `config.yaml` (7) and
+  `11_injection.jsonl` (2) in the store assistant still cited
+  `store-ADR-006`, `store-ADR-007`, `store-ADR-011` and `store-ADR-012` by bare
+  number — two resolving to the wrong decision here, the rest to nothing. Qualified. C2 now reads `.py`, `.yaml`,
+  `.yml`, `.jsonl` and `.toml` under `libs/` and `projects/`.
+- **A bare number in a tree migrated from agent-local is now ambiguous, not
+  valid.** agent-local's records 001-012 share numbers with this repository's,
+  so existence cannot tell the two apart — which is how 22 citations resolved
+  to the wrong decision without failing anything, and why a bare ADR-010,
+  which exists since ADR-010 landed, would have done the same. In
+  `libs/llm-core` and `projects/store-assistant` only the numbers checked to
+  mean ours may appear bare (001-004); any other fails and must be qualified.
+- **An unknown or malformed namespace now fails.** The earlier rule skipped any
+  namespace nobody had defined, so a misspelt one passed. English prefixes
+  (`pre-`, `non-`) are skipped case-insensitively, because `Pre-ADR-011` opens
+  a sentence in the agent core's own tests. A namespace must be lower-case and
+  a number three digits; the pattern is deliberately broader than a valid
+  citation so that a malformed one is seen and failed.
+- **C2 printed `ok` above its own FAIL lines** — the defect round seven removed
+  from C6. It now prints `ok` only when it found nothing. C3, C4, C5 and C9
+  still print it unconditionally; that is recorded for a separate change.
+- Each markdown file is now read once, not twice.
+- **Watched failing against the auditor's mutations, not the author's.** Eleven
+  mutations — M-C2a and M-C2b from the audit, plus one per new rule — each
+  killed by the test written for it. The re-introduced defect now fails C2 on
+  both files, naming the fix.
+
+### Fixed — QA-4 round twelve: the exporter's guarantees were written, not enforced
+
+- **Three of ADR-010's guarantees were false of the code that shipped with
+  them.** The exporter left itself out of its clean-tree check, so an
+  uncommitted edit to it was stamped with a clean commit — one commit, two
+  different exports. `--allow-dirty` wrote a real export stamped `-dirty`.
+  Nothing checked where the commit came from, and the first export ran from a
+  branch commit a squash would orphan. Now the script counts itself as source,
+  `--allow-dirty` is refused without `--check`, and a write is refused unless
+  `HEAD` is an ancestor of `origin/main`. `--check` still runs anywhere.
+- **The tests covered the transforms and never ran the script.** Five of the
+  auditor's mutations passed all 17. One of them, dropping `re.MULTILINE`, ships
+  a `core/__init__.py` that still imports `llm_core`, so it cannot be imported.
+  The suite now builds a scratch git repository with the exporter and the
+  twelve modules and runs the real script against it. It imports the export
+  with `llm_core` blocked and recomputes every provenance hash. It also checks
+  that `--check` passes on a fresh export and reports drift after a one-byte
+  edit, and that a stray module, uncommitted source, an uncommitted exporter,
+  `--allow-dirty` alone, a commit off `main` and an unknown `origin/main` are
+  each refused.
+- **The boundary test saw one way of naming a host file out of six.** It
+  matched a quoted string starting `docs/` and missed the other forms:
+  `Path("docs") / ...`, concatenation, f-strings, a bare `QUICK_START.md` and a
+  backtick-quoted path. It now walks every string literal in the exported
+  modules. It flags a `docs` path component or the name of a document at this
+  repository's root or in `docs/`. Its first draft also flagged the word "docs"
+  in prose, in two modules, so prose negatives are now pinned too.
+- **Watched failing against the auditor's mutations, not the author's.** Eleven
+  mutations, each killed: E1-E5 from the audit, the three new guards, and three
+  ways to weaken the boundary detector. The first run found a survivor: no
+  fixture named the `docs` directory alone. That fixture was then added.
+- ADR-010 gains a dated correction. It gives the method for its commit count,
+  and it corrects §5, §6 and §7.
+
+### Fixed — QA-4 round twelve: the link check promised a scheduled sweep it did not have
+
+- `docs-quality.yml` said "the scheduled run below is the one that sweeps
+  everything", and it had no `schedule:`. The full sweep ran only when a push to
+  `main` touched a markdown file, so external link rot was never looked for on
+  its own. It now also runs weekly (Mondays 06:00 UTC, the template's cadence)
+  and on manual dispatch. A change to the workflow or to the link-check config
+  now triggers it too.
+- The step now says what it does not check: anchors. The audit pointed a link
+  at a heading that does not exist and the lane stayed green. It also found one
+  real dead anchor, `RUNBOOK.md:95`, which is fixed separately with the other
+  findings outside this change.
+
 ### Fixed — the link checker was configured but never run, and it had 17 dead links to find
 
 - **`.github/markdown-link-check.json` has existed since August and nothing
@@ -53,6 +225,9 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 - Corrected to `[ADR-003](../../docs/decisions/ADR-003-service-template-consumption.md)`,
   the convention already used correctly by one file in the same directory, and
   propagated to the four tool surfaces by `sync_agentic_adapters.py`.
+- **Corrected by QA-4 round twelve** (entry above): the workflow's own comment
+  promised a scheduled sweep that did not exist, and the check never looked at
+  anchors — neither of which this entry said.
 
 ### Changed — `agent-local` stays public; ADR-002's archival is reversed
 

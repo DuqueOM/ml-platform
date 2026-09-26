@@ -20,7 +20,7 @@ from store_assistant import USECASE_ROOT, build_registry
 class TierResolutionStub:
     """Gives a tier-client double the resolution half of the client contract.
 
-    Since ADR-011 the controller asks the tier client to collapse a requested
+    Since store-ADR-011 the controller asks the tier client to collapse a requested
     tier onto the topology that is actually configured before consulting the
     circuit breaker. A double has no topology, so it resolves every tier to
     itself — leaving existing call/tier assertions meaningful.

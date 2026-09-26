@@ -20,6 +20,7 @@ blast radius, matching the library decomposition rule in
 | [ADR-007](ADR-007-drift-detection-per-project-kind.md) | Drift is one contract and four detectors, not one implementation | Accepted |
 | [ADR-008](ADR-008-serving-a-forecast-from-a-classification-scaffold.md) | The generated service cannot serve this platform's first project | Proposed |
 | [ADR-009](ADR-009-data-versioning-ownership.md) | Three data-versioning mechanisms, one criterion each | Accepted |
+| [ADR-010](ADR-010-agent-core-authority.md) | `libs/llm-core` is authoritative for the agent core; `agent-local` is a one-way export of it | Accepted |
 
 ## Format
 

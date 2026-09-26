@@ -36,7 +36,7 @@ _PATTERNS = [
 # Machine-generated identifiers that are never PII. They contain digit runs
 # (UUIDs, ISO timestamps, semver) that the phone pattern would otherwise mangle,
 # which would destroy the very traceability the telemetry contract promises
-# (ADR-005). They are excluded from redaction by key.
+# (store-ADR-005). They are excluded from redaction by key.
 _SAFE_KEYS = frozenset({"trace_id", "decision_id", "policy_version", "ts"})
 
 
