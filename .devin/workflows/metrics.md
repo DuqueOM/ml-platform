@@ -2,6 +2,10 @@
 <!-- surface: devin | canonical: agentic/workflows/metrics.md -->
 <!-- This is a MIRROR. Edit the canonical source, never this file. -->
 
+---
+description: Invoke the quality-metrics skill — keep every published quality claim tied to a command that can fail a build
+---
+
 # /metrics
 
 Invokes the `quality-metrics` skill.

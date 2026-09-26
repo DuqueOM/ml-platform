@@ -402,7 +402,7 @@ git log --no-merges --oneline "$(grep -oE 'Last independent audit: [0-9-]+ \(([0
 
 | Finding | State |
 | --- | --- |
-| **P0-1** — Claude Code registers none of the 29 skills; both surface validators green | Open as **R12-2**, a separate change |
+| **P0-1** — Claude Code registers none of the 29 skills; both surface validators green | Closed, *fix(agentic): QA-4 round twelve, P0 — render every surface where its tool looks* — Cursor and Codex were broken the same way, and are fixed with it |
 | **P2-1** — C2's extension: its tests missed both of the auditor's mutations, and the original defect could be re-introduced | Closed, *fix(gates): QA-4 round twelve, P2 — C2's new guards could not fail, and it could not read YAML* |
 | **P2-2** — nine agent-local citations still bare in YAML and JSONL | Closed, same commit |
 | **P2-3** — the exporter's provenance: `--allow-dirty` wrote, an uncommitted exporter was stamped clean, nothing required `main` | Closed, *fix(export): QA-4 round twelve, P2 — the exporter's guarantees were written, not enforced* |
