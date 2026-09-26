@@ -359,6 +359,12 @@ the new test fails when a plan deliverable has no component.
 
 ### W-8 — Two mutable references inside a repository that pins everything else
 
+> **Status: done** — *fix(ci): pin the scanner this repository downloads, and widen the gate that missed it*. The
+> image tag half closed earlier with the placeholder tag. The kubescape half was worse than recorded: the asset
+> had been renamed upstream, so `releases/latest/download/kubescape-ubuntu-latest` 404s and the advisory step
+> reported that as success. Pinned to v4.0.14 with its published sha256, install split from scan so the tool can
+> fail, and gate P10 widened to moving download URLs — watched reporting the old line against `origin/main`.
+
 **Mode**: AUTO · **Closes**: F-12 · **Size**: ~1.5h
 
 1. **An unpinned executable in CI.** The `iac-security` job runs

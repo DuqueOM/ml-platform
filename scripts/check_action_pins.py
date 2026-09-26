@@ -69,6 +69,20 @@ _DIGEST = re.compile(r"^[0-9a-f]{40}$")
 #: The tag a digest was resolved from, as it appears in the trailing comment.
 _TAG = re.compile(r"\bv?\d+(?:\.\d+)*\b")
 
+#: A URL that resolves to different bytes over time. `releases/latest` is the
+#: one this repository shipped: CI downloaded a scanner from it for weeks, and
+#: when the asset was renamed upstream the request began 404ing while the job
+#: stayed green, because the step was advisory (QA-4 W-8).
+#:
+#: A `uses:` pinned to a SHA and a binary fetched from a moving URL are the
+#: same class — code that runs in CI, identified by something that can change
+#: underneath. One gate covers both, rather than two that can disagree about
+#: what "pinned" means.
+_MUTABLE_DOWNLOAD = re.compile(
+    r"https://[^\s\"']*?/(?:releases/latest/download|raw/(?:main|master)/|archive/refs/heads/(?:main|master))"
+    r"[^\s\"']*"
+)
+
 failures: list[str] = []
 notes: list[str] = []
 
@@ -110,10 +124,21 @@ def check() -> list[str]:
                     f"or upgraded — append `# vX.Y` naming the tag it was resolved from"
                 )
 
+    downloads = 0
+    for workflow in sorted(WORKFLOWS.glob("*.yml")):
+        for match in _MUTABLE_DOWNLOAD.finditer(workflow.read_text(encoding="utf-8")):
+            downloads += 1
+            found.append(
+                f"{workflow.name}: {match.group(0)} is a moving reference. The bytes behind it change without a "
+                f"commit here, and an asset renamed upstream turns into a 404 that a `continue-on-error` step "
+                f"reports as success — pin the release tag and verify the published digest"
+            )
+
     if not found:
         # Printed, not implied. A zero here would otherwise be
         # indistinguishable from a glob that stopped matching workflows.
         notes.append(f"{pinned} third-party action reference(s), all pinned to a commit and labelled")
+        notes.append(f"{downloads} moving download reference(s) in workflow run blocks")
     return found
 
 

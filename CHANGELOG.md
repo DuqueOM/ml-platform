@@ -558,6 +558,24 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Fixed
 
+- **A scanner this repository has been "running" for weeks was a 404.** QA-4
+  W-8. CI fetched kubescape from `releases/latest/download/kubescape-ubuntu-latest`.
+  That asset does not exist in v4 — the release publishes
+  `kubescape_4.0.14_linux_amd64` — so the download failed, the scan ran against
+  a file that was not a binary, and the step's `continue-on-error` reported the
+  whole thing as success. **A scanner that never runs produces no findings,
+  which is indistinguishable from a clean tree.**
+
+  The install is now its own step, pinned to `v4.0.14` and verified against the
+  sha256 published with that release, and it is **not** advisory: if the
+  download or the digest fails, the job goes red. Only the findings stay
+  advisory, which is what gate P8 actually says.
+
+  Gate P10 is widened from `uses:` references to any moving download URL in a
+  workflow — `releases/latest`, `raw/main`, `archive/refs/heads/main`. A pinned
+  action and a binary fetched from a URL whose bytes change are the same class,
+  and one gate covers both rather than two that can disagree about what pinned
+  means. Watched reporting the old line against `origin/main`.
 - **"Every CI job carries `timeout-minutes`" stopped being true a week after
   it was written.** The auto-merge workflow arrived with no bound, which is not
   a slow build: GitHub cancels a job after six hours, so a wedged step holds a
