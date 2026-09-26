@@ -267,6 +267,166 @@ def test_doc_coherence_fails_on_a_dangling_adr_reference() -> None:
     assert "ADR-999" in result.stdout
 
 
+def test_doc_coherence_fails_on_a_dangling_adr_reference_in_code() -> None:
+    """Code cites decisions too, and C2 read only markdown.
+
+    The agent core carried references like `ADR-011` in its comments for six
+    weeks: agent-local's hybrid-tier decision, and no such ADR here. Markdown-
+    only scanning never saw them. The probe is a Python file under `libs/`,
+    where a citation documents a design decision.
+    """
+    probe = REPO_ROOT / "libs" / "ml-core" / "src" / "ml_core" / "_gate_probe.py"
+    with temporarily(probe, '"""Probe."""\n\n# See ADR-999 for the reasoning.\n'):
+        result = _run(GATES["doc-coherence"])
+
+    assert result.returncode == 1
+    assert "_gate_probe.py references ADR-999" in result.stdout
+
+
+def test_doc_coherence_fails_on_a_dangling_namespaced_reference() -> None:
+    """A namespace prefix is a claim about another index, and is now checked.
+
+    The lookbehind that stops `store-ADR-006` reading as THIS repository's
+    ADR-006 used to stop it being checked at all, so `store-ADR-099` passed.
+    """
+    probe = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.md"
+    with temporarily(probe, "# probe\n\nSee store-ADR-099 for details.\n"):
+        result = _run(GATES["doc-coherence"])
+
+    assert result.returncode == 1
+    assert "store-ADR-099" in result.stdout
+
+
+def test_doc_coherence_does_not_read_prose_as_a_namespace() -> None:
+    """`pre-ADR-011` is English for "before ADR-011", not a namespace `pre`.
+
+    The first version of the namespaced check failed on exactly that phrase,
+    in a real ADR. Only a namespace that has an index is a claim.
+    """
+    probe = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.md"
+    with temporarily(probe, "# probe\n\nThe pre-ADR-005 layout, a non-ADR-003 path. Pre-ADR-005, it was flat.\n"):
+        result = _run(GATES["doc-coherence"])
+
+    assert result.returncode == 0, result.stdout
+    for prose in ("pre-ADR-005", "non-ADR-003", "Pre-ADR-005"):
+        assert prose not in result.stdout, result.stdout
+
+
+# --- C2's round-twelve negative controls ------------------------------------
+#
+# QA-4 round twelve found that the C2 extension's first tests each exercised
+# only the half its author had touched: the code probe lived under libs/, so
+# dropping projects/ from the scan passed; the namespaced probe was markdown,
+# so deleting the namespaced check from the code loop passed. Each test below
+# is written against one of the auditor's mutations, and was watched failing
+# under it — not under a mutation chosen by the author.
+
+_ML_CORE = REPO_ROOT / "libs" / "ml-core" / "src" / "ml_core"
+_FORECAST = REPO_ROOT / "projects" / "demand-forecast" / "src" / "demand_forecast"
+
+
+def test_doc_coherence_scans_code_under_projects() -> None:
+    """Mutation M-C2a: `_CODE_ROOTS = ("libs",)` — projects/ no longer scanned."""
+    probe = _FORECAST / "_gate_probe.py"
+    with temporarily(probe, '"""Probe."""\n\n# See ADR-999 for the reasoning.\n'):
+        result = _run(GATES["doc-coherence"])
+
+    assert result.returncode == 1
+    assert "_gate_probe.py references ADR-999" in result.stdout
+
+
+def test_doc_coherence_checks_namespaced_citations_in_code() -> None:
+    """Mutation M-C2b: the namespaced check deleted from the code loop."""
+    probe = _ML_CORE / "_gate_probe.py"
+    with temporarily(probe, '"""Probe."""\n\n# See store-ADR-099 for the reasoning.\n'):
+        result = _run(GATES["doc-coherence"])
+
+    assert result.returncode == 1
+    assert "store-ADR-099" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("suffix", "content"),
+    [
+        (".yaml", "# See ADR-999 for the reasoning.\nkey: value\n"),
+        (".yml", "# See ADR-999 for the reasoning.\nkey: value\n"),
+        (".toml", "# See ADR-999 for the reasoning.\nkey = 1\n"),
+        (".jsonl", '{"note": "See ADR-999 for the reasoning."}\n'),
+    ],
+)
+def test_doc_coherence_scans_configuration_and_evaluation_data(suffix: str, content: str) -> None:
+    """Nine agent-local citations survived in a YAML config and a JSONL eval set.
+
+    Every `.py` beside them had been qualified; the file types were never read.
+    """
+    probe = REPO_ROOT / "projects" / "demand-forecast" / f"_gate_probe{suffix}"
+    with temporarily(probe, content):
+        result = _run(GATES["doc-coherence"])
+
+    assert result.returncode == 1, f"a {suffix} file is not scanned"
+    assert f"_gate_probe{suffix} references ADR-999" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "probe",
+    [
+        # The auditor's re-introduction: #86's own defect, put back.
+        REPO_ROOT / "projects" / "store-assistant" / "src" / "store_assistant" / "_gate_probe.py",
+        # ADR-010 exists since #87, so a bare ADR-010 meaning agent-local's
+        # decision would resolve silently where it used to dangle.
+        REPO_ROOT / "libs" / "llm-core" / "src" / "llm_core" / "_gate_probe.py",
+    ],
+)
+def test_doc_coherence_fails_an_ambiguous_bare_citation_in_migrated_code(probe: Path) -> None:
+    """A bare number that EXISTS here, in a tree written in agent-local's numbering."""
+    with temporarily(probe, '"""Probe."""\n\n# The reflection channel (ADR-009), and (ADR-010).\n'):
+        result = _run(GATES["doc-coherence"])
+
+    assert result.returncode == 1
+    assert "cites bare ADR-009 in a tree migrated from agent-local" in result.stdout
+    assert "cites bare ADR-010 in a tree migrated from agent-local" in result.stdout
+
+
+def test_the_same_bare_citation_passes_outside_the_migrated_trees() -> None:
+    """The control: the rule above is about WHERE the text came from, not the number."""
+    probe = _ML_CORE / "_gate_probe.py"
+    with temporarily(probe, '"""Probe."""\n\n# Data versioning (ADR-009).\n'):
+        result = _run(GATES["doc-coherence"])
+
+    assert "_gate_probe.py" not in result.stdout, result.stdout
+
+
+@pytest.mark.parametrize("citation", ["store-ADR-9", "Store-ADR-099", "ADR-0123"])
+def test_doc_coherence_fails_a_malformed_citation(citation: str) -> None:
+    """The auditor wrote these into code; the old narrow pattern never saw them."""
+    probe = _ML_CORE / "_gate_probe.py"
+    with temporarily(probe, f'"""Probe."""\n\n# See {citation} for the reasoning.\n'):
+        result = _run(GATES["doc-coherence"])
+
+    assert result.returncode == 1
+    assert "malformed" in result.stdout, result.stdout
+
+
+def test_doc_coherence_fails_an_unknown_namespace() -> None:
+    """The old rule skipped any namespace nobody defined, so a misspelling passed."""
+    probe = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.md"
+    with temporarily(probe, "# probe\n\nSee strore-ADR-006 for details.\n"):
+        result = _run(GATES["doc-coherence"])
+
+    assert result.returncode == 1
+    assert "no projects/*/docs/decisions/ directory defines a `strore` namespace" in result.stdout
+
+
+def test_doc_coherence_prints_no_ok_above_its_own_failure() -> None:
+    """C2 printed `ok` directly above its own FAIL lines, the defect C6 had in round seven."""
+    probe = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.md"
+    with temporarily(probe, "# probe\n\nSee ADR-999 for details.\n"):
+        result = _run(GATES["doc-coherence"])
+
+    assert "FAIL [C2]" in result.stdout
+    assert "ok  [C2]" not in result.stdout, result.stdout
+
+
 def test_doc_coherence_fails_on_a_private_repository_link() -> None:
     """The repository is public; a private reference must not survive review.
 

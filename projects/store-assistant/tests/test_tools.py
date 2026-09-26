@@ -93,7 +93,7 @@ def test_tool_contract_rejects_an_unregistered_tool(registry: Any) -> None:
     assert obs.error == "unknown_tool"
 
 
-# --- capability contract (ADR-006, I-2) -----------------------------------
+# --- capability contract (store-ADR-006, I-2) -----------------------------------
 def test_tool_contract_phase_one_blocks_a_mutating_tool() -> None:
     """A mutating tool cannot run in read-only mode just because it is named."""
     reg = ToolRegistry(read_only_mode=True)
@@ -124,7 +124,7 @@ def test_tool_contract_every_tool_declares_its_capability(registry: Any) -> None
         assert registry.spec(name).read_only is True
 
 
-# --- structured tool-call contract (ADR-007) ------------------------------
+# --- structured tool-call contract (store-ADR-007) ------------------------------
 def test_planner_json_schema_reflects_registered_tools() -> None:
     reg = ToolRegistry(read_only_mode=True)
     reg.register("a", lambda **k: _ok(), read_only=True)
@@ -180,7 +180,7 @@ def test_agent_registers_all_tools(store_agent: Any) -> None:
         assert name in agent.registry, f"Tool {name} not registered"
 
 
-# --- capability manifest (ADR-006 read as data) ---------------------------
+# --- capability manifest (store-ADR-006 read as data) ---------------------------
 # The registry populates itself by import side effect, so the capability
 # contract used to be answerable only by running the program. `manifest()`
 # makes it readable, which is what lets these assertions exist at all.

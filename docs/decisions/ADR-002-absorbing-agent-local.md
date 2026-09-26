@@ -5,6 +5,9 @@
 - **Amended**: 2026-09-22 — the disposition of the source repository was
   reversed; see [Correction, 2026-09-22](#correction-2026-09-22). The migration
   itself stands.
+- **Amended**: 2026-09-23 — the open question of authority is answered by
+  [ADR-010](ADR-010-agent-core-authority.md); see
+  [Correction, 2026-09-23](#correction-2026-09-23).
 
 ## Context
 
@@ -239,3 +242,27 @@ the document was not.
 - `agent-local` goes twelve months without a commit — the "independent value"
   claim this correction rests on stops being observable, and archival returns
   to the table with the reasoning it never received.
+
+## Correction, 2026-09-23
+
+The correction above describes `agent-local` as "the business-agnostic
+upstream". **It was not one, and the word made a claim about the direction of
+change that nothing supported.** An upstream is where changes flow *from*.
+Measured on 2026-09-23, `agent-local/core` had received no commit since
+2026-08-05, while `libs/llm-core` here had received nine; eleven of the twelve
+files the two share differed, and four modules existed only here. Nothing
+flowed from `agent-local`. It was the original, frozen at the moment of
+migration.
+
+The same correction set a revisit trigger — *the two cores diverge in
+behaviour rather than only in packaging; the authority ADR is then overdue,
+not optional*. That condition already held when the trigger was written. It was
+set without measuring, which is [ADR-005](ADR-005-agentic-governance.md) rule A
+— a claim without its method — failing in a correction whose subject was a
+claim without its method.
+
+[ADR-010](ADR-010-agent-core-authority.md) records the measurement and answers
+the question left open above: `libs/llm-core` is authoritative, and
+`agent-local` is a one-way export of it. The accurate description of
+`agent-local` is therefore *the original standalone version* until its first
+export, and *a pinned distribution of `libs/llm-core`* after it.

@@ -6,7 +6,7 @@ the tier runs (``local`` llama.cpp vs ``remote`` provider), which model to ask
 for, and which environment variable carries its credential — never the
 credential itself.
 
-Per ADR-011 a deployment picks one of three topology profiles:
+Per store-ADR-011 a deployment picks one of three topology profiles:
 
     local-only  Tier 0 only; every higher tier resolves down to it.
     hybrid      Tier 0 local (routing), Tiers 1+ remote.   <- default
@@ -14,7 +14,7 @@ Per ADR-011 a deployment picks one of three topology profiles:
 
 Resident memory is the binding constraint on a developer workstation, so the
 number of ``local`` tiers is capped by ``limits.max_local_tiers`` (default 1)
-and enforced at config load. See ADR-011.
+and enforced at config load. See store-ADR-011.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ REMOTE = "remote"
 # Memory pools a local tier can be resident in. They are separate budgets with
 # different capacities and different failure modes: exceeding VRAM makes
 # llama.cpp fall back to partial offload (slow but alive), while exceeding
-# system RAM makes the host swap or the OOM killer fire (ADR-012).
+# system RAM makes the host swap or the OOM killer fire (store-ADR-012).
 GPU = "gpu"
 CPU = "cpu"
 DEVICES = (GPU, CPU)
@@ -53,7 +53,7 @@ class MissingCredentialError(RuntimeError):
 
 @dataclass(frozen=True)
 class TierEndpoint:
-    """Where one tier runs and how to reach it (ADR-011).
+    """Where one tier runs and how to reach it (store-ADR-011).
 
     A tier is either a ``local`` llama.cpp server — which costs resident RAM
     but supports GBNF grammars — or a ``remote`` OpenAI-compatible provider,
@@ -74,7 +74,7 @@ class TierEndpoint:
         device: Which memory pool a *local* tier is resident in — ``"gpu"`` or
             ``"cpu"``. Ignored for remote tiers. "Local" is not one budget:
             the same model that fits in VRAM may not fit in system RAM, and
-            the two deployment paths fail differently (ADR-012).
+            the two deployment paths fail differently (store-ADR-012).
         weights_gb: Size of the quantised weights in GiB, used to check the
             tier against its device budget at config load. ``0.0`` disables
             the check for that tier.
@@ -104,7 +104,7 @@ class TierEndpoint:
         GBNF is a llama.cpp capability, not part of the OpenAI API. Remote
         tiers get the weaker ``response_format: json_object`` constraint
         instead; validation still fails closed downstream (Pydantic +
-        ``allowed_intents``). See ADR-011 "Consequences".
+        ``allowed_intents``). See store-ADR-011 "Consequences".
         """
         return self.is_local
 
@@ -283,7 +283,7 @@ def adapt_constraints(payload: dict[str, Any], endpoint: TierEndpoint) -> dict[s
     every caller.
 
     A provider that rejects ``response_format: json_schema`` should set
-    ``structured_tool_calls: false`` in the use-case config (ADR-007), which
+    ``structured_tool_calls: false`` in the use-case config (store-ADR-007), which
     stops the planner from requesting a schema at all.
 
     Args:
@@ -339,7 +339,7 @@ class TierClient:
         This is what makes the ``local-only`` profile work: a config declaring
         only tier 0 serves every escalation from tier 0 instead of raising, so
         the same use-case runs on a workstation and in a full topology
-        without editing the loop (ADR-011).
+        without editing the loop (store-ADR-011).
 
         Args:
             tier: The tier the loop asked for.

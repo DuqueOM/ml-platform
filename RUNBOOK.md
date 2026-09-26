@@ -197,7 +197,7 @@ against absolute paths, examined **zero files**, and passed.
 | Check | What it enforces | When it fails |
 | --- | --- | --- |
 | C1 | Every ADR on disk is in the index, and none vanished since HEAD | Add the index row. A deletion or renumber is STOP — supersede instead |
-| C2 | No document cites an ADR number that does not exist | Fix the citation. Inherited numbering is namespaced `template-ADR-NNN` |
+| C2 | Markdown, and Python, YAML, JSONL and TOML under `libs/` and `projects/`, cite no ADR that does not exist. `scripts/`, `tests/` and generated surfaces are out of scope. A namespaced citation resolves against its project's own index, and an unknown or malformed namespace fails. In trees migrated from agent-local, only an allowlisted set of bare numbers may appear | Fix the citation. The template's numbering is `template-ADR-NNN`, agent-local's is `store-ADR-NNN`. It proves a number exists, not that it means what the sentence says |
 | C3 | An accepted ADR is referenced from the plan or the index | Integrate the decision, or it is a document nobody will find |
 | C4 | Every quality-gate row carries a command that resolves and a threshold rationale | Add the command, or delete the claim. A metric that cannot fail is decoration |
 | C5 | The agentic counts in `AGENTS.md` match the filesystem | Update the count after adding a rule, skill or workflow |

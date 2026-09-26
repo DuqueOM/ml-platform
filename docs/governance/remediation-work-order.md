@@ -629,6 +629,110 @@ on unwired fields, and the ledger entry moves to `adopted`.
   median over five green runs. `timeout-minutes: 75` bounds it; nothing yet
   measures where those minutes go.
 
+## Round twelve — what stays open, and why each one waits
+
+QA-4 round twelve audited `6a4bfe2` — `main` plus the two pull requests that
+qualified the agent core's foreign ADR citations and added
+[ADR-010](../decisions/ADR-010-agent-core-authority.md) — and reported 1 P0,
+7 P2 and 6 P3. Its hypothesis was that negative controls chosen by the author
+test what the author already believed, and six of the eight it attacked
+failed. Commits are cited by subject, as above.
+
+What closed, on the same branch as the work it corrects:
+
+- C2's extension, whose tests missed both of the auditor's mutations; the nine
+  citations it could not see in YAML and JSONL; the double read; the RUNBOOK
+  row that overstated it (*fix(gates): QA-4 round twelve, P2 — C2's new guards
+  could not fail, and it could not read YAML*).
+- The exporter's provenance guarantees, its transform-only tests, the boundary
+  test that saw one form of host reference in six, and ADR-010's unmeasured
+  commit count (*fix(export): QA-4 round twelve, P2 — the exporter's guarantees
+  were written, not enforced*).
+- The link check's missing scheduled sweep (*fix(ci): QA-4 round twelve, P3 —
+  the link check promised a scheduled sweep it did not have*).
+
+Each fix was verified against the auditor's own mutations, not only its
+author's: 11 of 11 killed for C2, 11 of 11 for the exporter.
+
+What follows did not close. The findings in code this session did not write are
+kept to separate pull requests, so each is reviewed on its own.
+
+### R12-1 — agent-local's drift guard takes its verdict from the directory it validates
+
+**Mode**: AUTO · **Source**: round twelve P2-5 · **Size**: ~1h
+
+`tests/test_core_is_exported.py` in `agent-local` recomputes hashes against
+`EXPORTED_FROM.json`, which sits in the directory being checked. A hand edit to
+`policy.py` passes if the same commit updates its hash.
+
+**Waits on**: this change reaching `main`. The export must name a commit that
+a squash cannot orphan, and the exporter now refuses to write from any other.
+
+**Closes when**: `agent-local`'s CI checks out this repository at the commit
+`EXPORTED_FROM.json` names and runs `export_llm_core.py --check` against its
+tree. The auditor's edit, with the manifest updated to match, must fail it.
+
+### R12-2 — Claude Code registers none of the 29 skills
+
+**Mode**: AUTO · **Source**: round twelve P0-1 · **Size**: ~2h
+
+The adapter renders `.claude/skills/<id>.md`; Claude Code discovers
+`.claude/skills/<id>/SKILL.md` with frontmatter. `sync_agentic_adapters.py
+--check` and `validate_agentic_surface.py --strict` both stay green, because
+each checks the layout the adapter writes rather than the one the tool reads.
+The base template already renders the right layout.
+
+**Closes when**: skills render as `<id>/SKILL.md` with `name` and
+`description` frontmatter, command pointers carry a `description`, and a
+validator check fails on the flat layout. The Cursor and Codex surfaces get
+the same test against their own tool's discovery rules.
+
+### R12-3 — Two negative controls that pass with the guard broken
+
+**Mode**: AUTO · **Source**: round twelve P2-6, P3-3 · **Size**: ~1h
+
+- `test_workflow_bounds`' negative control recomputes which jobs lack a bound
+  instead of calling the guard, so it passes with the guard broken. It also
+  accepts a boolean as a timeout.
+- The rag-assistant ingest tests pin `user_agent()` but not that the request
+  sends it: replacing the header with a constant passes.
+
+**Closes when**: each test fails under the auditor's mutation (W1/W2 for the
+first, the header replacement for the second).
+
+### R12-4 — Documents that describe a different gate
+
+**Mode**: AUTO · **Source**: round twelve P2-7, P3-2, P3-5 · **Size**: ~1h
+
+- `agentic/rules/23-doc-coherence.md` lists checks that do not match
+  `check_doc_coherence.py`; in it, C7 is the private-reference guard.
+- The audit brief still says two projects and 28 gates.
+- `RUNBOOK.md:95` links to a heading in the technical plan that was renamed.
+
+**Closes when**: the rule's list is generated from, or tested against, the
+checks the script runs, and the two stale facts and the anchor are corrected.
+
+### R12-5 — Four coherence checks print `ok` above their own failure
+
+**Mode**: AUTO · **Source**: found while fixing C2 in round twelve · **Size**: under 1h
+
+C3, C4, C5 and C9 print `ok` unconditionally, the defect round seven removed
+from C6 and round twelve from C2.
+
+**Closes when**: each prints `ok` only when it added no failure, with a test
+per check that drives one failure and asserts no `ok` line for it.
+
+### R12-6 — Nothing checks anchors
+
+**Mode**: AUTO · **Source**: round twelve P3-2 · **Size**: ~2h
+
+The link check reads every file and fails a dead file link, but a link to a
+heading that does not exist passes. The workflow now says so.
+
+**Closes when**: a link to a missing heading fails CI. Either a checker that
+validates fragments, or a small pass in the coherence script over relative
+links, which avoids network flakiness. The auditor's mutation B must fail it.
+
 ---
 
 ## Not for an agent

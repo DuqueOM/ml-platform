@@ -34,7 +34,7 @@ def _first_line(docstring: str | None) -> str:
 
 @dataclass(frozen=True)
 class ToolSpec:
-    """A registered tool plus its capability contract (ADR-006).
+    """A registered tool plus its capability contract (store-ADR-006).
 
     Capabilities are **fail-closed**: a tool is assumed to mutate state unless
     it declares ``read_only=True`` (or ``dry_run_only=True``). The registry uses
@@ -187,13 +187,13 @@ class ToolRegistry:
         return sorted(name for name, spec in self._registry.items() if not spec.read_only and not spec.dry_run_only)
 
     def planner_json_schema(self) -> dict[str, Any]:
-        """JSON schema for the planner's structured tool-call output (ADR-007).
+        """JSON schema for the planner's structured tool-call output (store-ADR-007).
 
         Constrains the planner to emit ``{"tool_calls": [{"tool", "args"}, …]}``
         where ``tool`` is restricted to the registered names — a closed set, the
         same discipline the router applies to ``allowed_intents``. Per-tool
         argument typing is enforced afterwards by each tool's ``args_model``
-        (defence in depth, ADR-006). This object is the single source of truth
+        (defence in depth, store-ADR-006). This object is the single source of truth
         shared by the server-side constraint and the parser's validation.
         """
         return {
@@ -234,7 +234,7 @@ class ToolRegistry:
         if spec is None:
             return Observation(tool=call.tool, ok=False, data={}, error="unknown_tool")
 
-        # Fail-closed phase gate (ADR-006): a mutating tool cannot run in a
+        # Fail-closed phase gate (store-ADR-006): a mutating tool cannot run in a
         # read-only phase just because the model named it.
         if self.read_only_mode and not spec.read_only and not spec.dry_run_only:
             return Observation(tool=call.tool, ok=False, data={}, error="tool_not_permitted_phase1")

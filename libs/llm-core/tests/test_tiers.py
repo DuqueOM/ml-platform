@@ -117,7 +117,7 @@ def test_retry_policy_from_config() -> None:
     assert RetryPolicy.from_config(None).max_retries == 2  # defaults
 
 
-# --- tier topology (ADR-011) ------------------------------------------------
+# --- tier topology (store-ADR-011) ------------------------------------------------
 
 
 def _remote(**over: Any) -> dict[str, Any]:
