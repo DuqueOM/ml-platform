@@ -92,7 +92,7 @@ hook gets disabled alongside a broken one.
 
 The three scope defects are recorded as open findings, each hook named and its
 cause diagnosed, in
-[`docs/architecture/technical-plan.md`](docs/architecture/technical-plan.md#open-findings-from-the-parity-work--measured-not-yet-fixed).
+[`docs/architecture/technical-plan.md`](docs/architecture/technical-plan.md#findings-from-the-parity-work).
 The common shape: the hook's file scope was never given the exclusions that
 ruff, coverage and the CI steps were argued into having, so it lints generator
 source that is Jinja rather than YAML, and type-checks a directory set CI does

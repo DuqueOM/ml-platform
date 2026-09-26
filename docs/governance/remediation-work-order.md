@@ -689,7 +689,7 @@ the same test against their own tool's discovery rules.
 
 ### R12-3 — Two negative controls that pass with the guard broken
 
-**Mode**: AUTO · **Source**: round twelve P2-6, P3-3 · **Size**: ~1h
+**Mode**: AUTO · **Source**: round twelve P2-6, P3-3 · **Size**: ~1h · **Closed** by *fix: QA-4 round twelve — two negative controls that passed with the guard broken, and a rule describing another gate*
 
 - `test_workflow_bounds`' negative control recomputes which jobs lack a bound
   instead of calling the guard, so it passes with the guard broken. It also
@@ -702,7 +702,7 @@ first, the header replacement for the second).
 
 ### R12-4 — Documents that describe a different gate
 
-**Mode**: AUTO · **Source**: round twelve P2-7, P3-2, P3-5 · **Size**: ~1h
+**Mode**: AUTO · **Source**: round twelve P2-7, P3-2, P3-5 · **Size**: ~1h · **Closed** by *fix: QA-4 round twelve — two negative controls that passed with the guard broken, and a rule describing another gate*
 
 - `agentic/rules/23-doc-coherence.md` lists checks that do not match
   `check_doc_coherence.py`; in it, C7 is the private-reference guard.
@@ -714,7 +714,7 @@ checks the script runs, and the two stale facts and the anchor are corrected.
 
 ### R12-5 — Four coherence checks print `ok` above their own failure
 
-**Mode**: AUTO · **Source**: found while fixing C2 in round twelve · **Size**: under 1h
+**Mode**: AUTO · **Source**: found while fixing C2 in round twelve · **Size**: under 1h · **Closed** by *fix: QA-4 round twelve — two negative controls that passed with the guard broken, and a rule describing another gate*, filtering at print time rather than per check
 
 C3, C4, C5 and C9 print `ok` unconditionally, the defect round seven removed
 from C6 and round twelve from C2.

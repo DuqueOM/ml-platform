@@ -18,6 +18,42 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Fixed — QA-4 round twelve: two negative controls that passed with the guard broken, and a rule describing another gate
+
+- **The workflow-bounds control recomputed what it checked** (P2-6). It
+  selected unbounded jobs with its own expression instead of calling the
+  contract's. With the contract weakened to a default of 60 and an unbounded
+  job added, all 15 tests passed. `timeout-minutes: true` also passed: YAML
+  loads it as a bool, and a bool is an int in Python. Both tests now call one
+  `problem()` function. It rejects any type other than `int`, and the control
+  probes the six shapes a bound can take. The audit's two mutations, and a
+  revert to `isinstance`, each fail.
+- **The EDGAR contact was pinned in `user_agent()` and never in the request**
+  (P3-3). Replacing the header with a constant passed all 36 of the
+  project's tests. A test now captures the `Request` that `fetch_filings`
+  hands to `urlopen` and asserts the header on it. It runs with no network
+  and no sleep.
+- **Rule 23 described ml-service-template's coherence gate** (P2-7). That
+  rule is rendered to every tool surface. Its C1–C7 meant the template's
+  checks, so an overdue audit here (C7) read as a private-name leak. The rule
+  now points at the one list in `agentic/workflows/doc-coherence.md`.
+  `tests/test_doc_coherence_ids.py` checks that list against the identifiers
+  the script reports, and fails any other agentic body that defines one. The
+  rule's release section described the template's `releases/vX.Y.Z.md`
+  flow; it now describes this repository's CHANGELOG-driven one. The
+  workflow's C2 line now states C2's current scope.
+- **C3, C4, C5 and C9 printed `ok` above their own `FAIL`** — the defect
+  rounds seven and twelve removed from C6 and C2, one check at a time. The
+  lines are now filtered once, when they are printed. The first version of
+  this fix guarded inside `ok()`, and the test written for C5 caught it: C5
+  reports `ok` before the loop that can fail it.
+- **A C2 test from round twelve asserted the whole gate green**, so it went
+  red when #87's squash made C7 fail. That breaks the rule round nine
+  recorded for exactly this. It now runs `--only C2`.
+- The audit brief no longer states two projects and 28 gates. It names the
+  command that gives the count. `RUNBOOK.md:95` linked to a heading that was
+  renamed.
+
 ### Fixed — QA-4 round twelve, P0: no tool could find a single skill, and both surface checks were green
 
 - **Claude Code registered none of the 29 skills.** They were rendered as
