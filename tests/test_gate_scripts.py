@@ -305,7 +305,10 @@ def test_doc_coherence_does_not_read_prose_as_a_namespace() -> None:
     """
     probe = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.md"
     with temporarily(probe, "# probe\n\nThe pre-ADR-005 layout, a non-ADR-003 path. Pre-ADR-005, it was flat.\n"):
-        result = _run(GATES["doc-coherence"])
+        # `--only C2`: asserting the whole gate green made this red whenever an
+        # unrelated check was — C7, the day round twelve's squash landed. The
+        # rule the section below records, broken by a test written after it.
+        result = _run(GATES["doc-coherence"], "--only", "C2")
 
     assert result.returncode == 0, result.stdout
     for prose in ("pre-ADR-005", "non-ADR-003", "Pre-ADR-005"):
@@ -732,6 +735,39 @@ def test_agentic_sync_removes_generated_files_left_at_an_abandoned_layout() -> N
 
     assert result.returncode == 1
     assert "orphan: .cursor/skills/rollback.mdc" in result.stdout
+
+
+def test_no_coherence_check_prints_ok_above_its_own_failure() -> None:
+    """The class, not an instance, in both orders a check can report in.
+
+    C5 records `ok` before the loop that can fail it, so a guard that only
+    looks back at earlier failures misses it — the first version of this fix.
+    """
+    sys.path.insert(0, str(SCRIPTS))
+    import check_doc_coherence as coherence
+
+    saved = (list(coherence.failures), list(coherence.notes))
+    try:
+        coherence.failures.clear()
+        coherence.notes.clear()
+        coherence.fail("C3", "probe")
+        coherence.ok("C3", "fail first")
+        coherence.ok("C5", "ok first")
+        coherence.fail("C5", "probe")
+        coherence.ok("C8", "untouched")
+        assert coherence.passing_notes() == ["[C8] untouched"], coherence.passing_notes()
+    finally:
+        coherence.failures[:] = saved[0]
+        coherence.notes[:] = saved[1]
+
+
+def test_c5_prints_no_ok_above_its_own_failure() -> None:
+    """On the real tree: a skill directory with no SKILL.md fails C5 and nothing says C5 is fine."""
+    with temporarily(REPO_ROOT / "agentic" / "skills" / "_gate_probe" / "README.md", "not a skill\n"):
+        result = _run(GATES["doc-coherence"])
+
+    assert "FAIL [C5] skill _gate_probe has no SKILL.md" in result.stdout
+    assert "ok  [C5]" not in result.stdout, result.stdout
 
 
 # --- the tree is left as it was found ---------------------------------------

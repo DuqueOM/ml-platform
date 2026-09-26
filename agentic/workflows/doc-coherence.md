@@ -30,7 +30,13 @@ count under C3, and found neither. Same identifiers, different meanings,
 which is worse than no list.
 
 - **C1** ADRs on disk ⇄ the index, and none removed since git HEAD.
-- **C2** no document references an ADR number that does not exist.
+- **C2** no ADR citation dangles or points into the wrong index. It reads
+  markdown everywhere, and `.py`, `.yaml`, `.yml`, `.jsonl` and `.toml` under
+  `libs/` and `projects/`. A namespaced citation (`store-ADR-NNN`) resolves
+  against that project's own index; an unknown or malformed namespace fails.
+  In the trees migrated from agent-local, a bare number other than 001–004
+  fails as ambiguous. It proves a number exists in the right index, not that
+  it means what the sentence says.
 - **C3** accepted ADRs are integrated rather than orphaned.
 - **C4** every quality-gate row carries a command that resolves — a script that
   exists, or a tool some workflow actually invokes.

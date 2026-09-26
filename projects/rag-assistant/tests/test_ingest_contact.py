@@ -64,3 +64,39 @@ def test_the_error_says_how_to_fix_it(monkeypatch: pytest.MonkeyPatch) -> None:
     message = str(raised.value)
     assert "export" in message, message
     assert "sec.gov" in message, message
+
+
+def test_the_request_actually_sends_the_configured_contact(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """QA-4 round twelve, P3-3: the tests above pinned `user_agent()` and never the request.
+
+    Replacing the header with a constant passed all 36 of this project's tests.
+    What SEC sees is the header on the wire, so this captures the `Request`
+    that `fetch_filings` hands to `urlopen` — no network, no sleep.
+    """
+    contact = "Example Research contact@example.com"
+    monkeypatch.setenv(ingest.USER_AGENT_VARIABLE, contact)
+    monkeypatch.setattr(ingest.time, "sleep", lambda _seconds: None)
+    sent: list[object] = []
+
+    class _Response:
+        def __enter__(self) -> _Response:
+            return self
+
+        def __exit__(self, *_exc: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b"filing body"
+
+    def _urlopen(request: object, timeout: float) -> _Response:
+        sent.append(request)
+        return _Response()
+
+    monkeypatch.setattr(ingest.urllib.request, "urlopen", _urlopen)
+    filing = ingest.Filing(form="10-K", company="Example Co", cik="1", filed="2026-01-02", path="edgar/data/1/x.txt")
+
+    written = ingest.fetch_filings([filing], tmp_path)
+
+    assert len(sent) == 1, sent
+    assert sent[0].get_header("User-agent") == contact  # type: ignore[attr-defined]
+    assert written == [tmp_path / filing.local_name]

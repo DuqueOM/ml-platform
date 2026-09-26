@@ -136,7 +136,9 @@ Broad shape:
   An earlier version of this brief listed five without that split and
   overstated what existed — the failure the derived documents were built to
   prevent, occurring in the document that points at them
-- 2 projects: `demand-forecast` and `rag-assistant`
+- the projects under `projects/` — `ls projects`, not this line. It said two
+  until QA-4 round twelve; `store-assistant`, migrated from agent-local, made
+  three
 - the gates C4 resolves; `scripts/` holds the enforcing code
 - `ops/audit.jsonl` — hash-chained append-only operational record, and since
   round seven's preparation the record C7 checks its own marker against
@@ -316,7 +318,7 @@ evidence. Specifically:
 
 - Negative tests were designed by someone who knew the implementation, and so
   test the failure modes that occurred to them.
-- The gate inventory (28) is self-declared; a gate that was never written
+- The gate inventory is self-declared; a gate that was never written
   cannot be missing from a list the same author wrote.
 - Coverage measures lines executed, not properties asserted.
 - The audit trail (`ops/audit.jsonl`) is hash-chained, which makes tampering
@@ -408,13 +410,13 @@ git log --no-merges --oneline "$(grep -oE 'Last independent audit: [0-9-]+ \(([0
 | **P2-3** — the exporter's provenance: `--allow-dirty` wrote, an uncommitted exporter was stamped clean, nothing required `main` | Closed, *fix(export): QA-4 round twelve, P2 — the exporter's guarantees were written, not enforced* |
 | **P2-4** — the exporter's tests covered only the transforms; five mutations survived | Closed, same commit |
 | **P2-5** — agent-local's drift test takes its verdict from the directory it checks | Open as **R12-1**, in agent-local, after the export is re-taken from `main` |
-| **P2-6** — the workflow-bounds negative control recomputes instead of calling the guard | Open as **R12-3** |
-| **P2-7** — `agentic/rules/23-doc-coherence.md` describes a different gate | Open as **R12-4** |
+| **P2-6** — the workflow-bounds negative control recomputes instead of calling the guard | Closed, *fix: QA-4 round twelve — two negative controls that passed with the guard broken, and a rule describing another gate* |
+| **P2-7** — `agentic/rules/23-doc-coherence.md` describes a different gate | Closed, *fix: QA-4 round twelve — two negative controls that passed with the guard broken, and a rule describing another gate* |
 | **P3-1** — the export boundary test recognised one form of host reference in six | Closed, the exporter commit |
-| **P3-2** — no anchor check, one dead anchor, a promised scheduled sweep that did not exist | Sweep closed, *fix(ci): QA-4 round twelve, P3 — the link check promised a scheduled sweep it did not have*; the anchor is in **R12-4**, the anchor check is **R12-6** |
-| **P3-3** — the ingest tests pin `user_agent()` but not that the request sends it | Open as **R12-3** |
+| **P3-2** — no anchor check, one dead anchor, a promised scheduled sweep that did not exist | Sweep closed, *fix(ci): QA-4 round twelve, P3 — the link check promised a scheduled sweep it did not have*; the dead anchor closed in *fix: QA-4 round twelve — two negative controls that passed with the guard broken, and a rule describing another gate*; the anchor check is **R12-6** |
+| **P3-3** — the ingest tests pin `user_agent()` but not that the request sends it | Closed, *fix: QA-4 round twelve — two negative controls that passed with the guard broken, and a rule describing another gate* |
 | **P3-4** — ADR-010's "9 commits" had no method | Closed by a dated correction in ADR-010, the exporter commit |
-| **P3-5** — the brief's stale facts; C2's descriptions overstated it | C2's RUNBOOK row closed in the C2 commit; the brief's two facts are in **R12-4** |
+| **P3-5** — the brief's stale facts; C2's descriptions overstated it | C2's RUNBOOK row closed in the C2 commit; the brief's two facts in *fix: QA-4 round twelve — two negative controls that passed with the guard broken, and a rule describing another gate* |
 | **P3-6** — C2 read each markdown file twice | Closed, the C2 commit |
 
 Everything open carries a mode, what it waits on, and its closing condition in

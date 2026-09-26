@@ -101,29 +101,32 @@ python3 scripts/check_doc_coherence.py
 #   → skill: doc-coherence   workflow: /doc-coherence
 ```
 
-The gate runs seven checks: version SSoT (C1), `llms.txt` version (C2),
-anti-pattern count (C3), agentic surface counts (C4), ADR traceability /
-no-silent-gaps (C5), release note existence (C6), documentation language +
-private-reference guard (C7 — `docs/` and root docs must be English-only
-and must never name a known private/personal repo; AUDIT R10, 2026-07-02).
-A failing gate blocks the PR — coherence is a release invariant, not a
-suggestion.
+What each check `C1`–`C9` means is listed once, in
+[`agentic/workflows/doc-coherence.md`](../workflows/doc-coherence.md) §2, and
+`tests/test_doc_coherence_ids.py` holds that list to the checks the script
+actually runs. This rule used to carry its own list, ported from
+ml-service-template, where the same identifiers mean different checks: read
+through it, `FAIL [C7]` — an overdue independent audit here — sent an agent
+looking for a private-name leak (QA-4 round twelve, P2-7). A failing gate
+blocks the PR — coherence is a release invariant, not a suggestion.
 
 ## Release publication is automatic — never a manual step
 
 A tag push (`git tag -a vX.Y.Z ... && git push origin vX.Y.Z`) is the
 **only** action a release requires beyond the coherence steps above.
-`.github/workflows/release-on-tag.yml` then publishes (or updates, if one
-already exists) the GitHub Release automatically: title from
-`releases/vX.Y.Z.md`'s H1, body from the full file, `--latest` computed
-correctly for the active `v0.x` line. **If you find yourself running
-`gh release create` or `gh release edit` by hand, that is a signal the
-automation is broken (or `releases/vX.Y.Z.md` is missing, C6) — fix the
-root cause, do not paper over it with a one-off manual command.** This
-exact failure mode shipped once (2026-07-01): a CHANGELOG heading format
-change silently broke the workflow's extraction regex, and the resulting
-generic release body was "fixed" by hand instead of at the source — see
-the workflow file's header comment for the full incident and the fix.
+`.github/workflows/release-on-tag.yml` then publishes the GitHub Release: it
+refuses a tag whose commit is not green in CI, titles the release with the tag,
+and takes the body from that version's `## [X.Y.Z]` section of `CHANGELOG.md`
+— failing, rather than publishing an empty release, when the section is
+missing. **If you find yourself running `gh release create` or
+`gh release edit` by hand, that is a signal the automation is broken or the
+CHANGELOG section is missing — fix the root cause, do not paper over it with
+a one-off manual command.** The workflow's comments record what went wrong
+the first time it ran.
+
+This section used to describe ml-service-template's release flow — a
+`releases/vX.Y.Z.md` file per version, which the template checks under its
+own numbering. This repository has never had one.
 
 ## Related
 
