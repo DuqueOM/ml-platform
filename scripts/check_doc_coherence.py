@@ -26,6 +26,7 @@ import sys
 from collections.abc import Callable
 from datetime import date, datetime
 from pathlib import Path
+from urllib.parse import unquote
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -161,7 +162,7 @@ def _rel_parts(path: Path) -> set[str]:
 def _is_scannable(path: Path, exclude: set[str] = frozenset()) -> bool:  # type: ignore[assignment]
     """True when a markdown file is part of the documentation surface."""
     parts = _rel_parts(path)
-    generated = {".claude", ".cursor", ".codex", ".devin"}
+    generated = {".claude", ".cursor", ".codex", ".devin", ".agents"}
     infra = {".git", ".venv", "node_modules", ".mypy_cache", ".pytest_cache"}
     return not (parts & (infra | generated | set(exclude)))
 
@@ -1270,6 +1271,75 @@ def check_changelog_covers_the_commit_range() -> None:
     fail("C8", "[Unreleased] is effectively empty while commits have accumulated")
 
 
+_FENCED = re.compile(r"^(```|~~~).*?^\1", re.DOTALL | re.MULTILINE)
+_INLINE_CODE = re.compile(r"`[^`\n]*`")
+_MD_LINK = re.compile(r"\]\(\s*<?([^)\s>]*)>?(?:\s+\"[^\"]*\")?\s*\)")
+_HEADING = re.compile(r"^#{1,6}\s+(.*?)\s*#*\s*$", re.MULTILINE)
+_HTML_ANCHOR = re.compile(r"<a\s+[^>]*(?:id|name)=\"([^\"]+)\"", re.IGNORECASE)
+
+
+def heading_slug(text: str) -> str:
+    """The anchor GitHub gives a heading: its rendered text, lower-cased.
+
+    Rendered, so link targets, backticks, tags and emphasis markers go first.
+    Then everything but letters, digits, spaces, hyphens and underscores is
+    dropped and spaces become hyphens — which is why " — " yields `--`.
+    """
+    text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"<[^>]+>", "", text.replace("`", ""))
+    text = re.sub(r"[*~]|(?<!\w)_+|_+(?!\w)", "", text).strip().lower()
+    return re.sub(r"[^\w\- ]", "", text).replace(" ", "-")
+
+
+def _anchors(path: Path, cache: dict[Path, set[str]]) -> set[str]:
+    """Every anchor a markdown file offers: heading slugs, numbered on repeat, and explicit ids."""
+    if path not in cache:
+        text = _FENCED.sub("", _read(path))
+        seen: dict[str, int] = {}
+        found: set[str] = set()
+        for heading in _HEADING.findall(text):
+            slug = heading_slug(heading)
+            repeat = seen.get(slug, 0)
+            seen[slug] = repeat + 1
+            found.add(slug if repeat == 0 else f"{slug}-{repeat}")
+        cache[path] = found | {anchor.lower() for anchor in _HTML_ANCHOR.findall(text)}
+    return cache[path]
+
+
+def check_markdown_anchors() -> None:
+    """C10 — every link to a heading in a markdown file names a heading that exists.
+
+    The link checker reads files and fails a dead one, and cannot see an anchor:
+    QA-4 round twelve pointed a link at `#no-such-heading` and the lane stayed
+    green, and found `RUNBOOK.md` linking to a heading renamed months earlier.
+    Offline and local on purpose — the anchors are this repository's own
+    headings, so there is nothing a network request would add except flakiness.
+    Links inside code are examples, not links, and are skipped.
+    """
+    cache: dict[Path, set[str]] = {}
+    checked = 0
+    for path in sorted(REPO_ROOT.rglob("*.md")):
+        if not path.is_file() or not _is_scannable(path):
+            continue
+        text = _INLINE_CODE.sub("", _FENCED.sub("", _read(path)))
+        for target in _MD_LINK.findall(text):
+            if "#" not in target or re.match(r"[a-z][a-z0-9+.-]*:", target):
+                continue
+            file_part, _, fragment = target.partition("#")
+            destination = (path.parent / file_part).resolve() if file_part else path
+            if destination.suffix != ".md" or not destination.is_file():
+                continue  # a dead file is the link checker's; a non-markdown target has no headings
+            checked += 1
+            if unquote(fragment).lower() not in _anchors(destination, cache):
+                fail(
+                    "C10",
+                    f"{path.relative_to(REPO_ROOT)} links to #{fragment} in "
+                    f"{destination.relative_to(REPO_ROOT) if destination.is_relative_to(REPO_ROOT) else destination}, "
+                    "which has no such heading. Point it at the heading's current slug",
+                )
+    ok("C10", f"{checked} links to markdown headings resolve")
+
+
 def _registry(adrs: dict[str, Path]) -> dict[str, Callable[[], None]]:
     """Every check, keyed by the id it reports under, in run order.
 
@@ -1293,6 +1363,7 @@ def _registry(adrs: dict[str, Path]) -> dict[str, Callable[[], None]]:
         "C6": check_language_and_privacy,
         "C8": check_changelog_covers_the_commit_range,
         "C9": check_copier_commands_are_pinned,
+        "C10": check_markdown_anchors,
         "C7": check_audit_freshness,
     }
 
@@ -1303,7 +1374,7 @@ def main() -> int:
         "--only",
         metavar="CHECK",
         help=(
-            "run one check by id (C1..C9) instead of all of them. For negative controls: "
+            "run one check by id (C1..C10) instead of all of them. For negative controls: "
             "a test asserting that C6 does not fire should not also assert that C7's audit "
             "counter is green, and one that does reports a false cause when it is not."
         ),
