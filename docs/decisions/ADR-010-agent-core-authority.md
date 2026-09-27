@@ -2,7 +2,8 @@
 
 - **Status**: Accepted. Four of its claims were false when it was written —
   one measurement and three guarantees; see
-  [Correction, 2026-09-23](#correction-2026-09-23). The decision stands.
+  [Correction, 2026-09-23](#correction-2026-09-23). Two more were false after
+  it; see [Correction, 2026-09-26](#correction-2026-09-26). The decision stands.
 - **Date**: 2026-09-23
 
 ## Context
@@ -243,3 +244,28 @@ five of six ways of naming one through. It now walks every string literal in
 the exported modules, f-string parts included, and flags a `docs` path
 component or the name of any document at the root of this repository or in
 `docs/`.
+
+## Correction, 2026-09-26
+
+**The decision stands. Two guarantees made after the first correction were
+still wider than the code.** QA-4 round thirteen found both by execution.
+
+- **"The guard that binds" could be bypassed by a subpackage.** The stray
+  check looked only for top-level `*.py` files, in the exporter and in
+  `agent-local`'s test. A `core/policy/` package beside the exported
+  `policy.py` passed `--check`. Python imports the package first, so the
+  exported file stayed byte-identical and correctly hashed, and was never
+  loaded. The check now accounts for every entry under `core/` at every depth,
+  apart from `__pycache__`: a subpackage, a stub, a data file and an
+  underscore module are each refused, and each case has a test.
+- **The provenance record's only guard was untested.** `--check` compares
+  `EXPORTED_FROM.json` with a fresh export, and nothing pinned that comparison.
+  `agent-local`'s hash test does not read the record's other fields, so a
+  changed `library_version` passed both. A test now tampers with one field and
+  expects DRIFT.
+
+The first correction's list of mutations killed was true only for the
+mutations tried. Round thirteen tried eleven more on the exporter and four
+survived. All the mutations are now in `tests/mutations.yaml`, which
+`scripts/mutation_harness.py` runs, so the next round extends that list
+instead of rebuilding it.

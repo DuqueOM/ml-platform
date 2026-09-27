@@ -101,7 +101,7 @@ python3 scripts/check_doc_coherence.py
 #   → skill: doc-coherence   workflow: /doc-coherence
 ```
 
-What each check `C1`–`C9` means is listed once, in
+What each check `C1`–`C10` means is listed once, in
 [`agentic/workflows/doc-coherence.md`](../workflows/doc-coherence.md) §2, and
 `tests/test_doc_coherence_ids.py` holds that list to the checks the script
 actually runs. This rule used to carry its own list, ported from

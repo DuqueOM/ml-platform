@@ -65,6 +65,8 @@ def isolated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(validate, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(validate, "failures", [])
     monkeypatch.setattr(validate, "notes", [])
+    monkeypatch.setattr(validate, "warnings", [])
+    monkeypatch.setattr(validate, "reports", [])
     return tmp_path
 
 
@@ -109,8 +111,23 @@ def test_the_discovery_layout_passes_v7(isolated: Path) -> None:
         ("---\nname: deploy-app\ndescription: x\n---\n", COMMAND_FRONT_MATTER, "requires its folder name"),
         (f"---\nname: deploy\ndescription: {'x' * 1025}\n---\n", COMMAND_FRONT_MATTER, "exceeds 1024"),
         (SKILL_FRONT_MATTER, "", ".claude/commands/ship.md has no front-matter"),
+        ('---\nname: deploy\ndescription: ""\n---\n', COMMAND_FRONT_MATTER, "missing 'description'"),
+        (
+            SKILL_FRONT_MATTER,
+            "---\nargument-hint: x\n---\n",
+            ".claude/commands/ship.md front-matter is missing 'description'",
+        ),
     ],
-    ids=["no-front-matter", "no-description", "no-name", "name-not-folder", "description-too-long", "bare-command"],
+    ids=[
+        "no-front-matter",
+        "no-description",
+        "no-name",
+        "name-not-folder",
+        "description-too-long",
+        "bare-command",
+        "empty-description",  # round thirteen survivor V7-empty-desc-ok
+        "command-without-description",  # round thirteen survivor V7-claude-cmd-desc-dropped
+    ],
 )
 def test_v7_fails_what_a_tool_would_not_list(isolated: Path, skill_head: str, command_head: str, expected: str) -> None:
     world = _world(isolated, FIXED, skill_head, command_head)
@@ -137,7 +154,55 @@ def test_v7_prints_no_ok_above_its_own_failure(isolated: Path) -> None:
     world = _world(isolated, FLAT, SKILL_FRONT_MATTER, COMMAND_FRONT_MATTER)
     validate.check_discovery(world["manifest"], world["canonical"])
     assert _failures("V7")
-    assert not [n for n in validate.notes if n.startswith("[V7]")]
+    assert not [n for n in validate.passing_notes() if n.startswith("[V7]")]
+
+
+def test_one_tool_reaching_two_identical_copies_is_accepted(isolated: Path) -> None:
+    """Cursor reads `.agents/` and `.claude/`: listed twice, the same skill both times (P2-3)."""
+    world = _world(isolated, FIXED, SKILL_FRONT_MATTER, COMMAND_FRONT_MATTER)
+    validate.check_discovery(world["manifest"], world["canonical"])
+    assert not _failures("V7"), validate.failures
+
+
+def test_one_tool_reaching_copies_that_disagree_fails(isolated: Path) -> None:
+    """Two skills under one name, and the tool — not this repository — picks which runs."""
+    world = _world(isolated, FIXED, SKILL_FRONT_MATTER, COMMAND_FRONT_MATTER)
+    claude = isolated / ".claude/skills/deploy/SKILL.md"
+    claude.write_text(claude.read_text().replace("Ship it", "Something else"), encoding="utf-8")
+    validate.check_discovery(world["manifest"], world["canonical"])
+    assert any("cursor reaches skill 'deploy' through copies that disagree" in f for f in _failures("V7"))
+
+
+def _nested(root: Path, owner: str, rel: str) -> None:
+    target = root / owner / "svc" / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("# pointer\n", encoding="utf-8")
+
+
+def test_v8_reports_an_inherited_service_without_failing(isolated: Path) -> None:
+    """P2-4: services/ are the template's (ADR-003) — seen every run, never silently."""
+    world = _world(isolated, FIXED, SKILL_FRONT_MATTER, COMMAND_FRONT_MATTER)
+    _nested(isolated, "services", ".cursor/skills/deploy.md")
+    _nested(isolated, "services", ".claude/skills/deploy/SKILL.md")
+    validate.check_nested_surfaces(world["canonical"])
+    assert not _failures("V8")
+    assert any(".cursor/skills: 1 flat pointer(s) no tool loads" in r for r in validate.reports), validate.reports
+    assert any(".claude/skills: 1 skill name(s) also defined at the root" in r for r in validate.reports)
+
+
+def test_v8_fails_the_same_defect_in_a_project_of_ours(isolated: Path) -> None:
+    world = _world(isolated, FIXED, SKILL_FRONT_MATTER, COMMAND_FRONT_MATTER)
+    _nested(isolated, "projects", ".agents/skills/deploy/SKILL.md")
+    validate.check_nested_surfaces(world["canonical"])
+    assert any("projects/svc/.agents/skills: 1 skill name(s) also defined at the root" in f for f in _failures("V8"))
+
+
+def test_no_ok_line_above_a_warning_for_the_same_check(isolated: Path) -> None:
+    """P3-3: V6 printed `ok` above its own warning, which --strict turns into a failure."""
+    validate.warn("V6", "rule 99-probe cites no authority")
+    validate.ok("V6", "24 rules carry a resolvable authority")
+    validate.ok("V1", "untouched")
+    assert validate.passing_notes() == ["[V1] untouched"]
 
 
 # --- the renderer -------------------------------------------------------------

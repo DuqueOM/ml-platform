@@ -848,6 +848,94 @@ def test_c10_reads_repeats_explicit_ids_and_skips_code() -> None:
     assert "_gate_probe.md links to #same-2" in dead.stdout
 
 
+# --- QA-4 round thirteen: mutations neither party chose -------------------------
+# Each test below closes a survivor from round thirteen's harness, named in its
+# docstring. They use `--only`, so no other check can turn them red.
+
+
+def test_c2_applies_the_migrated_tree_rule_to_markdown_too() -> None:
+    """Survivor C2-migrated-md-exempt: only code files in migrated trees were pinned."""
+    probe = REPO_ROOT / "libs" / "llm-core" / "_gate_probe.md"
+    with temporarily(probe, "# probe\n\nThe tier topology is ADR-007.\n"):
+        result = _run(GATES["doc-coherence"], "--only", "C2")
+    assert result.returncode == 1
+    assert "_gate_probe.md cites bare ADR-007 in a tree migrated from agent-local" in result.stdout
+
+
+def test_c10_does_not_count_a_heading_inside_code() -> None:
+    """Survivor C10-fenced-headings-count: the code test covered links in code, not headings."""
+    body = "# probe\n\n```markdown\n## Only In A Fence\n```\n\n[x](#only-in-a-fence)\n"
+    with temporarily(_ANCHOR_PROBE, body):
+        result = _run(GATES["doc-coherence"], "--only", "C10")
+    assert result.returncode == 1
+    assert "links to #only-in-a-fence" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("body", "dead"),
+    [
+        ("# probe\n\nSee [x][r].\n\n[r]: ../../RUNBOOK.md#no-such-reference\n", "no-such-reference"),
+        ('# probe\n\n<a href="../../RUNBOOK.md#no-such-html">y</a>\n', "no-such-html"),
+    ],
+    ids=["reference-definition", "html-href"],
+)
+def test_c10_checks_every_way_markdown_names_a_target(body: str, dead: str) -> None:
+    """P3-1: only inline links were checked."""
+    with temporarily(_ANCHOR_PROBE, body):
+        result = _run(GATES["doc-coherence"], "--only", "C10")
+    assert result.returncode == 1
+    assert f"links to #{dead}" in result.stdout
+
+
+def test_c10_reads_setext_headings_and_leaves_thematic_breaks_alone() -> None:
+    """P3-1: a setext heading was reported dead. A `---` after a blank line is a rule, not a heading."""
+    body = "---\ntitle: front matter\n---\n\nSetext Title\n============\n\nText.\n\n---\n\n[s](#setext-title)\n"
+    with temporarily(_ANCHOR_PROBE, body):
+        clean = _run(GATES["doc-coherence"], "--only", "C10")
+    assert clean.returncode == 0, clean.stdout
+    with temporarily(_ANCHOR_PROBE, body + "[t](#title-front-matter)\n[u](#text)\n"):
+        dead = _run(GATES["doc-coherence"], "--only", "C10")
+    assert "links to #title-front-matter" in dead.stdout, "front matter was read as a setext heading"
+    assert "links to #text" in dead.stdout, "a paragraph above a thematic break was read as a heading"
+
+
+@pytest.mark.parametrize("surface", [".agents", ".claude"])
+def test_c6_scans_links_in_generated_surfaces(surface: str) -> None:
+    """P2-5: a hand-added file in a generated directory published a non-public link past every gate."""
+    probe = REPO_ROOT / surface / "_gate_probe.md"
+    # Assembled at runtime, as the other C6 tests do: written literally, this
+    # file would itself fail C6 — which is how this test was first caught.
+    link = "https://github.com/" + "DuqueOM" + "/" + "not-a-public" + "-repo"
+    with temporarily(probe, f"Notes: {link}\n"):
+        result = _run(GATES["doc-coherence"], "--only", "C6")
+    assert result.returncode == 1
+    assert f"{surface}/_gate_probe.md links to non-public repository 'not-a-public-repo'" in result.stdout
+
+
+def test_an_inherited_defect_is_reported_even_when_the_check_fails() -> None:
+    """P3-2: `passing_notes()` hid C9's inherited report exactly when C9 was red."""
+    command = "# probe\n\n```bash\ncopier copy gh:owner/repo projects/new\n```\n"
+    inherited = REPO_ROOT / "services" / "demand-forecast-serving" / "_gate_probe.md"
+    with temporarily(inherited, command), temporarily(_ANCHOR_PROBE, command):
+        result = _run(GATES["doc-coherence"], "--only", "C9")
+    assert result.returncode == 1
+    assert "FAIL [C9] docs/runbooks/_gate_probe.md documents an unpinned copier command" in result.stdout
+    assert "note [C9] 1 unpinned command(s) INHERITED from the template" in result.stdout
+
+
+def test_every_markdown_lint_list_ignores_every_generated_surface() -> None:
+    """P3-5: `.agents/` joined the rendered surfaces and the hand-kept lists did not follow."""
+    sys.path.insert(0, str(SCRIPTS))
+    import check_doc_coherence as coherence
+
+    generated = coherence.generated_surface_dirs()
+    assert ".agents" in generated, "the manifest no longer renders into .agents — update this test"
+    config = (REPO_ROOT / ".markdownlint-cli2.yaml").read_text(encoding="utf-8")
+    workflow = (REPO_ROOT / ".github" / "workflows" / "docs-quality.yml").read_text(encoding="utf-8")
+    missing = [d for d in generated if f'"{d}"' not in config] + [d for d in generated if f"!{d}/**" not in workflow]
+    assert not missing, f"generated surfaces linted as if hand-written: {missing}"
+
+
 # --- the tree is left as it was found ---------------------------------------
 
 

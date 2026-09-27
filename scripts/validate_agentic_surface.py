@@ -17,6 +17,10 @@ Checks:
   V4  Mirror surfaces match their canonical body exactly.
   V5  Pointer surfaces contain no policy text — only the pointer.
   V6  Every rule declares its authority, and it resolves.
+  V8  Nested surfaces under `services/` and `projects/` are discoverable, and
+      their skill names do not collide with the root's unreported. A service
+      generated from the template is reported, not failed: its surfaces are
+      the template's to change (ADR-003).
   V7  Every artifact is where its TOOL looks for it, with the front-matter the
       tool requires. V1 compares the surfaces with the manifest; V7 compares
       them with the tools, from a table this file keeps apart from the
@@ -57,15 +61,29 @@ def warn(check: str, msg: str) -> None:
 
 
 def ok(check: str, msg: str) -> None:
-    """Record a passing check.
-
-    Silently skipped when this check has already failed: a gate that prints
-    both `ok` and `FAIL` for the same run is contradictory evidence, and a
-    reader has to guess which line is authoritative.
-    """
-    if any(f.startswith(f"[{check}]") for f in failures):
-        return
+    """Record a passing check. Whether it prints is decided in `passing_notes()`."""
     notes.append(f"[{check}] {msg}")
+
+
+#: Seen whatever the verdict — an inherited defect this repository cannot fix.
+reports: list[str] = []
+
+
+def report(check: str, msg: str) -> None:
+    reports.append(f"[{check}] {msg}")
+
+
+def passing_notes() -> list[str]:
+    """`ok` lines of checks with no failure AND no warning, decided at print time.
+
+    A gate that prints `ok` and `FAIL` for the same check is contradictory
+    evidence. The guard used to live in `ok()` and looked only at failures, so
+    V6 printed `ok … rules carry a resolvable authority` above its own warning,
+    which `--strict` — the mode CI runs — turns into a failure (QA-4 round
+    thirteen, P3-3: R12-5's class, in the sibling gate).
+    """
+    red = {entry.split("]", 1)[0] for entry in failures + warnings}
+    return [note for note in notes if note.split("]", 1)[0] not in red]
 
 
 def _front_matter(text: str) -> dict[str, Any] | None:
@@ -116,7 +134,21 @@ DISCOVERY: dict[str, dict[str, tuple[tuple[str, ...], tuple[str, ...]]]] = {
         "workflows": ((".claude/commands/{name}.md",), ("description",)),
     },
     "cursor": {
-        "skills": ((".cursor/skills/{name}/SKILL.md", ".agents/skills/{name}/SKILL.md"), ("name", "description")),
+        # Cursor also reads Claude's and Codex's directories, as documented
+        # "compatibility" paths (QA-4 round thirteen, P2-3; re-checked
+        # 2026-09-26). It therefore reaches each skill through `.agents/` and
+        # through `.claude/`: listed twice. That cannot be avoided while Claude
+        # reads only `.claude/` and Codex only `.agents/`, so V7 requires the
+        # copies one tool can reach to agree instead (see `_reach`).
+        "skills": (
+            (
+                ".cursor/skills/{name}/SKILL.md",
+                ".agents/skills/{name}/SKILL.md",
+                ".claude/skills/{name}/SKILL.md",
+                ".codex/skills/{name}/SKILL.md",
+            ),
+            ("name", "description"),
+        ),
         "workflows": ((".cursor/commands/{name}.md",), ()),
     },
     "codex": {
@@ -286,6 +318,31 @@ def check_rule_authority(canonical: dict[str, dict[str, Path]], manifest: dict[s
     ok("V6", f"{len(canonical.get('rules', {}))} rules carry a resolvable authority")
 
 
+_CANONICAL_LINE = re.compile(r"^\*\*Canonical source\*\*: `([^`]+)`", re.MULTILINE)
+
+
+def _reach(surface: str, name: str, copies: list[Path]) -> None:
+    """One tool reaches one skill through several paths: the copies must be the same skill.
+
+    Listed twice is noise; listed twice with different descriptions or
+    different canonical sources is two skills under one name, and which one
+    runs is the tool's choice, not this repository's.
+    """
+    seen: dict[tuple[object, object, object], list[str]] = {}
+    for copy in copies:
+        text = copy.read_text(encoding="utf-8")
+        fm = _front_matter(text) or {}
+        source = _CANONICAL_LINE.search(text)
+        key = (fm.get("name"), fm.get("description"), source.group(1) if source else None)
+        seen.setdefault(key, []).append(str(copy.relative_to(REPO_ROOT)))
+    if len(seen) > 1:
+        variants = " vs ".join(", ".join(paths) for paths in seen.values())
+        fail(
+            "V7",
+            f"{surface} reaches skill {name!r} through copies that disagree on name, description or source: {variants}",
+        )
+
+
 def check_discovery(manifest: dict[str, Any], canonical: dict[str, dict[str, Path]]) -> None:
     """V7 — each artifact is where its tool looks, carrying what the tool reads.
 
@@ -310,11 +367,14 @@ def check_discovery(manifest: dict[str, Any], canonical: dict[str, dict[str, Pat
                 fail("V7", f"{surface}: publishes {kind} to {published}, which the tool does not read")
             for name in canonical.get(kind, {}):
                 found = [REPO_ROOT / p.replace("{name}", name) for p in patterns]
-                path = next((f for f in found if f.is_file()), None)
+                reached = [f for f in found if f.is_file()]
+                path = reached[0] if reached else None
                 if path is None:
                     fail("V7", f"{surface}: {kind}/{name} is not where the tool looks ({' or '.join(patterns)})")
                     continue
                 checked += 1
+                if len(reached) > 1:
+                    _reach(surface, name, reached)
                 if not required:
                     continue
                 fm = _front_matter(path.read_text(encoding="utf-8"))
@@ -330,6 +390,57 @@ def check_discovery(manifest: dict[str, Any], canonical: dict[str, dict[str, Pat
                 if len(str(fm.get("description", ""))) > MAX_DESCRIPTION:
                     fail("V7", f"{rel} description exceeds {MAX_DESCRIPTION} characters")
     ok("V7", f"{checked} artifacts are where Claude Code, Cursor and Codex look for them")
+
+
+_NESTED_SKILL_DIRS = (".claude/skills", ".cursor/skills", ".codex/skills", ".agents/skills")
+
+
+def check_nested_surfaces(canonical: dict[str, dict[str, Path]]) -> None:
+    """V8 — tool discovery directories below the root.
+
+    Claude Code loads a nested `.claude/skills/` the first time it touches a
+    file in that directory, and Cursor picks up `.cursor/skills/` and
+    `.agents/skills/` anywhere in a repository. So a generated service's own
+    skills join the root's: a name both define is two skills under one name,
+    and a flat pointer file is a skill no tool loads. Nothing looked below the
+    root (QA-4 round thirteen, P2-4: `services/demand-forecast-serving`, on
+    template v0.26.0, carried 39 flat pointers and 19 colliding names).
+
+    `projects/` is this repository's and fails. `services/` is generated from
+    ml-service-template and changes only through `copier update` (ADR-003), so
+    it is reported every run — like C9's inherited copier commands — rather
+    than failed.
+    """
+    root_names = set(canonical.get("skills", {}))
+    inspected = 0
+    for owner in ("projects", "services"):
+        for unit in sorted(p for p in (REPO_ROOT / owner).glob("*") if p.is_dir()):
+            for rel_dir in _NESTED_SKILL_DIRS:
+                directory = unit / rel_dir
+                if not directory.is_dir():
+                    continue
+                inspected += 1
+                flat = sorted(f.name for f in directory.glob("*.md") if f.name != "INDEX.md")
+                names = {d.name for d in directory.iterdir() if (d / "SKILL.md").is_file()}
+                problems = []
+                if flat:
+                    problems.append(
+                        f"{len(flat)} flat pointer(s) no tool loads (the template's layout before template-ADR-027 §9; "
+                        "`copier update` to a release with it removes them)"
+                    )
+                if names & root_names:
+                    problems.append(
+                        f"{len(names & root_names)} skill name(s) also defined at the root — inherent to a service "
+                        "that ships its own skills; inside it the tool decides which runs"
+                    )
+                if not problems:
+                    continue
+                message = f"{directory.relative_to(REPO_ROOT)}: {'; '.join(problems)}"
+                if owner == "services":
+                    report("V8", f"{message}. INHERITED from ml-service-template (ADR-003)")
+                else:
+                    fail("V8", message)
+    ok("V8", f"{inspected} nested discovery director(ies) inspected under projects/ and services/")
 
 
 def main() -> int:
@@ -350,9 +461,12 @@ def main() -> int:
     check_pointer_purity(manifest)
     check_rule_authority(canonical, manifest)
     check_discovery(manifest, canonical)
+    check_nested_surfaces(canonical)
 
-    for note in notes:
+    for note in passing_notes():
         print(f"  ok   {note}")
+    for item in reports:
+        print(f"  note {item}")
     for warning in warnings:
         print(f"  warn {warning}")
 

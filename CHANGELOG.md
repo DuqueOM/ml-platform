@@ -18,6 +18,62 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Fixed — QA-4 round thirteen: what the round-twelve fixes claimed held only for the mutations tried
+
+- **A subpackage could replace an exported module and `--check` said OK**
+  (P2-1). The stray check looked only at top-level `*.py`. A `core/policy/`
+  package beside `policy.py` is imported first, so the exported file stayed
+  byte-identical, correctly hashed, and never loaded. The exporter now
+  accounts for every entry under `core/` at every depth, apart from
+  `__pycache__`. `agent-local`'s test gets the same rule in its own change.
+- **12 of 31 mutations neither party chose survived** (P2-2). Each now has the
+  test it lacked:
+  - `--check` comparing `EXPORTED_FROM.json`, the only guard on the record's
+    fields;
+  - an underscore stray;
+  - `-dirty` on a dry-run export, and an untracked file counting as dirty;
+  - the migrated-tree rule for markdown;
+  - a heading inside a code block;
+  - an empty skill description, and a Claude command without one;
+  - the EDGAR contact on every request, the rate-limit pause, and `limit`.
+- **The harness is committed.** `tests/mutations.yaml` holds 36 mutations,
+  among them round twelve's E1–E5, M-C2a and the flat Claude layout, and
+  `scripts/mutation_harness.py` runs them: 34 of 34 expected kills. The two
+  survivors only make a check stricter, and each carries its reason.
+  `tests/test_mutation_harness.py` fails when an anchor moves, so the
+  catalogue cannot shrink silently. RUNBOOK documents it.
+- **Cursor reads `.claude/skills/` too, so every skill is listed twice**
+  (P2-3). That cannot be avoided while Claude reads only `.claude/` and Codex
+  only `.agents/`. V7's table now includes Cursor's compatibility paths, and
+  V7 fails when the copies one tool reaches disagree on name, description or
+  canonical source. The manifest's "listed once" is corrected.
+- **Nothing looked below the root** (P2-4). New V8 inspects tool discovery
+  directories under `projects/` and `services/`: flat pointers no tool loads,
+  and skill names that collide with the root's. `projects/` fails.
+  `services/demand-forecast-serving`, generated from template v0.26.0, is
+  reported as inherited on every run, the way C9 reports inherited copier
+  commands. Its update is a separate change.
+- **C6's link scan skipped generated directories** (P2-5), so a hand-added
+  file there could publish a non-public link past every gate. C6 now skips
+  only infrastructure. The directories that count as generated come from
+  `agentic/manifest.yaml`, not a hand-kept list (P3-5), and markdownlint's
+  two lists add `.agents`, pinned by a test.
+- **C10 checked inline links only** (P3-1). Reference definitions, HTML
+  `href`s and setext headings are now read. Front matter and thematic breaks
+  are not mistaken for headings.
+- **A failing check hid its inherited-defect report** (P3-2). C9's
+  inherited copier commands and C2's unchecked count move to a `note` channel
+  that is never filtered. C9's line no longer says "all pinned" over an
+  inherited unpinned command.
+- **V6 printed `ok` above its own warning** (P3-3), which `--strict` makes a
+  failure. The agentic validator now filters `ok` lines at print time against
+  failures and warnings, as the coherence script does. RUNBOOK's "V1–V6"
+  becomes V1–V8.
+- The brief said `rag-assistant` sits below charter C1; it reuses three
+  libraries (P3-4). ADR-010 gains a second dated correction.
+- A C6 test of this change was caught by C6: it wrote the probe URL
+  literally. It now assembles the URL at runtime, as the other C6 tests do.
+
 ### Added — C10: every markdown link to a heading names a heading that exists
 
 - **Nothing checked anchors** (QA-4 round twelve, P3-2; R12-6). The link
@@ -44,6 +100,11 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   punctuation filter drops anyway. An `_emphasised_` case now pins it.
 - `.agents/`, the skills directory Cursor and Codex share since #89, joins the
   generated surfaces the coherence checks skip.
+- **Corrected by QA-4 round thirteen** (entry above): "every link to a
+  heading" was inline links only. Reference definitions and HTML `href`s were
+  not checked, a setext heading was reported dead, and a heading inside a code
+  block counted as an anchor. Skipping `.agents/` also removed it from C6's
+  link scan, where a leak in a generated directory is still a leak.
 
 ### Fixed — QA-4 round twelve: two negative controls that passed with the guard broken, and a rule describing another gate
 
@@ -139,6 +200,10 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   Cursor's skills flat under `.cursor/skills/` and Codex's under
   `.codex/skills/`, the same two defects. Changing that repository is the
   maintainer's call.
+- **Corrected by QA-4 round thirteen** (entry above): "a second copy under
+  `.cursor/skills/` would list every skill twice" implied that sharing
+  `.agents/skills/` lists each skill once. Cursor also reads `.claude/skills/`
+  as a documented compatibility path, so it lists every skill twice anyway.
 
 ### Added — ADR-010: this repository is authoritative for the agent core, and exports it
 
