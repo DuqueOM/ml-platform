@@ -12,4 +12,4 @@ config:
   # generated status files open with a warning banner.
   MD041: false
 globs: ["**/*.md"]
-ignores: ["services", ".claude", ".cursor", ".codex", ".devin", "templates", ".venv", "node_modules"]
+ignores: ["services", ".agents", ".claude", ".cursor", ".codex", ".devin", "templates", ".venv", "node_modules"]

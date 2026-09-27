@@ -17,6 +17,7 @@ Exit code 1 on any failure. Run before declaring a round complete.
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import itertools
 import json
@@ -27,6 +28,8 @@ from collections.abc import Callable
 from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import unquote
+
+import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -130,6 +133,18 @@ def ok(check: str, message: str) -> None:
     notes.append(f"[{check}] {message}")
 
 
+#: Things a check wants seen whatever its verdict — an inherited defect, a
+#: scope it could not reach. Kept apart from `notes` because QA-4 round
+#: thirteen found `passing_notes()` hiding them exactly when the check was
+#: already red: C9's inherited copier command and C2's unchecked count were
+#: carried in `ok()` lines and vanished with them.
+reports: list[str] = []
+
+
+def report(check: str, message: str) -> None:
+    reports.append(f"[{check}] {message}")
+
+
 def passing_notes() -> list[str]:
     """The `ok` lines of checks that did not fail — decided once, at print time.
 
@@ -159,12 +174,38 @@ def _rel_parts(path: Path) -> set[str]:
     return set(path.relative_to(REPO_ROOT).parts)
 
 
+_INFRASTRUCTURE_DIRS = frozenset({".git", ".venv", "node_modules", ".mypy_cache", ".pytest_cache"})
+
+
+@functools.cache
+def generated_surface_dirs() -> frozenset[str]:
+    """Every top-level directory `sync_agentic_adapters.py` renders into, read from its manifest.
+
+    Derived, not listed: #89 added `.agents/` as a rendered surface and the
+    hand-kept lists here, in the markdownlint config and in the docs workflow
+    each had to learn it separately (QA-4 round thirteen, P3-5).
+    """
+    manifest = yaml.safe_load(_read(REPO_ROOT / "agentic" / "manifest.yaml")) or {}
+    dirs: set[str] = set()
+    for cfg in (manifest.get("surfaces") or {}).values():
+        dirs.add(str(cfg["root"]).split("/")[0])
+        dirs.update(str(pattern).split("/")[0] for pattern in (cfg.get("layout") or {}).values())
+    return frozenset(dirs)
+
+
+def _is_infrastructure(path: Path) -> bool:
+    return bool(_rel_parts(path) & _INFRASTRUCTURE_DIRS)
+
+
 def _is_scannable(path: Path, exclude: set[str] = frozenset()) -> bool:  # type: ignore[assignment]
-    """True when a markdown file is part of the documentation surface."""
+    """True when a markdown file is part of the documentation surface.
+
+    Generated surfaces are excluded because their bodies are rendered from
+    `agentic/`, which is scanned: reading them again reports each finding once
+    per surface. That reasoning holds for coherence, not for privacy — see C6.
+    """
     parts = _rel_parts(path)
-    generated = {".claude", ".cursor", ".codex", ".devin", ".agents"}
-    infra = {".git", ".venv", "node_modules", ".mypy_cache", ".pytest_cache"}
-    return not (parts & (infra | generated | set(exclude)))
+    return not (parts & (_INFRASTRUCTURE_DIRS | generated_surface_dirs() | set(exclude)))
 
 
 def _adr_files() -> dict[str, Path]:
@@ -396,9 +437,10 @@ def check_no_dangling_refs(adrs: dict[str, Path]) -> None:
     if foreign:
         note += f"; {foreign} resolved against the template's index"
     if unresolvable:
-        note += (
-            f"; {unresolvable} in generated code NOT checked — no template checkout at "
-            f"{TEMPLATE_CHECKOUT.name}/, so their index is unreachable here"
+        report(
+            "C2",
+            f"{unresolvable} citations in generated code NOT checked — no template checkout at "
+            f"{TEMPLATE_CHECKOUT.name}/, so their index is unreachable here",
         )
     if len(failures) == before:
         ok("C2", note)
@@ -768,7 +810,13 @@ def check_language_and_privacy() -> None:
     # 1312 files and the general half over 233 left the general one where a
     # leak is likeliest to be a surprise.
     for path in _scannable_files():
-        if not _is_scannable(path):
+        # Only infrastructure is skipped. `_is_scannable` also skips generated
+        # surfaces, which avoids reporting a coherence finding once per
+        # surface — but a privacy leak in a generated directory is still a
+        # published leak, and a file the generator did NOT write there passed
+        # this scan, `sync --check` and `validate --strict` alike (QA-4 round
+        # thirteen, P2-5; `.agents/` had just joined that set in #91).
+        if _is_infrastructure(path):
             continue
         scanned += 1
         # `{owner}/{repo}` are literal placeholders the gh CLI substitutes itself;
@@ -923,9 +971,10 @@ def check_copier_commands_are_pinned() -> None:
                 "it resolves to the highest-sorting tag, which is a frozen v1.x snapshot",
             )
 
-    ok("C9", f"{checked} runnable copier command(s) against a versioned source, all pinned")
+    own = checked - len(upstream)
+    ok("C9", f"{own} runnable copier command(s) in this repository's own files, all pinned")
     if upstream:
-        ok(
+        report(
             "C9",
             f"{len(upstream)} unpinned command(s) INHERITED from the template, not fixable here: "
             + "; ".join(upstream),
@@ -1275,6 +1324,15 @@ _FENCED = re.compile(r"^(```|~~~).*?^\1", re.DOTALL | re.MULTILINE)
 _INLINE_CODE = re.compile(r"`[^`\n]*`")
 _MD_LINK = re.compile(r"\]\(\s*<?([^)\s>]*)>?(?:\s+\"[^\"]*\")?\s*\)")
 _HEADING = re.compile(r"^#{1,6}\s+(.*?)\s*#*\s*$", re.MULTILINE)
+# A setext heading: a text line underlined with `=` or `-`. The text line must
+# not itself be a list item, quote, table row or ATX heading, and must follow a
+# blank line or the start of the file — otherwise `---` under a paragraph's
+# last line is still a heading, which CommonMark agrees with, but `---` after a
+# blank line is a thematic break.
+_SETEXT = re.compile(r"^(?![ \t]*(?:[-*+>|#]|\d+\.)\s)([^\n]*\S[^\n]*)\n[ \t]{0,3}(?:=+|-+)[ \t]*$", re.MULTILINE)
+_FRONT_MATTER = re.compile(r"\A---\n.*?\n---\n", re.DOTALL)
+_REFERENCE_DEFINITION = re.compile(r"^[ ]{0,3}\[[^\]]+\]:[ \t]*<?([^\s>]+)>?", re.MULTILINE)
+_HTML_HREF = re.compile(r"<a\s[^>]*href=\"([^\"]+)\"", re.IGNORECASE)
 _HTML_ANCHOR = re.compile(r"<a\s+[^>]*(?:id|name)=\"([^\"]+)\"", re.IGNORECASE)
 
 
@@ -1294,10 +1352,13 @@ def heading_slug(text: str) -> str:
 def _anchors(path: Path, cache: dict[Path, set[str]]) -> set[str]:
     """Every anchor a markdown file offers: heading slugs, numbered on repeat, and explicit ids."""
     if path not in cache:
-        text = _FENCED.sub("", _read(path))
+        text = _FENCED.sub("", _FRONT_MATTER.sub("", _read(path)))
         seen: dict[str, int] = {}
         found: set[str] = set()
-        for heading in _HEADING.findall(text):
+        # Both heading forms, in document order, so a repeat is numbered where it falls.
+        headings = [(m.start(), m.group(1)) for m in _HEADING.finditer(text)]
+        headings += [(m.start(), m.group(1)) for m in _SETEXT.finditer(text)]
+        for _, heading in sorted(headings):
             slug = heading_slug(heading)
             repeat = seen.get(slug, 0)
             seen[slug] = repeat + 1
@@ -1322,7 +1383,10 @@ def check_markdown_anchors() -> None:
         if not path.is_file() or not _is_scannable(path):
             continue
         text = _INLINE_CODE.sub("", _FENCED.sub("", _read(path)))
-        for target in _MD_LINK.findall(text):
+        # Inline links, reference definitions and HTML anchors: the three ways
+        # markdown names a target. Round thirteen found only the first checked.
+        targets = _MD_LINK.findall(text) + _REFERENCE_DEFINITION.findall(text) + _HTML_HREF.findall(text)
+        for target in targets:
             if "#" not in target or re.match(r"[a-z][a-z0-9+.-]*:", target):
                 continue
             file_part, _, fragment = target.partition("#")
@@ -1394,7 +1458,7 @@ def main() -> int:
             print(f"[coherence] unknown check {args.only!r}; known: {', '.join(registry)}", file=sys.stderr)
             return 2
         registry[selected]()
-        if not failures and not notes:
+        if not failures and not notes and not reports:
             # A check that reports neither a pass nor a failure has verified
             # nothing, and a control asserting "C6 did not fire" would pass on
             # that silence. Same defect as the one this flag fixes, one level in.
@@ -1406,6 +1470,8 @@ def main() -> int:
 
     for note in passing_notes():
         print(f"  ok  {note}")
+    for item in reports:
+        print(f"  note {item}")
 
     if failures:
         print("\n[coherence] FAILED\n")

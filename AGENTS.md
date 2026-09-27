@@ -55,7 +55,7 @@ documents restate which facts; a hand edit fixes the copy you remembered.
 ## Independent audit
 
 ```text
-Last independent audit: 2026-09-23 (f8400f7)
+Last independent audit: 2026-09-26 (96128c0)
 ```
 
 The commit in parentheses is the tree the auditor read, and it is what C7

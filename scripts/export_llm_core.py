@@ -256,10 +256,25 @@ def build(dest: Path, *, allow_dirty: bool) -> tuple[dict[str, str], str]:
     return files, json.dumps(provenance, indent=2, sort_keys=True) + "\n"
 
 
-def stray_modules(core: Path) -> list[str]:
-    """Python files in the destination that the export does not produce."""
-    expected = {f"{module}.py" for module in MODULES}
-    return sorted(path.name for path in core.glob("*.py") if path.name not in expected)
+def stray_entries(core: Path) -> list[str]:
+    """Everything under the destination's `core/` that the export does not produce.
+
+    Every entry, at every depth — not only top-level `*.py`. QA-4 round
+    thirteen added a `core/policy/` package beside the exported `policy.py`:
+    Python imports the package first, so the exported file was never loaded,
+    and a check that looked only for stray top-level modules reported OK. A
+    `.pyi` stub or a data file can change behaviour the same way. Only
+    `__pycache__`, which Python writes itself, is left alone.
+    """
+    expected = {f"{module}.py" for module in MODULES} | {PROVENANCE}
+    strays = []
+    for path in sorted(core.rglob("*")):
+        relative = path.relative_to(core)
+        if "__pycache__" in relative.parts:
+            continue
+        if path.is_dir() or relative.as_posix() not in expected:
+            strays.append(relative.as_posix() + ("/" if path.is_dir() else ""))
+    return strays
 
 
 def _differs(path: Path, body: str) -> bool:
@@ -292,10 +307,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[export] FAILED — {error}", file=sys.stderr)
         return 1
 
-    strays = stray_modules(core)
+    strays = stray_entries(core)
     if strays:
         # Deleting files in another repository is not this script's decision.
-        print(f"[export] FAILED — {core} holds modules the export does not produce: {', '.join(strays)}")
+        print(f"[export] FAILED — {core} holds entries the export does not produce: {', '.join(strays)}")
         return 1
 
     drift = [name for name, body in files.items() if _differs(core / name, body)]

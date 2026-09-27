@@ -95,9 +95,13 @@ context:
 #
 # Two surfaces may name the same pattern. Cursor and Codex both read the open
 # Agent Skills directory `.agents/skills/`, and Codex reads nothing else at
-# repository scope; rendering Cursor's copy under `.cursor/skills/` as well
-# would list every skill twice there. A shared path is rendered once, naming
-# every surface that publishes it.
+# repository scope, so they share it; a shared path is rendered once, naming
+# every surface that publishes it. Cursor ALSO reads Claude's `.claude/skills/`
+# as a documented compatibility path, so it lists every skill twice — which no
+# layout can avoid while Claude reads only `.claude/` and Codex only `.agents/`.
+# V7 therefore requires the copies one tool reaches to be the same skill: same
+# name, description and canonical source (QA-4 round thirteen, P2-3). An
+# earlier version of this comment said each skill was listed once.
 #
 # `front_matter` lists the kinds whose files open with YAML front-matter: a
 # skill's `name` and `description`, a Claude command's `description`. The
@@ -135,7 +139,7 @@ surfaces:
       tool: Cursor
       discovery:
         - "`.cursor/rules/*.mdc` are rendered by the same generator as every other surface, so they carry **no `globs:` / `alwaysApply:` front-matter**. Cursor therefore attaches none of them automatically — a rule binds because `AGENTS.md` says it does, not because the editor injected it. Read the ones covering your files yourself."
-        - "Skills are under `.agents/skills/<id>/SKILL.md`, the open Agent Skills directory Cursor reads alongside `.cursor/skills/`, shared with Codex so that each skill is listed once. Each is a pointer with `name` and `description`; the body it names under `agentic/skills/` is the thing to read."
+        - "Skills are under `.agents/skills/<id>/SKILL.md`, the open Agent Skills directory Cursor reads alongside `.cursor/skills/`, shared with Codex. Cursor also reads `.claude/skills/` for compatibility, so it lists each skill twice; V7 keeps the two copies identical in name, description and canonical source, so the duplicate is the same skill. The body it names under `agentic/skills/` is the thing to read."
         - "A file under `.cursor/commands/` backs the `/<name>` command. Commands are plain markdown — Cursor does not read `.mdc` there — and each is a pointer to its canonical workflow under `agentic/workflows/`."
         - "Do not add front-matter to a `.mdc` file to make it auto-attach: it is generated output and the next `sync_agentic_adapters.py` run deletes the edit. Auto-attachment is a renderer change, in `scripts/sync_agentic_adapters.py`."
 

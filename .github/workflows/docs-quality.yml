@@ -90,6 +90,7 @@ jobs:
           # every canonical finding four times.
           globs: |
             **/*.md
+            !.agents/**
             !.claude/**
             !.cursor/**
             !.codex/**

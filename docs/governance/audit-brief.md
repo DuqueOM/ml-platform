@@ -303,10 +303,11 @@ Listed so their absence is not reported as a discovery — and so that anything
   `doc-intelligence`, `agent-ops`.
 - Two absences that are decisions, recorded as such and not gaps: a shared
   lakehouse module, and a documentation retrieval index.
-- `rag-assistant`'s shared-library reuse count sits below what charter
-  criterion C1 asks for. The number is not restated here; read it from
-  `uv run python scripts/check_library_reuse.py`, which reports it and
-  deliberately does not fail on it mid-phase.
+- Not a gap, and listed here because it used to be: `rag-assistant` meets
+  charter criterion C1 (a second project reusing at least three shared
+  libraries, no fork) at L1 since `llm-core` was migrated. Read it from
+  `uv run python scripts/check_library_reuse.py`, not from this line. This
+  line said "below C1" until QA-4 round thirteen found it stale.
 
 ---
 
@@ -384,105 +385,83 @@ avoid, and it has already occurred here once.
 
 ---
 
-## 11. Since the previous audit — round thirteen's starting point
+## 11. Since the previous audit — round fourteen's starting point
 
-Round twelve audited `6a4bfe2` on 2026-09-23 and reported **1 P0, 7 P2, 6 P3**.
-That tree was `main` plus the two pull requests that qualified the agent core's
-foreign ADR citations (#86) and added ADR-010 (#87). Both landed as one squash,
-through #87, and the marker in `AGENTS.md` was re-pointed to the landed commit,
-with an audit-trail entry that says it is a re-point, not a round.
+Round thirteen audited `96128c0` on 2026-09-26 and reported **0 P0, 0 P1, 5
+P2, 6 P3**. That tree was already on `main`, so unlike round twelve the marker
+needed no re-point, and the remediation is inside the marker range.
 
-List what changed rather than trusting this paragraph. The range is read from
-the marker rather than written here, because a squash or a rebase rewrites
-the commit, and a SHA restated in a document goes stale when it does:
+List what changed rather than trusting this paragraph:
 
 ```bash
 git log --no-merges --oneline "$(grep -oE 'Last independent audit: [0-9-]+ \(([0-9a-f]+)\)' AGENTS.md | grep -oE '[0-9a-f]{7,}')..HEAD"
 ```
 
-### What round twelve found, and where each one went
+### What round thirteen found, and where each one went
 
 | Finding | State |
 | --- | --- |
-| **P0-1** — Claude Code registers none of the 29 skills; both surface validators green | Closed, *fix(agentic): QA-4 round twelve, P0 — render every surface where its tool looks* — Cursor and Codex were broken the same way, and are fixed with it |
-| **P2-1** — C2's extension: its tests missed both of the auditor's mutations, and the original defect could be re-introduced | Closed, *fix(gates): QA-4 round twelve, P2 — C2's new guards could not fail, and it could not read YAML* |
-| **P2-2** — nine agent-local citations still bare in YAML and JSONL | Closed, same commit |
-| **P2-3** — the exporter's provenance: `--allow-dirty` wrote, an uncommitted exporter was stamped clean, nothing required `main` | Closed, *fix(export): QA-4 round twelve, P2 — the exporter's guarantees were written, not enforced* |
-| **P2-4** — the exporter's tests covered only the transforms; five mutations survived | Closed, same commit |
-| **P2-5** — agent-local's drift test takes its verdict from the directory it checks | Closed downstream, DuqueOM/agent-local#1 (`a40bf38`): CI job `export-provenance` re-runs the exporter at the recorded commit |
-| **P2-6** — the workflow-bounds negative control recomputes instead of calling the guard | Closed, *fix: QA-4 round twelve — two negative controls that passed with the guard broken, and a rule describing another gate* |
-| **P2-7** — `agentic/rules/23-doc-coherence.md` describes a different gate | Closed, *fix: QA-4 round twelve — two negative controls that passed with the guard broken, and a rule describing another gate* |
-| **P3-1** — the export boundary test recognised one form of host reference in six | Closed, the exporter commit |
-| **P3-2** — no anchor check, one dead anchor, a promised scheduled sweep that did not exist | Sweep closed, *fix(ci): QA-4 round twelve, P3 — the link check promised a scheduled sweep it did not have*; the dead anchor closed in *fix: QA-4 round twelve — two negative controls that passed with the guard broken, and a rule describing another gate*; the anchor check closed in *fix(gates): QA-4 round twelve, R12-6 — C10 checks that every markdown anchor names a heading* |
-| **P3-3** — the ingest tests pin `user_agent()` but not that the request sends it | Closed, *fix: QA-4 round twelve — two negative controls that passed with the guard broken, and a rule describing another gate* |
-| **P3-4** — ADR-010's "9 commits" had no method | Closed by a dated correction in ADR-010, the exporter commit |
-| **P3-5** — the brief's stale facts; C2's descriptions overstated it | C2's RUNBOOK row closed in the C2 commit; the brief's two facts in *fix: QA-4 round twelve — two negative controls that passed with the guard broken, and a rule describing another gate* |
-| **P3-6** — C2 read each markdown file twice | Closed, the C2 commit |
+| **P2-1** — a `core/` subpackage shadowed an exported module and `--check` said OK | Closed in this repository. Downstream half: **R13-2** |
+| **P2-2** — 12 of 31 mutations neither party chose survived | Closed. Each has its test, and the harness is committed as `tests/mutations.yaml` |
+| **P2-3** — Cursor also reads `.claude/skills/`; "listed once" was false | Closed here, with V7's copies-must-agree rule. Template half: **R13-3** |
+| **P2-4** — `services/demand-forecast-serving` carries the pre-§9 layout, and nothing checked nested surfaces | Detection closed (V8). The update itself: **R13-1** |
+| **P2-5** — C6's link scan skipped generated directories | Closed |
+| **P3-1** — C10 read inline links and ATX headings only | Closed |
+| **P3-2** — a failing check hid its inherited-defect report | Closed, with the `note` channel |
+| **P3-3** — V6 printed `ok` above its own warning | Closed, with a print-time filter in the agentic validator |
+| **P3-4** — the brief said `rag-assistant` sits below C1 | Closed |
+| **P3-5** — the lists of generated directories were kept by hand | Closed. Derived from the manifest where code reads them; the two markdownlint lists are pinned by a test |
+| **P3-6** — agent-local's export check does not block a merge | **R13-2** |
 
-Everything open carries a mode, what it waits on, and its closing condition in
-`docs/governance/remediation-work-order.md` under *Round twelve*. Finding one of
-those again is not a finding; finding one described there as closed that is
-not, is.
+The closing commit is *fix: QA-4 round thirteen — what the round-twelve fixes
+claimed held only for the mutations tried*. Everything open is in
+`docs/governance/remediation-work-order.md` under *Round thirteen*.
 
 ### Where the author's confidence proved wrong this round
 
-- **Four claims in ADR-010 were written from the design.** Three guarantees
-  in its Decision and one number in its table were not true of the code that
-  shipped with them. Nothing had run the exporter's `main()`.
-- **The first boundary detector reported zero false positives, and had
-  several.** The measurement script had an escaping bug, so it split on the
-  letter `s` rather than on whitespace. The real test then flagged the word
-  "docs" in prose in two modules.
-- **The first run of the auditor's mutations against the fixed exporter
-  found a survivor in the fix.** No fixture named the `docs` directory alone,
-  so the rule for it could be deleted with the suite green.
-- **The author's own prose failed the new C2 again.** An example quoted a
-  misspelt namespace to explain the rule. It is now described instead of
-  quoted.
-- **The author told the owner to run the cloud review on #87 only.** Both
-  pull requests needed it; the owner ran both.
+- **The first V8 message promised `copier update` would fix the name
+  collisions.** It fixes the flat pointers only. The collisions are inherent
+  to a service that ships its own skills.
+- **A new C6 test was caught by C6.** It wrote the probe URL literally, as
+  none of the existing C6 tests do.
+- **RUNBOOK still said "V1–V6"** a PR after V7 landed. The author's own
+  change, found by the author only while documenting this round's V8.
+- **V7's table came from reading Cursor's documentation on 2026-09-23**
+  without its compatibility section. The page listed it, and the author
+  missed it.
+- **`generated_surface_dirs()` parsed the manifest once per file** in its
+  first version, about 1,400 times per run, until it was cached.
 
-### The question round thirteen exists to answer
+### The question round fourteen exists to answer
 
-Round twelve's hypothesis held: six of the eight negative controls it attacked
-failed under a mutation the author had not chosen. The corrections were
-verified against the **auditor's** mutations: 11 of 11 killed for C2, 11 of 11
-for the exporter. That is a second-order version of the same risk, because
-the tests are now tuned to two people's guesses instead of one. **Attack with
-mutations neither chose**, and report any fix that passes one it should have
-caught. The harnesses are not in the repository. The mutations are listed in
-the two CHANGELOG entries, so they can be rebuilt.
+The mutation harness is now part of the repository, and its 36 entries are
+the author's and the last two auditors' ideas. **Extend it.** Add mutations
+to `tests/mutations.yaml` that nobody has tried, and run
+`scripts/mutation_harness.py`. The harness counts a mutation as killed when
+any command exits non-zero, so a mutation that stops a module from importing
+is "killed" without any assertion catching it. Check whether any entry is
+killed only that way.
 
 ### Where the author's confidence is weakest — attack these first
 
-1. **The exporter's end-to-end tests run in a simulated world.** A temporary
-   git repository holds a copy of the exporter and the twelve modules, and
-   `origin/main` is set with `update-ref`. The ancestry check has never run
-   against the real remote after a squash. Confirm that exporting from `main`
-   succeeds, and that exporting from the pre-squash branch commit is refused.
-2. **C2's list of bare citations allowed in migrated trees is hand-written.**
-   `001`–`004` are allowed bare in `libs/llm-core` and
-   `projects/store-assistant` because round twelve checked that each means
-   this repository's decision. That list is the same class as round eleven's
-   hand-written `SEAM`. A new occurrence of one of those four numbers that
-   means agent-local's decision passes.
-3. **The boundary detector's host documents are derived, with exclusions.**
-   The list is built from the tracked `*.md` names at the root and in `docs/`,
-   minus generic names (`README.md`, `CHANGELOG.md` and others). A reference
-   to one of those passes by design. So does a path assembled from values that
-   are not literals.
-4. **The weekly link sweep has never run.** Its first scheduled run is after
-   this lands. Confirm it runs, and that a full external sweep is not
-   permanently red from third-party flakiness.
-5. **R12-1 did not exist when this was written.** If agent-local's CI check
-   has landed by the time you read this, attack it the way P2-5 attacked the
-   hash test. Edit `policy.py` and the manifest together and confirm it fails.
+1. **V7's copies-must-agree rule compares name, description and canonical
+   source.** Two copies could differ in anything else — the mode line in the
+   body, or front-matter a tool reads that the rule does not compare.
+2. **C10's setext rule is a heuristic.** It excludes list items, quotes,
+   tables and front matter, and treats `---` after a blank line as a thematic
+   break. CommonMark has more cases than that: lazy continuation lines, HTML
+   blocks, indented code.
+3. **V8 reports inherited collisions under `services/` indefinitely.** Is a
+   permanent note the right answer, or a way of never deciding?
+4. **The exporter now refuses any untracked file under `libs/llm-core`.** Is
+   that too strict? It does refuse the case round thirteen named.
+5. **The downstream items R13-1 to R13-3** are separate changes in separate
+   repositories. If they have landed, attack them the way P2-1 attacked the
+   export check.
 
 ### Deliberately not done by the author
 
-- Did not fix the findings in code it did not write (R12-2 to R12-5). They go
-  in separate changes so each is reviewed on its own.
-- Did not add an anchor check (R12-6) in this round's own changes. It landed afterwards, in *fix(gates): QA-4 round twelve, R12-6 — C10 checks that every markdown anchor names a heading*.
-- Did not commit the mutation harnesses. They were throwaway scripts.
-- Has no knowledge beyond the log of commits other sessions made in the
-  marker range. They are in scope on the same footing.
+- Did not run Cursor or Codex. Discovery rules come from their current
+  documentation.
+- Did not change agent-local, the template or the service in this change.
+  Each is its own change, listed in the work order.

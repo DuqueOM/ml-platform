@@ -733,6 +733,77 @@ heading that does not exist passes. The workflow now says so.
 validates fragments, or a small pass in the coherence script over relative
 links, which avoids network flakiness. The auditor's mutation B must fail it.
 
+## Round thirteen — what stays open, and why each one waits
+
+QA-4 round thirteen audited `96128c0` and reported 0 P0, 0 P1, 5 P2 and 6 P3.
+The round-twelve remediation held against the real remote and CI. But 12 of
+31 mutations neither party had chosen survived its tests, and one bypass of
+agent-local's export check was found. Commits are cited by subject.
+
+What closed, in *fix: QA-4 round thirteen — what the round-twelve fixes
+claimed held only for the mutations tried*:
+
+- the exporter's blindness to subpackages and other strays (P2-1);
+- the twelve surviving mutations, each with the test it lacked, and the
+  harness committed as `tests/mutations.yaml` (P2-2);
+- V7's missing Cursor compatibility paths and the false "listed once" (P2-3);
+- V8 for nested surfaces (P2-4, detection);
+- C6's links in generated directories (P2-5);
+- C10's other link and heading forms (P3-1);
+- the `note` channel (P3-2);
+- V6's `ok` above a warning (P3-3);
+- the brief's C1 sentence (P3-4);
+- the derived generated-surface set (P3-5).
+
+What follows did not close in that change. Each is under way in its own
+repository, and each was approved by the maintainer on 2026-09-26.
+
+### R13-1 — `services/demand-forecast-serving` still carries the template's pre-§9 skill layout
+
+**Mode**: CONSULT, approved · **Source**: round thirteen P2-4 · **Size**: a template release plus a `copier update`
+
+V8 now reports it on every run: 38 flat pointers no tool loads, and 19 skill
+names that collide with the root's. ADR-003 lets it change only through
+`copier update`, and the template fix (ml-service-template#238) is in no
+release yet.
+
+**Waits on**:
+
+- a template release that contains template-ADR-027 §9;
+- a `copier update` of the service to that release, which spans more than a
+  hundred template commits.
+
+**Closes when**: V8 reports no flat pointers under `services/`. The name
+collisions will remain. They are inherent to a service that ships its own
+skills, and V8 reports them as such rather than as a defect to fix.
+
+### R13-2 — agent-local's export check is advisory
+
+**Mode**: CONSULT, approved · **Source**: round thirteen P3-6, and P2-1's downstream half · **Size**: ~1h
+
+agent-local's `main` is unprotected, so a red `export-provenance` does not
+block a merge. The job also runs only on agent-local's own events, so a
+history rewrite in this repository is not noticed until agent-local's next
+push. Its hash test still uses the top-level `*.py` pattern that P2-1 showed
+blind.
+
+**Closes when**:
+
+- `export-provenance` is a required check on agent-local `main`;
+- the job also runs on a weekly schedule;
+- agent-local's test refuses the same strays as the exporter.
+
+### R13-3 — The template's template-ADR-027 §9 repeats the "listed once" claim
+
+**Mode**: AUTO · **Source**: round thirteen P2-3, upstream half · **Size**: ~1h
+
+ml-service-template#238 made the same choice as this repository and wrote the
+same false sentence. Its validator's table also omits Cursor's compatibility
+paths.
+
+**Closes when**: the template's ADR carries a dated correction, and its
+validator requires the copies one tool reaches to agree.
+
 ---
 
 ## Not for an agent
