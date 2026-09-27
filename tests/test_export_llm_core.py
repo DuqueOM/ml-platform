@@ -297,6 +297,81 @@ def test_a_stray_module_in_the_destination_is_refused(
     assert "backdoor.py" in result.stdout
 
 
+@pytest.mark.parametrize(
+    "stray",
+    ["policy/__init__.py", "ext/__init__.py", "_private.py", "policy.pyi", "data/rules.json"],
+    ids=["shadowing-package", "new-package", "underscore-module", "stub", "data-file"],
+)
+def test_any_entry_the_export_did_not_produce_is_refused(
+    world: dict[str, Path], export: Callable[..., subprocess.CompletedProcess[str]], stray: str
+) -> None:
+    """QA-4 round thirteen, P2-1: `core/policy/` shadowed `policy.py` and `--check` said OK.
+
+    Python imports a package before a same-named module, so the exported file
+    was byte-identical, correctly hashed, and never loaded.
+    """
+    assert export().returncode == 0
+    target = world["dest"] / "core" / stray
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("SHADOWED = True\n", encoding="utf-8")
+
+    result = export("--check")
+
+    assert result.returncode == 1
+    assert stray.split("/")[0] in result.stdout
+
+
+def test_bytecode_caches_are_not_strays(
+    world: dict[str, Path], export: Callable[..., subprocess.CompletedProcess[str]]
+) -> None:
+    """Importing the export writes `__pycache__`; that must not make the next `--check` fail."""
+    assert export().returncode == 0
+    cache = world["dest"] / "core" / "__pycache__"
+    cache.mkdir()
+    (cache / "policy.cpython-311.pyc").write_bytes(b"\x00")
+    assert export("--check").returncode == 0
+
+
+def test_a_tampered_provenance_field_is_drift(
+    world: dict[str, Path], export: Callable[..., subprocess.CompletedProcess[str]]
+) -> None:
+    """Round thirteen: `--check` could stop comparing EXPORTED_FROM.json with every test green.
+
+    agent-local's own hash test passes a changed `library_version` (it checks
+    file hashes only), so this comparison is the one guard on the record.
+    """
+    assert export().returncode == 0
+    record = world["dest"] / "core" / "EXPORTED_FROM.json"
+    data = json.loads(record.read_text(encoding="utf-8"))
+    data["library_version"] = "99.0.0"
+    record.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+    result = export("--check")
+
+    assert result.returncode == 1
+    assert "EXPORTED_FROM.json" in result.stdout
+
+
+def test_an_untracked_file_in_the_library_makes_the_source_dirty(
+    world: dict[str, Path], export: Callable[..., subprocess.CompletedProcess[str]]
+) -> None:
+    """Round thirteen: ignoring untracked files, or dropping `-dirty`, passed every test.
+
+    The untracked file changes nothing that is exported, so the only visible
+    difference is the provenance's commit — which is exactly what must show.
+    """
+    assert export().returncode == 0
+    (world["library"] / "scratch.py").write_text("x = 1\n", encoding="utf-8")
+
+    refused = export()
+    assert refused.returncode == 1
+    assert "uncommitted" in refused.stderr
+
+    dry = export("--check", "--allow-dirty")
+    assert dry.returncode == 1
+    assert "EXPORTED_FROM.json" in dry.stdout, "a dirty source was stamped with the clean commit"
+
+
 def test_uncommitted_library_source_is_refused(
     world: dict[str, Path], export: Callable[..., subprocess.CompletedProcess[str]]
 ) -> None:

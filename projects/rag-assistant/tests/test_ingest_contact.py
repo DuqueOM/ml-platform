@@ -100,3 +100,53 @@ def test_the_request_actually_sends_the_configured_contact(tmp_path: Path, monke
     assert len(sent) == 1, sent
     assert sent[0].get_header("User-agent") == contact  # type: ignore[attr-defined]
     assert written == [tmp_path / filing.local_name]
+
+
+def _fake_edgar(monkeypatch: pytest.MonkeyPatch) -> tuple[list[object], list[float]]:
+    """Capture every request and every pause `fetch_filings` makes, without the network."""
+    sent: list[object] = []
+    slept: list[float] = []
+
+    class _Response:
+        def __enter__(self) -> _Response:
+            return self
+
+        def __exit__(self, *_exc: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b"filing body"
+
+    def _urlopen(request: object, timeout: float) -> _Response:
+        sent.append(request)
+        return _Response()
+
+    monkeypatch.setattr(ingest.urllib.request, "urlopen", _urlopen)
+    monkeypatch.setattr(ingest.time, "sleep", slept.append)
+    return sent, slept
+
+
+def _filings(count: int) -> list[ingest.Filing]:
+    return [
+        ingest.Filing(form="10-K", company=f"Co {i}", cik=str(i), filed="2026-01-02", path=f"edgar/data/{i}/x.txt")
+        for i in range(count)
+    ]
+
+
+def test_every_request_carries_the_contact_and_is_paced(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """QA-4 round thirteen: three weakenings passed the one-filing test above.
+
+    Sending the header only on the first request, dropping the pause SEC's
+    rate limit needs (module docstring), and ignoring `limit` all passed,
+    because one filing cannot tell a first request from every request.
+    """
+    contact = "Example Research contact@example.com"
+    monkeypatch.setenv(ingest.USER_AGENT_VARIABLE, contact)
+    sent, slept = _fake_edgar(monkeypatch)
+
+    written = ingest.fetch_filings(_filings(3), tmp_path, limit=2)
+
+    assert len(sent) == 2, "limit=2 was not honoured"
+    assert [r.get_header("User-agent") for r in sent] == [contact, contact]  # type: ignore[attr-defined]
+    assert slept == [ingest.REQUEST_INTERVAL_SECONDS] * 2, "requests were not paced for SEC's rate limit"
+    assert len(written) == 2

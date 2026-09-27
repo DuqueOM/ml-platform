@@ -1,0 +1,321 @@
+# Mutations every gate and test named below must kill — the harness QA-4 rounds
+# twelve and thirteen rebuilt by hand, each time, from a throwaway script.
+#
+# Round thirteen found that kill rates reported as 11/11, 11/11, 18/18 and 6/6
+# held only for mutations someone had already thought of: 12 of 31 new ones
+# survived. Committing the list means the next round starts from these and
+# adds its own, instead of rediscovering them.
+#
+#   uv run python scripts/mutation_harness.py            # every mutation
+#   uv run python scripts/mutation_harness.py E1 C10-case # by id
+#
+# `old` must occur exactly once in `file`; tests/test_mutation_harness.py holds
+# every entry to that, so a refactor that moves an anchor fails a fast test
+# instead of silently shrinking the harness. `expect: survives` is for a
+# mutation that only makes a check stricter, and needs a `reason`.
+mutations:
+- id: E1
+  origin: QA-4 round 12, auditor
+  file: scripts/export_llm_core.py
+  old: _IMPORT_FROM = re.compile(r"^(\s*)from llm_core(\.| import)", re.MULTILINE)
+  new: _IMPORT_FROM = re.compile(r"^(\s*)from llm_core(\.| import)")
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_export_llm_core.py
+  expect: killed
+- id: E1b
+  origin: QA-4 round 12, auditor
+  file: scripts/export_llm_core.py
+  old: _BARE_IMPORT = re.compile(r"^\s*import llm_core\b", re.MULTILINE)
+  new: _BARE_IMPORT = re.compile(r"^\s*import llm_core\b")
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_export_llm_core.py
+  expect: killed
+- id: E2
+  origin: QA-4 round 12, auditor
+  file: scripts/export_llm_core.py
+  old: '    if dirty and not allow_dirty:'
+  new: '    if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_export_llm_core.py
+  expect: killed
+- id: E3
+  origin: QA-4 round 12, auditor
+  file: scripts/export_llm_core.py
+  old: '    if strays:'
+  new: '    if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_export_llm_core.py
+  expect: killed
+- id: E4
+  origin: QA-4 round 12, auditor
+  file: scripts/export_llm_core.py
+  old: '        if drift:
+
+    '
+  new: '        if False:
+
+    '
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_export_llm_core.py
+  expect: killed
+- id: E5
+  origin: QA-4 round 12, auditor
+  file: scripts/export_llm_core.py
+  old: '"files": {name: hashlib.sha256(body.encode("utf-8")).hexdigest() for name, body in sorted(files.items())},'
+  new: '"files": {},'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_export_llm_core.py
+  expect: killed
+- id: X-provenance-not-compared
+  origin: QA-4 round 13, auditor
+  file: scripts/export_llm_core.py
+  old: "    if _differs(core / PROVENANCE, provenance):\n        drift.append(PROVENANCE)\n"
+  new: ''
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_export_llm_core.py
+  expect: killed
+- id: X-stray-ignores-underscore
+  origin: QA-4 round 13, auditor
+  file: scripts/export_llm_core.py
+  old: '        if path.is_dir() or relative.as_posix() not in expected:'
+  new: '        if not relative.name.startswith("_") and (path.is_dir() or relative.as_posix() not in expected):'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_export_llm_core.py
+  expect: killed
+- id: X-stray-top-level-py-only
+  origin: QA-4 round 13, P2-1
+  file: scripts/export_llm_core.py
+  old: '    for path in sorted(core.rglob("*")):'
+  new: '    for path in sorted(core.glob("*.py")):'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_export_llm_core.py
+  expect: killed
+- id: X-dirty-suffix-dropped
+  origin: QA-4 round 13, auditor
+  file: scripts/export_llm_core.py
+  old: '    return f"{commit}-dirty" if dirty else commit'
+  new: '    return commit'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_export_llm_core.py
+  expect: killed
+- id: X-untracked-not-dirty
+  origin: QA-4 round 13, auditor
+  file: scripts/export_llm_core.py
+  old: '        "--porcelain",
+
+    '
+  new: "        \"--porcelain\",\n        \"--untracked-files=no\",\n"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_export_llm_core.py
+  expect: killed
+- id: X-allow-dirty-writes
+  origin: QA-4 round 12, P2-3
+  file: scripts/export_llm_core.py
+  old: '    if args.allow_dirty and not args.check:'
+  new: '    if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_export_llm_core.py
+  expect: killed
+- id: X-ancestry-unchecked
+  origin: QA-4 round 12, P2-3
+  file: scripts/export_llm_core.py
+  old: "        if not args.check:\n            require_exportable_head()\n"
+  new: ''
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_export_llm_core.py
+  expect: killed
+- id: M-C2a
+  origin: QA-4 round 12, auditor
+  file: scripts/check_doc_coherence.py
+  old: _CODE_ROOTS = ("libs", "projects")
+  new: _CODE_ROOTS = ("libs",)
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "doc_coherence or c2"
+  expect: killed
+- id: C2-migrated-md-exempt
+  origin: QA-4 round 13, auditor
+  file: scripts/check_doc_coherence.py
+  old: "    relative = path.relative_to(REPO_ROOT).as_posix()\n    return any(relative == tree"
+  new: "    relative = path.relative_to(REPO_ROOT).as_posix()\n    return path.suffix != \".md\" and any(relative == tree"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "doc_coherence or c2"
+  expect: killed
+- id: C6-generated-links-skipped
+  origin: QA-4 round 13, P2-5
+  file: scripts/check_doc_coherence.py
+  old: "        if _is_infrastructure(path):\n            continue\n        scanned += 1"
+  new: "        if not _is_scannable(path):\n            continue\n        scanned += 1"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c6"
+  expect: killed
+- id: C9-report-channel-dropped
+  origin: QA-4 round 13, P3-2
+  file: scripts/check_doc_coherence.py
+  old: "    for item in reports:\n        print(f\"  note {item}\")\n"
+  new: ''
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "inherited_defect"
+  expect: killed
+- id: C10-never-fails
+  origin: round 12 author
+  file: scripts/check_doc_coherence.py
+  old: '            if unquote(fragment).lower() not in _anchors(destination, cache):'
+  new: '            if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c10"
+  expect: killed
+- id: C10-repeats-unnumbered
+  origin: round 12 author
+  file: scripts/check_doc_coherence.py
+  old: '            found.add(slug if repeat == 0 else f"{slug}-{repeat}")'
+  new: '            found.add(slug)'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c10"
+  expect: killed
+- id: C10-fenced-headings-count
+  origin: QA-4 round 13, auditor
+  file: scripts/check_doc_coherence.py
+  old: '        text = _FENCED.sub("", _FRONT_MATTER.sub("", _read(path)))'
+  new: '        text = _FRONT_MATTER.sub("", _read(path))'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c10"
+  expect: killed
+- id: C10-setext-ignored
+  origin: QA-4 round 13, P3-1
+  file: scripts/check_doc_coherence.py
+  old: '        headings += [(m.start(), m.group(1)) for m in _SETEXT.finditer(text)]
+
+    '
+  new: ''
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c10"
+  expect: killed
+- id: C10-reference-and-html-ignored
+  origin: QA-4 round 13, P3-1
+  file: scripts/check_doc_coherence.py
+  old: '        targets = _MD_LINK.findall(text) + _REFERENCE_DEFINITION.findall(text) + _HTML_HREF.findall(text)'
+  new: '        targets = _MD_LINK.findall(text)'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c10"
+  expect: killed
+- id: C10-case
+  origin: QA-4 round 13, auditor
+  file: scripts/check_doc_coherence.py
+  old: '            if unquote(fragment).lower() not in _anchors(destination, cache):'
+  new: '            if unquote(fragment) not in _anchors(destination, cache):'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c10"
+  expect: survives
+  reason: 'stricter only: no link in the tree uses an upper-case fragment'
+- id: V7-empty-description-ok
+  origin: QA-4 round 13, auditor
+  file: scripts/validate_agentic_surface.py
+  old: "                for key in required:\n                    if not fm.get(key):"
+  new: "                for key in required:\n                    if key not in fm:"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_agentic_discovery.py
+  expect: killed
+- id: V7-claude-command-description-dropped
+  origin: QA-4 round 13, auditor
+  file: scripts/validate_agentic_surface.py
+  old: '        "workflows": ((".claude/commands/{name}.md",), ("description",)),'
+  new: '        "workflows": ((".claude/commands/{name}.md",), ()),'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_agentic_discovery.py
+  expect: killed
+- id: V7-reach-unchecked
+  origin: QA-4 round 13, P2-3
+  file: scripts/validate_agentic_surface.py
+  old: "                if len(reached) > 1:\n                    _reach(surface, name, reached)\n"
+  new: ''
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_agentic_discovery.py
+  expect: killed
+- id: V7-cursor-compat-paths-dropped
+  origin: QA-4 round 13, P2-3
+  file: scripts/validate_agentic_surface.py
+  old: "                \".claude/skills/{name}/SKILL.md\",\n                \".codex/skills/{name}/SKILL.md\",\n"
+  new: ''
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_agentic_discovery.py
+  expect: killed
+- id: V8-services-failed-not-reported
+  origin: QA-4 round 13, P2-4
+  file: scripts/validate_agentic_surface.py
+  old: '                if owner == "services":'
+  new: '                if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_agentic_discovery.py
+  expect: killed
+- id: V8-collisions-ignored
+  origin: QA-4 round 13, P2-4
+  file: scripts/validate_agentic_surface.py
+  old: '                if names & root_names:'
+  new: '                if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_agentic_discovery.py
+  expect: killed
+- id: V-ok-above-warning
+  origin: QA-4 round 13, P3-3
+  file: scripts/validate_agentic_surface.py
+  old: '    red = {entry.split("]", 1)[0] for entry in failures + warnings}'
+  new: '    red = {entry.split("]", 1)[0] for entry in failures}'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_agentic_discovery.py
+  expect: killed
+- id: P0-claude-skills-flat
+  origin: QA-4 round 12, P0-1
+  file: agentic/manifest.yaml
+  old: '      skills: .claude/skills/{name}/SKILL.md
+
+    '
+  new: '      skills: .claude/skills/{name}.md
+
+    '
+  run:
+  - uv run python scripts/sync_agentic_adapters.py
+  - uv run python scripts/validate_agentic_surface.py --strict
+  expect: killed
+- id: I-header-first-only
+  origin: QA-4 round 13, auditor
+  file: projects/rag-assistant/src/rag_assistant/ingest.py
+  old: '        request = urllib.request.Request(filing.url, headers={"User-Agent": contact})'
+  new: '        request = urllib.request.Request(filing.url, headers={} if written else {"User-Agent": contact})'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/rag-assistant/tests
+  expect: killed
+- id: I-no-rate-limit
+  origin: QA-4 round 13, auditor
+  file: projects/rag-assistant/src/rag_assistant/ingest.py
+  old: '        time.sleep(REQUEST_INTERVAL_SECONDS)
+
+    '
+  new: ''
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/rag-assistant/tests
+  expect: killed
+- id: I-limit-ignored
+  origin: QA-4 round 13, auditor
+  file: projects/rag-assistant/src/rag_assistant/ingest.py
+  old: '    for filing in filings[:limit]:'
+  new: '    for filing in filings:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/rag-assistant/tests
+  expect: killed
+- id: W3-isinstance
+  origin: QA-4 round 12, author
+  file: tests/test_workflow_bounds.py
+  old: '    if type(timeout) is not int:'
+  new: '    if not isinstance(timeout, int):'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_workflow_bounds.py
+  expect: killed
+- id: W-ceiling-exclusive
+  origin: QA-4 round 13, auditor
+  file: tests/test_workflow_bounds.py
+  old: '    if not 0 < timeout <= GITHUB_MAXIMUM_MINUTES:'
+  new: '    if not 0 < timeout < GITHUB_MAXIMUM_MINUTES:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_workflow_bounds.py
+  expect: survives
+  reason: 'stricter only: no job declares exactly 360'
