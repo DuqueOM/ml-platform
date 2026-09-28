@@ -39,7 +39,7 @@ orchestration = [
 ]
 dev = [
     "pytest~=9.1",
-    "pytest-cov~=6.0",
+    "pytest-cov~=7.1",
     "mypy~=2.3",
     "ruff~=0.16",
     # Without stubs, every `import yaml` in scripts/ is an error under the
