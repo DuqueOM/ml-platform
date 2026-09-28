@@ -1239,7 +1239,7 @@ warehouse-validation = [
 [package.metadata]
 requires-dist = [
     { name = "data-contracts", editable = "libs/data-contracts" },
-    { name = "great-expectations", marker = "extra == 'warehouse-validation'", specifier = "~=1.3" },
+    { name = "great-expectations", marker = "extra == 'warehouse-validation'", specifier = "~=1.23" },
     { name = "joblib", specifier = "~=1.6" },
     { name = "kfp", marker = "extra == 'pipelines'", specifier = "~=2.11" },
     { name = "ml-core", editable = "libs/ml-core" },
@@ -1987,7 +1987,7 @@ wheels = [
 
 [[package]]
 name = "great-expectations"
-version = "1.20.0"
+version = "1.23.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "altair" },
@@ -2011,9 +2011,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "tzlocal" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/8a/b6/07e8ad9775826c2e261e28e2d572eb1fe80bd19d1858f2b068311dac2f8a/great_expectations-1.20.0.tar.gz", hash = "sha256:d6d6ed6a6437b81a452b6dbc201bd4403c3f96562788a1fcaf10848e96629864", size = 36310883, upload-time = "2026-08-07T14:08:14.021Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5c/39/88c2f24b0c17b62571d0773fa03bcadbddde004be77676c9ba060fc0a7b5/great_expectations-1.23.2.tar.gz", hash = "sha256:c4781d99413a60f45e15febd70b5bb14a27dd8368d7f9b9f766b03eb64645a16", size = 36995637, upload-time = "2026-09-25T18:48:29.536Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/74/57/351beba1b367e86183ee1e00cf64c286bac22dbc23b6ea02d971db06108a/great_expectations-1.20.0-py3-none-any.whl", hash = "sha256:cb6948e287826a039ea32f2f33add10fe276faf4278439431750250d46d74dd1", size = 4953172, upload-time = "2026-08-07T14:08:11.392Z" },
+    { url = "https://files.pythonhosted.org/packages/13/45/1b5ef5eb28e09ab4d223c77fa94f87d15326a9d36e0f3740c1f328df8803/great_expectations-1.23.2-py3-none-any.whl", hash = "sha256:2b8e3825e1695b5b6a3a5d85a8a225e5f3e1db37dbb6d1a381a28c7dc296101e", size = 5716039, upload-time = "2026-09-25T18:48:25.247Z" },
 ]
 
 [[package]]
