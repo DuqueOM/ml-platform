@@ -18,6 +18,20 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Changed — pytest-cov 7, with subprocess coverage asked for explicitly
+
+- **Dependabot's pytest-cov 6.3 → 7.1 bump (#99) failed `Tests and
+  coverage`.** The `scripts/` figure fell from above 74% to 39.78%, against a
+  floor of 74. pytest-cov 7 removed its automatic subprocess measurement, and
+  the gate tests run every `scripts/` gate as a subprocess, so almost none of
+  that code was measured any more.
+- **`[tool.coverage.run] patch = ["subprocess"]`** asks coverage (7.15.3 here;
+  7.10+ supports it) to measure subprocesses itself. With pytest-cov 7.1 the
+  `scripts/` step measures 83.66%. That is above the 74.65% pytest-cov 6
+  reported, because coverage now reaches subprocesses the old plugin missed.
+  The floor stays at 74 in this change. Raising it is a ratchet decision for
+  its own commit, once CI has measured the same figure.
+
 ### Fixed — QA-4 round thirteen: what the round-twelve fixes claimed held only for the mutations tried
 
 - **A subpackage could replace an exported module and `--check` said OK**
