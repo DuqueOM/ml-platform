@@ -173,6 +173,11 @@ markers = [
 ]
 
 [tool.coverage.run]
+# pytest-cov 7 removed its automatic subprocess measurement; coverage (>= 7.10)
+# now does it itself when asked. The gate tests run every `scripts/` gate as a
+# subprocess, so without this `--cov=scripts` measured almost none of them:
+# 39.78% against a floor of 74 on Dependabot's pytest-cov 7 bump (#99).
+patch = ["subprocess"]
 omit = [
     # `tests/test_gates_in_a_bare_environment.py` copies the gate scripts into
     # a temporary sandbox and runs them there. Coverage counted each COPY as a
