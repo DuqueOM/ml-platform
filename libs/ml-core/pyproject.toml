@@ -9,7 +9,7 @@ dependencies = [
     "numpy~=2.1",
     "polars~=1.44",
     "duckdb~=1.1",
-    "scikit-learn~=1.6",
+    "scikit-learn~=1.9",
 ]
 
 [build-system]
