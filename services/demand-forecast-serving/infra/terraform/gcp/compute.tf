@@ -35,15 +35,30 @@ resource "google_container_cluster" "gke" {
     master_ipv4_cidr_block  = "172.16.0.0/28"
   }
 
-  dynamic "master_authorized_networks_config" {
-    for_each = length(var.master_authorized_networks) > 0 ? [1] : []
-    content {
-      dynamic "cidr_blocks" {
-        for_each = var.master_authorized_networks
-        content {
-          cidr_block   = cidr_blocks.value.cidr_block
-          display_name = cidr_blocks.value.display_name
-        }
+  # Always emitted, never conditional.
+  #
+  # This used to be a `dynamic` block gated on the list being non-empty, so
+  # with the default empty list the cluster got NO authorized-networks
+  # configuration at all — and GKE's default is then "no restriction". That
+  # is harmless while `enable_private_endpoint = true` (the default), and it
+  # is a publicly reachable control plane the moment an adopter takes the
+  # documented dev opt-out and sets it false without also supplying a list.
+  #
+  # Emitting the block unconditionally inverts the failure mode: an empty
+  # list now means "authorized networks enabled, no external CIDR allowed" —
+  # the restrictive reading rather than the permissive one. The precondition
+  # below makes the dangerous combination impossible outright.
+  #
+  # It also makes the configuration statically visible. GCP-0061 (and tfsec's
+  # google-gke-enable-master-networks before it) fired here because no static
+  # analyser evaluates `dynamic` blocks. The finding was suppressed for two
+  # releases on the grounds that the HCL was correct anyway; it was not.
+  master_authorized_networks_config {
+    dynamic "cidr_blocks" {
+      for_each = var.master_authorized_networks
+      content {
+        cidr_block   = cidr_blocks.value.cidr_block
+        display_name = cidr_blocks.value.display_name
       }
     }
   }
@@ -55,6 +70,36 @@ resource "google_container_cluster" "gke" {
 
   release_channel {
     channel = "REGULAR"
+  }
+
+  # Trivy GCP-0051. Every bucket, key and service account in this module
+  # carries these; the cluster did not, so cost attribution and ownership
+  # queries had a hole exactly where the spend is.
+  resource_labels = {
+    environment = var.environment
+    managed-by  = "terraform"
+    component   = "gke"
+  }
+
+  lifecycle {
+    # The invariant the old suppression's justification claimed was "enforced
+    # by the variable validation rule in variables.tf". No such rule existed.
+    #
+    # A public control plane is acceptable only when it is constrained. This
+    # is a cross-variable condition, so it cannot live in a `validation`
+    # block on either variable — those could not reference other variables
+    # until Terraform 1.9, and this module targets >= 1.7. A resource
+    # precondition can, and it fails at plan time rather than at apply.
+    precondition {
+      condition     = var.enable_private_endpoint || length(var.master_authorized_networks) > 0
+      error_message = <<-EOT
+        enable_private_endpoint = false exposes the GKE control plane on a
+        public endpoint, so master_authorized_networks must list the CIDRs
+        allowed to reach it. Either keep the private endpoint (the default),
+        or supply master_authorized_networks. Leaving both unset would put an
+        unrestricted public control plane in front of the cluster.
+      EOT
+    }
   }
 }
 
@@ -100,6 +145,20 @@ resource "google_container_node_pool" "system" {
     disk_size_gb = 30
     disk_type    = "pd-standard"
 
+    # Dedicated node identity (D-31 / ADR-017). Without it GKE falls back to
+    # the DEFAULT Compute Engine service account, which in most projects
+    # carries roles/editor across the whole project — flagged as GCP-0050.
+    # Pods do not use this identity; they impersonate runtime/drift/retrain
+    # through Workload Identity. It covers node-level operations only.
+    service_account = google_service_account.nodes.email
+
+    # Container-Optimized OS with containerd (Trivy GCP-0054). COS is GKE's
+    # current default, which is precisely why it is pinned: a default is not
+    # a decision, and inheriting it silently means a future change to the
+    # default — or an override elsewhere — lands a different node OS with a
+    # different attack surface without anyone choosing it.
+    image_type = "COS_CONTAINERD"
+
     workload_metadata_config {
       mode = "GKE_METADATA"
     }
@@ -144,6 +203,20 @@ resource "google_container_node_pool" "workload" {
     machine_type = var.machine_type
     disk_size_gb = 50
     disk_type    = "pd-standard"
+
+    # Dedicated node identity (D-31 / ADR-017). Without it GKE falls back to
+    # the DEFAULT Compute Engine service account, which in most projects
+    # carries roles/editor across the whole project — flagged as GCP-0050.
+    # Pods do not use this identity; they impersonate runtime/drift/retrain
+    # through Workload Identity. It covers node-level operations only.
+    service_account = google_service_account.nodes.email
+
+    # Container-Optimized OS with containerd (Trivy GCP-0054). COS is GKE's
+    # current default, which is precisely why it is pinned: a default is not
+    # a decision, and inheriting it silently means a future change to the
+    # default — or an override elsewhere — lands a different node OS with a
+    # different attack surface without anyone choosing it.
+    image_type = "COS_CONTAINERD"
 
     workload_metadata_config {
       mode = "GKE_METADATA"

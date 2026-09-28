@@ -10,6 +10,7 @@
 ## P1 — Service Down (15 min SLA)
 
 ### Symptoms
+
 - Error rate > 5%
 - Health endpoint returning non-200
 - Pods in CrashLoopBackOff
@@ -29,12 +30,14 @@ curl -f http://demand-forecast-serving-service.{namespace}.svc.cluster.local:800
 ```
 
 ### Escalation
+
 - If rollback fails → page platform team
 - If rollback succeeds → schedule P2 investigation
 
 ## P2 — Metric Degradation (4 hours SLA)
 
 ### Symptoms
+
 - Rolling primary metric below quality gate
 - Significant drift alert (PSI >= 0.20 on critical feature)
 
@@ -54,13 +57,14 @@ gh run list --workflow=retrain-demand_forecast_serving.yml --limit=1
 ## P3 — Warning Drift (24 hours SLA)
 
 ### Symptoms
+
 - PSI between 0.10 and 0.20 on one or more features
 
 ### Actions
 
 ```bash
 # 1. Run detailed drift analysis (Python module — snake-case demand_forecast_serving)
-python src/demand_forecast_serving/monitoring/drift_detection.py \
+python -m src.demand_forecast_serving.monitoring.drift_detection \
   --reference data/reference/reference.csv \
   --current data/production/latest.csv \
   --output drift_report.json
@@ -76,6 +80,7 @@ cat drift_report.json | python -m json.tool
 ## P4 — Incipient Drift (1 week SLA)
 
 ### Symptoms
+
 - Small PSI increases trending upward over multiple days
 
 ### Actions
@@ -88,6 +93,7 @@ cat drift_report.json | python -m json.tool
 ## P4 — Executor Saturation (capacity planning)
 
 ### Symptoms
+
 - `ExecutorSaturated` fired: `inference_in_flight / inference_executor_capacity`
   has held at or near 1.0 for 5+ minutes — every inference thread is busy,
   new requests are queueing behind `run_in_executor` before they can start.

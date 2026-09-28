@@ -18,6 +18,71 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Changed — `demand-forecast-serving` at ml-service-template v0.30.2 (R13-1)
+
+- **The service moves from template v0.26.0 to v0.30.2.** It carried the
+  template's old skill layout, which QA-4 round thirteen reported (P2-4): 38
+  flat Cursor and Codex pointers that no tool loads. v0.30.0 renders them at
+  `.agents/skills/<id>/SKILL.md`. The change covers four template releases:
+  - 233 files changed, 22 removed and 39 added;
+  - the skills layout;
+  - NetworkPolicies for the scheduled jobs;
+  - Terraform-created GitHub Actions identities;
+  - per-purpose ServiceAccounts;
+  - dependency moves.
+- **Regenerated, not merged, and why that is equivalent.** Measured first: the
+  service was byte-identical to a fresh v0.26.0 generation with the same
+  answers, apart from `.copier-answers.yml` (0 differing files of 627). With
+  nothing customised, a regeneration at v0.30.2 is exactly what `copier
+  update` would produce. It also avoids copier 9.18's `git diff-tree` failure
+  on a service inside a larger repository, which stopped the dry run.
+- **The answers file now names the public template.** `_src_path` pointed at a
+  local checkout that exists on one machine, so no runner or other clone could
+  update this service. It now names
+  `https://github.com/DuqueOM/ml-service-template.git`. It was written by
+  copier from that source, not edited by hand.
+- **V8 now reports no flat pointers under `services/`.** The 19 skill names the
+  service shares with the root remain. They are inherent to a service that
+  ships its own skills, and V8 reports them as such.
+- **Not applied, and deliberately:** v0.29.0's overlays carry 30
+  `{PROJECT_NAME}` placeholders for the identities Terraform creates. Nothing
+  here is deployed and ADR-003 keeps the scaffold unedited, so they stay as
+  generated. Replacing them is a precondition of the first cloud deploy, which
+  remains a CONSULT decision (work order, *Not for an agent*).
+- **C9 read a trailing shell comment as a command.** The new service's
+  `CLAUDE.md` documents `make scaffold-update   # copier update, pinned`, and
+  C9 reported it as an unpinned copier command. Text after a `#` that follows
+  whitespace is now a comment. A test pins both directions, and the harness
+  gains the mutation.
+- **v0.30.2, not v0.30.0.** The first regeneration, at v0.30.0, brought in a
+  test fixture with a deliberately fake Google API key, and GitHub secret
+  scanning opened an alert on this branch. It was a false positive, nothing to
+  rotate: gitleaks over the full history of all five repositories found nothing
+  else. It was fixed at source (ml-service-template#241, v0.30.1). This
+  repository's `detect-private-key` hook then stopped the commit on the fake
+  PEM header beside it, which the first fix had not covered. That was fixed at
+  source too (#243, v0.30.2). The service is regenerated at v0.30.2, the branch
+  was rewritten before merging so neither literal reached `main`, and the
+  alert is resolved as "used in tests".
+- **joblib no longer straddles the serving seam, so its exemption is gone.**
+  v0.30.x raised the service's joblib to the version training writes. The
+  artifact gate then failed CI on its now-outlived exemption: "joblib is
+  exempted and no longer straddles — delete the exemption". The gate was right,
+  and this is its design. The exemption is deleted. The tests' "today" fixture
+  now models two exempt straddles, not three. A new test shows a joblib
+  straddle is reportable again, and restoring the exemption fails three tests,
+  a case the mutation harness now carries. **scikit-learn followed the same
+  path the same day:** Dependabot moved training to 1.9.1 (#96), the version
+  the service reads, and the gate failed on that exemption too. It is
+  removed, with its own reportable-again test and mutation (39 entries).
+  Only numpy remains exempt, under ADR-008. Local verification
+  missed this the first time, because it ran a chosen subset of gates and not
+  `make verify`.
+- **One secret-hook exemption fewer.** `detect-private-key` excluded
+  `tests/test_memory_redaction.py` for its fake PEM block. v0.30.2 assembles
+  that block at runtime, so the exclusion is removed. Injecting a key-shaped
+  header into the service's tests still fails the hook.
+
 ### Changed — pytest-cov 7, with subprocess coverage asked for explicitly
 
 - **Dependabot's pytest-cov 6.3 → 7.1 bump (#99) failed `Tests and

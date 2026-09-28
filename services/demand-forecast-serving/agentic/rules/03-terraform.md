@@ -22,6 +22,7 @@ NEVER commit `terraform.tfstate` to the repository. Always use remote backends:
 ## Variable Conventions
 
 Every variable MUST have:
+
 ```hcl
 variable "machine_type" {
   description = "GKE node pool machine type"
@@ -38,7 +39,7 @@ variable "machine_type" {
 
 ## File Organization
 
-```
+```text
 infra/terraform/
 ├── gcp/
 │   ├── main.tf          # Provider, backend
@@ -79,13 +80,15 @@ infra/terraform/
 
 ## Security Scanning
 
-- `tfsec` for static analysis of Terraform configurations
+- `trivy config` for static analysis of Terraform configurations (ADR-046;
+  tfsec is archived upstream)
 - `checkov` for compliance checks
 - Both run in CI (`ci-infra.yml`) on every change to `infra/`
 
 ## Budget Alerts
 
 Always include budget alerting:
+
 ```hcl
 resource "google_billing_budget" "ml_budget" {
   amount { specified_amount { units = var.monthly_budget } }

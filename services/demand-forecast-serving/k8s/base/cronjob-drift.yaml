@@ -18,7 +18,9 @@ spec:
           labels:
             app: "demand-forecast-serving-drift"
         spec:
-          serviceAccountName: "demand-forecast-serving-sa"
+          # Per-purpose identity (ADR-017): Terraform binds the drift GSA / IRSA
+          # role to this ServiceAccount, not to the predictor's.
+          serviceAccountName: "demand-forecast-serving-drift-sa"
           restartPolicy: Never
 
           # ------------------------------------------------------------------

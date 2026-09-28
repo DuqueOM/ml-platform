@@ -401,17 +401,17 @@ git log --no-merges --oneline "$(grep -oE 'Last independent audit: [0-9-]+ \(([0
 
 | Finding | State |
 | --- | --- |
-| **P2-1** — a `core/` subpackage shadowed an exported module and `--check` said OK | Closed in this repository. Downstream half: **R13-2** |
+| **P2-1** — a `core/` subpackage shadowed an exported module and `--check` said OK | Closed in this repository; downstream in DuqueOM/agent-local#2 and #3 (**R13-2**, closed) |
 | **P2-2** — 12 of 31 mutations neither party chose survived | Closed. Each has its test, and the harness is committed as `tests/mutations.yaml` |
-| **P2-3** — Cursor also reads `.claude/skills/`; "listed once" was false | Closed here, with V7's copies-must-agree rule. Template half: **R13-3** |
-| **P2-4** — `services/demand-forecast-serving` carries the pre-§9 layout, and nothing checked nested surfaces | Detection closed (V8). The update itself: **R13-1** |
+| **P2-3** — Cursor also reads `.claude/skills/`; "listed once" was false | Closed here, with V7's copies-must-agree rule; in the template by #239 (**R13-3**, closed) |
+| **P2-4** — `services/demand-forecast-serving` carries the pre-§9 layout, and nothing checked nested surfaces | Closed: V8 detects it, and *chore(services): demand-forecast-serving at ml-service-template v0.30.2* regenerated the service at template v0.30.2 (**R13-1**) |
 | **P2-5** — C6's link scan skipped generated directories | Closed |
 | **P3-1** — C10 read inline links and ATX headings only | Closed |
 | **P3-2** — a failing check hid its inherited-defect report | Closed, with the `note` channel |
 | **P3-3** — V6 printed `ok` above its own warning | Closed, with a print-time filter in the agentic validator |
 | **P3-4** — the brief said `rag-assistant` sits below C1 | Closed |
 | **P3-5** — the lists of generated directories were kept by hand | Closed. Derived from the manifest where code reads them; the two markdownlint lists are pinned by a test |
-| **P3-6** — agent-local's export check does not block a merge | **R13-2** |
+| **P3-6** — agent-local's export check does not block a merge | Closed: agent-local `main` requires `export-provenance`, and CI runs weekly (**R13-2**) |
 
 The closing commit is *fix: QA-4 round thirteen — what the round-twelve fixes
 claimed held only for the mutations tried*. Everything open is in

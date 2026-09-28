@@ -39,16 +39,40 @@ jobs:
         run: terraform validate
         working-directory: infra/terraform/${{ matrix.cloud }}
 
-      - name: tfsec
-        uses: aquasecurity/tfsec-action@b466648d6e39e7c75324f25d83891162a721f2d6 # v1.0.3
+      # ADR-046: tfsec is archived upstream; Trivy config is its successor.
+      # Same action the template repo uses for its own IaC gate.
+      - name: Trivy config (Terraform IaC)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          working_directory: infra/terraform/${{ matrix.cloud }}
-          format: json
+          scan-type: config
+          scan-ref: infra/terraform/${{ matrix.cloud }}
+          # Every severity, same as the upstream template.
+          #
+          # This ran at CRITICAL,HIGH until 2026-09-07, on the argument that a
+          # service had nowhere to record an accepted finding, so a stricter
+          # gate would just get deleted. True — and a fixable gap rather than
+          # a reason, so it was fixed: `.security-baselines/` and
+          # `scripts/check_baselines_expiry.py` now ship with the service.
+          #
+          # Worth knowing before you lower it: upstream, 10 of the 13 findings
+          # that sat below a severity threshold turned out to be real defects,
+          # including a GKE node pool running as the default Compute Engine
+          # service account. "Below the threshold" predicted nothing.
+          severity: CRITICAL,HIGH,MEDIUM,LOW
+          exit-code: "1"
+          trivyignores: .security-baselines/trivy-config.trivyignore
+          format: table
+
+      # The baseline is only a control if its entries expire. Without this the
+      # ignore file is an ordinary suppression list that grows and never
+      # shrinks.
+      - name: Security baseline expiry
+        run: python3 scripts/check_baselines_expiry.py
 
       - name: Checkov
         # Pinned to immutable tag (D-19, ADR-014 §1.1). Dependabot updates
         # via .github/dependabot.yml. Phase 5 will harden to commit-SHA.
-        uses: bridgecrewio/checkov-action@7b972723c44fb3d256283fac96fae5d7c1894bb7 # v12.3114.0
+        uses: bridgecrewio/checkov-action@444c9db6fa75e2d9c19ebf1fde7322089be9009e # v12.3123.0
         with:
           directory: infra/terraform/${{ matrix.cloud }}
           quiet: true
@@ -75,19 +99,29 @@ jobs:
           sudo mv /tmp/kubeconform /usr/local/bin/
           kubeconform -v
 
-      - name: Validate base manifests
-        run: kubeconform -strict -ignore-missing-schemas k8s/base/*.yaml
-
-      - name: Validate GCP overlays (per environment)
+      - name: Install kustomize
+        # Pinned, same version the template repo validates with, so the two
+        # runs cannot disagree. Previously this job used `kubectl kustomize`,
+        # whose embedded kustomize is a different (older) version than the one
+        # the template validates against — a silent source of "passes there,
+        # fails here".
         run: |
-          for overlay in k8s/overlays/gcp-*; do
-            [ -d "$overlay" ] && kubectl kustomize "$overlay" | kubeconform -strict -ignore-missing-schemas
-          done
-        continue-on-error: true
+          set -euo pipefail
+          KVER=v5.4.3
+          curl -sSL -o /tmp/kustomize.tgz \
+            "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F${KVER}/kustomize_${KVER}_linux_amd64.tar.gz"
+          tar -xzf /tmp/kustomize.tgz -C /tmp
+          sudo mv /tmp/kustomize /usr/local/bin/
+          kustomize version
 
-      - name: Validate AWS overlays (per environment)
-        run: |
-          for overlay in k8s/overlays/aws-*; do
-            [ -d "$overlay" ] && kubectl kustomize "$overlay" | kubeconform -strict -ignore-missing-schemas
-          done
-        continue-on-error: true
+      - name: Validate manifests (base + every overlay)
+        # Blocking. This replaced three steps: a base check that globbed
+        # `k8s/base/*.yaml`, and two overlay loops over `gcp-*` and `aws-*`
+        # that were `continue-on-error: true` and between them skipped the
+        # `batch-only` overlay entirely.
+        #
+        # The shared script fails when a discovery step finds nothing, which
+        # the old loops could not: `for o in k8s/overlays/gcp-*` over an empty
+        # match validated zero overlays and reported the same green as one
+        # that validated all of them.
+        run: bash scripts/validate_k8s_manifests.sh k8s

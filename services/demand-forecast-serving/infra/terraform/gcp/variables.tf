@@ -18,6 +18,12 @@ variable "environment" {
   description = "Environment name (staging, production)"
   type        = string
   default     = "production"
+  validation {
+    # The overlays and the Workload Identity / IRSA bindings derive the
+    # Kubernetes namespace from this value; anything else binds to nothing.
+    condition     = contains(["dev", "staging", "production"], var.environment)
+    error_message = "environment must be one of: dev, staging, production."
+  }
 }
 
 variable "machine_type" {
@@ -144,13 +150,29 @@ variable "node_oauth_scopes" {
   default = [
     "https://www.googleapis.com/auth/logging.write",
     "https://www.googleapis.com/auth/monitoring",
+    # Image pulls from Artifact Registry authenticate as the node service
+    # account, and a scope is an upper bound on what that account may do. The
+    # node SA holds roles/artifactregistry.reader (scoped to this repository,
+    # see iam.tf); without a storage read scope that grant can never be
+    # exercised and private pulls fail. Still avoiding cloud-platform, per the
+    # description above — this is the narrow scope, not the blanket one.
+    "https://www.googleapis.com/auth/devstorage.read_only",
   ]
 }
 
 variable "master_authorized_networks" {
   description = <<-EOT
-    CIDR blocks allowed to reach the GKE control plane. Empty list = no
-    public access (only relevant when enable_private_endpoint=false).
+    CIDR blocks allowed to reach the GKE control plane.
+
+    The authorized-networks block is always emitted, so an empty list means
+    "enabled, no external CIDR allowed" — the restrictive reading. It used to
+    mean the block was omitted entirely, which GKE reads as no restriction at
+    all.
+
+    REQUIRED when enable_private_endpoint = false: a public control plane has
+    to be constrained. That pairing is enforced by a precondition on
+    google_container_cluster.gke and fails at plan time.
+
     Format: list of objects with cidr_block + display_name.
   EOT
   type = list(object({
@@ -191,6 +213,18 @@ variable "workload_node_taint_value" {
 # overlay tfvars works for both clouds without per-cloud divergence.
 # ----------------------------------------------------------------------
 
+variable "github_repo" {
+  description = <<-EOT
+    GitHub repo (owner/name) whose Actions may impersonate the ci, deploy,
+    drift and retrain service accounts through Workload Identity Federation.
+    Empty = skip the pool, the provider and every impersonation grant, for an
+    adopter who federates some other way or already created a pool by hand.
+    Mirrors AWS variable.github_repo.
+  EOT
+  type        = string
+  default     = ""
+}
+
 variable "service_names" {
   description = <<-EOT
     Logical service names that need per-service Secret Manager entries
@@ -198,7 +232,7 @@ variable "service_names" {
     service deployed to this cluster. Mirrors AWS variable.service_names.
   EOT
   type        = list(string)
-  default     = ["fraud-detector"]
+  default     = ["demand-forecast-serving"]
 }
 
 variable "secret_names" {

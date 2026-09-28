@@ -319,3 +319,33 @@ mutations:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_workflow_bounds.py
   expect: survives
   reason: 'stricter only: no job declares exactly 360'
+- id: C9-trailing-comment-is-a-command
+  origin: service update to template v0.30.0
+  file: scripts/check_doc_coherence.py
+  old: '            line = re.sub(r"\s#.*$", "", line)
+
+    '
+  new: ''
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c9_reads"
+  expect: killed
+- id: artifact-joblib-exemption-restored
+  origin: service update to template v0.30.x
+  file: scripts/check_artifact_compatibility.py
+  old: '    "numpy": "ADR-008: the container pins 1.x against joblib corruption while the workspace resolves 2.x.",
+
+    '
+  new: "    \"numpy\": \"ADR-008: the container pins 1.x against joblib corruption while the workspace resolves 2.x.\",\n    \"joblib\": \"ADR-008: pinned alongside numpy, and moves with it.\",\n"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_artifact_compatibility.py
+  expect: killed
+- id: artifact-scikit-learn-exemption-restored
+  origin: Dependabot scikit-learn 1.9.1 (#96)
+  file: scripts/check_artifact_compatibility.py
+  old: '    "numpy": "ADR-008: the container pins 1.x against joblib corruption while the workspace resolves 2.x.",
+
+    '
+  new: "    \"numpy\": \"ADR-008: the container pins 1.x against joblib corruption while the workspace resolves 2.x.\",\n    \"scikit-learn\": \"ADR-008: the scaffold was generated for a classifier and its pin was never re-derived.\",\n"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_artifact_compatibility.py
+  expect: killed

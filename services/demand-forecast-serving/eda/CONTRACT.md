@@ -8,7 +8,7 @@ drift, and retrain via the loaders in
 ## The five artifacts
 
 | File | Format | Producer (phase) | Consumer | Loader |
-|------|--------|------------------|----------|--------|
+| ------ | -------- | ------------------ | ---------- | -------- |
 | `eda_summary.json` | JSON | `main()` (post-phase 6) | retrain (provenance) | `load_eda_summary` |
 | `schema_ranges.json` | JSON | phase 6 | training (Pandera synthesis), drift (range checks) | `load_schema_ranges` |
 | `baseline_distributions.parquet` | Parquet | phase 2 | drift CronJob (PSI) | `load_baseline_distributions` |
@@ -42,11 +42,11 @@ removed at version bump 2.
 ## Adding a new artifact
 
 1. Add the canonical filename + loader to
-   `templates/common_utils/eda_artifacts.py` (with version check).
+   `common_utils/eda_artifacts.py` (with version check).
 2. Add a writer helper to `eda/eda_pipeline.py` that stamps
    `eda_artifact_version`.
 3. Wire the helper into the appropriate `phase*` function.
-4. Add an end-to-end test in `templates/eda/tests/test_eda_artifacts.py`.
+4. Add an end-to-end test in `eda/tests/test_eda_artifacts.py`.
 5. Document the new file in this table.
 
 ## Adding a new field to an existing artifact

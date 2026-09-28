@@ -11,11 +11,14 @@ on:
         required: false
         default: "50"
 
-# Required GitHub Variables (no static cloud creds — D-18):
-#   GCP_WIF_PROVIDER     — Workload Identity Federation provider resource path
-#   GCP_SERVICE_ACCOUNT  — SA email used by GCS reads/writes
-#   MLFLOW_TRACKING_URI  — MLflow server URL
-#   MODEL_BUCKET         — GCS bucket for model artifacts
+# Required configuration, all REPOSITORY-scoped (this job declares no
+# `environment:`), no static cloud creds — D-18:
+#   GCP_WIF_PROVIDER             (variable) Workload Identity Federation provider
+#   GCP_RETRAIN_SERVICE_ACCOUNT  (variable) SA email: read data, write models
+#   AWS_RETRAIN_ROLE_ARN         (secret)   IAM role: read data, write models (s3)
+#   MLFLOW_TRACKING_URI          (secret)   tracking server URL; may embed credentials
+#   DATA_BUCKET, DATA_BUCKET_KIND, MODEL_BUCKET, MODEL_BUCKET_KIND  (variables)
+# A purpose-named identity, not the deploy role (ADR-017 / D-31).
 
 env:
   SERVICE: "Demand Forecast Serving"
@@ -33,12 +36,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -r ${{ env.SERVICE }}/requirements.txt
+        # Training needs mlflow + optuna, which the served image does not
+        # carry (ADR-049). requirements-train.txt pulls the runtime set too.
+        run: pip install -r ${{ env.SERVICE }}/requirements-train.txt
 
       # Cloud auth (parametrized by MODEL_BUCKET_KIND var — audit High-7).
       - name: Authenticate to GCP (WIF)
@@ -46,13 +51,13 @@ jobs:
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         with:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
-          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          service_account: ${{ vars.GCP_RETRAIN_SERVICE_ACCOUNT }}
 
       - name: Authenticate to AWS (OIDC)
         if: vars.MODEL_BUCKET_KIND == 's3'
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_RETRAIN_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Download fresh training data
@@ -100,7 +105,7 @@ jobs:
           MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
         run: |
           cd ${{ env.SERVICE }}
-          python src/${{ env.SERVICE_SLUG }}/training/train.py \
+          python -m src.${{ env.SERVICE_SLUG }}.training.train \
             --data data/raw/latest.csv \
             --experiment "${{ env.SERVICE }}-retrain-$(date +%Y%m%d)" \
             --optuna-trials ${{ github.event.inputs.optuna_trials }} \
@@ -274,7 +279,7 @@ jobs:
 
       - name: Block promotion (C/C blocked or keep)
         if: steps.cvsc.outputs.exit_code == '2' || steps.cvsc.outputs.exit_code == '1'
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const decision = '${{ steps.cvsc.outputs.exit_code }}' === '2' ? 'BLOCKED' : 'KEPT (no promotion)';
@@ -288,7 +293,7 @@ jobs:
 
       - name: Create failure issue (if gates fail)
         if: steps.gates.outcome == 'failure'
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             await github.rest.issues.create({

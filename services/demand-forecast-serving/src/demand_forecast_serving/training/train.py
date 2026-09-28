@@ -28,7 +28,7 @@ import pandas as pd
 from sklearn.metrics import f1_score, precision_recall_curve, roc_auc_score
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 
-from ..config import QualityGatesConfig
+from ..config import MLflowConfig, QualityGatesConfig, ServiceConfig
 from ..schemas import ServiceInputSchema
 from .features import FeatureEngineer
 from .model import build_pipeline
@@ -89,10 +89,16 @@ logger = logging.getLogger(__name__)
 #     expensive training step
 # Hyperparameters that DO NOT belong in the governance contract
 # (Optuna trials, CV folds, RNG seed) stay here.
+# Retained as the fallback experiment name for callers that construct a
+# Trainer directly without an MLflowConfig. `MLflowConfig.experiment_name`
+# carries the same default, and the config is authoritative when one is
+# supplied — this script no longer mutates this global from `main()`, which it
+# did, and which worked only because `_log_to_mlflow` happened to read it late.
 EXPERIMENT_NAME = "Demand Forecast Serving-Production"
 MODEL_REGISTRY_NAME = "Demand Forecast ServingClassifier"
 
 DEFAULT_QUALITY_GATES_PATH = "configs/quality_gates.yaml"
+DEFAULT_SERVICE_CONFIG_PATH = "configs/config.yaml"
 
 # PR-B2: canonical EDA artifacts location. Override in CI by passing
 # ``eda_artifacts_dir=...`` if the EDA was run with a non-default
@@ -125,7 +131,15 @@ class Trainer:
         quality_gates_path: str = DEFAULT_QUALITY_GATES_PATH,
         target_column: str = "target",
         eda_artifacts_dir: str | None = DEFAULT_EDA_ARTIFACTS_DIR,
+        mlflow_config: MLflowConfig | None = None,
     ) -> None:
+        # MLflow settings arrive as an object rather than being read off a
+        # module global. They used to be neither: `configs/config.yaml`
+        # declared `mlflow.tracking_uri` and nothing consulted it, so every
+        # run went to MLflow's own default whatever the file said. Defaulting
+        # to MLflowConfig() keeps direct `Trainer(...)` callers working and
+        # gives them the same documented precedence.
+        self.mlflow_config = mlflow_config or MLflowConfig()
         self.data_path = data_path
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -710,8 +724,26 @@ class Trainer:
         params: dict,
         artifact_path: Path,
     ) -> None:
-        """Log experiment to MLflow."""
-        mlflow.set_experiment(EXPERIMENT_NAME)
+        """Log experiment to MLflow, at the configured tracking URI.
+
+        `set_tracking_uri` is the line this method was missing. Without it
+        `set_experiment` below bound to whatever MLflow defaulted to, and the
+        configured URI — including the in-cluster server the staging and prod
+        profiles name — was never contacted.
+        """
+        if not self.mlflow_config.enabled:
+            logger.info("MLflow logging disabled (mlflow.enabled=false) — skipping")
+            return
+
+        tracking_uri = self.mlflow_config.resolve_tracking_uri()
+        mlflow.set_tracking_uri(tracking_uri)
+
+        # Logged at INFO because "where did my run go" is the first question
+        # when a run goes missing, and the answer used to be unobtainable from
+        # the output.
+        experiment = self.mlflow_config.experiment_name
+        logger.info("MLflow tracking URI: %s (experiment: %s)", tracking_uri, experiment)
+        mlflow.set_experiment(experiment)
 
         with mlflow.start_run():
             mlflow.log_params(params)
@@ -722,11 +754,37 @@ class Trainer:
             mlflow.set_tag("git_commit", os.getenv("GIT_SHA", "unknown"))
             mlflow.set_tag("environment", os.getenv("ENVIRONMENT", "development"))
 
-            # Register model
+            # Register model.
+            #
+            # `name=` not `artifact_path=`: 3.x deprecated the latter.
+            # `serialization_format="skops"` is 3.x's default and is kept
+            # deliberately — pickle and cloudpickle both work and MLflow warns
+            # that they "can execute arbitrary code during deserialization".
+            #
+            # `skops_trusted_types` is not optional for this pipeline. The
+            # default path fails outright:
+            #
+            #     MlflowException: The saved sklearn model references untrusted
+            #     types. Root error: Untrusted types found in the file:
+            #     ['sklearn.compose._column_transformer._RemainderColsList']
+            #
+            # The ColumnTransformer in model.py has a `remainder`, which
+            # produces that internal type, and skops does not trust it by
+            # default. ADR-047's first measurement missed this because it
+            # logged a Pipeline that had no ColumnTransformer.
+            #
+            # The list is DERIVED from the fitted pipeline, not hardcoded. A
+            # hardcoded list would be a template shipping a value that goes
+            # stale the moment an adopter edits their preprocessor — which the
+            # template explicitly tells them to do. Deriving it asserts trust
+            # in an artefact this process just fitted, which is a different and
+            # much weaker claim than trusting a model from elsewhere.
             mlflow.sklearn.log_model(
                 pipeline,
-                artifact_path="model",
+                name="model",
                 registered_model_name=MODEL_REGISTRY_NAME,
+                serialization_format="skops",
+                skops_trusted_types=_skops_trusted_types(pipeline),
             )
 
     def _quality_gates(self, metrics: dict) -> dict[str, bool]:
@@ -764,13 +822,90 @@ class Trainer:
         return {"all_passed": all_passed, "gates": gates, "failed": failed}
 
 
+def _skops_trusted_types(fitted_model: Any) -> list[str]:
+    """Types skops will refuse to load from `fitted_model` unless told to trust them.
+
+    MLflow 3.x serialises sklearn models with skops by default, which is the
+    safe choice — unlike pickle it does not execute arbitrary code on load. The
+    price is that it refuses types it does not recognise, and this template's
+    own pipeline contains one:
+    ``sklearn.compose._column_transformer._RemainderColsList``, produced by the
+    ``ColumnTransformer``'s ``remainder``.
+
+    Derived rather than hardcoded. The template tells adopters to edit
+    ``model.py``'s preprocessor, so a fixed list would be wrong for anyone who
+    followed the instructions — and wrong in the worst way, by failing at the
+    end of a training run rather than at its start.
+
+    An empty list on any failure, deliberately: if skops cannot be introspected
+    the correct outcome is MLflow's own refusal, naming the type, not a silent
+    blanket trust.
+    """
+    try:
+        import tempfile
+
+        import skops.io as sio
+    except ImportError:
+        logger.debug("skops not importable; letting MLflow decide what it trusts")
+        return []
+
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".skops", delete=False) as handle:
+            probe = Path(handle.name)
+        try:
+            sio.dump(fitted_model, probe)
+            untrusted = [str(name) for name in sio.get_untrusted_types(file=probe)]
+        finally:
+            probe.unlink(missing_ok=True)
+    except Exception as exc:  # noqa: BLE001 — never fail training on the probe
+        logger.warning("Could not enumerate skops types (%s); letting MLflow decide", exc)
+        return []
+
+    if untrusted:
+        logger.info("Trusting %d skops type(s) from this run's own pipeline: %s", len(untrusted), untrusted)
+    return untrusted
+
+
+def _load_mlflow_config(config_path: str) -> MLflowConfig:
+    """The `mlflow` block from config.yaml, or the built-in defaults.
+
+    A missing or unreadable config file is deliberately NOT fatal here.
+    Training has its own required config — `configs/quality_gates.yaml`, which
+    is loaded strictly and fails loudly — and a service that has not written a
+    `config.yaml` yet should still be able to train against the defaults. What
+    must never happen again is the previous behaviour: reading the file,
+    validating it, and then ignoring what it said.
+    """
+    try:
+        return ServiceConfig.from_yaml(config_path).mlflow
+    except FileNotFoundError:
+        logger.info("No %s — using built-in MLflow defaults", config_path)
+        return MLflowConfig()
+    except Exception as exc:  # noqa: BLE001 — a malformed mlflow block is worth naming
+        logger.warning("Could not read the mlflow block from %s (%s) — using defaults", config_path, exc)
+        return MLflowConfig()
+
+
 if __name__ == "__main__":
     import argparse
     import sys
 
     parser = argparse.ArgumentParser(description="Train Demand Forecast Serving model")
     parser.add_argument("--data", help="Path to training CSV (required unless --validate-config-only)")
-    parser.add_argument("--experiment", default=EXPERIMENT_NAME, help="MLflow experiment name")
+    parser.add_argument(
+        "--experiment",
+        default=None,
+        help="MLflow experiment name (overrides mlflow.experiment_name in --config)",
+    )
+    parser.add_argument(
+        "--config",
+        default=DEFAULT_SERVICE_CONFIG_PATH,
+        help=(
+            "Path to config.yaml. Its `mlflow` block sets the tracking URI and "
+            "experiment name; MLFLOW_TRACKING_URI still wins over the file. "
+            "Missing file is not an error — the built-in defaults apply."
+        ),
+    )
     parser.add_argument("--optuna-trials", type=int, default=OPTUNA_TRIALS, help="Optuna trials")
     parser.add_argument(
         "--quality-gates",
@@ -805,11 +940,19 @@ if __name__ == "__main__":
     if not args.data:
         parser.error("--data is required unless --validate-config-only is set")
 
-    EXPERIMENT_NAME = args.experiment
+    # The MLflow block used to be unreachable from here: this script mutated a
+    # module global for the experiment name and nothing ever read the tracking
+    # URI. Both now travel as one object, so `python -m ...training.train` and
+    # `python -m ...cli train` resolve them identically.
+    mlflow_config = _load_mlflow_config(args.config)
+    if args.experiment:
+        mlflow_config = mlflow_config.model_copy(update={"experiment_name": args.experiment})
+
     trainer = Trainer(
         data_path=args.data,
         quality_gates_path=args.quality_gates,
         target_column=args.target_column,
+        mlflow_config=mlflow_config,
     )
     result = trainer.run(optuna_trials=args.optuna_trials)
 

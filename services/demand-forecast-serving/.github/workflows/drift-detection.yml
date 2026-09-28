@@ -10,12 +10,15 @@ on:
         required: true
         default: "all"
 
-# Required GitHub Variables (no static cloud creds — D-18):
-#   GCP_WIF_PROVIDER     — Workload Identity Federation provider for GCS access
-#   GCP_SERVICE_ACCOUNT  — SA email with `roles/storage.objectViewer` on the
-#                          reference data bucket
-#   AWS_ROLE_ARN         — IAM role ARN with s3:GetObject on the data bucket
-#                          (set ONLY if DATA_BUCKET_KIND=s3)
+# Required configuration, all REPOSITORY-scoped (this job declares no
+# `environment:`), no static cloud creds — D-18:
+#   GCP_WIF_PROVIDER           (variable) Workload Identity Federation provider
+#   GCP_DRIFT_SERVICE_ACCOUNT  (variable) SA email with `roles/storage.objectViewer`
+#                              on the reference data bucket
+#   AWS_DRIFT_ROLE_ARN         (secret)   IAM role with s3:GetObject on the data
+#                              bucket (set ONLY if DATA_BUCKET_KIND=s3)
+# A purpose-named identity, not the deploy role: the deploy role is
+# environment-scoped and would arrive empty here (ADR-017 / D-31).
 #   DATA_BUCKET_KIND     — "gcs" | "s3" — picks the cloud-fetch branch below
 #   DATA_BUCKET          — bucket name (no protocol)
 #   PUSHGATEWAY_URL      — Prometheus Pushgateway URL
@@ -45,11 +48,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
 
       - name: Install dependencies
+        # Drift detection is PSI over numpy/pandas/sklearn — the runtime set
+        # is sufficient, and this lane is intentionally not a training lane.
         run: pip install -r ${{ matrix.service }}/requirements.txt
 
       # Cloud auth — picks the right path based on DATA_BUCKET_KIND var.
@@ -58,13 +63,13 @@ jobs:
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         with:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
-          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+          service_account: ${{ vars.GCP_DRIFT_SERVICE_ACCOUNT }}
 
       - name: Authenticate to AWS (OIDC)
         if: vars.DATA_BUCKET_KIND == 's3'
         uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_DRIFT_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
       - name: Download production data
@@ -101,7 +106,24 @@ jobs:
         continue-on-error: true
         run: |
           cd ${{ matrix.service }}
-          python src/*/monitoring/drift_detection.py \
+          # Module form, never `python src/*/.../drift_detection.py`. That file
+          # imports `..schemas.ServiceInputSchema` inside a try/except, so run as
+          # a script it does not crash — it silently binds the schema to None and
+          # `validate_drift_dataframe` skips every check, logging a warning whose
+          # own text says the branch "exists only for template-level tests". The
+          # PSI that comes out is then, in that function's words, "a phantom
+          # alert (or worse, a phantom all-clear)".
+          #
+          # The slug is discovered rather than hardcoded, because this workflow
+          # also runs over a multi-service repo via the matrix above. Ambiguity
+          # is a hard failure: guessing which package to run is how a drift job
+          # silently scores the wrong service.
+          SLUG=$(find src -mindepth 1 -maxdepth 1 -type d ! -name '__pycache__' -printf '%f\n')
+          if [ "$(printf '%s' "$SLUG" | grep -c .)" -ne 1 ]; then
+            echo "::error::expected exactly one package under src/, found: $SLUG"
+            exit 1
+          fi
+          python -m "src.${SLUG}.monitoring.drift_detection" \
             --reference data/reference/reference.csv \
             --current data/production/latest.csv \
             --output drift_report.json \
@@ -116,7 +138,7 @@ jobs:
 
       - name: Create issue on drift alert
         if: steps.drift.outcome == 'failure'
-        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             await github.rest.issues.create({
