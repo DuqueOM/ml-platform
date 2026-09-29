@@ -9,23 +9,25 @@ description: Create a new Architecture Decision Record with proper structure and
 ```bash
 ls docs/decisions/ | sort -n | tail -1
 ```
+
 // turbo
 
 Next number = last + 1, zero-padded to 3 digits.
 
 ## 2. Create ADR File
 
-Use template at `templates/docs/decisions/adr-template.md`:
+Use template at `templates/service/docs/decisions/adr-template.md`:
 
 ```bash
 export ADR_NUM="NNN"
 export ADR_SLUG="short-decision-name"
-cp templates/docs/decisions/adr-template.md docs/decisions/${ADR_NUM}-${ADR_SLUG}.md
+cp templates/service/docs/decisions/adr-template.md docs/decisions/${ADR_NUM}-${ADR_SLUG}.md
 ```
 
 ## 3. Fill in Sections
 
 Required sections:
+
 1. **Title**: `ADR-${ADR_NUM}: ${TITLE}`
 2. **Status**: Proposed (will change to Accepted after review)
 3. **Date**: Today's date (YYYY-MM-DD)

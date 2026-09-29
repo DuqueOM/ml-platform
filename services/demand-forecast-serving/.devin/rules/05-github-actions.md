@@ -8,10 +8,10 @@ description: GitHub Actions CI/CD patterns for ML services
 
 ## Workflow Organization
 
-```
+```text
 .github/workflows/
 ├── ci.yml                    # Lint, test, build — on push to main/develop
-├── ci-infra.yml              # Terraform validate, tfsec, checkov — on infra/ changes
+├── ci-infra.yml              # Terraform validate, trivy config, checkov — on infra/ changes
 ├── deploy-gcp.yml            # Deploy to GKE — on release tag or manual
 ├── deploy-aws.yml            # Deploy to EKS — on release tag or manual
 ├── drift-detection.yml       # PSI drift check — scheduled daily
@@ -52,6 +52,7 @@ jobs:
 ## Infrastructure CI (`ci-infra.yml`)
 
 Triggered on changes to `infra/` or `k8s/`:
+
 ```yaml
 jobs:
   terraform-validate:
@@ -61,7 +62,7 @@ jobs:
     steps:
       - terraform fmt -check
       - terraform validate
-      - tfsec --format json
+      - trivy config --severity HIGH,CRITICAL
       - checkov -d infra/terraform/{cloud}
 ```
 
@@ -86,16 +87,17 @@ jobs:
       matrix:
         service: [ServiceA, ServiceB, ServiceC]
     steps:
-      - run: python src/{service}/monitoring/drift_detection.py
+      - run: python -m src.{service}.monitoring.drift_detection
         continue-on-error: true
       - if: steps.drift.outcome == 'failure'
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         # Creates GitHub Issue automatically
 ```
 
 ## Retraining Workflows
 
 Triggered by `workflow_dispatch` (from drift detection or manual):
+
 ```yaml
 on:
   workflow_dispatch:
@@ -168,7 +170,7 @@ jobs:
 Environments to configure in `Settings → Environments`:
 
 | Env name | Reviewers | Wait timer | Deployment branches |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `{cloud}-dev` | 0 | 0 | all |
 | `{cloud}-staging` | 1 | 0 | main + tags |
 | `{cloud}-production` | 2 | 5 min | version tags only |
@@ -198,7 +200,7 @@ See `docs/environment-promotion.md` for full setup.
   cloud-credential scoping per dev/staging/prod (D-18 + D-26)
 - ALWAYS pin action versions to a specific SHA (not `@main` or `@v3`)
 - ALWAYS use `continue-on-error: true` for drift detection (drift does not block CI)
-- ALWAYS run security scans (trivy for images, tfsec/checkov for Terraform)
+- ALWAYS run security scans (trivy for images, trivy config/checkov for Terraform)
 - ALWAYS use matrix strategies for multi-service operations
 - ALWAYS use `workflow_call` reusable workflows for shared deploy logic
 - Production deploys MUST be gated on a version tag + 2 reviewers (D-26)

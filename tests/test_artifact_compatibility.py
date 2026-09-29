@@ -51,15 +51,18 @@ def seam(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-un
     return write
 
 
-_TODAY_LOCK = _lock(numpy=["1.26.4", "2.2.6"], scikit_learn="1.7.2", joblib="1.5.2")
-_TODAY_READER = "numpy~=1.26.0  # numpy 2.x silently corrupts joblib models\nscikit-learn~=1.5.2\njoblib~=1.4.2\n"
+# Today's seam: only numpy straddles, under ADR-008's exemption. joblib
+# (template v0.30.x) and scikit-learn (Dependabot's 1.9.1) stopped straddling
+# and their exemptions were removed — so both agree here.
+_TODAY_LOCK = _lock(numpy=["1.26.4", "2.2.6"], scikit_learn="1.9.1", joblib="1.5.2")
+_TODAY_READER = "numpy~=1.26.0  # numpy 2.x silently corrupts joblib models\nscikit-learn~=1.9.1\njoblib~=1.5.2\n"
 
 
 def test_the_known_straddles_are_exempt_while_the_adr_is_proposed(seam, capsys) -> None:  # type: ignore[no-untyped-def]
     seam(_TODAY_LOCK, _TODAY_READER)
     assert gate.main() == 0
     out = capsys.readouterr().out
-    assert out.count("exempt  [artifact]") == 3, out
+    assert out.count("exempt  [artifact]") == 1, out
 
 
 def test_every_resolved_version_is_checked_not_only_the_first(seam) -> None:  # type: ignore[no-untyped-def]
@@ -73,14 +76,42 @@ def test_deciding_the_adr_lifts_every_exemption(seam, capsys) -> None:  # type: 
     seam(_TODAY_LOCK, _TODAY_READER, _ACCEPTED)
     assert gate.main() == 1
     out = capsys.readouterr().out
-    assert out.count("no longer Proposed") == 3, out
+    assert out.count("no longer Proposed") == 1, out
 
 
 def test_an_exemption_that_outlives_its_straddle_fails(seam, capsys) -> None:  # type: ignore[no-untyped-def]
-    seam(_lock(numpy="1.26.4", scikit_learn="1.5.2", joblib="1.4.2"), _TODAY_READER)
+    seam(_lock(numpy="1.26.4", scikit_learn="1.9.1", joblib="1.5.2"), _TODAY_READER)
     assert gate.main() == 1
     out = capsys.readouterr().out
-    assert out.count("delete the exemption") == 3, out
+    assert out.count("delete the exemption") == 1, out
+
+
+def test_a_joblib_straddle_is_reportable_again(seam, capsys) -> None:  # type: ignore[no-untyped-def]
+    """joblib's exemption is gone, so a joblib straddle now fails instead of hiding.
+
+    The gate demanded that removal itself: after the service moved to template
+    v0.30.x, joblib agreed and the outlived exemption failed CI.
+    """
+    seam(
+        _lock(numpy=["1.26.4", "2.2.6"], scikit_learn="1.9.1", joblib="1.5.2"),
+        _TODAY_READER.replace("joblib~=1.5.2", "joblib~=1.4.2"),
+    )
+    assert gate.main() == 1
+    assert (
+        "joblib: written by 1.5.2, read by ~=1.4.2, and nothing records a decision about it" in capsys.readouterr().out
+    )
+
+
+def test_a_scikit_learn_straddle_is_reportable_again(seam, capsys) -> None:  # type: ignore[no-untyped-def]
+    """scikit-learn's exemption is gone too: Dependabot moved training to 1.9.1, the version the service reads."""
+    seam(
+        _lock(numpy=["1.26.4", "2.2.6"], scikit_learn="1.10.0", joblib="1.5.2"),
+        _TODAY_READER,
+    )
+    assert gate.main() == 1
+    assert "scikit-learn: written by 1.10.0, read by ~=1.9.1, and nothing records a decision about it" in (
+        capsys.readouterr().out
+    )
 
 
 def test_a_missing_adr_fails_safe(seam, capsys) -> None:  # type: ignore[no-untyped-def]

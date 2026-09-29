@@ -28,12 +28,12 @@ templates/scripts/new-service.sh` must return zero hits.
 
 ## D-34 — Unquoted Jinja tokens in YAML lists
 
-
 Copier's custom delimiters `{@ @}` produce valid YAML **only when
 quoted** in list contexts. An unquoted `- {@ service_name @}` is invalid
 YAML because the `@` character cannot start a token.
 
 **Rule**: All `{@ @}` tokens in YAML list items MUST be quoted:
+
 ```yaml
 # WRONG — invalid YAML
 service:
@@ -47,7 +47,6 @@ service:
 **Check**: `rg -n '^\s+- \{@' templates/service/ --glob "*.yml"` must
 return zero hits. Every match is an unquoted Jinja token in a YAML list.
 
-
 ## D-35 — Local profile accepting cloud credentials or targeting a cluster
 
 The `local` stack profile (`configs/profiles/local.yaml`) MUST NOT accept
@@ -56,6 +55,7 @@ enforces the local-first contract (ADR-033): the `local` profile is the
 zero-cloud-dependency on-ramp for adopters evaluating the template.
 
 **Required fields in `configs/profiles/local.yaml`**:
+
 ```yaml
 requires:
   cloud_credentials: false
@@ -74,9 +74,11 @@ fields are `false`.
 `scripts/test_scaffold.sh` MUST validate:
 
 1. Zero unreplaced Jinja tokens (`{@ @}`, `{% %}`, `{# #}`) in rendered output.
-
 2. Post-gen agentic tasks ran (`.devin/rules/` exists, manifest present).
-3. All 6 Kustomize overlays render from the scaffolded service.
+3. Every Kustomize overlay renders from the scaffolded service. CI discovers
+   them rather than listing them: a hardcoded list named the six cloud x env
+   overlays while the tree held seven, and `batch-only` went unrendered and
+   untested for as long as that list stood.
 4. `ci_verify_workflows.py` passes on the scaffolded service.
 
 ## Upgrade path
@@ -88,6 +90,7 @@ every scaffolded service.
 
 The `scaffold-update` skill and `/scaffold-update` workflow codify the
 upgrade procedure:
+
 1. Pre-flight: clean working tree + `.copier-answers.yml` present.
 2. Dry-run diff to categorize changes (no-op / conflict / new).
 3. Review with operator (CONSULT mode).

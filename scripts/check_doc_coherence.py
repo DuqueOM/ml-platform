@@ -912,6 +912,12 @@ def _runnable_copier_commands(text: str) -> list[str]:
             # the documentation that exists because of it.
             if line.lstrip().startswith("#"):
                 continue
+            # A TRAILING comment is prose too: `make scaffold-update   # copier
+            # update, pinned` names the tool in a comment and runs `make`. It
+            # was reported as an unpinned command the day the service moved to
+            # template v0.30.0. A `#` counts only after whitespace, so a URL
+            # fragment stays part of its word.
+            line = re.sub(r"\s#.*$", "", line)
             # The SUBCOMMAND is what makes it a command. Matching the bare word
             # made "copier source for a new project" — a directory description
             # in a ```text layout block — an unpinned invocation. This is the

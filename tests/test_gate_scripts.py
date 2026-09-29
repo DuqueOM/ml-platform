@@ -936,6 +936,20 @@ def test_every_markdown_lint_list_ignores_every_generated_surface() -> None:
     assert not missing, f"generated surfaces linted as if hand-written: {missing}"
 
 
+def test_c9_reads_a_trailing_comment_as_prose_and_still_fails_the_command_before_it() -> None:
+    """`make scaffold-update   # copier update, pinned` runs make, not copier."""
+    comment = "# probe\n\n```bash\nmake scaffold-update       # copier update, pinned\n```\n"
+    with temporarily(_ANCHOR_PROBE, comment):
+        clean = _run(GATES["doc-coherence"], "--only", "C9")
+    assert clean.returncode == 0, clean.stdout
+
+    command = "# probe\n\n```bash\ncopier update --trust   # refresh\n```\n"
+    with temporarily(_ANCHOR_PROBE, command):
+        caught = _run(GATES["doc-coherence"], "--only", "C9")
+    assert caught.returncode == 1
+    assert "documents an unpinned copier command" in caught.stdout
+
+
 # --- the tree is left as it was found ---------------------------------------
 
 

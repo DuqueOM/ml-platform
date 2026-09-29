@@ -7,6 +7,7 @@ description: Create a complete new ML service from template — end-to-end scaff
 ## 1. Gather Requirements
 
 Before creating any files, determine:
+
 - **Service name**: `Demand Forecast Serving-{Purpose}` (e.g., `FraudDetect-Scorer`)
 - **Service slug**: lowercase, no hyphens (e.g., `frauddetect`)
 - **Business problem**: One sentence
@@ -26,6 +27,7 @@ grep -r "Demand Forecast Serving\|demand_forecast_serving\|" ${SVC_NAME}/ --incl
 ```
 
 If `new-service.sh` is unavailable, manual fallback:
+
 ```bash
 cp -r templates/service/ ${SVC_NAME}/
 find ${SVC_NAME}/ -type f -exec sed -i "s/Demand Forecast Serving/${SVC_NAME}/g" {} +
@@ -64,9 +66,9 @@ mv ${SVC_NAME}/src/\{service\} ${SVC_NAME}/src/${SVC_SLUG}
 
 ```bash
 # Copy K8s templates
-cp templates/k8s/deployment.yaml k8s/base/${SVC_SLUG}-deployment.yaml
-cp templates/k8s/hpa.yaml k8s/base/${SVC_SLUG}-hpa.yaml
-cp templates/k8s/service.yaml k8s/base/${SVC_SLUG}-service.yaml
+cp templates/service/k8s/base/deployment.yaml k8s/base/${SVC_SLUG}-deployment.yaml
+cp templates/service/k8s/base/hpa.yaml k8s/base/${SVC_SLUG}-hpa.yaml
+cp templates/service/k8s/base/service.yaml k8s/base/${SVC_SLUG}-service.yaml
 sed -i "s/demand_forecast_serving/${SVC_SLUG}/g" k8s/base/${SVC_SLUG}-*.yaml
 ```
 
@@ -112,6 +114,7 @@ Add to kustomization.yaml and create overlay patches.
 ## 14. Final Verification
 
 Run the acceptance checklist:
+
 - [ ] All tests passing
 - [ ] Coverage >= 90%
 - [ ] Load test < 1% errors

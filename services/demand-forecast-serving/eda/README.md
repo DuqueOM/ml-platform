@@ -9,6 +9,7 @@ This module implements the 6-phase pipeline described in
 ## Why a structured EDA module
 
 Without structure, EDA tends to:
+
 - Leak production features into training (D-13)
 - Produce Pandera schemas disconnected from observed distributions (D-14)
 - Forget to persist baseline distributions, silently breaking drift detection (D-15)
@@ -18,7 +19,7 @@ This module makes all four anti-patterns impossible by design.
 
 ## Directory layout (enforced)
 
-```
+```text
 eda/
 ├── reports/                            # Human-readable outputs (gitignored — regenerable)
 │   ├── 00_ingest_report.md
@@ -41,7 +42,7 @@ eda/
 ## Files in this module
 
 | File | Purpose |
-|------|---------|
+| ------ | --------- |
 | `README.md` | This file |
 | `eda_pipeline.py` | Scriptable 6-phase implementation |
 | `notebook_template.ipynb` | Structured Jupyter notebook companion |
@@ -52,7 +53,7 @@ eda/
 
 ```bash
 # 1. Install deps (lightweight by default)
-pip install -r templates/eda/requirements.txt
+pip install -r eda/requirements.txt
 
 # 2. Run the 6-phase pipeline
 python -m eda.eda_pipeline \
@@ -76,23 +77,30 @@ git commit -m "feat(eda): complete EDA for <dataset>"
 ```
 
 Or in agentic mode:
-```
+
+```text
 /eda data/raw/dataset.csv fraud_detector
 ```
 
 ## Two modes: lightweight vs heavy
 
 ### Lightweight (default)
-- `pandas`, `scipy`, `scikit-learn`, `matplotlib`, `pandera`
+
+- `pandas`, `numpy`, `pyyaml` — the three the pipeline imports, pinned
+  identically to the service's `requirements.txt` because §3 of the
+  tutorial installs both into one environment (ADR-048)
+- `chardet` — encoding detection, used by the `eda-analysis` skill
 - ~50MB total
 - Phase 1 produces a Markdown profile, not ydata-profiling HTML
 - **Recommended for CI and small-to-medium datasets (< 1M rows)**
 
 ### Heavy (opt-in)
+
 ```bash
-pip install -r templates/eda/requirements-heavy.txt
+pip install -r eda/requirements-heavy.txt
 python -m eda.eda_pipeline --heavy ...
 ```
+
 - Adds `ydata-profiling` (~500MB) for rich HTML profiling
 - `plotly` for interactive plots
 - `great_tables` for publication-quality tables
@@ -101,7 +109,7 @@ python -m eda.eda_pipeline --heavy ...
 ## Phase artifacts reference
 
 | Phase | Output (report) | Output (artifact) | Consumer |
-|-------|----------------|-------------------|----------|
+| ------- | ---------------- | ------------------- | ---------- |
 | 0 | `00_ingest_report.md` | `data/processed/dataset_clean.parquet` | All downstream |
 | 1 | `01_profile.html` | `schema_ranges.json` | Phase 6 schema proposal |
 | 2 | `02_univariate.html` | **`baseline_distributions.parquet`** | **Drift CronJob (prod)** |
@@ -112,7 +120,7 @@ python -m eda.eda_pipeline --heavy ...
 
 ## The drift detection loop
 
-```
+```text
       EDA phase 2
            │
            ▼

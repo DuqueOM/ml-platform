@@ -9,9 +9,13 @@
 uv sync
 
 # Option B: pip (compatible, e.g. air-gapped environments)
-pip install -r requirements.txt
+# Three lanes (ADR-049). A training env is a superset of a serving env;
+# the served image gets requirements.txt and nothing more.
+pip install -r requirements-train.txt   # runtime + mlflow/optuna — needed to train
+# pip install -r requirements.txt      # serving only, what the image installs
+# pip install -r requirements-dev.txt  # runtime + pytest/httpx/locust/linters
 
-python src/demand_forecast_serving/training/train.py --data data/raw/dataset.csv
+python -m src.demand_forecast_serving.training.train --data data/raw/dataset.csv
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
@@ -30,7 +34,7 @@ Coming from a Cookiecutter Data Science background? See
 ## Endpoints
 
 | Method | Path | Description |
-|--------|------|-------------|
+| -------- | ------ | ------------- |
 | POST | `/predict` | Main prediction endpoint (async, ThreadPoolExecutor) |
 | POST | `/predict?explain=true` | Prediction with SHAP explanation (D-04) |
 | POST | `/predict_batch` | Batch prediction for multiple inputs |
@@ -65,7 +69,7 @@ curl -X POST http://localhost:8000/predict \
 ## Serving Latency (Measured)
 
 | Cloud | Instance | P50 (idle) | P95 (idle) | P50 (100u) |
-|-------|----------|-----------|-----------|-----------|
+| ------- | ---------- | ----------- | ----------- | ----------- |
 | GCP | {type} | {X}ms | {Y}ms | {X}ms |
 | AWS | {type} | {X}ms | {Y}ms | {X}ms |
 
@@ -95,7 +99,7 @@ kubectl apply -k k8s/overlays/aws-dev/
 
 ## Memory Footprint
 
-```
+```text
 Model + dependencies: ~{N}Mi
 Pod request: {X}Mi
 Pod limit: {Y}Mi

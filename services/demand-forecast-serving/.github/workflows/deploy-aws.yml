@@ -64,7 +64,9 @@ jobs:
           # Multi-service adopters can replace SERVICES with service-root pairs.
           for SERVICE in demand-forecast-serving; do
             IMAGE="${{ env.REGISTRY }}/${SERVICE}-predictor:${{ steps.version.outputs.v }}"
-            docker build -t "$IMAGE" .
+            # CLOUD_PROVIDER installs the secret-manager SDK the pods read
+            # API_KEY with (ADR-051); without it auth-enabled envs answer 503.
+            docker build --build-arg CLOUD_PROVIDER=aws -t "$IMAGE" .
             docker push "$IMAGE"
           done
 
@@ -109,7 +111,7 @@ jobs:
       # (same approach applies to AWS once Dockerfile is reproducible).
       # Generate one SBOM per service (multi-service safe — ADR-014 §5.7).
       - name: Install Syft (SBOM generator)
-        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
 
       - name: Generate SBOM per service (Syft / CycloneDX)
         run: |

@@ -1,7 +1,9 @@
 # =============================================================================
 # Multi-stage Dockerfile for Demand Forecast Serving
 # =============================================================================
-# Target image size: ~600MB (Python 3.13 slim + ML deps)
+# Image size: the runtime/training split took the installed set from 150
+# resolved packages to 35 (ADR-049). Re-measure with `docker images` rather
+# than trusting a number in a comment.
 #
 # Stage 1 (builder): Install system build tools + Python packages in a venv
 # Stage 2 (runtime): Copy only the venv + app code into a clean slim image
@@ -15,8 +17,14 @@
 #     NEVER use --workers N in K8s (causes CPU thrashing, dilutes HPA signal)
 #   - Model artifacts are NOT baked in — K8s init container downloads them
 #
+#   - requirements.txt is the RUNTIME set only. Training (mlflow, optuna) and
+#     test tooling (pytest, locust, ...) are deliberately absent: nothing that
+#     runs in this image imports them, and shipping them put 20 of this
+#     service's 24 fixable CRITICAL/HIGH advisories into every inference pod
+#     (ADR-049). Train with `pip install -r requirements-train.txt` outside
+#     the served image.
+#
 # TODO: Update LABEL metadata for your service.
-# TODO: Adjust requirements file name if you split prod vs dev dependencies.
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -40,8 +48,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc g++ build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements (change to requirements-prod.txt if you have separate files)
-COPY requirements.txt ./
+# Runtime requirements only — see the header. Copying requirements-train.txt
+# or requirements-dev.txt here would silently undo the partition, so don't.
+# The per-cloud files carry only the secret-manager SDK (ADR-051) and are
+# installed when CLOUD_PROVIDER names that cloud.
+ARG CLOUD_PROVIDER=""
+COPY requirements.txt requirements-gcp.txt requirements-aws.txt ./
 
 # Install into a venv for clean multi-stage copy
 # xgboost/lightgbm --no-deps avoids pulling nvidia-nccl-cu12 (~290MB)
@@ -65,6 +77,11 @@ RUN set -e && \
     . /opt/venv/bin/activate && \
     pip install --upgrade pip setuptools wheel && \
     pip install --no-cache-dir --no-compile -r requirements.txt && \
+    case "${CLOUD_PROVIDER}" in \
+      "") ;; \
+      gcp|aws) pip install --no-cache-dir --no-compile -r "requirements-${CLOUD_PROVIDER}.txt" ;; \
+      *) echo "CLOUD_PROVIDER must be empty, gcp or aws (got '${CLOUD_PROVIDER}')" >&2; exit 1 ;; \
+    esac && \
     # Uncomment if using xgboost/lightgbm:
     # pip install --no-cache-dir --no-deps "xgboost>=1.5.0,<3.0" && \
     # pip install --no-cache-dir --no-deps "lightgbm>=4.0.0,<5.0" && \
@@ -90,11 +107,61 @@ ENV PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH" \
     MODEL_PATH=models/model.joblib
 
-# Minimal runtime deps (curl for healthcheck, libgomp for lightgbm/xgboost)
+# Minimal runtime deps (curl for healthcheck, libgomp for lightgbm/xgboost),
+# plus the distro's pending security patches.
+#
+# `apt-get upgrade` is here because the base image lags Debian's security
+# archive, and the served image's Trivy gate (CRITICAL,HIGH, --ignore-unfixed)
+# holds the image to what is FIXABLE, not to what the base happens to ship.
+# Measured: three days after that gate first went green, two fixable HIGHs
+# appeared in a package neither this Dockerfile nor requirements.txt names —
+#
+#   libpcre2-8-0  CVE-2026-86145  out-of-bounds write, arbitrary code
+#   libpcre2-8-0  CVE-2026-89161  memory corruption
+#   installed 10.42-1, fixed in 10.42-1+deb12u1
+#
+# — and the gate blocked the build, which is the gate working rather than
+# breaking. Waiting for the upstream base tag to rebuild is not a control; it
+# is a hope with a release cadence attached.
+#
+# The trade-off, stated: this makes the OS layer non-reproducible across
+# builds. It already was — `apt-get install` without pinned versions resolves
+# against a moving archive — so `upgrade` changes the security posture without
+# changing that property. Reproducibility at this layer belongs to a digest-
+# pinned base image, which is a separate decision (D-17..D-19 pin what we
+# publish, not what Debian publishes).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates libgomp1 \
+    && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
+
+# Drop the system pip and setuptools. The venv at /opt/venv already has them
+# removed (see the builder's cleanup) and is first on PATH, so nothing in this
+# image can reach these — they are attack surface with no function.
+#
+# They are also the image's only fixable CRITICAL/HIGH findings. Measured
+# against python:3.13-slim-bookworm:
+#
+#   CVE-2025-47273       setuptools 70.3.0 -> needs 78.1.1   HIGH
+#   GHSA-6v7p-g79w-8964  msgpack 1.1.2 -> needs 1.2.1        HIGH   (vendored inside pip)
+#
+# Removing beats upgrading here: the serving image installs nothing at runtime,
+# so a *current* setuptools would be the same unused surface with a later CVE.
+# Verified before removal that every entrypoint this image runs imports cleanly
+# with pip, setuptools and pkg_resources blocked from sys.meta_path.
+#
+# The golden path now scans this image with the same Trivy gate the generated
+# service ships (CRITICAL,HIGH, --ignore-unfixed), so a regression here fails
+# the build rather than shipping quietly.
+RUN rm -rf /usr/local/lib/python*/site-packages/pip \
+           /usr/local/lib/python*/site-packages/pip-*.dist-info \
+           /usr/local/lib/python*/site-packages/setuptools \
+           /usr/local/lib/python*/site-packages/setuptools-*.dist-info \
+           /usr/local/lib/python*/site-packages/pkg_resources \
+           /usr/local/lib/python*/site-packages/wheel \
+           /usr/local/lib/python*/site-packages/wheel-*.dist-info \
+           /usr/local/bin/pip /usr/local/bin/pip3 /usr/local/bin/pip3.*
 
 # Non-root user — required by K8s Pod Security Standards (baseline)
 RUN groupadd -r appuser --gid=1000 && \
@@ -120,16 +187,39 @@ COPY --chown=appuser:appuser monitoring/ ./monitoring/
 COPY --chown=appuser:appuser common_utils/ ./common_utils/
 
 # Build-time smoke import (Phase 1.1 / audit closure):
-# Catches a missing/renamed common_utils module at *image build* time
-# instead of letting the runtime image ship and crash on first boot.
-# Each module here is a hard runtime dependency:
-#   - prediction_logger: closed-loop monitoring (D-21)
-#   - input_validation:  Pandera adapters (PR-R2-4)
-#   - secrets:           credential loader (D-17/D-18)
-# If any import fails, `docker build` exits non-zero and the image
-# never reaches the registry — the regression cannot reach production.
-RUN /opt/venv/bin/python -c "import common_utils.prediction_logger, common_utils.input_validation, common_utils.secrets" \
-    && echo "common_utils import smoke OK"
+# Catches a missing/renamed module — or a runtime dependency that the
+# requirements split dropped by mistake — at *image build* time instead of
+# letting the runtime image ship and crash on first boot.
+#
+# The list is every entrypoint this image actually runs, which is what makes
+# it the executable proof that requirements.txt is sufficient:
+#   - app.main:            the uvicorn CMD below
+#   - training.features:   app/fastapi_app.py imports FeatureEngineer at
+#                          startup and RAISES unless FEATURE_ENGINEERING_
+#                          REQUIRED=false, so serving genuinely depends on
+#                          this one module under training/
+#   - monitoring.*:        the drift + performance CronJobs run these from
+#                          THIS image (k8s/base/cronjob-*.yaml)
+#   - common_utils.*:      hard runtime deps — prediction_logger (D-21),
+#                          input_validation (PR-R2-4), secrets (D-17/D-18)
+# If any import fails, `docker build` exits non-zero and the image never
+# reaches the registry — the regression cannot reach production.
+#
+# What is deliberately NOT importable here: training.train, training.
+# promote_to_mlflow and cli, the three modules that import mlflow/optuna.
+# They run on a CI runner or a training job with requirements-train.txt
+# installed, never in the served image.
+RUN /opt/venv/bin/python -c "import app.main, common_utils.prediction_logger, common_utils.input_validation, common_utils.secrets" \
+    && /opt/venv/bin/python -c "import demand_forecast_serving.training.features, demand_forecast_serving.monitoring.drift_detection, demand_forecast_serving.monitoring.performance_monitor" \
+    && echo "runtime import smoke OK"
+
+# A cloud image that cannot import its secret backend would pass the smoke
+# above and then answer every authenticated request with 503 (ADR-051).
+ARG CLOUD_PROVIDER=""
+RUN case "${CLOUD_PROVIDER}" in \
+      gcp) /opt/venv/bin/python -c "import google.auth, google.cloud.secretmanager" ;; \
+      aws) /opt/venv/bin/python -c "import boto3" ;; \
+    esac && echo "cloud secret backend smoke OK (${CLOUD_PROVIDER:-none})"
 
 # Create runtime directories (models downloaded by K8s init container)
 RUN mkdir -p logs data/raw data/processed data/reference models results && \

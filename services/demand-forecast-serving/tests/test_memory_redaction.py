@@ -30,12 +30,13 @@ from pathlib import Path
 
 import pytest
 
-# Phase 1 modules live under templates/common_utils/. Same sys.path bridge
-# as test_memory_contracts.py so this test can run independently.
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-_TEMPLATES_DIR = _REPO_ROOT / "templates"
-if str(_TEMPLATES_DIR) not in sys.path:
-    sys.path.insert(0, str(_TEMPLATES_DIR))
+# common_utils sits at the service root — templates/service/ in this repo,
+# the repo root in a scaffolded service; parents[1] is that root in both.
+# Same sys.path bridge as test_memory_contracts.py so this test can run
+# independently. It pointed at templates/ until ADR-030 moved the tree.
+_SERVICE_ROOT = Path(__file__).resolve().parents[1]
+if (_SERVICE_ROOT / "common_utils" / "__init__.py").exists() and str(_SERVICE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SERVICE_ROOT))
 
 from common_utils.memory_redaction import (  # noqa: E402  type: ignore[import-not-found]
     REDACTION_PLACEHOLDER,
@@ -51,7 +52,9 @@ from common_utils.memory_redaction import (  # noqa: E402  type: ignore[import-n
 
 CASES_SECRETS: list[tuple[str, str]] = [
     ("aws_access_key_id", "Embedded key: AKIAIOSFODNN7EXAMPLE in config"),
-    ("gcp_api_key", "GCP key: AIzaSyD-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+    # Assembled at runtime for the same reason as test_context_files_hygiene.py:
+    # a literal key-shaped string triggers GitHub secret scanning downstream.
+    ("gcp_api_key", "GCP key: " + "AIza" + "Example" * 5 + "aa"),
     ("github_pat_classic", "PAT: ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"),
     (
         "openai_api_key_legacy",
@@ -75,7 +78,9 @@ CASES_SECRETS: list[tuple[str, str]] = [
     ),
     (
         "pem_private_key",
-        "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n-----END RSA PRIVATE KEY-----",  # gitleaks:allow
+        # Assembled at runtime so no private-key hook or scanner reads a literal
+        # PEM block in this file; the redactor still sees the whole thing.
+        "-----BEGIN RSA " + "PRIVATE KEY-----\nMIIEowIBAAKCAQEA\n-----END RSA " + "PRIVATE KEY-----",
     ),
     (
         "connection_string_with_password",

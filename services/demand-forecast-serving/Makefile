@@ -30,6 +30,7 @@ NC     := \033[0m
 SERVICE_SLUG ?= demand_forecast_serving
 MODEL_PATH   ?= models/model.joblib
 DATA_PATH    ?= data/raw/dataset.csv
+EDA_TARGET   ?= target
 IMAGE_TAG    ?= $(SERVICE_SLUG):latest
 VERSION      ?= latest
 CLOUD        ?= gcp
@@ -46,17 +47,22 @@ help: ## Show this help message
 # Development
 # ═══════════════════════════════════════════════
 
-install: ## Install dependencies
-	@echo "$(GREEN)Installing dependencies...$(NC)"
+install: ## Install runtime dependencies (what the served image gets)
+	@echo "$(GREEN)Installing runtime dependencies...$(NC)"
 	pip install -r requirements.txt
-	@echo "$(GREEN)✓ Dependencies installed$(NC)"
+	@echo "$(GREEN)✓ Runtime dependencies installed$(NC)"
 
-install-dev: ## Install dev dependencies + pre-commit hooks
+install-train: ## Install runtime + training dependencies (mlflow, optuna)
+	@echo "$(GREEN)Installing training dependencies...$(NC)"
+	pip install -r requirements-train.txt
+	@echo "$(GREEN)✓ Training environment ready$(NC)"
+
+install-dev: ## Install runtime + dev dependencies + pre-commit hooks
 	@echo "$(GREEN)Installing dev dependencies...$(NC)"
-	pip install -r requirements.txt
-	pip install pre-commit pytest-cov locust
+	pip install -r requirements-dev.txt
 	pre-commit install
 	@echo "$(GREEN)✓ Dev environment ready$(NC)"
+	@echo "$(YELLOW)  make train also needs: make install-train (ADR-049).$(NC)"
 
 install-uv: ## Install dependencies with uv (faster, reproducible)
 	@echo "$(GREEN)Installing dependencies with uv...$(NC)"
@@ -64,10 +70,14 @@ install-uv: ## Install dependencies with uv (faster, reproducible)
 	@echo "$(GREEN)✓ Dependencies installed via uv$(NC)"
 	@echo "$(GREEN)  (requirements.txt retained for pip compatibility)$(NC)"
 
-lock: ## Freeze requirements.txt into a hash-pinned lockfile (reproducible rebuilds)
-	@echo "$(GREEN)Generating hash-pinned lockfile from requirements.txt...$(NC)"
+lock: ## Freeze each requirements file into a hash-pinned lockfile (reproducible rebuilds)
+	@echo "$(GREEN)Generating hash-pinned lockfiles...$(NC)"
 	uv pip compile requirements.txt --generate-hashes -o requirements.lock.txt
-	@echo "$(GREEN)✓ requirements.lock.txt written — commit it with the release.$(NC)"
+	uv pip compile requirements-train.txt --generate-hashes -o requirements-train.lock.txt
+	@echo "$(GREEN)✓ lockfiles written — commit them with the release.$(NC)"
+	@echo "$(YELLOW)  The runtime lock is what the image installs; the training lock"
+	@echo "  is a superset. Locking only one of the two was how the split"
+	@echo "  would quietly stop meaning anything.$(NC)"
 	@echo "$(YELLOW)  requirements.txt (~=) states intent; the lockfile guarantees"
 	@echo "  byte-identical rebuilds a year from now. Install with:"
 	@echo "  pip install --require-hashes -r requirements.lock.txt$(NC)"
@@ -78,7 +88,7 @@ lock: ## Freeze requirements.txt into a hash-pinned lockfile (reproducible rebui
 
 train: ## Run training pipeline
 	@echo "$(GREEN)Running training pipeline...$(NC)"
-	python src/$(SERVICE_SLUG)/training/train.py --data $(DATA_PATH)
+	python -m src.$(SERVICE_SLUG).training.train --data $(DATA_PATH)
 	@echo "$(GREEN)✓ Training complete$(NC)"
 
 serve: ## Start local dev server (uvicorn)
@@ -91,7 +101,7 @@ serve: ## Start local dev server (uvicorn)
 
 local-loop: ## Run train → serve → drift in local mode (no Docker/K8s/TF)
 	@echo "$(GREEN)Running local loop (profile=local)...$(NC)"
-	python src/$(SERVICE_SLUG)/training/train.py --data $(DATA_PATH)
+	python -m src.$(SERVICE_SLUG).training.train --data $(DATA_PATH)
 	@echo "$(GREEN)Starting server...$(NC)"
 	@MODEL_PATH=$(MODEL_PATH) uvicorn app.main:app --host 0.0.0.0 --port $(PORT) &
 	@sleep 2 && curl -sf http://localhost:$(PORT)/health && echo " $(GREEN)✓ healthy$(NC)" || echo " $(RED)✗ unhealthy$(NC)"
@@ -230,13 +240,9 @@ new-service: ## Scaffold a new ML service (NAME=PascalCase SLUG=snake_case)
 	fi
 	bash templates/scripts/new-service.sh $(NAME) $(SLUG)
 
-eda: ## Run 6-phase EDA pipeline on data/raw/
-	@echo "$(GREEN)Running EDA pipeline...$(NC)"
-	@if [ -f eda/run_eda.py ]; then \
-		python eda/run_eda.py; \
-	else \
-		echo "$(YELLOW)See eda/README.md for the 6-phase pipeline.$(NC)"; \
-	fi
+eda: ## Run the 6-phase EDA pipeline (DATA_PATH=..., EDA_TARGET=...)
+	@echo "$(GREEN)Running EDA pipeline on $(DATA_PATH) (target: $(EDA_TARGET))...$(NC)"
+	python eda/eda_pipeline.py --input $(DATA_PATH) --target $(EDA_TARGET)
 
 drift-check: ## Run reproducible drift drill against data/production/
 	@echo "$(GREEN)Running drift drill...$(NC)"
@@ -244,7 +250,7 @@ drift-check: ## Run reproducible drift drill against data/production/
 
 retrain: ## Run training pipeline + quality gates (non-agentic equivalent of /retrain)
 	@echo "$(GREEN)Retraining $(SERVICE_SLUG)...$(NC)"
-	python src/$(SERVICE_SLUG)/training/train.py --data $(DATA_PATH)
+	python -m src.$(SERVICE_SLUG).training.train --data $(DATA_PATH)
 	@echo "$(GREEN)Validating quality gates...$(NC)"
 	python scripts/validate_quality_gates.py --require-at-least-one
 	@echo "$(GREEN)✓ Retraining + gate validation complete$(NC)"
@@ -314,9 +320,21 @@ secret-breach-check: ## Scan for leaked secrets (gitleaks)
 	@echo "$(GREEN)Scanning for leaked secrets...$(NC)"
 	gitleaks detect --no-git --source=. --redact
 
-scaffold-update: ## Update this service from the template (copier update)
-	@echo "$(GREEN)Updating from template...$(NC)"
-	copier update --trust --defaults
+# TEMPLATE_REF is deliberately separate from REF (used by ci-green as a git
+# branch, defaulting to `main`) and deliberately has NO default. Reusing REF
+# here would inherit that `main` default and update the service from the
+# moving development branch instead of a release — a worse outcome than the
+# unpinned form this target used to have.
+scaffold-update: ## Update this service from the template. TEMPLATE_REF is required: make scaffold-update TEMPLATE_REF=v0.26.0
+	@if [ -z "$(TEMPLATE_REF)" ]; then \
+		echo "$(RED)TEMPLATE_REF is required.$(NC) Usage: make scaffold-update TEMPLATE_REF=<template release tag>"; \
+		echo "Copier resolves an unpinned source to the highest-sorting tag, so the"; \
+		echo "service would jump to a release nobody chose. Pin it."; \
+		echo "See agentic/workflows/scaffold-update.md for the full procedure."; \
+		exit 2; \
+	fi
+	@echo "$(GREEN)Updating from template at $(TEMPLATE_REF)...$(NC)"
+	copier update --vcs-ref=$(TEMPLATE_REF) --trust --defaults
 
 doc-coherence: ## Check cross-document coherence (version, CHANGELOG, ADRs, counts)
 	@echo "$(GREEN)Checking documentation coherence...$(NC)"

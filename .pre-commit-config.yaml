@@ -88,7 +88,7 @@ repos:
       - id: check-merge-conflict
       - id: check-case-conflict
       - id: detect-private-key
-        # NOT weakened globally — scoped to the two paths where a PEM header
+        # NOT weakened globally — scoped to the one path where a PEM header
         # is the SUBJECT MATTER rather than a credential. Everywhere else in
         # the repo this hook still fails on a key.
         #
@@ -101,21 +101,18 @@ repos:
         # mirrored: agentic/ is canonical, the rest are generated from it and
         # cannot be edited independently.
         #
-        # tests/test_memory_redaction.py (line 78) feeds a truncated PEM
-        # opening/closing pair to the redactor as INPUT and asserts it comes
-        # back scrubbed. Between the two delimiters sit 16 characters of
-        # base64 filler — not a decodable key. A redaction test with nothing
-        # to redact tests nothing. That line already carries
-        # `# gitleaks:allow` for exactly this reason, so this exclusion
-        # restores agreement between the repo's two secret scanners rather
-        # than granting a new exemption.
+        # tests/test_memory_redaction.py was excluded too, for a truncated PEM
+        # block fed to the redactor as input. ml-service-template v0.30.2
+        # assembles that block at runtime (as it does its fake Google API key,
+        # which GitHub secret scanning reported), so the exemption was removed
+        # with the service update: a stale exemption is a hole nobody watches.
         #
         # Deliberately paraphrased above: spelling the PEM delimiters out
         # here would trip this very hook on this very file. It did, once.
         #
-        # Verified by injection: a private key added anywhere outside these
-        # two paths still fails the hook.
-        exclude: '(^|/)skills/secret-breach-response/SKILL\.md$|(^|/)tests/test_memory_redaction\.py$'
+        # Verified by injection: a private key added anywhere outside this
+        # path still fails the hook.
+        exclude: '(^|/)skills/secret-breach-response/SKILL\.md$'
       - id: check-added-large-files
         # Datasets are versioned by reference, never committed
         # (docs/datasets/register.md). This is the backstop for that rule.

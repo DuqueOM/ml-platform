@@ -7,6 +7,7 @@ description: Model retraining workflow — triggered by drift alert or manual re
 ## 1. Identify the Service
 
 Determine which service needs retraining and why:
+
 - Drift alert: check PSI scores in Prometheus
 - Metric degradation: check rolling metrics in Grafana
 - Manual request: document reason
@@ -16,6 +17,7 @@ Determine which service needs retraining and why:
 ```bash
 gsutil cp gs://${DATA_BUCKET}/${SERVICE}/production_data_latest.csv data/raw/
 ```
+
 // turbo
 
 ## 3. Validate Data
@@ -33,7 +35,7 @@ print(f'OK: {len(df)} rows')
 ## 4. Execute Training
 
 ```bash
-python src/${SERVICE_SLUG}/training/train.py \
+python -m src.${SERVICE_SLUG}.training.train \
   --data data/raw/production_data_latest.csv \
   --experiment "${SERVICE}-retrain-$(date +%Y%m%d)" \
   --optuna-trials 50
@@ -44,7 +46,7 @@ python src/${SERVICE_SLUG}/training/train.py \
 Run quality gate checks. **ALL must pass — no exceptions**:
 
 | Gate | Condition | Typical Threshold |
-|------|-----------|------------------|
+| ------ | ----------- | ------------------ |
 | Primary metric | `new_auc >= MIN_THRESHOLD` | ROC-AUC >= 0.80 |
 | No regression | `new_auc >= prod_auc * 0.95` | < 5% drop |
 | Fairness | `DIR >= 0.80` per protected attribute | Four-fifths rule |
@@ -95,7 +97,7 @@ gh issue create \
 ## 7. Update Reference Data
 
 ```bash
-python src/${SERVICE_SLUG}/monitoring/drift_detection.py --update-reference
+python -m src.${SERVICE_SLUG}.monitoring.drift_detection --update-reference
 ```
 
 ## 8. Verify Deployment

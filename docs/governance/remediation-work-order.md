@@ -760,7 +760,7 @@ repository, and each was approved by the maintainer on 2026-09-26.
 
 ### R13-1 — `services/demand-forecast-serving` still carries the template's pre-§9 skill layout
 
-**Mode**: CONSULT, approved · **Source**: round thirteen P2-4 · **Size**: a template release plus a `copier update`
+**Mode**: CONSULT, approved · **Source**: round thirteen P2-4 · **Size**: a template release plus a `copier update` · **Closed** by *chore(services): demand-forecast-serving at ml-service-template v0.30.2*: template v0.30.0 was released, then v0.30.1 and v0.30.2 (fake secrets in a test fixture, which GitHub and this repository's hook reported), and the service regenerated at v0.30.2. V8 reports no flat pointers; the 19 name collisions remain as reported, as expected
 
 V8 now reports it on every run: 38 flat pointers no tool loads, and 19 skill
 names that collide with the root's. ADR-003 lets it change only through
@@ -779,7 +779,7 @@ skills, and V8 reports them as such rather than as a defect to fix.
 
 ### R13-2 — agent-local's export check is advisory
 
-**Mode**: CONSULT, approved · **Source**: round thirteen P3-6, and P2-1's downstream half · **Size**: ~1h
+**Mode**: CONSULT, approved · **Source**: round thirteen P3-6, and P2-1's downstream half · **Size**: ~1h · **Closed** by DuqueOM/agent-local#2 (the stray rule, weekly schedule) and #3 (re-export from `7f1867c`), and by protecting agent-local `main` on 2026-09-26 with `export-provenance` required, `enforce_admins` on
 
 agent-local's `main` is unprotected, so a red `export-provenance` does not
 block a merge. The job also runs only on agent-local's own events, so a
@@ -795,7 +795,7 @@ blind.
 
 ### R13-3 — The template's template-ADR-027 §9 repeats the "listed once" claim
 
-**Mode**: AUTO · **Source**: round thirteen P2-3, upstream half · **Size**: ~1h
+**Mode**: AUTO · **Source**: round thirteen P2-3, upstream half · **Size**: ~1h · **Closed** by DuqueOM/ml-service-template#239 (template-ADR-027 §10, `skill_reach`), released in v0.30.0
 
 ml-service-template#238 made the same choice as this repository and wrote the
 same false sentence. Its validator's table also omits Cursor's compatibility

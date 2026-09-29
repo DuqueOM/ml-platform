@@ -34,16 +34,20 @@ or it is in `pyproject.toml` — never in `services/`.
 
 Why this gate ships red
 -----------------------
-It does not, quite. Three straddles exist today and all three are the subject
-of ADR-008, whose interface half needs a human decision. An exemption records
+It does not, quite. One straddle exists today, numpy, and it is the subject of
+ADR-008, whose interface half needs a human decision. Two more closed and their
+exemptions were removed, each after the gate failed on it as designed: joblib,
+when the service moved to ml-service-template v0.30.x, and scikit-learn, when
+Dependabot moved the training side to 1.9.1, the version the service reads. An exemption records
 them by name with the ADR that closes it, so the gate is green on the straddles
 that are *known* and red when the ADR is decided or an exemption outlives its
 straddle.
 
 **What it cannot report, stated because the first version promised it.** This
-docstring said the gate turns red "the moment a fourth appears". It cannot:
-`SEAM` names three packages and all three are exempt, so no straddle in the
-seam is unexempted, and a straddle OUTSIDE the seam — scipy, pandas — is not
+docstring said the gate turns red "the moment a fourth appears". It could not
+while all three `SEAM` packages were exempt. Now a joblib or scikit-learn
+straddle is reportable, but a new numpy straddle still hides behind its
+exemption, and a straddle OUTSIDE the seam — scipy, pandas — is not
 looked at (QA-4 round eleven put both in the container's requirements and got
 OK). A new straddle becomes reportable only by adding its package to `SEAM`
 without an exemption, and `SEAM` is still a hand-written list rather than the
@@ -96,8 +100,6 @@ SEAM = ("numpy", "scikit-learn", "joblib")
 #: reported as outlived.
 EXEMPT: dict[str, str] = {
     "numpy": "ADR-008: the container pins 1.x against joblib corruption while the workspace resolves 2.x.",
-    "scikit-learn": "ADR-008: the scaffold was generated for a classifier and its pin was never re-derived.",
-    "joblib": "ADR-008: pinned alongside numpy, and moves with it.",
 }
 
 _REQUIREMENT = re.compile(r"^\s*([A-Za-z0-9._-]+)\s*((?:[~<>=!]=|[<>])\s*[^#\s]+)")
