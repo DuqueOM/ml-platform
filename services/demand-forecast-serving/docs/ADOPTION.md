@@ -25,7 +25,7 @@ Each capability is rated **per environment**. Definitions:
 ### Compute & networking
 
 | Capability | dev | staging | prod | Notes |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | GKE cluster + node pool split (system / workload) | ready | ready | ready | PR-A3 cluster defaults; workload taint enforced |
 | EKS cluster + node group split (system / workload) | ready | ready | ready | Mirrors GCP; same taint contract |
 | VPC networking (custom-mode + private subnets) | ready | ready | ready | `network_mode = "managed" \| "existing"` |
@@ -37,7 +37,7 @@ Each capability is rated **per environment**. Definitions:
 ### Container & supply chain
 
 | Capability | dev | staging | prod | Notes |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | Multi-stage Dockerfile (slim runtime) | ready | ready | ready | Base image pinned by digest in staging/prod overlays |
 | Init-container model fetch (D-11) | ready | ready | ready | Models never in the image |
 | Cosign keyless signing | ready | ready | ready | OIDC via GitHub Actions |
@@ -49,7 +49,7 @@ Each capability is rated **per environment**. Definitions:
 ### Secrets & IAM
 
 | Capability | dev | staging | prod | Notes |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | Secrets via cloud manager (GSM/ASM) | ready | ready | ready | Per-service IAM binding only |
 | `common_utils.secrets.get_secret()` loader | ready | ready | ready | D-17 enforced by policy test |
 | Secret rotation procedure | ready | ready | ready | `/secret-breach` workflow + skill |
@@ -59,7 +59,7 @@ Each capability is rated **per environment**. Definitions:
 ### ML quality & observability
 
 | Capability | dev | staging | prod | Notes |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | Pandera schema validation in serving + drift | ready | ready | ready | PR-R2-4; second validation wall |
 | MLflow tracking + model registry | ready | ready | ready | Self-hosted on K8s; CMEK-backed |
 | Quality gates on promotion (DIR ≥ 0.80, primary metric, latency) | ready | ready | ready | PR-B1; per-service `quality_gates.yaml` |
@@ -74,7 +74,7 @@ Each capability is rated **per environment**. Definitions:
 ### Delivery
 
 | Capability | dev | staging | prod | Notes |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | 4-job deploy chain (build → dev → staging → prod) | ready | ready | ready | D-26 enforced; GitHub Environment Protection |
 | `terraform plan` nightly drift detection | ready | ready | ready | PR-A4; opens dedup'd `infra-drift` issue |
 | Argo Rollouts canary template | partial | partial | partial | AnalysisTemplate scaffolded; metric thresholds per service |
@@ -84,7 +84,7 @@ Each capability is rated **per environment**. Definitions:
 ### Governance
 
 | Capability | dev | staging | prod | Notes |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | ADRs for non-trivial decisions | ready | ready | ready | 35 ADRs cover all design choices |
 | Audit trail (append-only `ops/audit.jsonl`) | ready | ready | ready | ADR-014; CLI `scripts/audit_record.py` |
 | Anti-pattern policy tests on scaffolded output | ready | ready | ready | PR-R2-11; D-01..D-35 enforced |
@@ -106,7 +106,7 @@ inheriting the agentic surface.
 ### Workflow → make-target / runbook map
 
 | Slash workflow | Make equivalent | Runbook reference |
-|---|---|---|
+| --- | --- | --- |
 | `/new-service` | `make new-service NAME=<PascalCase> SLUG=<snake_case>` | `templates/scripts/new-service.sh --help` |
 | `/scaffold-update` | `copier update` (manual) | `agentic/workflows/scaffold-update.md` |
 | `/eda` | `make eda` (runs the 6-phase pipeline) | `eda/README.md` |
@@ -118,7 +118,7 @@ inheriting the agentic surface.
 | `/incident` | `make incident-runbook` (prints incident response steps) | `docs/runbooks/incident-response.md` |
 | `/performance-review` | `make performance-review` (sliced metrics + ground truth) | `docs/runbooks/performance-review.md` |
 | `/cost-review` | `make cost-review` (cloud billing pull + budget compare) | `docs/runbooks/cost-review.md` |
-| `/new-adr` | `make new-adr TITLE='<title>'` | `docs/decisions/template.md` |
+| `/new-adr` | `make new-adr TITLE='<title>'` | `docs/decisions/adr-template.md` |
 | `/secret-breach` | `make secret-breach-check` (gitleaks scan) + escalation runbook | `docs/runbooks/secret-breach.md` |
 | `/scaffold-update` | `make scaffold-update` (copier update) | `MIGRATION.md` |
 
@@ -128,14 +128,14 @@ Skills are agent reasoning bundles, so their non-agentic equivalent is the
 underlying CLI tool plus the corresponding human runbook:
 
 | Skill | CLI / runbook |
-|---|---|
+| --- | --- |
 | `new-service` | `templates/scripts/new-service.sh` |
 | `scaffold-update` | `copier update` (manual; see `agentic/workflows/scaffold-update.md`) |
-| `deploy-gke` / `deploy-aws` | `templates/scripts/deploy.sh` + `docs/runbooks/deploy-{gke,aws}.md` |
+| `deploy-gke` / `deploy-aws` | `scripts/deploy.sh` + `docs/runbooks/deploy-{gke,aws}.md` |
 | `rollback` | `make rollback` + `docs/runbooks/rollback.md` |
 | `drift-detection` | `scripts/drills/run_drift_drill.py` + `docs/runbooks/drift-detection.md` |
 | `model-retrain` | `make retrain` + `docs/runbooks/model-retrain.md` |
-| `eda-analysis` | `eda/run_eda.py` + `eda/README.md` |
+| `eda-analysis` | `eda/eda_pipeline.py` + `eda/README.md` |
 | `cost-audit` | `make cost-review` + `docs/runbooks/cost-review.md` |
 | `security-audit` | `make security-audit` (gitleaks + bandit + trivy) |
 | `secret-breach-response` | `make secret-breach-check` + `docs/runbooks/secret-breach.md` |
@@ -144,7 +144,7 @@ underlying CLI tool plus the corresponding human runbook:
 | `performance-degradation-rca` | `docs/runbooks/performance-degradation-rca.md` (manual RCA procedure) |
 | `concept-drift-analysis` | `make performance-review` + `docs/runbooks/concept-drift-analysis.md` |
 | `release-checklist` | `make release-checklist` |
-| `batch-inference` | `templates/scripts/batch_inference.sh` (or `make batch-inference DATA=<path>`) |
+| `batch-inference` | `make batch-inference DATA=<path>` (target in the service `Makefile`) |
 
 ### Operational reality check
 
@@ -211,9 +211,9 @@ Authority: R4 audit M4, ADR-020 §S2-2.
 ### 6.1 GDPR (Regulation (EU) 2016/679)
 
 | Control area | Coverage | Evidence in template | Adopter responsibility |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Article 5(1)(a) lawful processing | Out of scope | None | Define lawful basis per service domain |
-| Article 5(1)(c) data minimization | Partial | Pandera schema + `templates/eda/` baseline minimization heuristic | Per-service field selection review |
+| Article 5(1)(c) data minimization | Partial | Pandera schema + `eda/` baseline minimization heuristic | Per-service field selection review |
 | Article 5(1)(f) integrity / confidentiality | Covered | Cosign signing + Kyverno admission + IRSA / WI + secret manager | Cluster posture + key rotation cadence |
 | Article 17 right to erasure | Out of scope | None | Per-service data retention + deletion pipeline |
 | Article 25 data protection by design | Covered | `memory_redaction.py` PII pipeline; `prediction_logger.py` redaction hooks | Define which features are personal data |
@@ -223,7 +223,7 @@ Authority: R4 audit M4, ADR-020 §S2-2.
 ### 6.2 SOC 2 Type II (AICPA Trust Services Criteria)
 
 | Control area | Coverage | Evidence in template | Adopter responsibility |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | CC6.1 logical access controls | Covered | IRSA / WI per-purpose identities (D-31); RBAC manifests | IdP integration + access reviews |
 | CC6.6 environmental controls | Covered | PSS labels per environment (D-29); deny-default NetworkPolicy | Cluster-level firewall + WAF |
 | CC7.1 system monitoring | Covered | Prometheus + Grafana + AlertManager wiring | 24/7 oncall rotation + escalation matrix |
@@ -235,7 +235,7 @@ Authority: R4 audit M4, ADR-020 §S2-2.
 ### 6.3 ISO/IEC 27001:2022
 
 | Control area | Coverage | Evidence in template | Adopter responsibility |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | A.5.7 threat intelligence | Out of scope | None | Org-level threat intel feed |
 | A.5.30 ICT readiness for business continuity | Partial | `docs/runbooks/` cover deploy + rollback; backups out of scope | DR drills + RPO / RTO targets |
 | A.8.3 information access restriction | Covered | RBAC + NetworkPolicy + IRSA / WI | IdP federation |
@@ -248,7 +248,7 @@ Authority: R4 audit M4, ADR-020 §S2-2.
 ### 6.4 HIPAA Security Rule (45 CFR §164.302–.318)
 
 | Safeguard | Coverage | Evidence in template | Adopter responsibility |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | §164.308 administrative safeguards | Out of scope | None | Workforce training + risk analysis program |
 | §164.310 physical safeguards | N/A — cloud-managed | Cluster runs in cloud-provider physical secure facilities | Cloud BAA negotiation |
 | §164.312(a) access control | Covered | Per-purpose IRSA / WI identities, RBAC, audit trail | IdP federation + role assignment |
@@ -283,7 +283,8 @@ The template explicitly does **not** address:
 
 ## 7. Disclosure SLA (R4 audit M4 clarification)
 
-The vulnerability response timeline in [`SECURITY.md`](../SECURITY.md)
+The vulnerability response timeline in
+[`SECURITY.md`](https://github.com/DuqueOM/ml-service-template/blob/main/SECURITY.md)
 is **operational** for this template:
 
 - The maintainer commits to the response times listed (Critical 48h /

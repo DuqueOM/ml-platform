@@ -37,7 +37,7 @@ C6  Release note existence — the current ``VERSION`` must have a matching
     to a generic, unpolished release body (the exact failure this check
     exists to catch before it ships — see that workflow's file header for
     the 2026-07-01 incident this closes).
-C7  Documentation language + private-reference guard — every file under
+C7  Documentation language + private-reference guard (D-37) — every file under
     ``docs/`` and every root-level ``*.md`` must be English-only and must
     never name a known private/personal repo. AUDIT R10 (2026-07-02) found
     four ``docs/audit/*.md`` files fully in Spanish and a private repo
@@ -212,27 +212,157 @@ def check_anti_pattern_count() -> list[str]:
     return problems
 
 
+_SURFACE_CLAIM = re.compile(r"(\d+)\s*rules\s*\+\s*(\d+)\s*skills\s*\+\s*(\d+)\s*workflows")
+
+
+# Directories whose files are records of a past state, not claims about the
+# current one. An ADR quotes the drift it was written to fix — ADR-031 still
+# reads "15 rules + 16 skills + 12 workflows" because that is what the repo
+# looked like when the coherence system was proposed, and rewriting it to
+# today's numbers would falsify the record. Incident and audit write-ups are
+# dated the same way. Everything else under `docs/` and at the repository
+# root describes the tree as it is now, and is reconciled.
+_RECORD_DIRS = ("decisions", "audit", "incidents")
+
+# The same reasoning at the repository root. These three are append-only
+# histories: a CHANGELOG entry describes the release it belongs to, and the
+# v0.24.0 entry legitimately still reads "18 rules + 26 skills + 18
+# workflows" because it is reporting the drift that release fixed.
+_RECORD_FILES = ("CHANGELOG.md", "MIGRATION.md", "VALIDATION_LOG.md")
+
+
+def _states_current_surface(path: Path, root: Path) -> bool:
+    """True when `path` is a live document rather than a dated record."""
+    try:
+        rel = path.relative_to(root)
+    except ValueError:
+        return False
+    if len(rel.parts) == 1:
+        return rel.name not in _RECORD_FILES
+    return not (rel.parts[0] == "docs" and rel.parts[1] in _RECORD_DIRS)
+
+
+def _surface_claim_docs(root: Path) -> list[Path]:
+    """Every live document under `root` that could restate the surface counts."""
+    candidates = sorted(root.glob("*.md")) + sorted((root / "docs").rglob("*.md"))
+    return [p for p in candidates if p.is_file() and _states_current_surface(p, root)]
+
+
+def _reconcile_surface(doc_path: Path, rules_dir: Path, label: str) -> list[str]:
+    """Compare every surface claim in one document against the tree beside it.
+
+    The claim is reconciled wherever it appears, not only the first time:
+    a document that states the counts in a summary table and again in prose
+    can otherwise keep a stale copy below a corrected one.
+    """
+    doc = _read(doc_path)
+    if doc is None or not rules_dir.is_dir():
+        return []  # no agentic surface / no document here → nothing to reconcile
+
+    skills_dir = rules_dir.parent / "skills"
+    workflows_dir = rules_dir.parent / "workflows"
+    actual = (
+        len(list(rules_dir.glob("*.md"))),
+        len(list(skills_dir.glob("*/SKILL.md"))) if skills_dir.is_dir() else 0,
+        len(list(workflows_dir.glob("*.md"))) if workflows_dir.is_dir() else 0,
+    )
+
+    problems = []
+    for m in _SURFACE_CLAIM.finditer(doc):
+        claimed = (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        if claimed != actual:
+            line = doc.count("\n", 0, m.start()) + 1
+            problems.append(
+                f"{label}:{line} claims {claimed[0]} rules + {claimed[1]} skills + "
+                f"{claimed[2]} workflows; the surface beside it has "
+                f"{actual[0]} rules + {actual[1]} skills + {actual[2]} workflows."
+            )
+    return problems
+
+
+def _count_surface_units(directory: Path) -> int:
+    """How many rules / skills / workflows an adapter directory holds.
+
+    Adapters do not share a shape: `.claude/skills/`, `.agents/skills/` (shared
+    by Cursor and Codex, ADR-027 §9) and `.devin/skills/` use one directory per
+    skill, rules and commands use one file each, and two of them also carry an
+    `INDEX.md` that is not a skill. Counting entries naively gives 28 for one adapter and 27 for the
+    next, which is how the numbers in AGENTS.md drifted apart in the first
+    place.
+    """
+    if not directory.is_dir():
+        return -1
+    subdirs = [d for d in directory.iterdir() if d.is_dir() and not d.name.startswith("__")]
+    if subdirs:
+        return len(subdirs)
+    return len([f for f in directory.iterdir() if f.is_file() and f.name != "INDEX.md"])
+
+
+# A line of the adapter-surface tree in AGENTS.md:
+#   `.claude/skills/        # generated skill pointers + INDEX.md: 26 skills as …`
+_ADAPTER_LINE = re.compile(r"^(?P<path>\.[a-z]+/[a-z]+/)\s+#[^:]*:\s*(?P<count>\d+)\s")
+
+
+def _reconcile_adapter_block(doc_path: Path, root: Path, label: str) -> list[str]:
+    """Every `N <unit>` claim in the adapter-surface tree must match the tree.
+
+    AGENTS.md documents the generated surfaces with a count per directory.
+    All nine were stale — claiming 18 rules / 26 skills / 18 commands against
+    a live 19 / 27 / 20 — because C4 only ever reconciled CLAUDE.md. This is
+    the same gap C4's own docstring describes closing for the service copy of
+    CLAUDE.md, one document over.
+    """
+    text = _read(doc_path)
+    if text is None:
+        return []
+    problems: list[str] = []
+    for line in text.splitlines():
+        m = _ADAPTER_LINE.match(line)
+        if not m:
+            continue
+        target = root / m.group("path")
+        actual = _count_surface_units(target)
+        if actual < 0:
+            continue  # the adapter is not present in this tree
+        claimed = int(m.group("count"))
+        if claimed != actual:
+            problems.append(f"{label} says `{m.group('path')}` holds {claimed}; it holds {actual}.")
+    return problems
+
+
 def check_surface_counts() -> list[str]:
-    """C4 — live agentic surface counts must match CLAUDE.md's claim."""
-    claude = _read(CLAUDE)
-    if claude is None or not RULES_DIR.is_dir():
-        return []  # no agentic surface / no CLAUDE.md here → nothing to reconcile
+    """C4 — live agentic surface counts must match every document that states them.
 
-    rules = len(list(RULES_DIR.glob("*.md")))
-    skills = len(list(SKILLS_DIR.glob("*/SKILL.md"))) if SKILLS_DIR.is_dir() else 0
-    workflows = len(list(WORKFLOWS_DIR.glob("*.md"))) if WORKFLOWS_DIR.is_dir() else 0
+    This check has been widened twice by the same failure. It started as a
+    single reconciliation of the root ``CLAUDE.md``. Then
+    ``templates/service/CLAUDE.md`` — which ships into every scaffolded
+    service — was found sitting at "18 rules + 26 skills + 18 workflows"
+    against a live 19/27/20, because inside a generated service this script
+    reconciles it correctly but by then it has already shipped. Then
+    ``README.md`` was found stale for the same reason: nothing looked at it.
 
-    m = re.search(r"(\d+)\s*rules\s*\+\s*(\d+)\s*skills\s*\+\s*(\d+)\s*workflows", claude)
-    if not m:
-        return []  # CLAUDE.md doesn't claim a surface count → nothing to verify
-    claimed = (int(m.group(1)), int(m.group(2)), int(m.group(3)))
-    actual = (rules, skills, workflows)
-    if claimed != actual:
-        return [
-            f"CLAUDE.md claims {claimed[0]} rules + {claimed[1]} skills + {claimed[2]} workflows; "
-            f"agentic/ has {actual[0]} rules + {actual[1]} skills + {actual[2]} workflows."
-        ]
-    return []
+    Naming the files one at a time is what produced both misses, so the
+    check no longer does. It sweeps every live document at the repository
+    root and under ``docs/`` — in this repository and in the payload — and
+    reconciles each surface claim it finds. A new document that states the
+    counts is covered the day it is written, without anyone remembering to
+    add it here. Dated records are excluded and the reason is in
+    ``_RECORD_DIRS``.
+    """
+    service_root = REPO_ROOT / "templates" / "service"
+    service_rules = service_root / "agentic" / "rules"
+
+    problems: list[str] = []
+    for doc in _surface_claim_docs(REPO_ROOT):
+        problems += _reconcile_surface(doc, RULES_DIR, str(doc.relative_to(REPO_ROOT)))
+    for doc in _surface_claim_docs(service_root):
+        problems += _reconcile_surface(doc, service_rules, str(doc.relative_to(REPO_ROOT)))
+
+    # AGENTS.md documents the same surfaces as a directory tree with a count
+    # per adapter, and nothing checked those: all nine were stale.
+    problems += _reconcile_adapter_block(REPO_ROOT / "AGENTS.md", REPO_ROOT, "AGENTS.md")
+    problems += _reconcile_adapter_block(service_root / "AGENTS.md", service_root, "templates/service/AGENTS.md")
+    return problems
 
 
 def check_adr_traceability() -> list[str]:
@@ -359,6 +489,94 @@ def check_doc_language_and_privacy() -> list[str]:
     return problems
 
 
+def check_overlay_count() -> list[str]:
+    """C8 — no living document may state an overlay count that is not the real one.
+
+    The number six was asserted against this directory in fifteen living
+    places while the tree held seven.
+    ``batch-only`` was consequently absent from three CI lanes, from
+    ``test_scaffold.sh``, and from every test in the repository — it shipped a
+    real NetworkPolicy that nothing verified. The number was not merely stale
+    documentation; it was the shape of the blind spot.
+
+    The loops that used it now discover the directory instead, so this check
+    guards the remaining surface: prose. It scans living documents only —
+    frozen records (CHANGELOG, VALIDATION_LOG, releases/, docs/audit/,
+    docs/decisions/, MIGRATION.md) correctly describe the count at the time
+    they were written, and rewriting them would make them worse records.
+    """
+    overlay_dir = REPO_ROOT / "templates" / "service" / "k8s" / "overlays"
+    if not overlay_dir.is_dir():
+        return []
+    actual = sum(1 for d in overlay_dir.iterdir() if d.is_dir())
+    if actual == 0:
+        return [f"no overlays found under {overlay_dir} — the count cannot be checked"]
+
+    words = {
+        1: "one",
+        2: "two",
+        3: "three",
+        4: "four",
+        5: "five",
+        6: "six",
+        7: "seven",
+        8: "eight",
+        9: "nine",
+        10: "ten",
+    }
+    # `overlay` as well as `overlays`. README described the smoke lane in the
+    # singular ("… overlay renders …"), which the plural-only pattern walked
+    # straight past — the check added to stop this count drifting missed an
+    # instance of it on the day it shipped.
+    claim = re.compile(
+        r"\b(\d+|" + "|".join(words.values()) + r")\s+(?:kustomize\s+|environment\s+)?overlays?\b",
+        re.IGNORECASE,
+    )
+    frozen = (
+        "CHANGELOG.md",
+        "VALIDATION_LOG.md",
+        "MIGRATION.md",
+        "releases/",
+        "docs/audit/",
+        "docs/decisions/",
+    )
+    # Tracked files only. An untracked or ignored file — private scratch
+    # notes, a virtualenv — is not a claim this repository makes.
+    try:
+        tracked = subprocess.run(
+            ["git", "ls-files", "*.md", "*.py"],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split()
+    except (OSError, subprocess.CalledProcessError):
+        return ["could not list tracked files (`git ls-files`) to check overlay counts"]
+
+    problems: list[str] = []
+    for rel in sorted(tracked):
+        if rel.startswith(frozen):
+            continue
+        path = REPO_ROOT / rel
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for lineno, line in enumerate(text.splitlines(), 1):
+            match = claim.search(line)
+            if not match:
+                continue
+            token = match.group(1).lower()
+            stated = int(token) if token.isdigit() else next(n for n, w in words.items() if w == token)
+            if stated != actual:
+                problems.append(
+                    f"{rel}:{lineno}: says {match.group(0)!r}, but "
+                    f"templates/service/k8s/overlays/ holds {actual}. "
+                    f"A wrong count here is how `batch-only` stayed invisible to CI."
+                )
+    return problems
+
+
 CHECKS = [
     ("C1 version-sot", check_version_sot),
     ("C2 llms-version", check_llms_version),
@@ -367,6 +585,7 @@ CHECKS = [
     ("C5 adr-traceability", check_adr_traceability),
     ("C6 release-note-exists", check_release_note_exists),
     ("C7 doc-language-privacy", check_doc_language_and_privacy),
+    ("C8 overlay-count", check_overlay_count),
 ]
 
 
@@ -377,7 +596,9 @@ def main() -> int:
             all_problems.append((label, problem))
 
     if not all_problems:
-        print("[doc-coherence] OK — all 7 cross-document checks pass.")
+        # Derived, not written: this line said "all 7" while CHECKS held 8,
+        # in the script whose job is catching exactly that.
+        print(f"[doc-coherence] OK — all {len(CHECKS)} cross-document checks pass.")
         return 0
 
     print(f"[doc-coherence] {len(all_problems)} coherence violation(s):")

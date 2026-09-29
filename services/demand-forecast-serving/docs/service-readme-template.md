@@ -10,10 +10,14 @@
 
 ```bash
 # Install dependencies
-pip install -r requirements.txt
+# Three lanes (ADR-049). A training env is a superset of a serving env;
+# the served image gets requirements.txt and nothing more.
+pip install -r requirements-train.txt   # runtime + mlflow/optuna — needed to train
+# pip install -r requirements.txt      # serving only, what the image installs
+# pip install -r requirements-dev.txt  # runtime + pytest/httpx/locust/linters
 
 # Train model
-python src/demand_forecast_serving/training/train.py --data data/raw/dataset.csv
+python -m src.demand_forecast_serving.training.train --data data/raw/dataset.csv
 
 # Run API locally
 uvicorn app.main:app --host 0.0.0.0 --port 8000
@@ -27,7 +31,7 @@ curl -X POST http://localhost:8000/predict \
 ## Model
 
 | Property | Value |
-|----------|-------|
+| ---------- | ------- |
 | Architecture | {Model type — e.g., GBM pipeline with ColumnTransformer} |
 | Primary Metric | {metric_name} = {measured_value} |
 | Secondary Metric | {metric_name} = {measured_value} |
@@ -40,7 +44,7 @@ curl -X POST http://localhost:8000/predict \
 ## Endpoints
 
 | Method | Path | Description |
-|--------|------|-------------|
+| -------- | ------ | ------------- |
 | POST | `/predict` | Main prediction (probability + risk level) |
 | POST | `/predict?explain=true` | + SHAP feature contributions |
 | GET | `/health` | Liveness/readiness probe |
@@ -49,7 +53,7 @@ curl -X POST http://localhost:8000/predict \
 ## Serving Latency (Measured {YYYY-MM-DD})
 
 | Cloud | Instance | Replicas | P50 (idle) | P95 (idle) | P50 (100u) | P95 (100u) | Error % |
-|-------|----------|----------|-----------|-----------|-----------|-----------|---------|
+| ------- | ---------- | ---------- | ----------- | ----------- | ----------- | ----------- | --------- |
 | GCP | {type} | {N} | {X}ms | {Y}ms | {X}ms | {Y}ms | {Z}% |
 | AWS | {type} | {N} | {X}ms | {Y}ms | {X}ms | {Y}ms | {Z}% |
 
@@ -61,7 +65,7 @@ curl -X POST http://localhost:8000/predict \
 - **Key Thresholds**:
 
 | Feature | Warning | Alert | Reason |
-|---------|---------|-------|--------|
+| --------- | --------- | ------- | -------- |
 | {feature_a} | 0.10 | 0.20 | Historically stable |
 | {feature_b} | 0.15 | 0.30 | High natural variance |
 
@@ -84,7 +88,7 @@ kubectl apply -k k8s/overlays/aws-prod/
 
 ## Resource Profile
 
-```
+```text
 Model + deps in memory: ~{N}Mi
 Pod request: cpu={X}, memory={Y}Mi
 Pod limit: cpu={X}, memory={Y}Mi
@@ -93,7 +97,7 @@ HPA: {min}-{max} replicas, CPU target {N}%
 
 ## Total Cost of Ownership (Measured {YYYY-MM-DD})
 
-```
+```text
 Serving (2 clouds, {N} replicas): ${X}/mo
 Training (spot, monthly): ${X}/mo
 Storage (GCS + S3): ${X}/mo
@@ -110,4 +114,5 @@ TOTAL: ${X}/mo
 
 - **Grafana Dashboard**: {URL}
 - **AlertManager**: P1-P4 alerts configured
-- **Metrics**: `demand_forecast_serving_predictions_total`, `demand_forecast_serving_prediction_latency_seconds`, `demand_forecast_serving_psi_score`
+- **Metrics**: `demand_forecast_serving_predictions_total`, `demand_forecast_serving_prediction_latency_seconds`,
+  `demand_forecast_serving_psi_score`

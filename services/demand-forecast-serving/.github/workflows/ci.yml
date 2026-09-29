@@ -14,7 +14,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Python
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.11"
 
@@ -27,9 +27,16 @@ jobs:
         # Runs all commit-stage hooks (excludes pre-push scaffold smoke).
         run: pre-commit run --all-files --hook-stage commit
 
-      - name: mypy
-        # mypy not in pre-commit hooks yet — kept separate for now.
-        # TODO: add mypy to .pre-commit-config.yaml once baseline clean.
+      - name: mypy (against installed dependencies)
+        # mypy IS in .pre-commit-config.yaml and the step above already ran
+        # it — the comment here used to say it was not, with a TODO to add
+        # it, both of which had been untrue since the hook was added.
+        #
+        # This step is still worth its seconds, for a reason worth stating:
+        # `mirrors-mypy` runs mypy in its own virtualenv with no project
+        # dependencies, so it infers far less than mypy running where
+        # pandas, fastapi and pydantic are actually importable. The two
+        # runs check the same files and do not find the same things.
         run: |
           pip install mypy
           mypy src/ app/ --ignore-missing-imports
@@ -63,14 +70,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-cov
+        # requirements-dev.txt pulls requirements.txt and adds the test
+        # tooling. It deliberately does NOT pull requirements-train.txt:
+        # if a test needs mlflow or optuna it belongs in a training lane,
+        # not here (ADR-049).
+        run: pip install -r requirements-dev.txt
 
       - name: Run tests
         run: |
@@ -84,7 +93,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: matrix.python-version == '3.11'
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
         with:
           files: coverage.xml
           flags: ${{ matrix.service }}
@@ -233,7 +242,7 @@ jobs:
           severity: "CRITICAL,HIGH"
 
       - name: Install Syft (SBOM generator)
-        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
+        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
 
       - name: Generate SBOM (CycloneDX JSON) — SLSA L2 component (D-19)
         run: |

@@ -9,7 +9,7 @@ description: Documentation standards — ADRs, READMEs, runbooks
 ## Document Types
 
 | Type | Audience | Location |
-|------|----------|----------|
+| ------ | ---------- | ---------- |
 | ADRs | ML engineers, tech leads | `docs/decisions/` |
 | Service READMEs | Any new engineer | `{Service}/README.md` |
 | Infrastructure READMEs | DevOps/Platform engineers | `infra/terraform/*/README.md` |
@@ -19,6 +19,7 @@ description: Documentation standards — ADRs, READMEs, runbooks
 ## ADR Standards
 
 Every ADR MUST include:
+
 1. **Status**: Proposed | Accepted | Deprecated | Superseded by ADR-NNN
 2. **Date**: YYYY-MM-DD
 3. **Context**: What problem are we solving? What constraints exist?
@@ -28,11 +29,12 @@ Every ADR MUST include:
 7. **Consequences**: Positive and Negative trade-offs
 8. **Revisit When**: Conditions that would invalidate this decision
 
-Use template: `templates/docs/decisions/adr-template.md`
+Use template: `templates/service/docs/decisions/adr-template.md`
 
 ## Service README Standards
 
 Every service README MUST include:
+
 - **Purpose**: One sentence describing the business problem
 - **Quick Start**: How to run locally in < 3 commands
 - **Endpoints**: Full API documentation with examples
@@ -50,6 +52,7 @@ Every service README MUST include:
 ## AGENTS.md Updates
 
 When adding a new service or changing architecture:
+
 - Update service table with model type, key metrics
 - Add any new invariants specific to the service
 - Update anti-pattern detectors if new patterns discovered
@@ -57,9 +60,10 @@ When adding a new service or changing architecture:
 ## Runbook Standards
 
 Every service MUST have a runbook with executable steps for:
+
 - **P1** (15 min SLA): Immediate rollback commands
 - **P2** (4 hours SLA): Trigger retraining commands
 - **P3** (24 hours SLA): Investigation steps
 - **P4** (1 week SLA): Documentation and review steps
 
-Use template: `templates/docs/runbooks/runbook-template.md`
+Use template: `templates/service/docs/runbooks/runbook-template.md`

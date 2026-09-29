@@ -1,0 +1,102 @@
+// markdownlint-cli2 configuration — generated service
+// ============================================================================
+// Shipped by the ML-MLOps template. The rule block below is IDENTICAL to the
+// template repository's own `.markdownlint-cli2.jsonc`, byte for byte, and
+// `scripts/check_markdownlint_parity.py` in the template fails if the two ever
+// diverge. A template that lints itself to a stricter bar than it ships is the
+// same credibility problem as a gate that does not run.
+//
+// Only the SCOPE differs, because the two trees are not the same shape: this
+// repository has no `releases/` and no `templates/`, and its documentation is
+// yours to change.
+//
+// Enforced by `.github/workflows/docs-quality.yml`, which blocks. If a rule
+// here fights your house style, change it deliberately and say why in a
+// comment — that is what this file is for. What you should not do is delete
+// the file: without it markdownlint-cli2 finds no files, reports
+// "0 issues in 0 files" and exits 0, so the job passes by checking nothing.
+// The workflow asserts the file exists for exactly that reason.
+// ============================================================================
+{
+  // Declared here rather than in the workflow so a local `markdownlint-cli2`
+  // run checks exactly what CI checks. Passing `globs:` to the action would
+  // shadow this list and let the two drift apart.
+  //
+  // `gitignore: true` keeps the linter off anything git already ignores —
+  // `mlruns/`, virtualenvs, scratch notes — so a local run does not report
+  // third-party or private formatting as your debt.
+  "gitignore": true,
+
+  "globs": [
+    "**/*.md",
+    "!.git",
+    "!node_modules",
+    "!.venv",
+    "!venv",
+    "!**/site-packages/**"
+  ],
+
+  "config": {
+    // Everything on, then subtract with a stated reason.
+    "default": true,
+
+    // ---- Line length -------------------------------------------------
+    // 120, matching `line-length = 120` for ruff in pyproject.toml. The repo
+    // gets one line-length number instead of two. Tables and code blocks are
+    // exempt: a table row's width is set by its widest cell and a code block
+    // reproduces something that exists elsewhere at its own width — wrapping
+    // either changes what renders, which is the opposite of what this rule is
+    // for.
+    "MD013": {
+      "line_length": 120,
+      "tables": false,
+      "code_blocks": false
+    },
+
+    // ---- Table pipe alignment ----------------------------------------
+    // `compact` (`| a | b |`, no padding to column width). The default is
+    // `consistent`, which infers the style from each file's first table and
+    // then reports every later table that differs — 166 findings that were
+    // really one undeclared choice. Declaring it makes the whole rule
+    // auto-fixable.
+    "MD060": {
+      "style": "compact"
+    },
+
+    // ---- Duplicate headings ------------------------------------------
+    // `siblings_only` drops this from 142 findings to 3, and the 3 are real.
+    // ADRs repeat "Context"/"Decision"/"Consequences" and the CHANGELOG
+    // repeats "Fixed"/"Added" under every release — those are distinct
+    // sections under distinct parents, and their anchors do not collide in
+    // the way this rule exists to prevent.
+    "MD024": {
+      "siblings_only": true
+    },
+
+    // ---- Ordered list numbering --------------------------------------
+    // `ordered` (ascending) rather than the default `one_or_ordered`, which
+    // additionally demands the list start at 1. The R9 action plan numbers
+    // its items 1..10 continuously and splits them across `### Wave` headings,
+    // so a list legitimately begins at 7 — and GitHub renders it starting at
+    // 7, which is the intent. Requiring a restart would renumber the plan and
+    // break every cross-reference to an item number.
+    "MD029": {
+      "style": "ordered"
+    },
+
+    // ---- Emphasis as heading -----------------------------------------
+    // OFF. The ADR template and the runbooks use a bold lead-in
+    // (`**Positive**`, `**When you need this**`) as a labelled paragraph, not
+    // as a section. Promoting them to headings would put them in every
+    // table of contents and change the document structure to satisfy a
+    // formatting rule. This is a deliberate house style, not unfixed debt.
+    "MD036": false,
+
+    // ---- Inline HTML --------------------------------------------------
+    // Restricted rather than disabled. These are the elements the docs use
+    // for things Markdown cannot express; anything else is a finding.
+    "MD033": {
+      "allowed_elements": ["br", "details", "summary", "img", "sub", "sup"]
+    }
+  }
+}
