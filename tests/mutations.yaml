@@ -578,6 +578,7 @@ mutations:
   new: '    role.ml-platform.io/unclaimed: "true"'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_namespace_contract.py
+  expect: killed
 - id: AP1
   origin: R11-3 portable artifact, author
   file: projects/demand-forecast/src/demand_forecast/persist.py
