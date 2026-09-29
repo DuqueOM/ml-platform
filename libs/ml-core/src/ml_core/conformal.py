@@ -166,7 +166,12 @@ class SplitConformalRegressor:
         Raises:
             RuntimeError: If called before :meth:`calibrate`.
         """
-        if self._n_calibration is None:
+        # Checked through `is_calibrated`, not `_n_calibration is None`: the
+        # constructor initialises the count to 0, so the None check never
+        # fired and an uncalibrated regressor reported a calibration size of
+        # 0 instead of refusing. Found by the test for this branch, which the
+        # change that added the property did not have.
+        if not self.is_calibrated:
             raise RuntimeError("the regressor is not calibrated, so it has no calibration size to report")
         return self._n_calibration
 
