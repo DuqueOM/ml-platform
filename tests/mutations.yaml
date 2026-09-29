@@ -563,3 +563,19 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_agentic_discovery.py -k "another_checkout"
   expect: killed
+- id: NC1
+  origin: R11-1 namespace role contract, author
+  file: platform/policies/allow-serving-ingress.yaml
+  old: '            matchLabels: { "role.ml-platform.io/ingress": "true" }'
+  new: '            matchLabels: { app.kubernetes.io/name: ingress-nginx }'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_namespace_contract.py
+  expect: killed
+- id: NC2
+  origin: R11-1 namespace role contract, author
+  file: platform/local/manifests/00-namespace.yaml
+  old: '    role.ml-platform.io/monitoring: "true"'
+  new: '    role.ml-platform.io/unclaimed: "true"'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_namespace_contract.py
+  expect: killed
