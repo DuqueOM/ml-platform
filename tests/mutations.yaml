@@ -611,3 +611,36 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly libs/ml-core/tests/test_conformal.py
   expect: killed
+- id: DG1
+  origin: W-10 digest verification, author
+  file: projects/demand-forecast/src/demand_forecast/persist.py
+  old: '    _verify_digest(path)
+
+    '
+  new: '    pass
+
+    '
+  run: &id001
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_persist.py
+  expect: killed
+- id: DG2
+  origin: W-10 digest verification, author
+  file: projects/demand-forecast/src/demand_forecast/persist.py
+  old: '    if actual != recorded:'
+  new: '    if False:'
+  run: *id001
+  expect: killed
+- id: DG3
+  origin: W-10 digest verification, author
+  file: projects/demand-forecast/src/demand_forecast/persist.py
+  old: '    if not sidecar.is_file():'
+  new: '    if False:'
+  run: *id001
+  expect: killed
+- id: DG4
+  origin: W-10 digest verification, author — the state before it
+  file: projects/demand-forecast/src/demand_forecast/persist.py
+  old: '        "sha256": digest,'
+  new: '        "sha256": digest[:12],'
+  run: *id001
+  expect: killed
