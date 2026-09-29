@@ -325,7 +325,7 @@ back — describing a deployment that has never happened, against a path
 (`k8s/overlays/`) that does not exist in this repository, which uses
 `platform/kubernetes/overlays/`. Step 2's `pytest --cov=src --cov-fail-under=90`
 names a `src/` directory that does not exist at the root; the real gates are
-`--cov=libs` at 90 and `--cov=scripts` at a 74 ratchet floor.
+`--cov=libs` at 90 and `--cov=scripts` at a ratchet floor (83 since 2026-09-29).
 
 Treat steps 1 through 3 as current and the rest as inherited text awaiting the
 cloud work. This document, not that workflow, is the release procedure for this

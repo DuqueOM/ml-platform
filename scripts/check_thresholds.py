@@ -7,7 +7,7 @@ it plainly: STOP is declared everywhere and applied nowhere, and lowering a
 threshold is one of the two cases checkable today.
 
 Every number this repository gates on is a literal — `fail_under = 90`,
-`--cov-fail-under=74`, `MAX_ADAPTER_SHARE = 0.75`. Any of them could be edited
+`--cov-fail-under=83`, `MAX_ADAPTER_SHARE = 0.75`. Any of them could be edited
 downward in the same commit as the change that made it fail, and every gate
 would go green while the standard quietly moved.
 
