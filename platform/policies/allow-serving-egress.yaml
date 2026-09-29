@@ -69,7 +69,7 @@ spec:
     # merely idle.
     - to:
         - namespaceSelector:
-            matchLabels: { app.kubernetes.io/name: monitoring }
+            matchLabels: { "role.ml-platform.io/monitoring": "true" }
       ports:
         - { protocol: TCP, port: 4317 }
 
@@ -83,6 +83,6 @@ spec:
     #
     #   - to:
     #       - namespaceSelector:
-    #           matchLabels: { app.kubernetes.io/name: postgres }
+    #           matchLabels: { "role.ml-platform.io/database": "true" }
     #     ports:
     #       - { protocol: TCP, port: 5432 }
