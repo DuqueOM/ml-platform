@@ -22,6 +22,7 @@ import hashlib
 import itertools
 import json
 import re
+import shlex
 import subprocess
 import sys
 from collections.abc import Callable
@@ -787,7 +788,15 @@ def check_language_and_privacy() -> None:
         # rather than letting a wrong label stand in for a real finding.
         "ML-MLOps-Production-Template",
     }
-    repo_link = re.compile(r"github\.com/([A-Za-z0-9_-]+)/([A-Za-z0-9_.-]+)")
+    # Every form that names a repository: a web or scheme-less link, an SSH
+    # clone URL (`github.com:`), the REST API and raw content. QA-4 round
+    # fourteen published all four past this scan when only the first form was
+    # matched. Owners and repository names are case-insensitive on GitHub, so
+    # `duqueom/...` is the same account as `DuqueOM/...`.
+    repo_link = re.compile(
+        r"(?:github\.com[/:]|api\.github\.com/repos/|raw\.githubusercontent\.com/)([A-Za-z0-9_-]+)/([A-Za-z0-9_.-]+)",
+        re.IGNORECASE,
+    )
     scanned = 0
 
     # Snapshotted BEFORE either scan runs. Taking it after
@@ -854,7 +863,7 @@ def check_language_and_privacy() -> None:
         }
         for owner, repo in repo_link.findall(_read_lossy(path)):
             repo = repo.removesuffix(".git")
-            if owner in placeholders or repo in placeholders or owner in reserved:
+            if owner in placeholders or repo in placeholders or owner.lower() in reserved:
                 continue
             # The OWNER is what makes a link a privacy question. Widening this
             # scan from `*.md` to the whole tree surfaced 21 links to
@@ -868,9 +877,9 @@ def check_language_and_privacy() -> None:
             # anything about this author, and its visibility is not knowable
             # from here. What can leak is a repository under THEIR account that
             # is not on the public list.
-            if owner != PRIVATE_ACCOUNT:
+            if owner.lower() != PRIVATE_ACCOUNT.lower():
                 continue
-            if repo not in public_repos:
+            if repo.lower() not in {name.lower() for name in public_repos}:
                 fail("C6", f"{path.relative_to(REPO_ROOT)} links to non-public repository {repo!r}")
 
     # Only when nothing failed. `ok()` was called unconditionally, so C6
@@ -883,51 +892,129 @@ def check_language_and_privacy() -> None:
 
 
 _COPIER_COMMAND = re.compile(r"copier\s+(?:copy|update|recopy)\b(.*)")
-_FENCE = re.compile(r"```[a-z]*\n(.*?)```", re.DOTALL)
+_FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+#: copier options that take a value, so the value is not mistaken for the source.
+_COPIER_VALUED = frozenset(
+    {"-d", "--data", "-a", "--answers-file", "-r", "--vcs-ref", "-x", "--exclude", "-s", "--skip", "--data-file"}
+)
+#: How copier itself recognises a REMOTE template source. Round fourteen found
+#: `gh:owner/repo` — copier's documented GitHub shorthand — classified as a
+#: local path because the old test looked for "http" in the whole command.
+_REMOTE_SOURCE = re.compile(r"^(?:gh:|gl:|git@|git\+|[a-z][a-z0-9+.-]*://)", re.IGNORECASE)
 
 
-def _runnable_copier_commands(text: str) -> list[str]:
-    """Copier invocations from FENCED blocks, with continuations joined.
+def _code_blocks(text: str) -> list[str]:
+    """Every code block a reader could paste from: fenced with backticks or
+    tildes and any info string, and 4-space-indented blocks.
 
-    Two refinements the first version needed, both found by running it:
-
-    Only fenced blocks count. Prose naming the subcommand — "scaffolded via
-    `copier copy`" — is not a command anyone pastes, and a grep PATTERN that
-    happens to contain the words is not one either. Flagging those trains the
-    reader to skim past this check.
-
-    Continuations are joined. A pinned command written across several lines
-    with backslashes has its `--vcs-ref` on line two, and a line-at-a-time
-    reading calls the correct command wrong. That false positive was in this
-    repository's own runbook, on the very command the check exists to protect.
+    Round fourteen hid real commands in three shapes the old pattern
+    (```[a-z]*) could not see: an info string such as `shell-session`, which
+    desynchronised the fence pairing, a `~~~` fence, and an indented block.
     """
-    commands = []
-    for block in _FENCE.findall(text):
+    blocks: list[str] = []
+    lines = text.splitlines()
+    i, previous_blank = 0, True
+    while i < len(lines):
+        opened = _FENCE_OPEN.match(lines[i])
+        if opened:
+            marker = opened.group(1)
+            body: list[str] = []
+            i += 1
+            while i < len(lines) and not re.match(rf"^ {{0,3}}{re.escape(marker[0])}{{{len(marker)},}}\s*$", lines[i]):
+                body.append(lines[i])
+                i += 1
+            blocks.append("\n".join(body))
+            i += 1
+            previous_blank = True
+            continue
+        if previous_blank and (lines[i].startswith("    ") or lines[i].startswith("\t")) and lines[i].strip():
+            body = []
+            while i < len(lines) and (lines[i].startswith("    ") or lines[i].startswith("\t") or not lines[i].strip()):
+                body.append(lines[i][4:] if lines[i].startswith("    ") else lines[i].lstrip("\t"))
+                i += 1
+            blocks.append("\n".join(body))
+            previous_blank = True
+            continue
+        previous_blank = not lines[i].strip()
+        i += 1
+    return blocks
+
+
+def _copier_invocations(line: str) -> list[list[str]]:
+    """The argument lists of every copier copy/update/recopy on one shell line.
+
+    Tokenised as the shell would: quotes are honoured, a `#` starts a comment
+    only where the shell says it does, and `&&`, `;` and `|` end a command. A
+    regex over the raw line let `echo 'step #1' && copier copy …` hide the
+    whole command behind a quoted `#` (round fourteen, P2-2).
+    """
+    lexer = shlex.shlex(line, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    lexer.commenters = "#"
+    try:
+        tokens = list(lexer)
+    except ValueError:  # an unbalanced quote: fall back to whitespace
+        tokens = line.split()
+    found: list[list[str]] = []
+    for index, token in enumerate(tokens):
+        if (
+            token.rsplit("/", 1)[-1] == "copier"
+            and index + 1 < len(tokens)
+            and tokens[index + 1] in {"copy", "update", "recopy"}
+        ):
+            args = []
+            for arg in tokens[index + 1 :]:
+                if arg in {"&&", "||", ";", "|", "&"}:
+                    break
+                args.append(arg)
+            found.append(args)
+    return found
+
+
+def _runnable_copier_commands(text: str) -> list[list[str]]:
+    """Copier invocations from code blocks, with continuations joined.
+
+    Only code counts. Prose naming the subcommand — "scaffolded via `copier
+    copy`" — is not a command anyone pastes. Continuations are joined, so a
+    pinned command written across several lines with its `--vcs-ref` on line
+    two reads as pinned. Comments, whole-line or trailing, are the shell's to
+    decide — `make scaffold-update   # copier update, pinned` runs make.
+    """
+    commands: list[list[str]] = []
+    for block in _code_blocks(text):
         joined = re.sub(r"\\\n\s*", " ", block)
         for line in joined.splitlines():
-            # A shell COMMENT inside a fenced block is not a command. The
-            # template's own comment explaining why the pin is needed —
-            # "# --vcs-ref is REQUIRED: a bare `copier update` resolves to..." —
-            # was reported as an unpinned command, which is this check flagging
-            # the documentation that exists because of it.
-            if line.lstrip().startswith("#"):
-                continue
-            # A TRAILING comment is prose too: `make scaffold-update   # copier
-            # update, pinned` names the tool in a comment and runs `make`. It
-            # was reported as an unpinned command the day the service moved to
-            # template v0.30.0. A `#` counts only after whitespace, so a URL
-            # fragment stays part of its word.
-            line = re.sub(r"\s#.*$", "", line)
-            # The SUBCOMMAND is what makes it a command. Matching the bare word
-            # made "copier source for a new project" — a directory description
-            # in a ```text layout block — an unpinned invocation. This is the
-            # same defect the technology detector had: matching a word where a
-            # form was meant, so prose that merely names the tool is read as
-            # use of it.
-            match = _COPIER_COMMAND.search(line)
-            if match:
-                commands.append(match.group(0))
+            commands.extend(_copier_invocations(line))
     return commands
+
+
+def _is_pinned(args: list[str]) -> bool:
+    return any(a in {"--vcs-ref", "-r"} or a.startswith("--vcs-ref=") for a in args)
+
+
+def _source_is_local(args: list[str]) -> bool:
+    """Whether a copy/recopy reads a filesystem path, by copier's own rules.
+
+    `update` has no source argument — it reads the one recorded in the answers
+    file, which may be remote — so it always needs a pin.
+    """
+    if args[0] == "update":
+        return False
+    positional: list[str] = []
+    skip_next = False
+    for arg in args[1:]:
+        if skip_next:
+            skip_next = False
+            continue
+        if arg in _COPIER_VALUED:
+            skip_next = True
+            continue
+        if arg.startswith("-"):
+            continue
+        positional.append(arg)
+    if not positional:
+        return False
+    return not _REMOTE_SOURCE.match(positional[0])
 
 
 def check_copier_commands_are_pinned() -> None:
@@ -953,12 +1040,12 @@ def check_copier_commands_are_pinned() -> None:
     for path in sorted(REPO_ROOT.rglob("*.md")):
         if not _is_scannable(path):
             continue
-        for command in _runnable_copier_commands(_read(path)):
-            source_is_local = re.search(r"\s(\.|\.\./|/)\S*", command) and "http" not in command
-            if source_is_local:
+        for args in _runnable_copier_commands(_read(path)):
+            command = "copier " + " ".join(args)
+            if _source_is_local(args):
                 continue
             checked += 1
-            if "--vcs-ref" in command:
+            if _is_pinned(args):
                 continue
 
             rel = path.relative_to(REPO_ROOT)

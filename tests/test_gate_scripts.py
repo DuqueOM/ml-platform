@@ -936,9 +936,38 @@ def test_every_markdown_lint_list_ignores_every_generated_surface() -> None:
     assert not missing, f"generated surfaces linted as if hand-written: {missing}"
 
 
+def test_the_secret_hooks_scan_the_generated_surfaces_and_only_the_fixers_skip_them() -> None:
+    """QA-4 round fourteen, P3-1: a global pre-commit `exclude:` hid `.claude/`,
+    `.cursor/`, `.codex/` and `.devin/` from detect-private-key and gitleaks, and
+    lacked `.agents/`. The exclusion now lives on the two fixers only, with the
+    manifest's directory list."""
+    import re
+
+    import yaml
+
+    sys.path.insert(0, str(SCRIPTS))
+    import check_doc_coherence as coherence
+
+    config = yaml.safe_load((REPO_ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8"))
+    assert "exclude" not in config, "a global exclude also applies to the secret hooks"
+    hooks = {hook["id"]: hook for repo in config["repos"] for hook in repo["hooks"]}
+
+    probes = {d: f"{d}/skills/x/SKILL.md" for d in coherence.generated_surface_dirs()}
+    for fixer in ("trailing-whitespace", "end-of-file-fixer"):
+        pattern = re.compile(hooks[fixer].get("exclude", "^$"))
+        reached = sorted(d for d, path in probes.items() if not pattern.search(path))
+        assert not reached, f"{fixer} would rewrite rendered files in {reached}"
+    for secret_hook in ("detect-private-key", "gitleaks"):
+        pattern = re.compile(hooks[secret_hook].get("exclude", "^$"))
+        skipped = sorted(d for d, path in probes.items() if pattern.search(path))
+        assert not skipped, f"{secret_hook} skips {skipped}"
+
+
 def test_c9_reads_a_trailing_comment_as_prose_and_still_fails_the_command_before_it() -> None:
-    """`make scaffold-update   # copier update, pinned` runs make, not copier."""
-    comment = "# probe\n\n```bash\nmake scaffold-update       # copier update, pinned\n```\n"
+    """`make scaffold-update   # runs copier update --trust` runs make, not copier."""
+    comment = (
+        "# probe\n\n```bash\nmake scaffold-update       # runs copier update --trust, pinned by the Makefile\n```\n"
+    )
     with temporarily(_ANCHOR_PROBE, comment):
         clean = _run(GATES["doc-coherence"], "--only", "C9")
     assert clean.returncode == 0, clean.stdout
@@ -948,6 +977,99 @@ def test_c9_reads_a_trailing_comment_as_prose_and_still_fails_the_command_before
         caught = _run(GATES["doc-coherence"], "--only", "C9")
     assert caught.returncode == 1
     assert "documents an unpinned copier command" in caught.stdout
+
+
+# --- QA-4 round fourteen: C6 saw one way of writing a link ----------------------
+# Assembled at runtime so this file does not itself fail C6.
+_OWNER, _REPO = "Duque" + "OM", "not-a-public" + "-repo"
+
+
+@pytest.mark.parametrize(
+    "link",
+    [
+        f"https://github.com/{_OWNER}/{_REPO}",
+        f"github.com/{_OWNER}/{_REPO}",  # scheme-less, the form the pattern was written for
+        f"https://github.com/{_OWNER.lower()}/{_REPO}",  # owners are case-insensitive on GitHub
+        f"git clone git@github.com:{_OWNER}/{_REPO}.git",
+        f"https://api.github.com/repos/{_OWNER}/{_REPO}",
+        f"https://raw.githubusercontent.com/{_OWNER}/{_REPO}/main/README.md",
+    ],
+    ids=["https", "scheme-less", "lowercase-owner", "ssh", "api", "raw"],
+)
+def test_c6_fails_every_form_of_a_non_public_repository_link(link: str) -> None:
+    probe = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.md"
+    with temporarily(probe, f"# probe\n\n{link}\n"):
+        result = _run(GATES["doc-coherence"], "--only", "C6")
+    assert result.returncode == 1, result.stdout
+    assert "links to non-public repository 'not-a-public-repo'" in result.stdout
+
+
+def test_c6_still_passes_a_public_repository_in_any_case() -> None:
+    probe = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.md"
+    with temporarily(
+        probe, "# probe\n\nhttps://github.com/duqueom/ML-MLOps-Portfolio and git@github.com:DuqueOM/agent-local.git\n"
+    ):
+        result = _run(GATES["doc-coherence"], "--only", "C6")
+    assert result.returncode == 0, result.stdout
+
+
+# --- QA-4 round fourteen: C9 exempted copier's shorthand and lost commands ------
+_TPL = "Duque" + "OM/ml-service-template"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        f"```bash\ncopier copy gh:{_TPL} ./services/x\n```\n",
+        f"```bash\ncopier copy gh:{_TPL} /srv/x\n```\n",
+        f"```bash\necho 'step #1' && copier copy https://github.com/{_TPL} out\n```\n",
+        f"```shell-session\n$ ls\n```\n\n```bash\ncopier copy https://github.com/{_TPL} out\n```\n",
+        f"~~~bash\ncopier copy https://github.com/{_TPL} out\n~~~\n",
+        f"```\ncopier copy https://github.com/{_TPL} out\n```\n",
+        f"Run:\n\n    copier copy https://github.com/{_TPL} out\n",
+        "```bash\ncopier update --trust\n```\n",
+    ],
+    ids=[
+        "gh-shorthand-relative",
+        "gh-shorthand-absolute",
+        "quoted-hash",
+        "info-string",
+        "tilde-fence",
+        "bare-fence",
+        "indented",
+        "update",
+    ],
+)
+def test_c9_sees_every_unpinned_command(body: str) -> None:
+    with temporarily(_ANCHOR_PROBE, "# probe\n\n" + body):
+        result = _run(GATES["doc-coherence"], "--only", "C9")
+    assert result.returncode == 1, result.stdout
+    assert "documents an unpinned copier command" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "```bash\ncopier copy . projects/new\n```\n",
+        f"```bash\ncopier copy --vcs-ref=v0.30.2 gh:{_TPL} ./x\n```\n",
+        f"```bash\ncopier copy -r v0.30.2 gh:{_TPL} ./x\n```\n",
+        f"```bash\ncopier copy \\\n  --vcs-ref v0.30.2 \\\n  gh:{_TPL} ./x\n```\n",
+        "```bash\nmake scaffold-update   # copier update, pinned\n```\n",
+        "```text\ntemplates/   copier source for a new project\n```\n",
+    ],
+    ids=[
+        "local-source",
+        "pinned-equals",
+        "pinned-short",
+        "pinned-continuation",
+        "trailing-comment",
+        "prose-in-text-block",
+    ],
+)
+def test_c9_passes_what_is_pinned_local_or_not_a_command(body: str) -> None:
+    with temporarily(_ANCHOR_PROBE, "# probe\n\n" + body):
+        result = _run(GATES["doc-coherence"], "--only", "C9")
+    assert result.returncode == 0, result.stdout
 
 
 # --- the tree is left as it was found ---------------------------------------

@@ -385,11 +385,11 @@ avoid, and it has already occurred here once.
 
 ---
 
-## 11. Since the previous audit — round fourteen's starting point
+## 11. Since the previous audit — round fifteen's starting point
 
-Round thirteen audited `96128c0` on 2026-09-26 and reported **0 P0, 0 P1, 5
-P2, 6 P3**. That tree was already on `main`, so unlike round twelve the marker
-needed no re-point, and the remediation is inside the marker range.
+Round fourteen audited `f8b9d27` on 2026-09-29 and reported **0 P0, 0 P1, 4
+P2, 5 P3**. That tree was on `main`, so the marker needed no re-point, and the
+remediation is inside the marker range.
 
 List what changed rather than trusting this paragraph:
 
@@ -397,71 +397,86 @@ List what changed rather than trusting this paragraph:
 git log --no-merges --oneline "$(grep -oE 'Last independent audit: [0-9-]+ \(([0-9a-f]+)\)' AGENTS.md | grep -oE '[0-9a-f]{7,}')..HEAD"
 ```
 
-### What round thirteen found, and where each one went
+### What round fourteen found, and where each one went
 
 | Finding | State |
 | --- | --- |
-| **P2-1** — a `core/` subpackage shadowed an exported module and `--check` said OK | Closed in this repository; downstream in DuqueOM/agent-local#2 and #3 (**R13-2**, closed) |
-| **P2-2** — 12 of 31 mutations neither party chose survived | Closed. Each has its test, and the harness is committed as `tests/mutations.yaml` |
-| **P2-3** — Cursor also reads `.claude/skills/`; "listed once" was false | Closed here, with V7's copies-must-agree rule; in the template by #239 (**R13-3**, closed) |
-| **P2-4** — `services/demand-forecast-serving` carries the pre-§9 layout, and nothing checked nested surfaces | Closed: V8 detects it, and *chore(services): demand-forecast-serving at ml-service-template v0.30.2* regenerated the service at template v0.30.2 (**R13-1**) |
-| **P2-5** — C6's link scan skipped generated directories | Closed |
-| **P3-1** — C10 read inline links and ATX headings only | Closed |
-| **P3-2** — a failing check hid its inherited-defect report | Closed, with the `note` channel |
-| **P3-3** — V6 printed `ok` above its own warning | Closed, with a print-time filter in the agentic validator |
-| **P3-4** — the brief said `rag-assistant` sits below C1 | Closed |
-| **P3-5** — the lists of generated directories were kept by hand | Closed. Derived from the manifest where code reads them; the two markdownlint lists are pinned by a test |
-| **P3-6** — agent-local's export check does not block a merge | Closed: agent-local `main` requires `export-provenance`, and CI runs weekly (**R13-2**) |
+| **P2-1** — C6 missed lowercase-owner, SSH, API and raw links | Closed |
+| **P2-2** — C9 exempted `gh:` sources, was blinded by a quoted `#`, and missed info-string, `~~~` and indented blocks | Closed. Commands are tokenised with `shlex` |
+| **P2-3** — the artifact gate compared names literally and skipped unpinned lines | Closed. PEP 503 names, and one minor series per seam package |
+| **P2-4** — the `scripts/` figure left out `fetch.py` and `preflight.py` | Closed. Both counted and tested, with the floor unchanged |
+| **P3-1** — the secret hooks skipped four generated directories | Closed. The exclusion sits on the fixers only, pinned by a test |
+| **P3-2** — uncommitted catalogue entries could not run, and a crash counted as a kill | Closed. `CRASH` fails the run |
+| **P3-3** — `check_thresholds.py` preferred a stale local `main` | Closed |
+| **P3-4** — V8 looked one level down and read copies and different skills alike | Closed here. The upstream rename is **R14-1**, open |
+| **P3-5** — `service_name` was not recorded, so the service could not be regenerated from its answers | Closed. Recorded upstream (DuqueOM/ml-service-template#254, v0.31.0), and the service regenerated with it |
 
-The closing commit is *fix: QA-4 round thirteen — what the round-twelve fixes
-claimed held only for the mutations tried*. Everything open is in
-`docs/governance/remediation-work-order.md` under *Round thirteen*.
+The closing commit is *fix: QA-4 round fourteen — three gates that each missed
+a realistic input, and a coverage figure that left two scripts out*. What is
+open is in `docs/governance/remediation-work-order.md` under *Round fourteen*.
 
 ### Where the author's confidence proved wrong this round
 
-- **The first V8 message promised `copier update` would fix the name
-  collisions.** It fixes the flat pointers only. The collisions are inherent
-  to a service that ships its own skills.
-- **A new C6 test was caught by C6.** It wrote the probe URL literally, as
-  none of the existing C6 tests do.
-- **RUNBOOK still said "V1–V6"** a PR after V7 landed. The author's own
-  change, found by the author only while documenting this round's V8.
-- **V7's table came from reading Cursor's documentation on 2026-09-23**
-  without its compatibility section. The page listed it, and the author
-  missed it.
-- **`generated_surface_dirs()` parsed the manifest once per file** in its
-  first version, about 1,400 times per run, until it was cached.
+- **Two of the author's own new mutations survived at first.** The
+  trailing-comment test's comment read `copier update, pinned`, which never
+  tokenises as a command, so disabling comment handling changed nothing. A
+  removed probe was redundant with the others. Both were sharpened until
+  killed. The harness caught this, not the author.
+- **Rewriting C9 and V8 moved three committed anchors.**
+  `tests/test_mutation_harness.py` failed on each, as designed.
+- **`include_namespace_packages` went into `[run]` first.** Coverage ignores it
+  there with a warning, and the new scope test failed. It is a `[report]`
+  option. It also reaches `libs/`, whose source directories are not packages
+  either. The `libs/` figure, measured again with it: 94.06% against a floor
+  of 90. That run still had the scope test's defect below, which could only
+  have lowered it.
+- **The scope test first broke the figure it guards.** It built a `Coverage`
+  object inside the measured process. That re-applied the `subprocess` patch
+  and sent every later subprocess's data to the test's temporary file, so the
+  CI-equivalent run measured 51.86%, with `check_doc_coherence.py` at 20%. It
+  now asks in a child process with the `COVERAGE_*` variables removed. The
+  old version takes that file to 0% in a two-test run; the new one leaves it
+  unchanged. Only the full measurement showed it. Every targeted test passed.
 
-### The question round fourteen exists to answer
+### The question round fifteen exists to answer
 
-The mutation harness is now part of the repository, and its 36 entries are
-the author's and the last two auditors' ideas. **Extend it.** Add mutations
-to `tests/mutations.yaml` that nobody has tried, and run
-`scripts/mutation_harness.py`. The harness counts a mutation as killed when
-any command exits non-zero, so a mutation that stops a module from importing
-is "killed" without any assertion catching it. Check whether any entry is
-killed only that way.
+Every finding of round fourteen had one shape: a gate re-implemented how a
+consumer reads its input, and got it wrong. C6 did this for GitHub's URLs,
+C9 for the shell and copier, the artifact gate for pip, and the coverage
+floor for coverage's file discovery. **Find the gates that still parse
+something another tool parses**, and feed each one an input the real
+consumer accepts. Candidates: C10's heading slugs against GitHub's; V7's
+front matter against each tool's loader; `check_thresholds.py`'s reading of
+`ci.yml`.
+
+The harness is where the result goes. To add entries without committing,
+edit `tests/mutations.yaml`: it is exempt from the dirty-tree refusal and
+from the restore. Or pass `--catalogue <file>`. Run
+`scripts/mutation_harness.py` for the current count rather than trusting one
+written here. A kill caused by a crash is reported as `CRASH` and fails the
+run.
 
 ### Where the author's confidence is weakest — attack these first
 
-1. **V7's copies-must-agree rule compares name, description and canonical
-   source.** Two copies could differ in anything else — the mode line in the
-   body, or front-matter a tool reads that the rule does not compare.
-2. **C10's setext rule is a heuristic.** It excludes list items, quotes,
-   tables and front matter, and treats `---` after a blank line as a thematic
-   break. CommonMark has more cases than that: lazy continuation lines, HTML
-   blocks, indented code.
-3. **V8 reports inherited collisions under `services/` indefinitely.** Is a
-   permanent note the right answer, or a way of never deciding?
-4. **The exporter now refuses any untracked file under `libs/llm-core`.** Is
-   that too strict? It does refuse the case round thirteen named.
-5. **The downstream items R13-1 to R13-3** are separate changes in separate
-   repositories. If they have landed, attack them the way P2-1 attacked the
-   export check.
+1. **The artifact gate does not follow `-r` or `-c` includes.** A seam pin
+   moved into an included file reads as "not installed by name" and fails.
+   That is the safe direction, but the gate still does not read what pip
+   reads.
+2. **"One minor series" is decided by probing.** Probes sit at both ends of
+   each series the operands name, their neighbours, and the extremes. An
+   exotic specifier (`===`, stacked `!=`, a pre-release bound) may fall
+   between probes.
+3. **V8 tells a copy from a different skill by description alone.** Two
+   different skills with the same description would read as a copy.
+4. **`CRASH` is detected from output text.** A test that checks a gate's exit
+   code and never prints the gate's traceback hides a crash from the harness.
+5. **The template change is a MINOR by the author's reading of
+   ml-service-template's `docs/RELEASING.md` §1.** The answers file gains a
+   line, and an interactive `copier copy` asks one more question.
 
 ### Deliberately not done by the author
 
+- Did not file R14-1 upstream. Opening an issue in another repository is
+  outward-facing, so the text is drafted in the work order for the maintainer.
 - Did not run Cursor or Codex. Discovery rules come from their current
   documentation.
-- Did not change agent-local, the template or the service in this change.
-  Each is its own change, listed in the work order.

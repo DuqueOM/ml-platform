@@ -41,14 +41,20 @@ reads, so once it is gone the service cannot recover on its own.
 
 ```bash
 copier copy --trust \
-  --vcs-ref=v0.26.0 \
+  --vcs-ref=v0.31.0 \
   --data service_slug=demand_forecast_serving \
   --data service_name="Demand Forecast Serving" \
   --data gh_org=DuqueOM --data gh_repo=ml-platform \
   --data profile=local \
-  https://github.com/DuqueOM/ml-service-template \
+  https://github.com/DuqueOM/ml-service-template.git \
   services/demand-forecast-serving
 ```
+
+`service_name` is not the template's default (`DemandForecastServing`), and
+before template v0.31.0 it was never recorded: it existed only in this
+command. A regeneration from the answers file alone differed from the
+committed service in 60 files (QA-4 round fourteen, P3-5). From v0.31.0 the
+template records it, and the service's answers file carries it.
 
 Then confirm the update path exists before doing anything else. A service
 without `.copier-answers.yml` has no upgrade route and is, in ADR-003's words,
@@ -64,13 +70,35 @@ Never bare. Always to a named release, from inside the service directory:
 
 ```bash
 cd services/demand-forecast-serving
-copier update --trust --vcs-ref=v0.27.0 --pretend   # read the diff first
-copier update --trust --vcs-ref=v0.27.0
+copier update --trust --vcs-ref=v0.31.0 --data service_name="Demand Forecast Serving" --pretend   # read the diff first
+copier update --trust --vcs-ref=v0.31.0 --data service_name="Demand Forecast Serving"
 ```
 
 `--pretend` is not politeness. `update` performs a three-way merge into your
 working tree, and reading what it intends to do is the only step between an
-upstream fix and an overwritten local change.
+upstream fix and an overwritten local change. `--data service_name` is
+redundant once the answers file records the name, and harmless; it stays so
+the command is right whatever the answers file holds.
+
+**Where `update` fails.** copier 9.18 runs `git diff-tree` in the service
+directory, and inside this repository that fails, which stopped the v0.30.2
+dry run. The service carries nothing customised, so regenerating it is what
+`update` would produce. Run the generate command above into a scratch
+directory, `diff -rq` it against the committed service, and copy it over:
+
+```bash
+copier copy --trust --defaults --vcs-ref=v0.31.0 \
+  --data service_slug=demand_forecast_serving \
+  --data service_name="Demand Forecast Serving" \
+  --data gh_org=DuqueOM --data gh_repo=ml-platform --data profile=local \
+  https://github.com/DuqueOM/ml-service-template.git /tmp/dfs
+diff -rq /tmp/dfs services/demand-forecast-serving
+```
+
+Before copying, regenerate at the service's CURRENT version the same way and
+diff that too: it must show no differences apart from `.copier-answers.yml`.
+Any other difference is a change this repository made, and regenerating would
+discard it. Stop and merge by hand.
 
 ## Cadence — a pin without one is a freeze
 

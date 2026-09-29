@@ -12,10 +12,11 @@
 #
 # Keep it committed. Deleting it strands the service on the template revision
 # it was born from.
-_commit: v0.30.2
+_commit: v0.31.0
 _src_path: https://github.com/DuqueOM/ml-service-template.git
 gh_org: DuqueOM
 gh_repo: ml-platform
 profile: local
+service_name: Demand Forecast Serving
 service_slug: demand_forecast_serving
 
