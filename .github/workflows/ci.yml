@@ -361,17 +361,22 @@ jobs:
         # coverage floor at all; two of its files sat at 0% while a green
         # step implied otherwise.
         #
-        # 74% is a RATCHET floor, set at what the suite measures TODAY
-        # (74.65%) rather than at an aspiration nothing meets — a floor above
-        # the measurement is a red build, not a standard. It is not a
-        # relaxation of L1/L2: no threshold for scripts/ existed before this
-        # line, which is how two files reached 0%. Raise it as coverage rises;
-        # never lower it (P-10, and a STOP in AGENTS.md).
+        # A RATCHET floor, set at what the suite measures rather than at an
+        # aspiration nothing meets — a floor above the measurement is a red
+        # build, not a standard. It is not a relaxation of L1/L2: no threshold
+        # for scripts/ existed before this line, which is how two files
+        # reached 0%. Raise it as coverage rises; never lower it (P-10, and a
+        # STOP in AGENTS.md).
+        #
+        # History: 74 when set (measured 74.65%). 83 on 2026-09-29, after
+        # CI measured 83.66% twice on main (23cdf6d, 7f93ebe) once pytest-cov 7
+        # and coverage's own subprocess patch replaced pytest-cov 6 (#101); the
+        # figure just before that was 80.20–80.82%.
         run: |
           uv run pytest -q \
             --cov=scripts --cov-branch \
             --cov-report=term \
-            --cov-fail-under=74
+            --cov-fail-under=83
 
       - name: Upload coverage
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7

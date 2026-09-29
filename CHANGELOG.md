@@ -18,6 +18,20 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Changed — the `scripts/` coverage floor ratchets from 74 to 83
+
+- **CI measured 83.66% twice on `main`** (`23cdf6d`, `7f93ebe`) once
+  pytest-cov 7 and coverage's own subprocess patch replaced pytest-cov 6
+  (#101). The floor is a ratchet, "raise it as coverage rises", and moves to
+  83, the whole number below the measurement, as 74 was below 74.65%.
+  `check_thresholds.py` reads it as a strengthening. `quality-gates.md` (P12),
+  `RELEASING.md` and the CI comment carry the new value and its history.
+- **Corrected** (entry below, #101): "83.66% … is above the 74.65% pytest-cov
+  6 reported" compared the new figure with the value measured when the floor
+  was first set. Just before #101, pytest-cov 6 was measuring 80.20–80.82% on
+  `main`. The real gain from coverage's subprocess patch is about three
+  points, not nine.
+
 ### Changed — `demand-forecast-serving` at ml-service-template v0.30.2 (R13-1)
 
 - **The service moves from template v0.26.0 to v0.30.2.** It carried the
