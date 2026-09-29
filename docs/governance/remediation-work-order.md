@@ -804,6 +804,66 @@ paths.
 **Closes when**: the template's ADR carries a dated correction, and its
 validator requires the copies one tool reaches to agree.
 
+## Round fourteen — what stays open, and why each one waits
+
+QA-4 round fourteen audited `f8b9d27` and reported 0 P0, 0 P1, 4 P2 and 5 P3.
+Round thirteen's remediation held under direct attack. But five of the
+auditor's nine new mutations survived, C6, C9 and the artifact gate each missed
+a realistic input, and the published `scripts/` coverage figure left out two
+scripts no test ran.
+
+What closed, in *fix: QA-4 round fourteen — three gates that each missed a
+realistic input, and a coverage figure that left two scripts out*:
+
+- C6's other link forms (P2-1);
+- C9's tokenising, copier's source rules and every code-block shape (P2-2);
+- the artifact gate's name normalisation and one-minor-series rule (P2-3);
+- the two uncounted scripts, counted and tested, with the floor unchanged
+  (P2-4);
+- the secret hooks' view of the generated directories (P3-1);
+- the harness's uncommitted entries and `CRASH` verdict (P3-2);
+- the thresholds baseline (P3-3);
+- V8's tree walk and its copy/collision split (P3-4, detection);
+- `service_name` recorded upstream (DuqueOM/ml-service-template#254,
+  released in v0.31.0) and the service regenerated with it (P3-5).
+
+One item stays open. Opening an issue in another repository is outward-facing,
+so the agent drafts it and the maintainer files it.
+
+### R14-1 — Two of the template's skills share a name with a different root skill
+
+**Mode**: STOP for an agent beyond this proposal · **Source**: round fourteen P3-4, upstream half · **Size**: a template rename plus a `copier update`
+
+`services/demand-forecast-serving` ships 19 skills whose names the root also
+defines. 17 are copies. Two are different skills:
+
+- `doc-coherence`: the template's covers version, CHANGELOG, `llms.txt` and
+  schemas (rule 16, template-ADR-031). The root's covers the ADR index, plan
+  status and gate traceability.
+- `enterprise-audit`: the template's is a 23-domain ISO audit. The root's is a
+  staff-level verification audit.
+
+In the service's directory, which one a tool runs depends on where it was
+invoked. V8 fails on this, except for the two pairs recorded in `V8_EXEMPT`,
+and fails on an exemption once its collision is gone.
+
+**Proposed issue text for ml-service-template** (for the maintainer to file):
+
+> **Two skill names collide with the adopting repository's own skills.**
+> A service generated into a repository that has its own agentic surface
+> (ml-platform) ships `doc-coherence` and `enterprise-audit` under the same
+> names as the adopter's skills with different purposes. Cursor and Claude
+> Code load nested skill directories, so inside the service the tool picks
+> one. These names are generic enough to collide with any adopter.
+> Proposal: prefix the template's service-scoped skills, for example
+> `service-doc-coherence` and `service-enterprise-audit`, or document the
+> collision as an adopter decision in template-ADR-027. Either is a template
+> decision (ADR-003 downstream).
+
+**Closes when**: the template renames them, or records the collision as the
+adopter's to resolve, and the service is updated to that release. V8 then
+fails on the two stale exemptions until they are deleted.
+
 ---
 
 ## Not for an agent

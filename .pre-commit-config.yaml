@@ -19,21 +19,26 @@
 default_language_version:
   python: python3.11
 
-# Generated surfaces are validated by their own hook below, not linted as
-# hand-written source. Linting a mirror reports the same finding N times.
-# The generated tool surfaces are excluded from every hook: they are rendered
-# from `agentic/` and a fixer editing one would be overwritten on the next sync.
+# There is deliberately NO global `exclude:`. One used to skip the generated
+# tool surfaces (.claude, .cursor, .codex, .devin) for every hook, which
+# meant the secret hooks too: a key committed under `.devin/` passed
+# detect-private-key while the comment on that hook said it failed
+# "everywhere else" (QA-4 round fourteen, P3-1). A per-hook `exclude:` cannot
+# undo a global one, so the exclusion moved down to the two hooks it was
+# for — the fixers that WRITE — and every checking hook sees every file.
 #
-# That has a consequence worth stating, because it cost a debugging session. A
-# whitespace fixer touching a CANONICAL file under `agentic/` desyncs its
-# mirrors, which the exclusion above protects from being fixed in place — so
-# `agentic-surface-sync` then fails, and so do the two checks behind it. The
-# resolution is not to widen this exclusion but to re-render:
+# Why the fixers skip the generated surfaces: those files are rendered from
+# `agentic/`, and a fixer editing one would be overwritten on the next sync.
+# A whitespace fixer touching a CANONICAL file under `agentic/` desyncs its
+# mirrors, so `agentic-surface-sync` then fails, and so do the two checks
+# behind it. The resolution is not to widen the exclusion but to re-render:
 #
 #     uv run python scripts/sync_agentic_adapters.py
 #
-# Found by a trailing space inside an awk command in one skill body.
-exclude: '^(\.claude|\.cursor|\.codex|\.devin)/'
+# Found by a trailing space inside an awk command in one skill body. The
+# directory list is the manifest's (`generated_surface_dirs()`), and
+# tests/test_gate_scripts.py fails when the two disagree — the hand-kept
+# copy here lacked `.agents` for a round after #89 added it.
 
 repos:
   # --- hygiene -------------------------------------------------------------
@@ -53,11 +58,12 @@ repos:
       #
       # Same argument, same file set as `services` in [tool.ruff]
       # extend-exclude and `services/*` in [tool.coverage.run] omit. The
-      # template's own CI applies these hooks at the source.
+      # template's own CI applies these hooks at the source. The generated
+      # tool surfaces are excluded for the reason at the top of this file.
       - id: trailing-whitespace
-        exclude: '^services/'
+        exclude: '^(services|\.agents|\.claude|\.codex|\.cursor|\.devin)/'
       - id: end-of-file-fixer
-        exclude: '^services/'
+        exclude: '^(services|\.agents|\.claude|\.codex|\.cursor|\.devin)/'
       - id: check-yaml
         args: [--allow-multiple-documents]
         # Two scope corrections, both measured on a clean checkout of HEAD.
@@ -88,9 +94,11 @@ repos:
       - id: check-merge-conflict
       - id: check-case-conflict
       - id: detect-private-key
-        # NOT weakened globally — scoped to the one path where a PEM header
-        # is the SUBJECT MATTER rather than a credential. Everywhere else in
-        # the repo this hook still fails on a key.
+        # NOT weakened globally — scoped to the one skill where a PEM header
+        # is the SUBJECT MATTER rather than a credential, in each of its two
+        # rendered shapes: `skills/<name>/SKILL.md` and Devin's flat
+        # `skills/<name>.md`. Every other file, generated surfaces included,
+        # is scanned: there is no global exclude above this hook any more.
         #
         # skills/secret-breach-response/SKILL.md (line 56) holds a markdown
         # table of DETECTION patterns. The row pairs "GCP service account
@@ -110,9 +118,9 @@ repos:
         # Deliberately paraphrased above: spelling the PEM delimiters out
         # here would trip this very hook on this very file. It did, once.
         #
-        # Verified by injection: a private key added anywhere outside this
-        # path still fails the hook.
-        exclude: '(^|/)skills/secret-breach-response/SKILL\.md$'
+        # Verified by injection: a private key added anywhere outside these
+        # paths still fails the hook — under .claude/ and .devin/ too.
+        exclude: '(^|/)skills/secret-breach-response(/SKILL)?\.md$'
       - id: check-added-large-files
         # Datasets are versioned by reference, never committed
         # (docs/datasets/register.md). This is the backstop for that rule.

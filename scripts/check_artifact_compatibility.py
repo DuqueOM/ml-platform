@@ -72,7 +72,9 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.requirements import InvalidRequirement, Requirement
+from packaging.specifiers import SpecifierSet
+from packaging.utils import canonicalize_name
 from packaging.version import InvalidVersion, Version
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -102,7 +104,10 @@ EXEMPT: dict[str, str] = {
     "numpy": "ADR-008: the container pins 1.x against joblib corruption while the workspace resolves 2.x.",
 }
 
-_REQUIREMENT = re.compile(r"^\s*([A-Za-z0-9._-]+)\s*((?:[~<>=!]=|[<>])\s*[^#\s]+)")
+#: A requirements-file option (`-r`, `--index-url`, `--hash=...`) or an
+#: inline comment: everything a requirement line carries that is not the
+#: requirement itself.
+_NOT_A_REQUIREMENT = re.compile(r"(?:^|\s)(?:#|--?[A-Za-z]).*$")
 
 
 @dataclass(frozen=True)
@@ -128,7 +133,7 @@ def locked_versions() -> dict[str, list[Version]]:
     document = tomllib.loads(LOCK.read_text(encoding="utf-8"))
     found: dict[str, list[Version]] = {}
     for package in document.get("package", []):
-        name = package.get("name", "")
+        name = canonicalize_name(package.get("name", ""))
         if name in SEAM:
             try:
                 found.setdefault(name, []).append(Version(package["version"]))
@@ -138,22 +143,82 @@ def locked_versions() -> dict[str, list[Version]]:
 
 
 def reader_specifiers() -> dict[str, SpecifierSet]:
-    """The specifiers the container installs, from the file it installs from."""
+    """The specifiers the container installs, from the file it installs from.
+
+    Names are compared as pip compares them — PEP 503 normalised — and the line
+    is parsed as a requirement rather than matched by a pattern. The pattern
+    this replaced needed an operator, so a bare `joblib` line was not seen at
+    all, and it compared names literally, so `scikit_learn ~= 1.5.0` — which
+    pip installs as scikit-learn — was not seen either (QA-4 round fourteen).
+    A seam package listed with no specifier comes back as an empty
+    `SpecifierSet`: present and unpinned, which `unpinned()` reports.
+    """
     found: dict[str, SpecifierSet] = {}
-    for line in READER.read_text(encoding="utf-8").splitlines():
-        if line.lstrip().startswith("#"):
-            continue
-        match = _REQUIREMENT.match(line)
-        if not match:
-            continue
-        name, specifier = match.group(1), match.group(2).replace(" ", "")
-        if name not in SEAM:
+    for raw in READER.read_text(encoding="utf-8").splitlines():
+        line = _NOT_A_REQUIREMENT.sub("", raw).rstrip("\\ \t")
+        if not line.strip():
             continue
         try:
-            found[name] = SpecifierSet(specifier)
-        except InvalidSpecifier:  # pragma: no cover
+            requirement = Requirement(line)
+        except InvalidRequirement:  # pragma: no cover - pip would refuse the file first
             continue
+        name = canonicalize_name(requirement.name)
+        if name not in SEAM:
+            continue
+        # A package listed twice is installed under both lines, so both bind.
+        found[name] = found[name] & requirement.specifier if name in found else requirement.specifier
     return found
+
+
+def _admitted_minors(specifier: SpecifierSet) -> set[tuple[int, int]]:
+    """The `(major, minor)` series a specifier admits, found by probing.
+
+    Probes sit at both ends of every series its own operands name and of the
+    series either side of them, plus the extremes, so an open bound — `>=1.5`,
+    `<2`, `~=1.5` — admits a probe outside the named series and shows up as a
+    second one.
+    """
+    anchors: set[tuple[int, int]] = set()
+    for clause in specifier:
+        try:
+            release = Version(clause.version.removesuffix(".*")).release
+        except InvalidVersion:  # pragma: no cover - SpecifierSet already parsed it
+            continue
+        anchors.add((release[0], release[1] if len(release) > 1 else 0))
+    probes = {Version("0.0.1"), Version("99999")}
+    for major, minor in anchors:
+        for m in (minor - 1, minor, minor + 1):
+            if m >= 0:
+                probes |= {Version(f"{major}.{m}.0"), Version(f"{major}.{m}.99999")}
+        probes |= {Version(f"{major + 1}.0.0")}
+        if major > 0:
+            probes |= {Version(f"{major - 1}.99999.0")}
+    return {(v.major, v.minor) for v in probes if specifier.contains(v, prereleases=True)}
+
+
+def unpinned() -> list[str]:
+    """Seam packages the container installs without holding to one minor series.
+
+    `straddles()` asks whether today's writer version satisfies the reader. That
+    is only half the seam: a reader that admits any version — a bare `joblib`,
+    `numpy>=1.26` — agrees with every writer today and installs whatever is
+    newest on the next image build, which is the silent unpickle this gate
+    exists to prevent. So a seam package must be named in the reader, with a
+    specifier that admits exactly one minor series. `~=X.Y.Z` does; `~=X.Y`
+    does not, because it means `>=X.Y, <X+1`.
+    """
+    read = reader_specifiers()
+    problems = []
+    for package in SEAM:
+        specifier = read.get(package)
+        if specifier is None:
+            problems.append(f"{package} is not installed by name in the reader, so its version is whatever resolves")
+        elif not str(specifier):
+            problems.append(f"{package} is installed with no specifier, so the next image build takes any version")
+        elif len(minors := _admitted_minors(specifier)) > 1:
+            series = ", ".join(f"{a}.{b}" for a, b in sorted(minors))
+            problems.append(f"{package} is read by {specifier}, which admits more than one minor series ({series})")
+    return problems
 
 
 def straddles() -> list[Straddle]:
@@ -220,6 +285,7 @@ def main() -> int:
         f"reported as outlived"
         for package in sorted(set(EXEMPT) - set(SEAM))
     ]
+    failures += unpinned()
 
     for straddle in found:
         if straddle.package in EXEMPT and open_adr:

@@ -18,6 +18,88 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Fixed — QA-4 round fourteen: three gates that each missed a realistic input, and a coverage figure that left two scripts out
+
+- **C6 saw one way of writing a link** (P2-1). A link to a non-public DuqueOM
+  repository passed when written with a lowercase owner, as an SSH remote,
+  through `api.github.com/repos/` or through `raw.githubusercontent.com`. The
+  pattern now reads all four, and owners and repository names compare
+  case-insensitively, as GitHub compares them.
+- **C9 read copier commands with a regex** (P2-2). It:
+  - classified `gh:owner/repo`, copier's own GitHub shorthand, as a local
+    path;
+  - was blinded by a quoted `#` (`echo 'step #1' && copier copy …`);
+  - saw nothing in a fence with an info string it did not expect, in a `~~~`
+    fence or in an indented block.
+  Commands are now tokenised with `shlex` as the shell would, split on `&&`,
+  `;` and `|`, and read from every fenced and indented code block. A source is
+  remote by copier's rules, not by whether "http" appears in the line.
+- **The artifact gate compared package names literally and skipped unpinned
+  lines** (P2-3). `scikit_learn ~= 1.5.0`, which pip installs as
+  scikit-learn, and a bare `joblib` both passed. Names are now PEP 503
+  normalised on both sides and each line is parsed as a requirement. A seam
+  package must be in the reader with a specifier that admits exactly one
+  minor series: `~=X.Y.Z` does, while `~=X.Y`, `>=` and a bare name fail.
+- **The `scripts/` coverage figure left out two scripts no test ran**
+  (P2-4). Coverage finds an unexecuted file only inside a package, and
+  `scripts/datasets/` and `scripts/local/` have no `__init__.py`. So
+  `fetch.py` and `preflight.py`, 315 statements, were missing from the 83.66%
+  instead of counted at 0%, which put the honest figure at no more than
+  78.60%, below the floor. `include_namespace_packages` now counts them, and
+  `tests/test_coverage_scope.py` fails if any tracked script is missing from
+  the report. Both scripts gained tests (`test_dataset_fetch.py`,
+  `test_local_preflight.py`) against a fake network and a fake host. The
+  floor stays at 83. Measured with CI's exact command, all 31 tracked scripts
+  counted: 86.33%, with `fetch.py` and `preflight.py` at 99%. The floor
+  ratchets after CI measures it on `main`, as 83 did.
+- **The secret hooks skipped four generated directories** (P3-1). A global
+  pre-commit `exclude:` hid `.claude/`, `.cursor/`, `.codex/` and `.devin/`
+  from `detect-private-key` and `gitleaks`, while the hook's comment said it
+  failed "everywhere else". The list also lacked `.agents`. The exclusion now
+  sits on the two fixers that write, with the manifest's directory list,
+  pinned by a test. `.devin`'s flat copy of the breach-response skill is
+  scoped into the PEM exemption. An injected key now fails under each of the
+  five directories.
+- **The mutation harness could not run an entry that was not committed, and
+  counted a crash as a kill** (P3-2). The catalogue is now exempt from the
+  dirty-tree refusal and from the restore, and `--catalogue` reads another
+  file. A kill whose output carries `ERROR collecting`, an import or syntax
+  error or a traceback is reported as `CRASH` and fails the run.
+- **`check_thresholds.py` preferred a stale local `main` to the parent**
+  (P3-3). On a commit already on `origin/main`, a lowered floor was compared
+  against whatever the local `main` held. The local branch is now consulted
+  only when `origin/main` does not exist.
+- **V8 looked one level down and could not tell a copy from a different
+  skill** (P3-4). It now walks the whole tree, skipping infrastructure and
+  any nested checkout, so `libs/llm-core/.agents/skills/` is seen. A nested
+  skill whose description matches the root's, once the mode suffix is
+  removed, is a copy. It is noted in `services/` and fails anywhere else. A
+  different skill under a root name fails unless `V8_EXEMPT` records it. The
+  two in the service (`doc-coherence`, `enterprise-audit`) are exempted
+  against a proposed upstream rename, and an exemption that outlives its
+  collision fails.
+- **The service could not be regenerated from its own answers file** (P3-5).
+  `service_name` was a hidden template question, so "Demand Forecast Serving"
+  existed only in the runbook's command line. Without it, a regeneration
+  differed in 60 files. DuqueOM/ml-service-template#254 records it
+  (released in v0.31.0), and the service is regenerated at that release with
+  the name in its answers file. The runbook pins the same release, passes the
+  name to `update`, and says how to regenerate where copier 9.18's `update`
+  fails inside a larger repository. Checked before regenerating: the v0.30.2
+  regeneration differs from the committed service only in `data/`, which the
+  service's `.gitignore` excludes, so nothing was customised. The v0.31.0
+  regeneration changes four files: the answers file, plus uvicorn 0.54,
+  boto3 1.43.103 and setuptools>=84 from the template's Dependabot. A
+  regeneration from the answers file ALONE now matches the service with no
+  differences.
+- **The catalogue grew from 39 entries to 66.** 64 are expected kills, and
+  two are declared survivors. It gained the auditor's nine mutations,
+  re-anchored where C6, C9 and V8 were rewritten, and at least one for every
+  guard above. Two entries of this change's own
+  first survived: a comment in the trailing-comment test that did not
+  tokenise as a command, and a probe the other probes made redundant. Both
+  were sharpened until killed.
+
 ### Changed — the `scripts/` coverage floor ratchets from 74 to 83
 
 - **CI measured 83.66% twice on `main`** (`23cdf6d`, `7f93ebe`) once
