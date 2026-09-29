@@ -256,3 +256,40 @@ def test_on_the_default_branch_the_baseline_is_still_the_parent(tmp_path: Path, 
         check=False,
     ).stdout.strip()
     assert resolved != head, "the baseline is HEAD itself, so the gate compares the file against itself"
+
+
+def test_a_stale_local_main_is_not_the_baseline_when_origin_main_exists(tmp_path: Path, monkeypatch) -> None:
+    """QA-4 round fourteen, P3-3: on a commit already on `origin/main`, the
+    merge base is HEAD, and the loop then tried the local `main` — here a
+    stale branch from before the floor was raised — ahead of the parent. A
+    floor lowered 83 -> 80 was compared against the old 74 and passed."""
+    import importlib
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    module = importlib.import_module("check_thresholds")
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    def git(*args: str) -> None:
+        subprocess.run(
+            ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t", *args],
+            check=True,
+            capture_output=True,
+        )
+
+    git("init", "-q", "-b", "main")
+    for floor in (74, 83, 80):
+        (repo / "gate.cfg").write_text(f"fail_under = {floor}\n", encoding="utf-8")
+        git("add", "-A")
+        git("commit", "-qm", f"floor {floor}")
+        if floor == 74:
+            git("checkout", "-q", "--detach")  # the local `main` stays here, stale
+    git("update-ref", "refs/remotes/origin/main", "HEAD")
+    monkeypatch.setattr(module, "REPO_ROOT", repo)
+    monkeypatch.delenv(module.BASELINE_ENV, raising=False)
+
+    baseline = module._baseline_ref("gate.cfg")
+    at_base = subprocess.run(
+        ["git", "-C", str(repo), "show", f"{baseline}:gate.cfg"], capture_output=True, text=True, check=True
+    ).stdout
+    assert "83" in at_base, f"the baseline resolved to {baseline}, whose floor is {at_base.strip()!r}"

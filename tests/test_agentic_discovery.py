@@ -173,12 +173,23 @@ def test_one_tool_reaching_copies_that_disagree_fails(isolated: Path) -> None:
     assert any("cursor reaches skill 'deploy' through copies that disagree" in f for f in _failures("V7"))
 
 
-def _nested(root: Path, owner: str, rel: str) -> None:
-    target = root / owner / "svc" / rel
+_COPY = '---\nname: deploy\ndescription: "canonical (Mode: CONSULT)"\n---\n'
+_OTHER = '---\nname: deploy\ndescription: "a different skill (Mode: AUTO)"\n---\n'
+
+
+def _nested(root: Path, owner: str, rel: str, text: str = _COPY, unit: str = "svc") -> None:
+    target = root / owner / unit / rel
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text("# pointer\n", encoding="utf-8")
+    target.write_text(text, encoding="utf-8")
 
 
+@pytest.fixture
+def no_exemptions(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The real exemptions name this repository's service, which a temporary tree does not have."""
+    monkeypatch.setattr(validate, "V8_EXEMPT", {})
+
+
+@pytest.mark.usefixtures("no_exemptions")
 def test_v8_reports_an_inherited_service_without_failing(isolated: Path) -> None:
     """P2-4: services/ are the template's (ADR-003) — seen every run, never silently."""
     world = _world(isolated, FIXED, SKILL_FRONT_MATTER, COMMAND_FRONT_MATTER)
@@ -187,14 +198,77 @@ def test_v8_reports_an_inherited_service_without_failing(isolated: Path) -> None
     validate.check_nested_surfaces(world["canonical"])
     assert not _failures("V8")
     assert any(".cursor/skills: 1 flat pointer(s) no tool loads" in r for r in validate.reports), validate.reports
-    assert any(".claude/skills: 1 skill name(s) also defined at the root" in r for r in validate.reports)
+    assert any(".claude/skills: 1 skill(s) that copy a root skill" in r for r in validate.reports)
 
 
+@pytest.mark.usefixtures("no_exemptions")
 def test_v8_fails_the_same_defect_in_a_project_of_ours(isolated: Path) -> None:
     world = _world(isolated, FIXED, SKILL_FRONT_MATTER, COMMAND_FRONT_MATTER)
     _nested(isolated, "projects", ".agents/skills/deploy/SKILL.md")
     validate.check_nested_surfaces(world["canonical"])
-    assert any("projects/svc/.agents/skills: 1 skill name(s) also defined at the root" in f for f in _failures("V8"))
+    assert any("projects/svc/.agents/skills: 1 skill(s) that copy a root skill" in f for f in _failures("V8"))
+
+
+# --- round fourteen, P3-4: any depth, and copies told apart from collisions ----
+
+
+@pytest.mark.usefixtures("no_exemptions")
+@pytest.mark.parametrize(
+    "where",
+    ["libs/llm-core/.agents/skills", "projects/rag-assistant/src/.agents/skills", "docs/.cursor/skills"],
+)
+def test_v8_sees_a_discovery_directory_at_any_depth(isolated: Path, where: str) -> None:
+    """The auditor's three probes, each of which V8 inspected as `2 directories … OK`."""
+    world = _world(isolated, FIXED, SKILL_FRONT_MATTER, COMMAND_FRONT_MATTER)
+    target = isolated / where / "deploy" / "SKILL.md"
+    target.parent.mkdir(parents=True)
+    target.write_text(_COPY, encoding="utf-8")
+    validate.check_nested_surfaces(world["canonical"])
+    assert any(f"{where}: 1 skill(s) that copy a root skill" in f for f in _failures("V8")), validate.failures
+
+
+@pytest.mark.usefixtures("no_exemptions")
+def test_v8_fails_a_different_skill_under_a_root_name_even_in_a_service(isolated: Path) -> None:
+    world = _world(isolated, FIXED, SKILL_FRONT_MATTER, COMMAND_FRONT_MATTER)
+    _nested(isolated, "services", ".agents/skills/deploy/SKILL.md", _OTHER)
+    validate.check_nested_surfaces(world["canonical"])
+    assert any("services/svc/.agents/skills/deploy: a different skill" in f for f in _failures("V8"))
+
+
+def test_v8_notes_an_exempted_collision_and_fails_an_outlived_exemption(
+    isolated: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    world = _world(isolated, FIXED, SKILL_FRONT_MATTER, COMMAND_FRONT_MATTER)
+    _nested(isolated, "services", ".agents/skills/deploy/SKILL.md", _OTHER)
+    monkeypatch.setattr(
+        validate, "V8_EXEMPT", {("services/svc", "deploy"): "the template's", ("services/svc", "gone"): "renamed"}
+    )
+    validate.check_nested_surfaces(world["canonical"])
+    assert any("deploy: a different skill under a root skill's name — exempt" in r for r in validate.reports)
+    assert _failures("V8") == [
+        "[V8] V8_EXEMPT names services/svc/gone, which no longer collides — delete the exemption"
+    ]
+
+
+@pytest.mark.usefixtures("no_exemptions")
+def test_v8_does_not_walk_into_another_checkout(isolated: Path) -> None:
+    """A worktree under `.claude/worktrees/` is another copy of the repository, not a nested surface."""
+    world = _world(isolated, FIXED, SKILL_FRONT_MATTER, COMMAND_FRONT_MATTER)
+    worktree = isolated / ".claude" / "worktrees" / "wip"
+    (worktree / ".agents" / "skills" / "deploy").mkdir(parents=True)
+    (worktree / ".agents" / "skills" / "deploy" / "SKILL.md").write_text(_OTHER, encoding="utf-8")
+    (worktree / ".git").write_text("gitdir: elsewhere\n", encoding="utf-8")
+    validate.check_nested_surfaces(world["canonical"])
+    assert not _failures("V8"), validate.failures
+
+
+def test_the_real_exemptions_still_name_real_collisions(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Run against this repository: an exemption that outlives its collision fails V8."""
+    for bucket in ("failures", "notes", "warnings", "reports"):
+        monkeypatch.setattr(validate, bucket, [])
+    manifest = validate.yaml.safe_load(validate.MANIFEST.read_text(encoding="utf-8"))
+    validate.check_nested_surfaces(validate.collect_canonical(manifest))
+    assert not _failures("V8"), validate.failures
 
 
 def test_no_ok_line_above_a_warning_for_the_same_check(isolated: Path) -> None:

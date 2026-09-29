@@ -204,6 +204,14 @@ omit = [
 
 [tool.coverage.report]
 fail_under = 90
+# Report a file no test executed, even in a directory with no `__init__.py`.
+# Without it, coverage discovers unexecuted files only inside packages, so
+# `scripts/datasets/fetch.py` and `scripts/local/preflight.py` — 315 statements
+# no test ran — were absent from the `scripts/` figure instead of counted at
+# 0%, and the published 83.66% measured only the scripts some test happened to
+# touch (QA-4 round fourteen, P2-4). `tests/test_coverage_scope.py` holds every
+# tracked script to being in the report.
+include_namespace_packages = true
 
 [build-system]
 requires = ["hatchling"]

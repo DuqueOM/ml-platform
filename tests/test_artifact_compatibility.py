@@ -141,6 +141,73 @@ def test_an_exemption_outside_the_seam_is_itself_a_failure(seam, monkeypatch, ca
     assert "pandas is exempted but is not in SEAM" in capsys.readouterr().out
 
 
+# --- the reader is read as pip reads it (QA-4 round fourteen) -----------------
+
+
+@pytest.mark.parametrize(
+    "spelling",
+    ["scikit_learn ~= 1.5.0", "Scikit-Learn~=1.5.0", "scikit.learn ~= 1.5.0", "scikit-learn[alldeps] ~= 1.5.0"],
+)
+def test_a_straddle_is_seen_under_any_spelling_pip_accepts(seam, capsys, spelling: str) -> None:  # type: ignore[no-untyped-def]
+    """The auditor's first reproduction: pip installs every one of these as scikit-learn."""
+    seam(_TODAY_LOCK, _TODAY_READER.replace("scikit-learn~=1.9.1", spelling))
+    assert gate.main() == 1
+    assert "scikit-learn: written by 1.9.1, read by ~=1.5.0" in capsys.readouterr().out
+
+
+def test_a_lock_name_is_normalised_too(seam, capsys) -> None:  # type: ignore[no-untyped-def]
+    seam(
+        _TODAY_LOCK.replace('name = "scikit-learn"', 'name = "Scikit_Learn"'),
+        _TODAY_READER.replace("~=1.9.1", "~=1.5.0"),
+    )
+    assert gate.main() == 1
+    assert "scikit-learn: written by 1.9.1" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("line", "why"),
+    [
+        ("joblib", "no specifier"),
+        ("joblib  # unpinned on purpose", "no specifier"),
+        ("joblib>=1.5", "more than one minor series"),
+        ("joblib~=1.5", "more than one minor series"),
+        ("joblib<2", "more than one minor series"),
+        ("joblib!=1.4.0", "more than one minor series"),
+        ("", "not installed by name"),
+    ],
+)
+def test_a_seam_package_the_reader_does_not_hold_to_one_minor_fails(seam, capsys, line: str, why: str) -> None:  # type: ignore[no-untyped-def]
+    """The auditor's second reproduction: a bare `joblib` agrees with every writer today."""
+    seam(_TODAY_LOCK, _TODAY_READER.replace("joblib~=1.5.2", line))
+    assert gate.main() == 1
+    out = capsys.readouterr().out
+    assert "joblib" in out, out
+    assert why in out, out
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "joblib~=1.5.2",
+        "joblib == 1.5.2",
+        "joblib==1.5.*",
+        "joblib>=1.5.0,<1.6",
+        "joblib ~= 1.5.2 ; python_version >= '3.11'",
+        "joblib~=1.5.2 --hash=sha256:00",
+        "joblib~=1.5.0 \\",
+    ],
+)
+def test_one_minor_series_passes_in_every_form(seam, line: str) -> None:  # type: ignore[no-untyped-def]
+    seam(_TODAY_LOCK, _TODAY_READER.replace("joblib~=1.5.2", line))
+    assert gate.unpinned() == []
+    assert gate.main() == 0
+
+
+def test_a_package_listed_twice_is_bound_by_both_lines(seam) -> None:  # type: ignore[no-untyped-def]
+    seam(_TODAY_LOCK, _TODAY_READER.replace("joblib~=1.5.2", "joblib>=1.5\njoblib<1.6"))
+    assert gate.unpinned() == []
+
+
 # --- the ADR status is read from the header only ------------------------------
 
 

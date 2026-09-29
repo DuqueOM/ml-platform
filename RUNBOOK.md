@@ -170,7 +170,7 @@ oversight.
 | Lint / format | `uv run ruff check .` · `uv run ruff format --check .` | Mechanical. `ruff check --fix` and `ruff format` |
 | Types | `uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/ projects/store-assistant/src/ orchestration/` | `strict` applies to everything in scope, not only `libs/` — the per-module override that appeared to narrow it never did (mypy applies `strict` globally) |
 | Agentic surfaces stale | `uv run python scripts/sync_agentic_adapters.py --check` | A canonical body changed without re-rendering. Fix with `make sync`, never by editing a rendered file. Passing, it reports the artifact and surface counts it checked — 74 across 4 |
-| Agentic surface integrity | `uv run python scripts/validate_agentic_surface.py --strict` | V1–V6: missing surface, drifted mirror, policy text in a pointer, an unresolvable authority, or a **de-escalated mode**. V7: a skill or command not where Claude Code, Cursor or Codex looks, or copies one tool reaches twice that disagree. V8: nested surfaces under `projects/` (fails) and `services/` (reported as inherited) |
+| Agentic surface integrity | `uv run python scripts/validate_agentic_surface.py --strict` | V1–V6: missing surface, drifted mirror, policy text in a pointer, an unresolvable authority, or a **de-escalated mode**. V7: a skill or command not where Claude Code, Cursor or Codex looks, or copies one tool reaches twice that disagree. V8: nested discovery directories anywhere in the tree. A copy of a root skill fails, except under `services/`, where it is reported as inherited. A different skill under a root skill's name fails unless `V8_EXEMPT` records it |
 | Documentation coherence | `uv run python scripts/check_doc_coherence.py` | C1–C10; see the table below |
 | Derived document stale | `uv run python scripts/check_implementation_status.py --check` | The committed table no longer matches the filesystem. Regenerate — never hand-edit |
 | Technology inventory stale | `uv run python scripts/check_technology_inventory.py --check` | Same, for detected technology use |
@@ -186,13 +186,18 @@ oversight.
 ```bash
 uv run python scripts/mutation_harness.py          # every mutation in tests/mutations.yaml
 uv run python scripts/mutation_harness.py E1 E2    # by id
+uv run python scripts/mutation_harness.py --catalogue /tmp/mine.yaml
 ```
 
 Each entry breaks one line of a gate or guarded module and names the tests
 or gate that must catch it. QA-4 rounds twelve and thirteen each rebuilt this
 by hand. In round thirteen, 12 of 31 mutations nobody had tried survived
-tests that had been reported as 11/11 and 18/18. It refuses a dirty tree and
-takes several minutes, so it is not part of the suite.
+tests that had been reported as 11/11 and 18/18. It refuses a dirty tree,
+apart from `tests/mutations.yaml` itself: entries can be added and run before
+anything is committed. A kill whose output shows an import, syntax or
+collection error, or a traceback, is reported as `CRASH` and fails the run,
+because it proves nothing about the check. The harness takes several minutes,
+so it is not part of the suite.
 `tests/test_mutation_harness.py` is fast and is part of the suite: it fails
 when a refactor moves an anchor, so the catalogue cannot shrink silently.
 When you add a guard, add the mutation that proves it.

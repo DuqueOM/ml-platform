@@ -242,16 +242,16 @@ mutations:
 - id: V8-services-failed-not-reported
   origin: QA-4 round 13, P2-4
   file: scripts/validate_agentic_surface.py
-  old: '                if owner == "services":'
-  new: '                if False:'
+  old: '            if inherited:'
+  new: '            if False:'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_agentic_discovery.py
   expect: killed
 - id: V8-collisions-ignored
   origin: QA-4 round 13, P2-4
   file: scripts/validate_agentic_surface.py
-  old: '                if names & root_names:'
-  new: '                if False:'
+  old: '        if copies:'
+  new: '        if False:'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_agentic_discovery.py
   expect: killed
@@ -322,10 +322,8 @@ mutations:
 - id: C9-trailing-comment-is-a-command
   origin: service update to template v0.30.0
   file: scripts/check_doc_coherence.py
-  old: '            line = re.sub(r"\s#.*$", "", line)
-
-    '
-  new: ''
+  old: '    lexer.commenters = "#"'
+  new: '    lexer.commenters = ""'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c9_reads"
   expect: killed
@@ -348,4 +346,220 @@ mutations:
   new: "    \"numpy\": \"ADR-008: the container pins 1.x against joblib corruption while the workspace resolves 2.x.\",\n    \"scikit-learn\": \"ADR-008: the scaffold was generated for a classifier and its pin was never re-derived.\",\n"
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_artifact_compatibility.py
+  expect: killed
+- id: R14-artifact-reader-name-unnormalized
+  origin: QA-4 round 14, auditor
+  file: services/demand-forecast-serving/requirements.txt
+  old: 'scikit-learn         ~= '
+  new: 'scikit_learn         ~= 1.5.0  # '
+  run:
+  - uv run python scripts/check_artifact_compatibility.py
+  expect: killed
+- id: R14-artifact-reader-unpinned
+  origin: QA-4 round 14, auditor
+  file: services/demand-forecast-serving/requirements.txt
+  old: 'joblib               ~= '
+  new: 'joblib               # '
+  run:
+  - uv run python scripts/check_artifact_compatibility.py
+  expect: killed
+- id: R14-artifact-lock-name-unnormalized
+  origin: QA-4 round 14 remediation
+  file: scripts/check_artifact_compatibility.py
+  old: '        name = canonicalize_name(package.get("name", ""))'
+  new: '        name = package.get("name", "")'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_artifact_compatibility.py
+  expect: killed
+- id: R14-artifact-reader-name-literal
+  origin: QA-4 round 14 remediation
+  file: scripts/check_artifact_compatibility.py
+  old: '        name = canonicalize_name(requirement.name)'
+  new: '        name = requirement.name'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_artifact_compatibility.py
+  expect: killed
+- id: R14-artifact-unpinned-not-reported
+  origin: QA-4 round 14 remediation
+  file: scripts/check_artifact_compatibility.py
+  old: '    failures += unpinned()'
+  new: '    failures += []'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_artifact_compatibility.py
+  expect: killed
+- id: R14-artifact-open-upper-bound-ok
+  origin: QA-4 round 14 remediation
+  file: scripts/check_artifact_compatibility.py
+  old: '        for m in (minor - 1, minor, minor + 1):'
+  new: '        for m in (minor,):'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_artifact_compatibility.py
+  expect: killed
+- id: R14-V7-reach-name-only
+  origin: QA-4 round 14, auditor
+  file: scripts/validate_agentic_surface.py
+  old: 'key = (fm.get("name"), fm.get("description"), source.group(1) if source else None)'
+  new: 'key = (fm.get("name"), None, None)'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_agentic_discovery.py
+  expect: killed
+- id: R14-C6-https-prefix-only
+  origin: QA-4 round 14, auditor
+  file: scripts/check_doc_coherence.py
+  old: 'r"(?:github\.com[/:]|api\.github\.com/repos/|raw\.githubusercontent\.com/)([A-Za-z0-9_-]+)/([A-Za-z0-9_.-]+)",'
+  new: 'r"https://github\.com/([A-Za-z0-9_-]+)/([A-Za-z0-9_.-]+)",'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c6_fails_every_form"
+  expect: killed
+- id: R14-C6-owner-case-sensitive
+  origin: QA-4 round 14 remediation
+  file: scripts/check_doc_coherence.py
+  old: '            if owner.lower() != PRIVATE_ACCOUNT.lower():'
+  new: '            if owner != PRIVATE_ACCOUNT:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c6_fails_every_form"
+  expect: killed
+- id: R14-C2-store-read-as-english
+  origin: QA-4 round 14, auditor
+  file: scripts/check_doc_coherence.py
+  old: '_ENGLISH_PREFIXES = frozenset({"non", "pre"})'
+  new: '_ENGLISH_PREFIXES = frozenset({"non", "pre", "store"})'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "dangling_namespaced"
+  expect: killed
+- id: R14-C9-fence-needs-language
+  origin: QA-4 round 14, auditor
+  file: scripts/check_doc_coherence.py
+  old: '_FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")'
+  new: '_FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})([a-z]+)$")'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c9_sees_every"
+  expect: killed
+- id: R14-C9-http-guard-dropped
+  origin: QA-4 round 14, auditor
+  file: scripts/check_doc_coherence.py
+  old: '_REMOTE_SOURCE = re.compile(r"^(?:gh:|gl:|git@|git\+|[a-z][a-z0-9+.-]*://)", re.IGNORECASE)'
+  new: '_REMOTE_SOURCE = re.compile(r"^(?:[a-z][a-z0-9+.-]*://)", re.IGNORECASE)'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c9_sees_every"
+  expect: killed
+- id: R14-C9-quoted-hash-is-a-comment
+  origin: QA-4 round 14 remediation
+  file: scripts/check_doc_coherence.py
+  old: '        tokens = list(lexer)'
+  new: '        tokens = line.split("#")[0].split()'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c9_sees_every"
+  expect: killed
+- id: R14-C9-indented-blocks-skipped
+  origin: QA-4 round 14 remediation
+  file: scripts/check_doc_coherence.py
+  old: '        if previous_blank and (lines[i].startswith("    ") or lines[i].startswith("\t")) and lines[i].strip():'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c9_sees_every"
+  expect: killed
+- id: R14-thresholds-scripts-floor-lowered
+  origin: QA-4 round 14, auditor
+  file: .github/workflows/ci.yml
+  old: '            --cov-fail-under=83'
+  new: '            --cov-fail-under=74'
+  run:
+  - uv run python scripts/check_thresholds.py
+  expect: killed
+- id: R14-coverage-namespace-discovery-off
+  origin: QA-4 round 14, P2-4
+  file: pyproject.toml
+  old: 'include_namespace_packages = true'
+  new: 'include_namespace_packages = false'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_scope.py
+  expect: killed
+- id: R14-precommit-global-exclude-restored
+  origin: QA-4 round 14, P3-1
+  file: .pre-commit-config.yaml
+  old: "default_language_version:\n"
+  new: "exclude: '^(\\.claude|\\.cursor|\\.codex|\\.devin)/'\ndefault_language_version:\n"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "secret_hooks"
+  expect: killed
+- id: R14-precommit-fixer-misses-agents
+  origin: QA-4 round 14, P3-1
+  file: .pre-commit-config.yaml
+  old: "      - id: end-of-file-fixer\n        exclude: '^(services|\\.agents|"
+  new: "      - id: end-of-file-fixer\n        exclude: '^(services|"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "secret_hooks"
+  expect: killed
+- id: R14-harness-crash-counted-as-kill
+  origin: QA-4 round 14, P3-2
+  file: scripts/mutation_harness.py
+  old: '                if causes:'
+  new: '                if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_mutation_harness.py -k "crash"
+  expect: killed
+- id: R14-harness-restore-reverts-catalogue
+  origin: QA-4 round 14, P3-2
+  file: scripts/mutation_harness.py
+  old: '    _git("checkout", "--", ".", f":(exclude){CATALOGUE.relative_to(REPO_ROOT)}")'
+  new: '    _git("checkout", "--", ".")'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_mutation_harness.py -k "uncommitted_catalogue"
+  expect: killed
+- id: R14-thresholds-stale-local-main
+  origin: QA-4 round 14, P3-3
+  file: scripts/check_thresholds.py
+  old: '    default = "origin/main" if _git("rev-parse", "--verify", "--quiet", "origin/main") else "main"'
+  new: '    default = "main" if head == _git("merge-base", "HEAD", "origin/main") else "origin/main"'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
+  expect: killed
+- id: R14-V8-projects-only-reported
+  origin: QA-4 round 14, auditor (re-anchored to the rewritten V8)
+  file: scripts/validate_agentic_surface.py
+  old: '        inherited = rel.parts[0] == "services"'
+  new: '        inherited = rel.parts[0] in ("services", "projects")'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_agentic_discovery.py
+  expect: killed
+- id: R14-V8-depth-one
+  origin: QA-4 round 14, P3-4
+  file: scripts/validate_agentic_surface.py
+  old: '            if here != REPO_ROOT and candidate.is_dir():'
+  new: '            if here.parent.parent == REPO_ROOT and candidate.is_dir():'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_agentic_discovery.py -k "any_depth"
+  expect: killed
+- id: R14-V8-collisions-read-as-copies
+  origin: QA-4 round 14, P3-4
+  file: scripts/validate_agentic_surface.py
+  old: '        copies = [n for n in shared if _purpose(directory / n / "SKILL.md") == root_purpose[n]]'
+  new: '        copies = list(shared)'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_agentic_discovery.py -k "v8"
+  expect: killed
+- id: R14-V8-mode-suffix-kept
+  origin: QA-4 round 14, P3-4
+  file: scripts/validate_agentic_surface.py
+  old: '_MODE_SUFFIX = re.compile(r"\s*\(Mode:[^)]*\)\s*$")'
+  new: '_MODE_SUFFIX = re.compile(r"(?!)")'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_agentic_discovery.py -k "v8"
+  expect: killed
+- id: R14-V8-exemption-never-outlived
+  origin: QA-4 round 14, P3-4
+  file: scripts/validate_agentic_surface.py
+  old: '    for unit, name in sorted(set(V8_EXEMPT) - colliding):'
+  new: '    for unit, name in sorted(set[tuple[str, str]]()):'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_agentic_discovery.py -k "v8"
+  expect: killed
+- id: R14-V8-walks-into-worktrees
+  origin: QA-4 round 14, P3-4
+  file: scripts/validate_agentic_surface.py
+  old: ' and not (here != REPO_ROOT and (here / d / ".git").exists())'
+  new: ''
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_agentic_discovery.py -k "another_checkout"
   expect: killed

@@ -34,6 +34,7 @@ Exit 1 on any failure. `--strict` additionally fails on warnings.
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import sys
 from pathlib import Path
@@ -394,53 +395,130 @@ def check_discovery(manifest: dict[str, Any], canonical: dict[str, dict[str, Pat
 
 _NESTED_SKILL_DIRS = (".claude/skills", ".cursor/skills", ".codex/skills", ".agents/skills")
 
+#: Never walked: tool caches and environments, and any directory that is its
+#: own checkout (a `.git` file or directory) — a worktree under `.claude/` is
+#: another copy of this repository, not a nested surface of it.
+_WALK_PRUNE = frozenset(
+    {".git", ".venv", "node_modules", "__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".hypothesis"}
+)
+
+#: `(Mode: …)` as the renderers append it to a description.
+_MODE_SUFFIX = re.compile(r"\s*\(Mode:[^)]*\)\s*$")
+
+#: Nested skills that share a root skill's NAME but not its PURPOSE, each
+#: recorded against what ends it. Only services/ can appear here: those skills
+#: are ml-service-template's, and renaming them is the template's change to
+#: make (ADR-003), proposed upstream in the round-fourteen work order. An
+#: entry whose collision is gone fails, so the list cannot outlive its cause.
+V8_EXEMPT: dict[tuple[str, str], str] = {
+    ("services/demand-forecast-serving", "doc-coherence"): (
+        "the template's documentation-coherence skill (rule 16, ADR-031), not the root's; "
+        "upstream rename proposed (remediation work order, round fourteen, P3-4)"
+    ),
+    ("services/demand-forecast-serving", "enterprise-audit"): (
+        "the template's 23-domain ISO audit, not the root's staff-level verification audit; "
+        "upstream rename proposed (remediation work order, round fourteen, P3-4)"
+    ),
+}
+
+
+def _nested_skill_dirs() -> list[Path]:
+    """Every tool discovery directory below the root, at any depth."""
+    found: list[Path] = []
+    for current, dirs, _files in os.walk(REPO_ROOT):
+        here = Path(current)
+        dirs[:] = sorted(
+            d for d in dirs if d not in _WALK_PRUNE and not (here != REPO_ROOT and (here / d / ".git").exists())
+        )
+        for rel in _NESTED_SKILL_DIRS:
+            candidate = here / rel
+            if here != REPO_ROOT and candidate.is_dir():
+                found.append(candidate)
+    return found
+
+
+def _purpose(skill: Path) -> str:
+    """A skill's description with the mode suffix a renderer appends removed."""
+    fm = _front_matter(skill.read_text(encoding="utf-8")) or {}
+    return " ".join(_MODE_SUFFIX.sub("", str(fm.get("description") or "")).split())
+
 
 def check_nested_surfaces(canonical: dict[str, dict[str, Path]]) -> None:
     """V8 — tool discovery directories below the root.
 
     Claude Code loads a nested `.claude/skills/` the first time it touches a
     file in that directory, and Cursor picks up `.cursor/skills/` and
-    `.agents/skills/` anywhere in a repository. So a generated service's own
-    skills join the root's: a name both define is two skills under one name,
-    and a flat pointer file is a skill no tool loads. Nothing looked below the
-    root (QA-4 round thirteen, P2-4: `services/demand-forecast-serving`, on
+    `.agents/skills/` anywhere in a repository. So a nested directory's skills
+    join the root's: a name both define is two skills under one name, and a
+    flat pointer file is a skill no tool loads. Nothing looked below the root
+    (QA-4 round thirteen, P2-4: `services/demand-forecast-serving`, on
     template v0.26.0, carried 39 flat pointers and 19 colliding names).
 
-    `projects/` is this repository's and fails. `services/` is generated from
-    ml-service-template and changes only through `copier update` (ADR-003), so
-    it is reported every run — like C9's inherited copier commands — rather
-    than failed.
+    The whole tree is walked. The first version looked one level under
+    `projects/` and `services/` only, so `libs/llm-core/.agents/skills/` or
+    `projects/rag-assistant/src/.agents/skills/` passed while Cursor loaded
+    them (QA-4 round fourteen, P3-4).
+
+    A shared name is one of two things, and they are reported differently:
+
+    * a **copy** — the same purpose, the description equal once the mode
+      suffix is removed. Inside the nested directory the tool decides which
+      runs, and either is the same skill. Noted in `services/`, which changes
+      only through `copier update` (ADR-003); failed anywhere else, where the
+      copy is ours to delete.
+    * a **collision** — a different skill under the same name. Which one runs
+      depends on where the tool is invoked, and nothing decided that. Fails,
+      unless `V8_EXEMPT` records it with what ends it.
     """
-    root_names = set(canonical.get("skills", {}))
+    root_purpose = {
+        name: " ".join(str((_front_matter(path.read_text(encoding="utf-8")) or {}).get("description") or "").split())
+        for name, path in canonical.get("skills", {}).items()
+    }
     inspected = 0
-    for owner in ("projects", "services"):
-        for unit in sorted(p for p in (REPO_ROOT / owner).glob("*") if p.is_dir()):
-            for rel_dir in _NESTED_SKILL_DIRS:
-                directory = unit / rel_dir
-                if not directory.is_dir():
-                    continue
-                inspected += 1
-                flat = sorted(f.name for f in directory.glob("*.md") if f.name != "INDEX.md")
-                names = {d.name for d in directory.iterdir() if (d / "SKILL.md").is_file()}
-                problems = []
-                if flat:
-                    problems.append(
-                        f"{len(flat)} flat pointer(s) no tool loads (the template's layout before template-ADR-027 §9; "
-                        "`copier update` to a release with it removes them)"
-                    )
-                if names & root_names:
-                    problems.append(
-                        f"{len(names & root_names)} skill name(s) also defined at the root — inherent to a service "
-                        "that ships its own skills; inside it the tool decides which runs"
-                    )
-                if not problems:
-                    continue
-                message = f"{directory.relative_to(REPO_ROOT)}: {'; '.join(problems)}"
-                if owner == "services":
-                    report("V8", f"{message}. INHERITED from ml-service-template (ADR-003)")
-                else:
-                    fail("V8", message)
-    ok("V8", f"{inspected} nested discovery director(ies) inspected under projects/ and services/")
+    colliding: set[tuple[str, str]] = set()
+    for directory in _nested_skill_dirs():
+        inspected += 1
+        rel = directory.relative_to(REPO_ROOT)
+        unit = rel.parent.parent.as_posix()
+        inherited = rel.parts[0] == "services"
+        flat = sorted(f.name for f in directory.glob("*.md") if f.name != "INDEX.md")
+        shared = sorted(d.name for d in directory.iterdir() if (d / "SKILL.md").is_file() and d.name in root_purpose)
+        copies = [n for n in shared if _purpose(directory / n / "SKILL.md") == root_purpose[n]]
+        others = [n for n in shared if n not in copies]
+
+        problems = []
+        if flat:
+            problems.append(
+                f"{len(flat)} flat pointer(s) no tool loads (the template's layout before template-ADR-027 §9; "
+                "`copier update` to a release with it removes them)"
+            )
+        if copies:
+            problems.append(
+                f"{len(copies)} skill(s) that copy a root skill of the same name — inside it the tool decides "
+                "which runs, and both are the same skill"
+            )
+        if problems:
+            message = f"{rel}: {'; '.join(problems)}"
+            if inherited:
+                report("V8", f"{message}. INHERITED from ml-service-template (ADR-003)")
+            else:
+                fail("V8", message)
+
+        for name in others:
+            colliding.add((unit, name))
+            exemption = V8_EXEMPT.get((unit, name))
+            if exemption:
+                report("V8", f"{rel}/{name}: a different skill under a root skill's name — exempt: {exemption}")
+            else:
+                fail(
+                    "V8",
+                    f"{rel}/{name}: a different skill under the name of a root skill — which one runs depends "
+                    "on where the tool is invoked. Rename one, or record the pair in V8_EXEMPT",
+                )
+
+    for unit, name in sorted(set(V8_EXEMPT) - colliding):
+        fail("V8", f"V8_EXEMPT names {unit}/{name}, which no longer collides — delete the exemption")
+    ok("V8", f"{inspected} nested discovery director(ies) inspected across the whole tree")
 
 
 def main() -> int:

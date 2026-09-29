@@ -219,14 +219,19 @@ def _baseline_ref(path: str) -> str:
         return "HEAD"
 
     head = _git("rev-parse", "HEAD")
-    for default in ("origin/main", "main"):
-        base = _git("merge-base", "HEAD", default)
-        # `base == head` means HEAD is contained in the default branch — a push
-        # to main, or a branch nobody has committed on yet. Comparing against
-        # it would compare the file with itself, which is the failure mode this
-        # function was written for; fall through to the parent.
-        if base and base != head:
-            return base
+    # The local `main` is consulted only when there is no `origin/main`. It
+    # used to be tried second, so on a commit already on `origin/main` — whose
+    # merge base is HEAD — a stale local `main` became the baseline, and a
+    # floor lowered from 83 to 80 compared against a months-old 74 and passed
+    # (QA-4 round fourteen, P3-3): a result that depended on the machine.
+    default = "origin/main" if _git("rev-parse", "--verify", "--quiet", "origin/main") else "main"
+    base = _git("merge-base", "HEAD", default)
+    # `base == head` means HEAD is contained in the default branch — a push to
+    # main, or a branch nobody has committed on yet. Comparing against it would
+    # compare the file with itself, which is the failure mode this function was
+    # written for; fall through to the parent.
+    if base and base != head:
+        return base
 
     # No parent means the initial commit: there is no earlier state to compare
     # against, and reporting that as "not loosened" is the honest answer.
