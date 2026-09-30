@@ -108,6 +108,31 @@ that is a CONSULT-class decision.** What follows is the recommendation.
   would make the mismatch disappear from view without resolving it, and the
   next project would rediscover it.
 
+## Progress, 2026-09-22 — the artifact is portable; the schema mismatch is not resolved
+
+**Status stays `Proposed`, deliberately.** One half of what this ADR records
+has been fixed, and flipping the status would assert the other half was too —
+and would lift the exemptions gate P14 holds against this document, turning it
+red on straddles nobody has addressed.
+
+What changed: the artifact no longer pickles workspace objects. It carried
+`demand_forecast.persist.ForecastModel` wrapping
+`ml_core.conformal.SplitConformalRegressor`, so reading it required both
+packages installed, and the serving image installs neither — the load failed
+with `ModuleNotFoundError` before any version was compared. It now carries a
+scikit-learn estimator and data: the conformal regressor travels as the two
+numbers calibration produces, and `load` rebuilds it. A reader needs
+scikit-learn, numpy and joblib, which the image has.
+`projects/demand-forecast/tests/test_artifact_portability.py` asserts that the
+artifact's BYTES name no workspace package, and that a container-shaped reader
+gets predictions and intervals without importing anything from here.
+
+What has not changed, and is what keeps this Proposed: the scaffold's
+prediction path is still binary classification, its response schema still
+carries `prediction_score` bounded to [0, 1] and `risk_level`, and a demand
+forecast still does not fit through it. That is a cross-repository change and
+a CONSULT-class decision, exactly as recorded above.
+
 ## Revisit triggers
 
 - `ml-service-template` gains a `task_type` question — this ADR moves to

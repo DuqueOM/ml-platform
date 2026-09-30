@@ -134,16 +134,32 @@ def test_the_sidecar_answers_what_is_deployed_without_unpickling(model: Forecast
 
 
 def test_an_artifact_from_another_schema_is_refused(model: ForecastModel, tmp_path: Path) -> None:
-    """Unpickling into a dataclass whose fields changed meaning is worse than failing."""
-    import dataclasses
-
+    """Reading a payload whose fields changed meaning is worse than failing."""
     import joblib
+    from demand_forecast.persist import _payload
 
-    stale = dataclasses.replace(model, schema=ARTIFACT_SCHEMA + 1)
+    stale = {**_payload(model), "schema": ARTIFACT_SCHEMA + 1}
     artifact = tmp_path / "stale.joblib"
     joblib.dump(stale, artifact)
 
     with pytest.raises(ValueError, match="artifact schema"):
+        load(artifact)
+
+
+def test_an_artifact_that_pickled_the_model_object_is_refused(model: ForecastModel, tmp_path: Path) -> None:
+    """Schema 1 wrote the object itself, and that is exactly what R11-3 removed.
+
+    Such a file is readable only where `demand_forecast` and `ml_core` are
+    installed — which the serving image is not. It is refused with a message
+    that says so, rather than converted: a conversion would have to trust
+    fields whose meaning is what changed.
+    """
+    import joblib
+
+    artifact = tmp_path / "schema1.joblib"
+    joblib.dump(model, artifact)
+
+    with pytest.raises(ValueError, match="not an artifact payload"):
         load(artifact)
 
 
