@@ -148,3 +148,77 @@ def test_coverage_report_flags_undercoverage_in_both_directions() -> None:
     report = conformal.coverage(y_cal, pred_cal)
     assert report.within(0.05)
     assert not report.within(0.0) or abs(report.gap) == 0.0
+
+
+# --- restoring a calibrated regressor from data (R11-3) ----------------------
+#
+# An artifact that pickles this class can only be read where ml_core is
+# installed, and the serving image installs no workspace library. So an
+# artifact carries the two numbers calibration produced instead, and these
+# three members are how they travel. They are public API on a shared library,
+# and each validation branch below was untested until a review of the change
+# that added them found it had been verified with a one-off `python -c`.
+
+
+def _calibrated() -> SplitConformalRegressor:
+    y, pred = _linear_data(500)
+    regressor = SplitConformalRegressor(alpha=0.1)
+    regressor.calibrate(y, pred)
+    return regressor
+
+
+def test_an_uncalibrated_regressor_has_no_quantile_to_report() -> None:
+    """Reading a number that does not exist yet must not return a default."""
+    regressor = SplitConformalRegressor(alpha=0.1)
+    with pytest.raises(RuntimeError, match="not calibrated"):
+        _ = regressor.quantile
+    with pytest.raises(RuntimeError, match="not calibrated"):
+        _ = regressor.n_calibration
+
+
+def test_the_reported_calibration_is_what_calibrate_returned() -> None:
+    y, pred = _linear_data(400)
+    regressor = SplitConformalRegressor(alpha=0.1)
+    returned = regressor.calibrate(y, pred)
+    assert regressor.quantile == returned
+    assert regressor.n_calibration == 400
+
+
+def test_a_restored_regressor_gives_identical_intervals() -> None:
+    """The whole point: two numbers reproduce the object exactly."""
+    original = _calibrated()
+    restored = SplitConformalRegressor.from_calibration(
+        alpha=original.alpha, quantile=original.quantile, n_calibration=original.n_calibration
+    )
+    points = np.linspace(0, 30, 17)
+    lower_a, upper_a = original.interval(points)
+    lower_b, upper_b = restored.interval(points)
+    np.testing.assert_array_equal(lower_a, lower_b)
+    np.testing.assert_array_equal(upper_a, upper_b)
+    assert restored.nominal_coverage == original.nominal_coverage
+
+
+def test_a_negative_quantile_is_refused() -> None:
+    """It would produce intervals whose lower bound exceeds the upper one."""
+    with pytest.raises(ValueError, match="non-negative"):
+        SplitConformalRegressor.from_calibration(alpha=0.1, quantile=-0.5, n_calibration=10)
+
+
+def test_a_zero_quantile_is_allowed() -> None:
+    """A perfect calibration set is unusual, not invalid — the boundary is inclusive."""
+    restored = SplitConformalRegressor.from_calibration(alpha=0.1, quantile=0.0, n_calibration=10)
+    lower, upper = restored.interval(np.array([5.0]))
+    assert lower[0] == upper[0] == 5.0
+
+
+@pytest.mark.parametrize("n", [0, -3])
+def test_an_empty_calibration_set_is_refused(n: int) -> None:
+    with pytest.raises(ValueError, match="positive"):
+        SplitConformalRegressor.from_calibration(alpha=0.1, quantile=1.0, n_calibration=n)
+
+
+@pytest.mark.parametrize("alpha", [0.0, 1.0, -0.1, 1.5])
+def test_a_restored_alpha_is_validated_like_a_constructed_one(alpha: float) -> None:
+    """`from_calibration` goes through the constructor, so it inherits its guard."""
+    with pytest.raises(ValueError, match="alpha"):
+        SplitConformalRegressor.from_calibration(alpha=alpha, quantile=1.0, n_calibration=10)

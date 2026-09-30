@@ -43,7 +43,7 @@ from demand_forecast.train import ALPHA, CALIBRATION_HOURS, select_modellable_zo
 #: Bumped when the artifact's SHAPE changes — a field added, a field's meaning
 #: changed. Loading an artifact from a different schema fails rather than
 #: unpickling into a dataclass whose fields no longer mean what they did.
-ARTIFACT_SCHEMA = 1
+ARTIFACT_SCHEMA = 2
 
 
 @dataclass(frozen=True)
@@ -175,6 +175,43 @@ def fit_final(
     )
 
 
+def _payload(model: ForecastModel) -> dict[str, Any]:
+    """The artifact's contents: the estimator, and everything else as data.
+
+    **Why not pickle the model object.** Doing that wrote
+    `demand_forecast.persist.ForecastModel` and
+    `ml_core.conformal.SplitConformalRegressor` into the file, so reading it
+    required both workspace packages importable. The serving image installs
+    neither — `services/demand-forecast-serving/requirements.txt` names no
+    workspace library — so the artifact could not be loaded there at all,
+    whatever the numpy and scikit-learn versions were (QA-4 round eleven,
+    R11-3, recorded in ADR-008).
+
+    What remains is a scikit-learn estimator, which the image does install, and
+    plain values. The conformal regressor becomes the two numbers calibration
+    produced; `load` rebuilds it with
+    :meth:`ml_core.conformal.SplitConformalRegressor.from_calibration`.
+
+    The artifact is therefore readable by anything with scikit-learn, numpy and
+    joblib — which is the property a serving container needs and the one
+    `tests/test_artifact_portability.py` holds.
+    """
+    return {
+        "schema": ARTIFACT_SCHEMA,
+        "estimator": model.estimator,
+        "conformal_alpha": model.conformal.alpha,
+        "conformal_quantile": model.conformal.quantile,
+        "conformal_n_calibration": model.conformal.n_calibration,
+        "feature_columns": list(model.feature_columns),
+        "trained_through": model.trained_through,
+        "calibrated_from": model.calibrated_from,
+        "n_train_rows": model.n_train_rows,
+        "zones": list(model.zones),
+        "alpha": model.alpha,
+        "seed": model.seed,
+    }
+
+
 def save(model: ForecastModel, path: Path) -> dict[str, Any]:
     """Write the artifact and a readable metadata sidecar.
 
@@ -192,7 +229,7 @@ def save(model: ForecastModel, path: Path) -> dict[str, Any]:
         The metadata written, including ``version``.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(model, path)
+    joblib.dump(_payload(model), path)
 
     # Version derived from the artifact's BYTES. A hand-set version string is
     # one edit away from labelling two different models the same, and the first
@@ -216,6 +253,12 @@ def save(model: ForecastModel, path: Path) -> dict[str, Any]:
 def load(path: Path) -> ForecastModel:
     """Read an artifact back, refusing one written by a different schema.
 
+    The file carries data, not objects of this package (see :func:`_payload`),
+    so the model is rebuilt here rather than unpickled. A reader that only
+    needs predictions — a serving container — does not need this function at
+    all: `payload["estimator"].predict(...)` plus
+    ``± payload["conformal_quantile"]`` is the whole contract.
+
     Args:
         path: The joblib artifact written by :func:`save`.
 
@@ -223,15 +266,34 @@ def load(path: Path) -> ForecastModel:
         The :class:`ForecastModel`.
 
     Raises:
-        ValueError: If the artifact is not a :class:`ForecastModel`, or its
-            schema is not :data:`ARTIFACT_SCHEMA`.
+        ValueError: If the file is not an artifact payload, or its schema is
+            not :data:`ARTIFACT_SCHEMA`.
     """
-    model = joblib.load(path)
-    if not isinstance(model, ForecastModel):
-        raise ValueError(f"{path} holds {type(model).__name__}, not a ForecastModel")
-    if model.schema != ARTIFACT_SCHEMA:
+    payload = joblib.load(path)
+    if not isinstance(payload, dict):
         raise ValueError(
-            f"{path} was written with artifact schema {model.schema}, this code reads {ARTIFACT_SCHEMA}. "
+            f"{path} holds {type(payload).__name__}, not an artifact payload. Schema 1 pickled the model "
+            f"OBJECT, which is what made the artifact unreadable anywhere this package is not installed; "
+            f"re-fit rather than converting it."
+        )
+    schema = payload.get("schema")
+    if schema != ARTIFACT_SCHEMA:
+        raise ValueError(
+            f"{path} was written with artifact schema {schema}, this code reads {ARTIFACT_SCHEMA}. "
             "Re-fit rather than reading it: the fields do not mean the same thing."
         )
-    return model
+    return ForecastModel(
+        estimator=payload["estimator"],
+        conformal=SplitConformalRegressor.from_calibration(
+            alpha=payload["conformal_alpha"],
+            quantile=payload["conformal_quantile"],
+            n_calibration=payload["conformal_n_calibration"],
+        ),
+        feature_columns=tuple(payload["feature_columns"]),
+        trained_through=payload["trained_through"],
+        calibrated_from=payload["calibrated_from"],
+        n_train_rows=payload["n_train_rows"],
+        zones=tuple(payload["zones"]),
+        alpha=payload["alpha"],
+        seed=payload["seed"],
+    )

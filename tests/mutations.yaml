@@ -579,3 +579,35 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_namespace_contract.py
   expect: killed
+- id: AP1
+  origin: R11-3 portable artifact, author
+  file: projects/demand-forecast/src/demand_forecast/persist.py
+  old: '    joblib.dump(_payload(model), path)'
+  new: '    joblib.dump(model, path)'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_artifact_portability.py
+  expect: killed
+- id: AP2
+  origin: R11-3 portable artifact, author
+  file: libs/ml-core/src/ml_core/conformal.py
+  old: '        if quantile < 0.0:'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly libs/ml-core/tests/test_conformal.py
+  expect: killed
+- id: AP3
+  origin: R11-3 portable artifact, author
+  file: libs/ml-core/src/ml_core/conformal.py
+  old: '        if n_calibration < 1:'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly libs/ml-core/tests/test_conformal.py
+  expect: killed
+- id: AP4
+  origin: R11-3 portable artifact, review of its own change
+  file: libs/ml-core/src/ml_core/conformal.py
+  old: '        if not self.is_calibrated:'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly libs/ml-core/tests/test_conformal.py
+  expect: killed
