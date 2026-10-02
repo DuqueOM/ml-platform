@@ -39,6 +39,7 @@ STOP operation (AGENTS.md, P-10).
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import sys
 import tempfile
@@ -73,7 +74,8 @@ class Scope:
             otherwise arrive with no floor, which is how this scope started.
         exempt: Packages with no floor, each with its reason. An exemption
             holds only while the package stays at most `EXEMPT_MAX_STATEMENTS`
-            statements; past that it has code, and its floor applies.
+            statements AND its modules hold no code at all (`_implementation`);
+            past either, it has code, and its floor applies.
     """
 
     name: str
@@ -242,7 +244,39 @@ def _total(packages: Mapping[str, Counts]) -> Counts:
     return total
 
 
-def check(measured: Mapping[str, Mapping[str, Counts]], has_branches: bool) -> tuple[list[str], list[str]]:
+def _implementation(package: Path) -> str:
+    """What makes a package more than empty, or "" when it holds nothing.
+
+    A statement count alone could not tell: a dict of three lambdas is one
+    statement, so a library could sit under the exemption with no floor (QA-4
+    round fifteen). Empty means each module holds only a docstring, a
+    `__version__` string and `from __future__` imports.
+    """
+    for module in sorted(package.rglob("*.py")):
+        if "tests" in module.relative_to(package).parts:
+            continue
+        for node in ast.parse(module.read_text(encoding="utf-8")).body:
+            if (
+                isinstance(node, ast.Expr)
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+            ):
+                continue
+            if isinstance(node, ast.ImportFrom) and node.module == "__future__":
+                continue
+            if (
+                isinstance(node, ast.Assign)
+                and [getattr(target, "id", None) for target in node.targets] == ["__version__"]
+                and isinstance(node.value, ast.Constant)
+            ):
+                continue
+            return f"code at {module.relative_to(package.parent.parent)}:{node.lineno}"
+    return ""
+
+
+def check(
+    measured: Mapping[str, Mapping[str, Counts]], has_branches: bool, root: Path = REPO_ROOT
+) -> tuple[list[str], list[str]]:
     """Return (failures, report lines). No failures means every floor holds."""
     if not has_branches:
         return [
@@ -280,11 +314,12 @@ def check(measured: Mapping[str, Mapping[str, Counts]], has_branches: bool) -> t
             floor = scope.every_package or scope.packages.get(package)
             branch = "n/a" if counts.branch is None else f"{counts.branch:.2f}%"
             if package in scope.exempt:
-                if counts.statements > EXEMPT_MAX_STATEMENTS:
+                implementation = _implementation(root / package)
+                if counts.statements > EXEMPT_MAX_STATEMENTS or implementation:
+                    found = implementation or f"{counts.statements} statements"
                     failures.append(
-                        f"{package} is exempt as empty ({scope.exempt[package]}) but now has "
-                        f"{counts.statements} statements; it has code, so remove the exemption and hold it "
-                        f"to its floor"
+                        f"{package} is exempt as empty ({scope.exempt[package]}) but now has {found}; it has "
+                        f"code, so remove the exemption and hold it to its floor"
                     )
                 lines.append(f"         {package:<30} exempt: {scope.exempt[package]}")
                 continue
@@ -331,7 +366,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     measured, has_branches = measure(data, Path(args.root), Path(args.xml) if args.xml else None)
-    failures, report = check(measured, has_branches)
+    failures, report = check(measured, has_branches, Path(args.root))
     for line in report:
         print(line)
 

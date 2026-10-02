@@ -1,0 +1,453 @@
+Committed copy of the QA-4 round 12 report (the auditor's ~/qa4-round-12-report.md),
+verbatim. Committed during round fifteen's remediation: that round found that the
+reports of rounds twelve to fourteen existed only in a home directory while the
+audit trail cited them there, so the evidence behind the trail was not in the
+public repository. Plain text, like round fifteen's, so quoted probes stay
+quotations.
+
+-------------------------------------------------------------------------------
+
+# QA-4 round twelve — independent audit of ml-platform
+
+- **Audited tree**: `6a4bfe2acf90f38b381400fc944c15173c63d2b9` (`feat/export-agent-core`, contains `main` @ `8d9c302`, #86 @ `3214d62`, #87 @ `6a4bfe2`)
+- **Date**: 2026-09-23
+- **Method**: `agentic/skills/enterprise-audit/SKILL.md` + QA-4 (`docs/governance/qa-procedures.md`), read in full. The skill was loaded by reading it, because it does not register as a Claude skill in this harness (see P0-1).
+- **Workspace**: isolated worktree `/tmp/qa4-r12`, `uv sync --all-packages --all-extras --locked`. Clones used for evidence: `/tmp/qa4-r12-agent-local` and `/tmp/qa4-r12-mlc`. Every mutation was made inside `/tmp/qa4-r12` (or the throwaway agent-local clone) and reverted with `git checkout`. `git status --porcelain` was empty after each one.
+- **Independence (ADR-005 rule B)**: I did not write any of this work. The commits carry `Co-Authored-By: Claude Opus 5 / Opus 5.5` from other sessions. The authoring session's own worktrees still exist under another project's scratchpad (`…ML-MLOps-Portfolio/de0c5989…/scratchpad/wt-adrns`, `wt-export`, `wt-exp-run`). They were not touched. This session (`7f138f6e…`) did not produce the work.
+- **Cloud reviews**: `/code-review ultra 86` and `/code-review ultra 87` ran before this audit. I treated their five findings as leads, re-executed each one, and give each one's disposition below.
+
+---
+
+## 1. Scope
+
+### Audited
+
+1. **Commits on `main` since the marker.** Listed with the brief's §11 command, not taken from the brief's own list:
+
+   ```text
+   $ git log --no-merges --oneline "$(grep -oE 'Last independent audit: [0-9-]+ \(([0-9a-f]+)\)' AGENTS.md | grep -oE '[0-9a-f]{7,}')..HEAD"
+   6a4bfe2 docs(governance): brief QA-4 round twelve on the 2026-09-22/23 session
+   b6a64c3 feat: ADR-010 — llm-core is authoritative for the agent core, and exports it
+   3214d62 fix(llm-core): qualify the 48 citations of agent-local's ADRs, and let C2 read code
+   8d9c302 ci: wire the link checker that was configured but never run (#84)
+   b8bb345 ci: split the invariants lane, and stop calling a CI decision a constraint (#83)
+   e00f4e1 docs: correct ADR-002 — agent-local was never archived, and should not be (#74)
+   84e21d2 fix(ci): bound the auto-merge job, and gate the convention that bounded the rest (#75)
+   7dfec65 chore: archive the agent-local history as a tag, and delete the branch (#73)
+   986b5a8 chore(deps): batch six uv-ecosystem updates, verified against the suite (#72)
+   98b634e chore(deps): batch pyproject bumps and let Dependabot own the lockfile (#65)
+   f1d3ec2 ci(deps): Bump the actions group with 3 updates (#64)
+   c8ff203 fix(rag-assistant): read the EDGAR contact from the environment (#60)
+   6d96f51 fix(governance): re-point the audit marker at the squash commit (#59)
+   ```
+
+   Ten of these are on `main` (#59 to #84). The brief's "Deliberately not done" names only #72, #73 and #75 as other sessions' work. #59, #60, #64 and #65 are also in range, and it does say "whatever else the range command lists".
+2. **#86 and #87**: `gh pr view 86/87 --json commits` gives #86 = `3214d62` and #87 = `b6a64c3`, `6a4bfe2`.
+3. **DuqueOM/agent-local#1** (optional, read-only): cloned under `/tmp`, PR head `a5b1308`.
+4. **The lead in the prompt**: whether `.claude/skills/` loads in Claude Code.
+5. **Every claim in the brief's §11 "weakest confidence" list**, items 1 to 8.
+
+### Deliberately not audited
+
+- C6 (private-reference guard), the conformal implementation, `libs/feature-defs` and the Kubernetes overlays. None changed in scope.
+- Whether round eleven's "Closed" findings are really closed. I did not re-verify them. The only check was the audit-trail consistency below.
+- A **push-to-`main`** link-check run on a broken link. I cannot push, so I reproduced it locally with the same action source, the same `markdown-link-check@3.8.7` and the exact `find` command the CI log prints.
+- Whether Cursor and Codex load `.cursor/skills/*.mdc` and `.codex/skills/*.md`. This harness has no way to observe it, so it stays unverified here (see P0-1).
+- Issue #85: not root-caused. The dependency bumps (#64, #65, #72) got a lockfile check and the full suite only.
+
+---
+
+## 2. Verified-correct surfaces, with the commands that verified them
+
+| Surface | Command | Actual result |
+| --- | --- | --- |
+| Full test suite | `uv run pytest -o addopts="" -p no:cacheprovider -q -x` | `1342 passed, 54 skipped in 827.80s`, exit 0, tree clean afterwards |
+| Coherence: **C7 is the only failure** (known environment fact, confirmed) | `uv run python scripts/check_doc_coherence.py` | C1–C6, C8 and C9 `ok`; `FAIL [C7] 13 commits not contained in 01e122d (grace: 10)`; exit 1 |
+| CI shows the same thing | `gh run view 35918800302 --log-failed` | Only `FAIL [C7] …` in *Fast gates*. Every other Fast-gates step shows `success`, because they run after the coherence step fails |
+| Agentic render and parity | `sync_agentic_adapters.py --check`; `validate_agentic_surface.py --strict` | `[sync] OK — 74 artifacts, 4 surfaces, all current`; `[agentic] OK` (but see P0-1 for what they don't check) |
+| Derived documents | `check_implementation_status.py --check`; `check_technology_inventory.py --check` | both `OK` |
+| Library reuse | `check_library_reuse.py` | rag-assistant 3, store-assistant 1, `[reuse] OK` |
+| Lockfile | `uv lock --check` | `Resolved 279 packages` |
+| **Brief #2: the aggregator reports failure** | `gh pr checks 86/87`; job log | `Fast gates fail` → `Repository invariants fail`, `##[error]Fast gates did not succeed (failure)`. `!= "success"` also covers `cancelled` and `skipped` (read at `ci.yml:469-476`) |
+| **Brief #1: the link check reads files** | CI log of run 35895553399 (push to `main`) | `+ find docs projects platform orchestration agentic -name '*.md' … -exec markdown-link-check '{}' --config … -q ';'`, 36 s. The action's `IFS=', '` parses the list (`entrypoint.sh`, handle_dirs) |
+| …and goes red on a dead link in an unchanged `agentic/` file | same `find` with `markdown-link-check@3.8.7`, after breaking `agentic/rules/14-github-actions.md:8` | baseline `GREEN (74 files read)` → `RED: [✖] ../../docs/decisions/ADR-003-no-such-file.md → Status: 400` |
+| **Brief #3: the qualified citations mean what they say** | `git grep -n 'store-ADR-' -- libs/llm-core projects/store-assistant` against `projects/store-assistant/docs/decisions/` titles | All 58 `store-ADR-NNN` occurrences match their decision's title (006 capability contract, 007 structured calling, 009 reflection notes, 011 tier topology, 012 memory budget, …). The 12 bare `.py` citations (ADR-001/002/003/004) mean this repository's decisions. **But see P2-2 for what C2 cannot see** |
+| **Brief #4: the exporter changes only strings** | `astcmp.py`: `ast.dump` of source vs exported module, with string constants masked and the import rewrite normalised | `SAME` for all 12 modules. Five string constants changed (3 error messages and 2 docstrings in `config.py`/`controller.py`), each `store-ADR-NNN` → `ADR-NNN`, which is correct for agent-local's index. No defect |
+| Exporter end to end | `export_llm_core.py --dest <scratch>` then `--check` | `wrote 12 module(s)`; `OK — … matches an export of 6a4bfe2acf90`; the exported `core` imports cleanly without `llm_core` installed |
+| Exporter refuses dirty `libs/llm-core` | edit `policy.py`, export without flag | `FAILED — libs/llm-core has uncommitted changes …`, exit 1 |
+| **Brief #8: the status document returns to 48** | stub C7 (`return` at `check_doc_coherence.py:989`), then run the generator; reverted | `[coherence] OK`; `**48 done · 2 partial · 5 absent**` (committed: 47) |
+| ADR-010's measured table | `git show 8d9c302:…` vs `agent-local@c95e331:core/` | 3,043 vs 2,159 lines ✓; exactly 1 of 12 byte-identical (`policy.py`) ✓. The "9 commits" row: see P3-4 |
+| Audit-trail consistency for round 11 | `ops/audit.jsonl` lines 74–76 | `1 P1, 5 P2, 6 P3` against `0fe7343`; two recorded re-points to `8897281`, then to `01e122d` — matches the brief and the marker |
+| #75 guard catches a step-level-only timeout | move `timeout-minutes` from the job into a step | `1 failed, 13 passed` ✓ |
+| #60 refuses an unset or blank contact | `projects/rag-assistant/tests` | pass; the blank and unset cases are covered |
+| agent-local#1 drift test catches a plain hand edit | append to `core/policy.py` | `1 failed, 3 passed` ✓ (but see P2-5) |
+
+---
+
+## 3. Findings, most severe first
+
+### [P0-1] Claude Code registers none of the 29 skills, and both surface validators stay green
+
+The ported skills never load as skills under Claude, even though AGENTS.md and ADR-005 promise four equivalent surfaces.
+
+- **Where**: `agentic/manifest.yaml` (`surfaces.claude.layout.skills: skills`, `extension: .md`); `scripts/sync_agentic_adapters.py:369-372` (`target_path` → `.claude/skills/<name>.md`); the claim is at `.claude_context.md:25`.
+- **Commands**:
+
+  ```text
+  $ ls .claude/skills | head -3 ; find .claude/skills -name SKILL.md | wc -l
+  batch-inference.md
+  ci-green-verify.md
+  concept-drift-analysis.md
+  0
+  $ test -f .claude/skills/enterprise-audit/SKILL.md || echo absent
+  absent
+  $ grep -n 'is listed as a skill' .claude_context.md
+  25:- A file under `.claude/skills/` is listed as a skill, but its body is a pointer — read `agentic/skills/<id>/SKILL.md` …
+  $ uv run python scripts/sync_agentic_adapters.py --check
+  [sync] OK — 74 artifacts, 4 surfaces, all current
+  $ uv run python scripts/validate_agentic_surface.py --strict
+  [agentic] OK — surface is coherent across every tool
+  $ ls services/demand-forecast-serving/.claude/skills/batch-inference/ ; head -3 services/demand-forecast-serving/.claude/skills/batch-inference/SKILL.md
+  SKILL.md
+  ---
+  name: batch-inference
+  ```
+
+- **Executed evidence from this Claude Code session**:
+  - The harness's skill list for this repository contains exactly the 22 names in `.claude/commands/` (`qa`, `tests`, `release`, …). Each has the description `<!-- generated by scripts/sync_agentic_adapters.py — do not edit -->`, because the pointer's first line is an HTML comment and it has no front-matter.
+  - It contains **none** of the 29 skill names. `enterprise-audit` was not invocable, and the prompt had anticipated exactly that.
+  - Claude Code discovers project skills at `.claude/skills/<name>/SKILL.md`, with `name`/`description` front-matter.
+- **Impact**:
+  - The skills plane doesn't exist for Claude, including the STOP-mode `secret-breach-response`, whose `mode:` lives only in the canonical front-matter.
+  - The four-surface parity claim (`AGENTS.md:400-403`: "a rule that binds under one tool binds under all of them"; ADR-005 "four-plane") is false for skills on this surface.
+  - `.claude_context.md` tells agents the opposite of the truth.
+  - `--check` and `--strict` verify only that pointer files exist and match the renderer, so the defect cannot turn them red.
+- **§6 classification**: a **discipline failure, not inherited debt**. The base template, as rendered in this repository at `services/demand-forecast-serving/.claude/skills/<name>/SKILL.md`, already uses the correct layout with front-matter. The port flattened it.
+- **Not verified**: whether `.cursor/skills/*.mdc` and `.codex/skills/*.md` have the same problem. Both are flat as well.
+- **Fix**:
+  - Render the Claude skills as `.claude/skills/<id>/SKILL.md` with `name:` and `description:` front-matter (description taken from the canonical `description`, plus its `mode`).
+  - Add a `description:` front-matter to the `.claude/commands/*.md` pointers.
+  - Add a V-check that fails when a surface's skill path doesn't match the tool's discovery layout.
+  - Correct `.claude_context.md:25`.
+  - Check the Cursor and Codex layouts against those tools' documentation before claiming parity for them.
+
+### [P2-1] #86's C2 extension: its new tests miss both mutations I chose, and #86's own defect can be re-introduced with C2 green
+
+- **Where**: `scripts/check_doc_coherence.py:85` (`_CODE_ROOTS`), `:319` (`check_namespaced(path, text)`); `tests/test_gate_scripts.py:270-311`.
+- **Commands**:
+
+  ```text
+  # M-C2a: _CODE_ROOTS = ("libs",)          — projects/ no longer scanned
+  # M-C2b: delete check_namespaced(path, text) in the code loop — namespaced refs in .py unchecked
+  $ uv run pytest -o addopts="" tests/test_gate_scripts.py      (both mutations applied)
+  49 passed, 1 skipped in 314.00s
+  # Re-introduce the defect #86 fixed: controller.py:360,396 store-ADR-009 → ADR-009; tools.py:37 store-ADR-006 → ADR-006;
+  # plus a probe .py under projects/ containing "(ADR-010)", "store-ADR-9", "Store-ADR-099"
+  $ uv run python scripts/check_doc_coherence.py | grep C2
+    ok  [C2] 260 markdown and 87 Python files scanned for dangling ADR references; 69 project-scope references resolved …
+  ```
+
+- **Why this matters**:
+  - Both code-side probes sit under `libs/`, and only a markdown probe exercises the namespaced path, so half of what #86 added is pinned by nothing.
+  - The existence-only limit is honestly stated in the CHANGELOG. What is new is that #87 adds ADR-010 here, so a bare `ADR-010` that means agent-local's *MCP/A2A interop rejected* now resolves silently where it used to dangle.
+  - `store-ADR-9` and `Store-ADR-099` are malformed and pass unseen: the regex needs three digits and a lowercase namespace, and the bare-ref lookbehind excludes both.
+- **Fix**:
+  - Add a code probe under `projects/` and a `store-ADR-099` probe in a `.py` file.
+  - Make C2 fail on any `(?i)[a-z]+-ADR-\d+` whose namespace is unknown, or which isn't exactly three digits, with an allowlist for English prefixes like `pre-` and `non-`.
+  - For the silent class: fail on a bare `ADR-NNN` inside `libs/llm-core` and `projects/store-assistant` unless it is on a short allowlist of platform ADRs cited there.
+
+### [P2-2] Nine agent-local citations are still bare in YAML and JSONL: seven silently wrong or dangling, and C2 cannot see them (cloud lead #86-1, confirmed and extended)
+
+- **Where**:
+  - `projects/store-assistant/src/store_assistant/config.yaml:11, 27, 37, 46, 79, 89, 92`
+  - `projects/store-assistant/src/store_assistant/evals/sets/11_injection.jsonl:7, 11`
+- **Command**:
+
+  ```text
+  $ git grep -nE '(^|[^A-Za-z0-9_/-])ADR-[0-9]{3}' -- projects/store-assistant ':!projects/store-assistant/docs/decisions' | grep -v store-ADR | grep -E 'yaml|jsonl'
+  …/config.yaml:11:# tools (ADR-006). Set to 2 only once real mutating backends + their evals exist.
+  …/config.yaml:27:# Tier topology (ADR-011). ONE committed config serves all three profiles; …
+  …/config.yaml:37:#               constraints are unavailable there — see ADR-011 Consequences.
+  …/config.yaml:46:    # ADR-012: where the weights are resident decides which budget they are
+  …/config.yaml:79:# resident-memory invariant (ADR-011).
+  …/config.yaml:89:  # Per-device budgets (ADR-012), measured on the reference workstation
+  …/config.yaml:92:  # the "Correction" section of ADR-012.
+  …/11_injection.jsonl:7: … the planner's closed tool-name enum (ADR-007) prevents this …
+  …/11_injection.jsonl:11: … the planner's closed enum (ADR-007) means a near-miss name never resolves …
+  $ ls docs/decisions | grep -E 'ADR-0(06|07|11|12)'
+  ADR-006-edge-protection.md
+  ADR-007-drift-detection-per-project-kind.md
+  ```
+
+- **Impact**:
+  - `ADR-006` resolves to *edge protection* (it means the tool capability contract), and `ADR-007` resolves to *drift detection* (it means structured tool calling).
+  - `ADR-011` and `ADR-012` resolve to nothing.
+  - C2's code scan is `rglob("*.py")` (`:309`) and its markdown scan is `*.md`, so neither file type is read.
+  - The CHANGELOG's "48 references … pointed at agent-local's ADRs" undercounts: there were at least 57, and the neighbouring `config.py` documenting the same config was qualified while this file was not.
+- **Fix**:
+  - Qualify all nine as `store-ADR-NNN`.
+  - Extend C2's code scan to `*.yaml`, `*.yml` and `*.jsonl` under `_CODE_ROOTS`.
+  - Correct the CHANGELOG count.
+
+### [P2-3] Exporter provenance: `--allow-dirty` writes a real export, and an uncommitted exporter is stamped with a clean commit. ADR-010 §5 and §7 and the CHANGELOG claim otherwise (cloud leads #87-1 and #87-2, both confirmed)
+
+- **Where**: `scripts/export_llm_core.py:177-186`, `:234`, `:240`, `:262-266`; `docs/decisions/ADR-010-agent-core-authority.md:88-96`; the CHANGELOG paragraph "Provenance without a timestamp".
+- **Commands**:
+
+  ```text
+  $ echo '# probe edit' >> libs/llm-core/src/llm_core/policy.py
+  $ uv run python scripts/export_llm_core.py --dest $S/dest --allow-dirty      # no --check
+  [export] wrote 12 module(s) and EXPORTED_FROM.json to …/dest/core (2 changed)
+  $ grep '"commit"' $S/dest/core/EXPORTED_FROM.json ; tail -1 $S/dest/core/policy.py
+    "commit": "6a4bfe2acf90f38b381400fc944c15173c63d2b9-dirty",
+  # probe edit
+  # --- exporter edited, llm-core clean:
+  $ uv run python scripts/export_llm_core.py --dest $S/dest
+  [export] wrote 12 module(s) … (13 changed)
+    "commit": "6a4bfe2acf90f38b381400fc944c15173c63d2b9",
+  # injected by an uncommitted exporter
+  $ git checkout -- scripts && uv run python scripts/export_llm_core.py --dest $S/dest --check
+  [export] DRIFT — 13 file(s) differ from an export of this commit: …        (same commit, two outputs)
+  ```
+
+  The very first export above ran from `6a4bfe2`, which is not on `main`, and exited 0.
+- **Impact**:
+  - Three documented claims are false: "Exports come from `main`" (§7), "The script refuses uncommitted source outright" (§7 and the CHANGELOG), and "The same commit exports byte-identical output" (§5).
+  - Output also depends on the destination's `__version__`.
+  - agent-local#1's `EXPORTED_FROM.json` names `b6a64c3`, which is not on `main`. The brief's item 7 acknowledges the squash orphaning.
+- **Fix**:
+  - Reject `--allow-dirty` unless `--check` is set.
+  - Include `scripts/export_llm_core.py` in the `git status --porcelain` pathspec.
+  - Refuse a write unless `git merge-base --is-ancestor HEAD origin/main`.
+  - Reword §5 as "same commit and same destination version".
+
+### [P2-4] The exporter's tests pin only the pure transforms: five mutations of mine survive, one of which ships an unimportable package
+
+- **Where**: `tests/test_export_llm_core.py` (17 tests); `scripts/export_llm_core.py:77-78, 181, 215, 246, 256`.
+- **Command**:
+
+  ```text
+  E1 drop re.MULTILINE from _IMPORT_FROM and _BARE_IMPORT   → 17 passed
+  E2 `if dirty and not allow_dirty:` → `if False:`          → 17 passed
+  E3 `if strays:` → `if False:`                             → 17 passed
+  E4 `--check`: `if drift:` → `if False:`                   → 17 passed
+  E5 provenance "files": {}                                  → 17 passed
+  # E1's consequence, executed:
+  $ grep -c 'from llm_core' $S/destE1/core/__init__.py
+  3
+  $ python -I -c "import sys; sys.path.insert(0,'.'); …block llm_core…; import core"
+  ModuleNotFoundError: llm_core
+  ```
+
+- **Impact**: every parametrised input is a single line starting at position 0, so the multiline behaviour that matters in `__init__.py:27-29` is never exercised. `build`, `source_commit`, `stray_modules` and `main` have no test at all, and provenance is the part ADR-010 rests on.
+- **Fix**: add an end-to-end test that runs `main()` against a `tmp_path` destination. It should cover:
+  - importing the exported `core` with `llm_core` blocked;
+  - `--check` OK, then DRIFT after a one-byte edit;
+  - a stray module refused;
+  - dirty source refused;
+  - the provenance hashes recomputed.
+
+### [P2-5] agent-local#1's drift test takes its verdict from the directory it validates: a hand edit to `policy.py` passes if the same commit also updates the hash (downstream, optional scope)
+
+- **Where**: agent-local `tests/test_core_is_exported.py` (PR #1 head `a5b1308`); `ADR-010-agent-core-authority.md:92-94` ("fails on a hand edit or a stray module").
+- **Command**, in `/tmp/qa4-r12-agent-local` on `pr1`:
+
+  ```text
+  baseline                                                          → 4 passed
+  append "ALLOW_EVERYTHING = True" to core/policy.py                → 1 failed, 3 passed
+  same edit + update files["policy.py"] in core/EXPORTED_FROM.json  → 4 passed
+  add core/backdoor.py + list it in EXPORTED_FROM.json              → 4 passed
+  ```
+
+- **Impact**: this is the skill's first-listed pattern, a gate supplied with its own verdict. The one file ADR-010 calls "a safety defect" if it drifts, the policy gate, can be changed downstream in a single commit with the guard green. `EXPORTED_FROM.json` itself is hashed by nothing.
+- **Fix**:
+  - Run ml-platform's `export_llm_core.py --check` against agent-local in a scheduled CI job, or in agent-local's CI against a pinned ml-platform checkout.
+  - Or sign the provenance.
+  - At minimum, reword ADR-010 §6 to "detects an edit that does not also update the manifest".
+
+### [P2-6] #75's workflow-bounds negative control recomputes the selection instead of calling the guard, so it passes with the guard broken
+
+- **Where**: `tests/test_workflow_bounds.py:50` (contract) and `:62-76` (negative control).
+- **Command**:
+
+  ```text
+  # W1: line 50 → spec.get("timeout-minutes", 60)  AND  append an unbounded job (sleep 99999) to docs-quality.yml
+  $ uv run pytest -o addopts="" tests/test_workflow_bounds.py
+  15 passed in 0.38s
+  # W2: docs-quality.yml link-check `timeout-minutes: true`
+  14 passed in 0.34s                     (isinstance(True, int) is True, and 0 < True <= 360)
+  ```
+
+- **Impact**: this is the anti-pattern the skill names ("a regression test that recomputed a selection instead of calling the production code"), and `monkeypatch.setattr("tests.test_workflow_bounds.WORKFLOWS", …, raising=False)` on line 71 is a no-op. An unbounded job can land with the whole file green once the contract assertion is weakened.
+- **Fix**:
+  - Move the assertion into a function, `offenders(workflows_dir) -> list[str]`, that both the contract test and the negative control call.
+  - Reject `bool` explicitly: `type(timeout) is int`.
+
+### [P2-7] The canonical rule `agentic/rules/23-doc-coherence.md` describes a different gate: in it, C7 is the private-reference guard
+
+- **Where**: `agentic/rules/23-doc-coherence.md:104-109` (rendered to all four surfaces; last touched by #84).
+- **Command**:
+
+  ```text
+  $ sed -n 104,109p agentic/rules/23-doc-coherence.md
+  The gate runs seven checks: version SSoT (C1), `llms.txt` version (C2),
+  anti-pattern count (C3), agentic surface counts (C4), ADR traceability /
+  no-silent-gaps (C5), release note existence (C6), documentation language +
+  private-reference guard (C7 — `docs/` and root docs must be English-only …
+  $ uv run python scripts/check_doc_coherence.py | grep -oE '\[C[0-9]\]' | sort -u | wc -l
+  9
+  ```
+
+- **Impact**:
+  - The gate has nine checks, and here C1 is ADR integrity, C2 dangling ADRs and C7 audit freshness.
+  - `agentic/workflows/doc-coherence.md:28-30` already fixed this exact error ("Same identifiers, different meanings, which is worse than no list"), but the rule that binds on every surface was not fixed.
+  - An agent reading "FAIL [C7]" through this rule would look for a private-name leak instead of an overdue audit.
+- **Fix**: replace lines 104–109 with the C1–C9 list from the workflow (or point to it), and add the rule to what C5 or a test cross-checks.
+
+### [P3-1] The export boundary test recognises one way of naming a host file (brief #6, cloud lead #87-3, both confirmed)
+
+- **Where**: `tests/test_export_llm_core.py:92`.
+- **Command** (each line appended to `llm_core/tools.py`, then reverted):
+
+  ```text
+  [1 passed]  <= DOC = Path("docs") / "ADOPTION.md"
+  [1 passed]  <= DOC = "docs" + "/ADOPTION.md"
+  [1 passed]  <= DOC = f"{ROOT}/docs/ADOPTION.md"
+  [1 passed]  <= DOC = "QUICK_START.md"
+  [1 passed]  <= # see `docs/ADOPTION.md#give-the-memory-back`
+  [1 failed]  <= DOC = "docs/ADOPTION.md"
+  ```
+
+- **Fix**: add a backtick to the quote class. Better, run the export and check that every `*.md`, `docs` path component and `Path(...)` string literal in the output resolves inside the destination checkout.
+
+### [P3-2] The link check can't see anchors, a real dead anchor exists, and the workflow promises a scheduled sweep that doesn't exist
+
+- **Where**: `.github/workflows/docs-quality.yml:8-14, 49-53`; `RUNBOOK.md:95`.
+- **Command**:
+
+  ```text
+  # mutation B: agentic/rules/14-github-actions.md:8 → …ADR-003-service-template-consumption.md#no-such-heading
+  $ find agentic -name '*.md' -exec markdown-link-check '{}' --config .github/markdown-link-check.json -q ';'
+  GREEN (74 files read)
+  $ grep -n 'open-findings-from-the-parity' RUNBOOK.md ; grep -n 'Findings from the parity work' docs/architecture/technical-plan.md
+  95:…(docs/architecture/technical-plan.md#open-findings-from-the-parity-work--measured-not-yet-fixed).
+  356:### Findings from the parity work
+  $ grep -n 'schedule\|cron' .github/workflows/docs-quality.yml
+  (no output)       — while line 52 reads "The scheduled run below is the one that sweeps everything."
+  ```
+
+- **Impact**:
+  - The sweep runs only on a push to `main` that changes a `*.md` file, so external link rot is never swept on its own schedule.
+  - Quiet mode writes the per-file `FILE:` lines to `error.txt`, which is printed only on failure. The brief's item 1 is therefore right that a green log shows no count, though the files are read.
+- **Fix**: add `schedule:` (weekly) and `workflow_dispatch`, add an anchor check (a newer `markdown-link-check`, or a small Python pass in C-checks), and fix `RUNBOOK.md:95`.
+
+### [P3-3] #60: the tests pin `user_agent()` but not that the request sends it
+
+- **Where**: `projects/rag-assistant/src/rag_assistant/ingest.py:173`; `projects/rag-assistant/tests/test_ingest_contact.py`.
+- **Command**: `headers={"User-Agent": contact}` → `{"User-Agent": "python-urllib"}`, then run `pytest projects/rag-assistant/tests` → `36 passed, 1 skipped`.
+- **Fix**: add a test that monkeypatches `urllib.request.urlopen`, captures the `Request`, and asserts `get_header("User-agent") == os.environ[...]`.
+
+### [P3-4] ADR-010's "9 commits since the migration" has no recorded method and counts commits from before the migration
+
+- **Where**: `docs/decisions/ADR-010-agent-core-authority.md:23`.
+- **Command**:
+
+  ```text
+  $ git log --format='%h %ci %s' 8d9c302 -- libs/llm-core/src/llm_core/{__init__,agent,…,tools}.py
+  7dfec65 2026-09-22 … (#73)
+  01e122d 2026-09-15 … (#58)
+  c7131a1 2026-08-29 feat(phase-3): the agent core lands … (#47)
+  5c02411 2026-08-19 …
+  f6defbd 2026-08-05 feat: found ml-platform …
+  ```
+
+- **Impact**: 9 is reproduced only by `--since=2026-08-05 -- libs/llm-core/src/llm_core`. That counts the founding commit and five commits made before the agent core landed (`c7131a1`, 2026-08-29), mostly to the retrieval-evaluation modules that are not exported. Commits to the twelve core modules since the core landed: **2**. The conclusion (divergence) still holds on the line counts and the 1-of-12 identity.
+- **Fix**: state the command next to the number, or replace it with "2 commits to the exported modules since `c7131a1`".
+
+### [P3-5] The audit brief still carries stale facts, and C2's descriptions overstate it
+
+- **Where**: `docs/governance/audit-brief.md:139`, `:224`; `RUNBOOK.md:200`.
+- **Command**:
+
+  ```text
+  $ ls projects ; grep -n '2 projects' docs/governance/audit-brief.md
+  README.md  demand-forecast  rag-assistant  store-assistant
+  139:- 2 projects: `demand-forecast` and `rag-assistant`
+  $ grep -n 'gate inventory (28)' docs/governance/audit-brief.md ; uv run python scripts/check_doc_coherence.py | grep C4
+  224:- The gate inventory (28) is self-declared; …
+    ok  [C4] 38 gates declared with commands that resolve
+  $ sed -n 200p RUNBOOK.md
+  | C2 | No document cites an ADR number that does not exist | …
+  ```
+
+- **Impact**:
+  - The brief tells auditors not to trust its numbers, but it still states two wrong ones.
+  - RUNBOOK's C2 row is false for YAML/JSONL (P2-2) and for unknown or malformed namespaces (P2-1).
+  - The "misspelt namespace passes" trade-off (brief #5) is stated only in the CHANGELOG, not in RUNBOOK or in `agentic/workflows/doc-coherence.md:33`.
+- **Fix**: correct §4 to three projects, delete the "(28)", and state C2's scope and the namespace trade-off wherever C2 is described.
+
+### [P3-6] C2 reads each markdown file twice (cloud lead #86-2, confirmed by reading only)
+
+- **Where**: `scripts/check_doc_coherence.py:276` and `:300` (`_read(path)` twice, uncached, at `:99-100`).
+- **Fix**: read once into `text`, as the code loop does at `:314`. This was not measured, so no timing is claimed.
+
+### Disposition of the cloud-review leads
+
+| Lead | Verdict | Where |
+| --- | --- | --- |
+| #86-1: YAML not scanned | Confirmed and extended (9 citations, including JSONL) | P2-2 |
+| #86-2: double read | Confirmed by reading | P3-6 |
+| #87-1: `--allow-dirty` writes | Confirmed by execution | P2-3 |
+| #87-2: exporter not in the dirty check | Confirmed by execution (same commit, two outputs) | P2-3 |
+| #87-3: host-file regex misses backticks | Confirmed, 5 of 6 forms pass | P3-1 |
+
+### The brief's eight weakest points, answered
+
+| # | Claim to attack | Result |
+| --- | --- | --- |
+| 1 | The link check examines nothing | **Refuted.** It reads the files and fails on dead file links. It does **not** check anchors, and it has no scheduled sweep (P3-2) |
+| 2 | The aggregator has never failed | **Refuted.** Red on #86 and #87 with the reason named. The logic covers `cancelled` and `skipped` |
+| 3 | The classification of the 48 | **The 58 qualified occurrences are correct.** Nine unclassified citations in YAML/JSONL are wrong or dangling (P2-2) |
+| 4 | The exporter rewrites code | **Refuted.** The ASTs are identical apart from strings. Transform tests fail five of my mutations (P2-4) |
+| 5 | C2 skips unknown namespaces | **Confirmed**, plus malformed ones (`store-ADR-9`, `Store-ADR-099`). Stated only in the CHANGELOG (P2-1, P3-5) |
+| 6 | The boundary test matches one pattern | **Confirmed** (P3-1) |
+| 7 | Provenance names a commit a squash will orphan | **Confirmed**, and ADR-010 claims more than this in three places (P2-3, P2-5) |
+| 8 | 47 → 48 when C7 passes | **Confirmed**, by simulation |
+
+**§6 classification**: P0-1 is a discipline failure: the base template solved it and the port did not follow it. P2-1 to P2-6 are new code whose negative controls were author-chosen, which is exactly the hypothesis this round was asked to test, and it held for six of the eight in-scope controls I attacked. The two that held are #83's aggregator and #84's link check for dead files.
+
+---
+
+## 4. Verdict
+
+What the scoped work claims about what it *changed* is true (the citations it qualified, the exporter's output, the aggregator and the link check all do what they say). What it claims about what its *guards* prevent is not: six of the eight negative controls I attacked passed a mutation they should have caught, and the Claude skills plane the parity claim rests on does not load at all.
+
+**Tally**: 1 P0, 7 P2, 6 P3.
+
+---
+
+## 5. For the owner, after reviewing: do not run from the auditing session
+
+The audited tree `6a4bfe2` is `feat/export-agent-core`, and it is **not on `main`**. It becomes unreachable when #86 and #87 are squash-merged. Two consequences:
+
+- **On #87's branch**: a marker naming `6a4bfe2` is an ancestor of the branch, so C7 passes there.
+- **On #86's own branch (`3214d62`)**: `6a4bfe2` is not an ancestor, so C7 will refuse that marker if #86 lands separately. Whether to land #86 and #87 as one squash or as two is the owner's call.
+
+**1. Record the round**, naming the tree actually read:
+
+```bash
+uv run python scripts/audit_record.py --action independent-audit --target ml-platform --mode CONSULT --outcome "Round 12 against tree 6a4bfe2 (feat/export-agent-core: main 8d9c302 + #86 3214d62 + #87 b6a64c3/6a4bfe2). 1 P0, 7 P2, 6 P3. P0: Claude registers none of the 29 skills - .claude/skills/<id>.md is flat, Claude discovers .claude/skills/<id>/SKILL.md; sync --check and validate --strict stay green; base template already uses the right layout. P2: C2 extension's tests pass with projects/ unscanned and namespaced-in-code unchecked, and #86's defect re-introduced passes C2; 9 agent-local citations still bare in config.yaml and 11_injection.jsonl (ADR-006/007 mis-resolve, 011/012 dangle), unscanned; exporter --allow-dirty writes -dirty provenance and an uncommitted exporter is stamped clean, contradicting ADR-010 s5/s7; exporter tests survive 5 mutations incl. one shipping an unimportable core; agent-local#1 drift test passes a policy.py edit when the manifest hash is edited with it; test_workflow_bounds negative control recomputes instead of calling the guard; rules/23-doc-coherence.md describes a different gate (C7 = private guard). P3: boundary test catches 1 of 6 host-file forms; link check has no anchor check, a dead anchor at RUNBOOK.md:95, and no scheduled sweep despite its comment; #60 header not asserted; ADR-010 '9 commits' has no method (2 to the exported modules since c7131a1); brief states 2 projects and 28 gates; C2 double read. Verified: suite 1342 passed/54 skipped; C7 the only coherence failure; aggregator red on #86/#87; link check reads files and fails a dead file link; 58 store-ADR citations correct; exported ASTs identical modulo strings; status returns to 48 when C7 passes. Cloud reviews of #86/#87 treated as leads: all 5 confirmed." --evidence "Report: ~/qa4-round-12-report.md. Worktree /tmp/qa4-r12 at 6a4bfe2 after uv sync --all-packages --all-extras --locked. pytest -o addopts='' (1342 passed, 54 skipped); check_doc_coherence.py; sync_agentic_adapters.py --check; validate_agentic_surface.py --strict; check_implementation_status.py --check; check_technology_inventory.py --check; uv lock --check; mutations M-C2a/M-C2b + tests/test_gate_scripts.py; E1-E5 + tests/test_export_llm_core.py; export_llm_core.py --dest <scratch> [--allow-dirty|--check]; AST comparison of export vs source; markdown-link-check@3.8.7 with CI's find command; W1/W2 + tests/test_workflow_bounds.py; agent-local pr1 tests/test_core_is_exported.py with manifest edit; gh pr checks 86/87; gh run view 35918800302 and 35895553399."
+```
+
+**2. Add the marker** to `AGENTS.md`, on the branch that contains the audited tree, in a commit made after `6a4bfe2`:
+
+```text
+Last independent audit: 2026-09-23 (6a4bfe2)
+```
+
+**3. After the squash merge**, apply the AGENTS.md squash rule, as rounds five, eight, nine and eleven did:
+
+- Re-point the marker at the squash commit that actually landed on `main`, for example `Last independent audit: 2026-09-23 (<squash-sha>)`.
+- Record that re-point as its own `audit_record.py --action independent-audit` entry beginning "Re-point, not a new round and not an audit", naming `6a4bfe2` as the tree read, so the provenance survives in `ops/audit.jsonl`.
+
+**4. Regenerate the status document** once C7 passes. The committed `implementation-status.md` says 47 done, and with C7 green the generator produces 48, so `check_implementation_status.py --check` will fail until it is rewritten with `--write`.

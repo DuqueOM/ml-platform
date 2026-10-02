@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**55 of 121 committed technologies implemented (45%)** — plus 15 studied and 10 rejected, which are decisions rather than gaps.
+**54 of 121 committed technologies implemented (44%)** — plus 15 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 | :-: | --- |
@@ -54,12 +54,12 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | 📓 | `docker-compose` | studied | kind used instead: the local stack must exercise Kubernetes manifests, which compose cannot. |
 | ✅ | `devcontainers` | demonstrated | |
 
-## CI/CD — 9 built, 0 pending
+## CI/CD — 8 built, 1 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
 | ✅ | `github-actions` | core | |
-| ✅ | `codecov` | core | |
+| ⬜ | `codecov` | core | Configured but enforcing nothing: every upload is rejected for want of credentials (QA-4 R15, R15-5). L1/L2/P12/P17 are enforced by scripts/check_coverage_floors.py, not by this. |
 | ✅ | `coverage-gate` | core | |
 | ✅ | `release-on-tag` | core | |
 | ✅ | `openssf-scorecard` | core | |

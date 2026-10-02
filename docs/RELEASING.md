@@ -322,10 +322,11 @@ three steps apply here. Steps 4 through 12 build and push images to two cloud
 registries, `kubectl apply -k k8s/overlays/...`, smoke-test endpoints and roll
 back — describing a deployment that has never happened, against a path
 (`k8s/overlays/`) that does not exist in this repository, which uses
-`platform/kubernetes/overlays/`. Step 2's `pytest --cov=src --cov-fail-under=90`
-names a `src/` directory that does not exist at the root; the real gates are
-the floors in `scripts/check_coverage_floors.py`, applied to one coverage run
-over `libs/`, `scripts/`, `projects/` and `orchestration/` (quality gates L1,
+`platform/kubernetes/overlays/`. Step 2 used to be `pytest --cov=src
+--cov-fail-under=90`, which measured a `src/` directory that does not exist at
+the root and so failed at 0% on every run (QA-4 round fifteen); it is
+`make verify` now, which runs every CI gate and the coverage floors in
+`scripts/check_coverage_floors.py` over one measured run (quality gates L1,
 L2, P12 and P17).
 
 Treat steps 1 through 3 as current and the rest as inherited text awaiting the

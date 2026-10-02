@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import functools
 import hashlib
+import html
 import itertools
 import json
 import re
@@ -551,6 +552,8 @@ def check_gate_traceability() -> None:
         for referenced in script_ref.findall(row):
             if not (REPO_ROOT / referenced).is_file():
                 fail("C4", f"gate {gate_id} runs {referenced}, which does not exist")
+        for measured in _measured_paths(row):
+            fail("C4", f"gate {gate_id} measures {measured}, which does not exist — it can only report 0%")
 
         # A `pytest -k` selector that matches NO test. The sharpest form of the
         # defect C4 exists for, because it exits 0: pytest DESELECTS rather
@@ -603,7 +606,38 @@ def check_gate_traceability() -> None:
                     f"the row PENDING — a gate presenting itself as enforced while nothing can run it "
                     f"is the decoration ADR-005 rule K names",
                 )
+    # The workflows an agent follows run commands too, and one measured a path
+    # that does not exist: the release workflow's `pytest --cov=src
+    # --cov-fail-under=90` failed at 0% on every run, because there is no `src/`
+    # at the root (QA-4 round fifteen). C4 resolved script paths only. A line
+    # that first changes directory is skipped: its paths are relative to a
+    # directory this check cannot know.
+    for workflow in sorted((REPO_ROOT / "agentic" / "workflows").glob("*.md")):
+        for block in _code_blocks(_read(workflow)):
+            for line in block.splitlines():
+                if re.search(r"(?:^|[;&|]\s*)cd\s", line):
+                    continue
+                for measured in _measured_paths(line):
+                    fail(
+                        "C4",
+                        f"{workflow.relative_to(REPO_ROOT)} measures {measured}, which does not exist — the step "
+                        f"can only fail at 0%",
+                    )
     ok("C4", f"{len(rows)} gates declared with commands that resolve")
+
+
+#: `--cov=PATH` and `--source=A,B`: the paths a coverage command measures.
+_MEASURED = re.compile(r"--(?:cov|source)=([^\s`'\"|;&]+)")
+
+
+def _measured_paths(text: str) -> list[str]:
+    """Paths a coverage command names that do not exist under the repository root."""
+    missing = []
+    for value in _MEASURED.findall(text):
+        for part in value.split(","):
+            if part and not part.startswith(("$", "<", "{")) and not (REPO_ROOT / part).exists():
+                missing.append(f"`{part}`")
+    return missing
 
 
 def check_agentic_surface() -> None:
@@ -797,6 +831,23 @@ def check_language_and_privacy() -> None:
         r"(?:github\.com[/:]|api\.github\.com/repos/|raw\.githubusercontent\.com/)([A-Za-z0-9_-]+)/([A-Za-z0-9_.-]+)",
         re.IGNORECASE,
     )
+    # A repository also names itself WITHOUT a host, in forms GitHub and its
+    # tools resolve: an autolink (`OWNER/repo#12`), an Actions reference
+    # (`uses: OWNER/repo@sha`), copier's shorthand (`gh:OWNER/repo`), a gh CLI
+    # argument (`gh repo clone OWNER/repo`, `gh api repos/OWNER/repo`), and a
+    # Pages site (`OWNER.github.io/repo`). QA-4 round fifteen published all six
+    # past the link pattern above, two of them forms this repository's own
+    # tooling uses. Not after a `/` (other than gh's `repos/`): there the
+    # account is a path segment — `/home/<user>/projects` is a directory, and
+    # a URL under another host is the link pattern's question, not this one's.
+    # Matched for the private account ONLY: a bare `owner/name`
+    # token for anyone else is a path as often as a repository, and it cannot
+    # disclose anything about this author either way.
+    account = re.escape(PRIVATE_ACCOUNT)
+    bare_reference = re.compile(
+        rf"(?:(?<=repos/)|(?<![\w./-]))({account})/([A-Za-z0-9_.-]+)|(?<![\w.-])({account})\.github\.io/([A-Za-z0-9_.-]+)",
+        re.IGNORECASE,
+    )
     scanned = 0
 
     # Snapshotted BEFORE either scan runs. Taking it after
@@ -861,8 +912,29 @@ def check_language_and_privacy() -> None:
             "codespaces",
             "sponsors",
         }
-        for owner, repo in repo_link.findall(_read_lossy(path)):
-            repo = repo.removesuffix(".git")
+        text = _read_lossy(path)
+        # (owner, repo, elided): `elided` when the name runs straight into an
+        # ellipsis — a quotation cut short, as audit reports do. An elided name
+        # passes only as the prefix of a PUBLIC repository; anything else still
+        # fails, so truncating a private name does not hide it.
+        references = [
+            (match.group(1), match.group(2), text[match.end() : match.end() + 1] == "\u2026")
+            for match in repo_link.finditer(text)
+        ] + [
+            (
+                match.group(1) or match.group(3),
+                match.group(2) or match.group(4),
+                text[match.end() : match.end() + 1] == "\u2026",
+            )
+            for match in bare_reference.finditer(text)
+        ]
+        for owner, repo, elided in references:
+            repo = repo.removesuffix(".git").rstrip(".")
+            if not repo:
+                # `OWNER/...` in prose names no repository.
+                continue
+            if elided and any(name.lower().startswith(repo.lower()) for name in public_repos):
+                continue
             if owner in placeholders or repo in placeholders or owner.lower() in reserved:
                 continue
             # The OWNER is what makes a link a privacy question. Widening this
@@ -891,8 +963,20 @@ def check_language_and_privacy() -> None:
         ok("C6", f"{scanned} files scanned for non-public repository links and denylisted names")
 
 
-_COPIER_COMMAND = re.compile(r"copier\s+(?:copy|update|recopy)\b(.*)")
-_FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+#: Any indentation: a fence inside a list item sits at the item's content
+#: indent, which is past the three spaces a top-level fence allows, and GitHub
+#: renders it as code whether or not a blank line precedes it (QA-4 round
+#: fifteen). `_COPIER_COMMAND`, which stood here, was referenced nowhere.
+_FENCE_OPEN = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
+#: A blockquote marker, possibly nested. Stripped before blocks are found, so a
+#: fence inside a quote is still a fence.
+_BLOCKQUOTE = re.compile(r"^(?:\s{0,3}>\s?)+")
+#: An HTML `<pre>` block: GitHub renders it as code, and it is as pasteable.
+_PRE_BLOCK = re.compile(r"<pre\b[^>]*>(.*?)</pre>", re.IGNORECASE | re.DOTALL)
+#: What `--vcs-ref` must name for a REMOTE source to be pinned: a version tag or
+#: a commit. `HEAD` or a branch name moves, which is the defect C9 exists for.
+_PLACEHOLDER_REF = re.compile(r"^(?:<[^>]+>|\$\{?\w+\}?|\$\(\w+\))$")
+_VERSION_REF = re.compile(r"^(?:v?\d+(?:\.\d+){0,3}(?:[.+-][0-9A-Za-z.]+)?|[0-9a-f]{7,40})$")
 #: copier options that take a value, so the value is not mistaken for the source.
 _COPIER_VALUED = frozenset(
     {"-d", "--data", "-a", "--answers-file", "-r", "--vcs-ref", "-x", "--exclude", "-s", "--skip", "--data-file"}
@@ -911,17 +995,18 @@ def _code_blocks(text: str) -> list[str]:
     (```[a-z]*) could not see: an info string such as `shell-session`, which
     desynchronised the fence pairing, a `~~~` fence, and an indented block.
     """
-    blocks: list[str] = []
-    lines = text.splitlines()
+    blocks: list[str] = [html.unescape(re.sub(r"<[^>]+>", "", match.group(1))) for match in _PRE_BLOCK.finditer(text)]
+    lines = [_BLOCKQUOTE.sub("", line) for line in text.splitlines()]
     i, previous_blank = 0, True
     while i < len(lines):
         opened = _FENCE_OPEN.match(lines[i])
         if opened:
             marker = opened.group(1)
             body: list[str] = []
+            indent = len(lines[i]) - len(lines[i].lstrip())
             i += 1
-            while i < len(lines) and not re.match(rf"^ {{0,3}}{re.escape(marker[0])}{{{len(marker)},}}\s*$", lines[i]):
-                body.append(lines[i])
+            while i < len(lines) and not re.match(rf"^\s*{re.escape(marker[0])}{{{len(marker)},}}\s*$", lines[i]):
+                body.append(lines[i][indent:] if lines[i][:indent].isspace() else lines[i].lstrip())
                 i += 1
             blocks.append("\n".join(body))
             i += 1
@@ -956,9 +1041,14 @@ def _copier_invocations(line: str) -> list[list[str]]:
     except ValueError:  # an unbalanced quote: fall back to whitespace
         tokens = line.split()
     found: list[list[str]] = []
+    cwd: str | None = None
     for index, token in enumerate(tokens):
+        if token == "cd" and index + 1 < len(tokens):
+            cwd = tokens[index + 1]
+        # `copier@9.4.1` is how `uvx` pins the tool itself; the token was
+        # compared with the bare name, so `uvx copier@x copy …` was invisible.
         if (
-            token.rsplit("/", 1)[-1] == "copier"
+            token.rsplit("/", 1)[-1].split("@", 1)[0] == "copier"
             and index + 1 < len(tokens)
             and tokens[index + 1] in {"copy", "update", "recopy"}
         ):
@@ -967,7 +1057,10 @@ def _copier_invocations(line: str) -> list[list[str]]:
                 if arg in {"&&", "||", ";", "|", "&"}:
                     break
                 args.append(arg)
-            found.append(args)
+            # Where the command runs, recorded as a pseudo-argument after the
+            # real ones: `update` names no source, and an in-repo project under
+            # `projects/` takes its template from this working tree.
+            found.append([*args, f"{_CWD_MARK}{cwd or ''}"])
     return found
 
 
@@ -988,8 +1081,35 @@ def _runnable_copier_commands(text: str) -> list[list[str]]:
     return commands
 
 
+_CWD_MARK = "\0cwd="
+
+
+def _split_cwd(args: list[str]) -> tuple[list[str], str]:
+    if args and args[-1].startswith(_CWD_MARK):
+        return args[:-1], args[-1][len(_CWD_MARK) :]
+    return args, ""
+
+
 def _is_pinned(args: list[str]) -> bool:
-    return any(a in {"--vcs-ref", "-r"} or a.startswith("--vcs-ref=") for a in args)
+    """`--vcs-ref` names a version or a commit — not merely that the flag is present.
+
+    `--vcs-ref HEAD` passed when presence was the test, and for a remote source
+    HEAD is the default branch's tip: it moves, which is what an unpinned
+    command does (QA-4 round fifteen). A local source never reaches here.
+    """
+    args, _ = _split_cwd(args)
+    for index, arg in enumerate(args):
+        if arg.startswith("--vcs-ref="):
+            value = arg.split("=", 1)[1] or (args[index + 1] if index + 1 < len(args) else "")
+        elif arg in {"--vcs-ref", "-r"}:
+            value = args[index + 1] if index + 1 < len(args) else ""
+        else:
+            continue
+        # A placeholder — `<release-tag>`, which the tokeniser splits at `<`,
+        # or a shell variable — cannot be run as written: the reader must
+        # supply a version, so it documents a pin rather than omitting one.
+        return value == "<" or bool(_VERSION_REF.match(value) or _PLACEHOLDER_REF.match(value))
+    return False
 
 
 def _source_is_local(args: list[str]) -> bool:
@@ -998,8 +1118,11 @@ def _source_is_local(args: list[str]) -> bool:
     `update` has no source argument — it reads the one recorded in the answers
     file, which may be remote — so it always needs a pin.
     """
+    args, cwd = _split_cwd(args)
     if args[0] == "update":
-        return False
+        # Run inside an in-repo project, its answers file records this
+        # repository's own template; anywhere else the source is unknown here.
+        return cwd.startswith("projects/")
     positional: list[str] = []
     skip_next = False
     for arg in args[1:]:
@@ -1041,7 +1164,7 @@ def check_copier_commands_are_pinned() -> None:
         if not _is_scannable(path):
             continue
         for args in _runnable_copier_commands(_read(path)):
-            command = "copier " + " ".join(args)
+            command = "copier " + " ".join(_split_cwd(args)[0])
             if _source_is_local(args):
                 continue
             checked += 1
@@ -1432,13 +1555,34 @@ _HTML_ANCHOR = re.compile(r"<a\s+[^>]*(?:id|name)=\"([^\"]+)\"", re.IGNORECASE)
 def heading_slug(text: str) -> str:
     """The anchor GitHub gives a heading: its rendered text, lower-cased.
 
-    Rendered, so link targets, backticks, tags and emphasis markers go first.
-    Then everything but letters, digits, spaces, hyphens and underscores is
-    dropped and spaces become hyphens — which is why " — " yields `--`.
+    Rendered, so the markdown goes first. Then everything but letters, digits,
+    spaces, hyphens and underscores is dropped and spaces become hyphens —
+    which is why " — " yields `--`.
+
+    "Rendered" has to mean what GitHub renders, and five shapes did not (QA-4
+    round fifteen, checked against `gh api markdown`):
+
+    - a code span's text is literal, `<` and all — `` `<pre>` handling ``
+      renders "<pre> handling", so `pre-handling`, not a stripped tag;
+    - an image contributes nothing: its alt text is an attribute, not text;
+    - an HTML entity renders as its character — `&amp;` is "&", then dropped;
+    - a backslash escape renders the character it escapes, so `\\_private`
+      keeps its underscore instead of losing it as an emphasis marker;
+    - a link contributes its text.
     """
-    text = re.sub(r"!?\[([^\]]*)\]\([^)]*\)", r"\1", text)
-    text = re.sub(r"<[^>]+>", "", text.replace("`", ""))
-    text = re.sub(r"[*~]|(?<!\w)_+|_+(?!\w)", "", text).strip().lower()
+    kept: list[str] = []
+
+    def keep(literal: str) -> str:
+        kept.append(literal)
+        return f"\0{len(kept) - 1}\0"
+
+    text = re.sub(r"`+([^`]+?)`+", lambda match: keep(match.group(1)), text)
+    text = re.sub(r"\\([!-/:-@\[-`{-~])", lambda match: keep(match.group(1)), text)
+    text = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", text)
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    text = html.unescape(re.sub(r"<[^>]+>", "", text))
+    text = re.sub(r"[*~]|(?<!\w)_+|_+(?!\w)", "", text)
+    text = re.sub(r"\0(\d+)\0", lambda match: kept[int(match.group(1))], text).strip().lower()
     return re.sub(r"[^\w\- ]", "", text).replace(" ", "-")
 
 

@@ -430,8 +430,8 @@ mutations:
 - id: R14-C9-fence-needs-language
   origin: QA-4 round 14, auditor
   file: scripts/check_doc_coherence.py
-  old: '_FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")'
-  new: '_FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})([a-z]+)$")'
+  old: '_FENCE_OPEN = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")'
+  new: '_FENCE_OPEN = re.compile(r"^\s*(`{3,}|~{3,})([a-z]+)$")'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c9_sees_every"
   expect: killed
@@ -677,10 +677,10 @@ mutations:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
   expect: killed
 - id: CF3
-  origin: W-5 coverage floors, author
+  origin: W-5 coverage floors, author — re-anchored in round fifteen, when the exemption also reads the AST
   file: scripts/check_coverage_floors.py
-  old: '                if counts.statements > EXEMPT_MAX_STATEMENTS:'
-  new: '                if False:'
+  old: '                if counts.statements > EXEMPT_MAX_STATEMENTS or implementation:'
+  new: '                if implementation:'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
   expect: killed
@@ -811,4 +811,156 @@ mutations:
   new: ''
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_scope.py
+  expect: killed
+- id: R15-TH1
+  origin: QA-4 round fifteen remediation
+  file: scripts/check_thresholds.py
+  old: '            same_name = defined(threshold.name)'
+  new: '            same_name = None'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
+  expect: killed
+- id: R15-TH2
+  origin: QA-4 round fifteen remediation
+  file: scripts/check_thresholds.py
+  old: '        if old.name not in claimed:'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
+  expect: killed
+- id: R15-TH3
+  origin: QA-4 round fifteen remediation
+  file: scripts/check_thresholds.py
+  old: '                    previous = value * factor if value is not None else None'
+  new: '                    previous = value'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
+  expect: killed
+- id: R15-CAL1
+  origin: QA-4 round fifteen remediation
+  file: projects/demand-forecast/src/demand_forecast/train.py
+  old: '        return deviation <= tolerance or math.isclose(deviation, tolerance, rel_tol=0.0, abs_tol=1e-12)'
+  new: '        return deviation <= tolerance'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_training.py
+  expect: killed
+- id: R15-DAG4
+  origin: QA-4 round fifteen remediation
+  file: orchestration/dags/demand_forecast_training.py
+  old: '        report = evaluate(read_demand())'
+  new: '        report = evaluate(read_demand(), n_folds=3)'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py
+  expect: killed
+- id: R15-KFP4
+  origin: QA-4 round fifteen remediation
+  file: orchestration/pipelines/demand_forecast_pipeline.py
+  old: '    n_folds: int = 3,'
+  new: '    n_folds: int = 1,'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_pipeline_components.py
+  expect: killed
+- id: R15-C6a
+  origin: QA-4 round fifteen remediation
+  file: scripts/check_doc_coherence.py
+  old: '            for match in bare_reference.finditer(text)'
+  new: '            for match in []'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c6_reads
+  expect: killed
+- id: R15-C6b
+  origin: QA-4 round fifteen remediation
+  file: scripts/check_doc_coherence.py
+  old: '            if elided and any(name.lower().startswith(repo.lower()) for name in public_repos):'
+  new: '            if elided:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c6_reads
+  expect: killed
+- id: R15-C9a
+  origin: QA-4 round fifteen remediation
+  file: scripts/check_doc_coherence.py
+  old: '            token.rsplit("/", 1)[-1].split("@", 1)[0] == "copier"'
+  new: '            token.rsplit("/", 1)[-1] == "copier"'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c9_sees_an
+  expect: killed
+- id: R15-C9b
+  origin: QA-4 round fifteen remediation
+  file: scripts/check_doc_coherence.py
+  old: '    lines = [_BLOCKQUOTE.sub("", line) for line in text.splitlines()]'
+  new: '    lines = text.splitlines()'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c9_sees_an
+  expect: killed
+- id: R15-C9c
+  origin: QA-4 round fifteen remediation
+  file: scripts/check_doc_coherence.py
+  old: '        return value == "<" or bool(_VERSION_REF.match(value) or _PLACEHOLDER_REF.match(value))'
+  new: '        return True'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c9_sees_an
+  expect: killed
+- id: R15-C9d
+  origin: QA-4 round fifteen remediation
+  file: scripts/check_doc_coherence.py
+  old: '    blocks: list[str] = [html.unescape(re.sub(r"<[^>]+>", "", match.group(1))) for match in _PRE_BLOCK.finditer(text)]'
+  new: '    blocks: list[str] = []'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c9_sees_an
+  expect: killed
+- id: R15-C10
+  origin: QA-4 round fifteen remediation
+  file: scripts/check_doc_coherence.py
+  old: '    text = re.sub(r"`+([^`]+?)`+", lambda match: keep(match.group(1)), text)'
+  new: '    text = text.replace("`", "")'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c10_slugs
+  expect: killed
+- id: R15-C4
+  origin: QA-4 round fifteen remediation
+  file: scripts/check_doc_coherence.py
+  old: '                for measured in _measured_paths(line):'
+  new: '                for measured in []:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c4_resolves
+  expect: killed
+- id: R15-ART1
+  origin: QA-4 round fifteen remediation
+  file: scripts/check_artifact_compatibility.py
+  old: '        if requirement.marker is not None and not requirement.marker.evaluate(environment):'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_artifact_compatibility.py
+  expect: killed
+- id: R15-ART2
+  origin: QA-4 round fifteen remediation
+  file: scripts/check_artifact_compatibility.py
+  old: '    for provider in CLOUD_PROVIDERS:'
+  new: '    for provider in ():'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_artifact_compatibility.py
+  expect: killed
+- id: R15-CF-AST
+  origin: QA-4 round fifteen remediation
+  file: scripts/check_coverage_floors.py
+  old: '                if counts.statements > EXEMPT_MAX_STATEMENTS or implementation:'
+  new: '                if counts.statements > EXEMPT_MAX_STATEMENTS:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
+  expect: killed
+- id: R15-PAR
+  origin: QA-4 round fifteen remediation
+  file: scripts/check_upstream_parity.py
+  old: '        if status == "pending" and (problem := _expiry_problem(path, entry.get("expires"), today)):'
+  new: '        if False and (problem := _expiry_problem(path, entry.get("expires"), today)):'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_upstream_parity.py
+  expect: killed
+- id: R15-PIN
+  origin: QA-4 round fifteen remediation
+  file: platform/local/manifests/40-metrics.yaml
+  old: '          image: prom/prometheus:v3.15.0@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e'
+  new: '          image: prom/prometheus:v3.15.0'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_local_stack_images.py
   expect: killed

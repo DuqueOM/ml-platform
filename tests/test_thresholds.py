@@ -293,3 +293,172 @@ def test_a_stale_local_main_is_not_the_baseline_when_origin_main_exists(tmp_path
         ["git", "-C", str(repo), "show", f"{baseline}:gate.cfg"], capture_output=True, text=True, check=True
     ).stdout
     assert "83" in at_base, f"the baseline resolved to {baseline}, whose floor is {at_base.strip()!r}"
+
+
+# --- a threshold that moved, was relabelled, or stopped being watched -------
+#
+# QA-4 round fifteen: each threshold was compared only under its CURRENT path
+# and pattern. Move the constant to another file, or relabel its watch entry,
+# and nothing at the baseline matched — the comparison was skipped. #112 moved
+# four coverage floors that way, and the auditor lowered all four to near zero
+# with this gate green. The fix compares by NAME against the watch list the
+# baseline itself declared.
+
+_BASELINE_WATCH_LIST = """
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class Threshold:
+    name: str
+    path: str
+    pattern: str
+    higher_is_stricter: bool = True
+
+THRESHOLDS = (
+    Threshold("coverage floor", "ci.yml", r"--cov-fail-under=(\\d+)"),
+    Threshold("line floor", "gate.py", r"LINE_FLOOR = ([\\d.]+)"),
+)
+"""
+
+
+def _watched_repo(tmp_path: Path) -> Path:
+    """`main` watches two floors; the work branch starts from it with nothing changed yet."""
+    repo = tmp_path / "watched"
+    (repo / "scripts").mkdir(parents=True)
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "probe",
+        "GIT_AUTHOR_EMAIL": "probe@example.com",
+        "GIT_COMMITTER_NAME": "probe",
+        "GIT_COMMITTER_EMAIL": "probe@example.com",
+    }
+
+    def git(*args: str) -> None:
+        subprocess.run(
+            ["git", "-C", str(repo), "-c", "commit.gpgSign=false", *args],
+            check=True,
+            capture_output=True,
+            env=env,
+        )
+
+    git("init", "-q", "-b", "main")
+    (repo / "scripts" / "check_thresholds.py").write_text(_BASELINE_WATCH_LIST, encoding="utf-8")
+    (repo / "ci.yml").write_text("run: pytest --cov-fail-under=83\n", encoding="utf-8")
+    (repo / "gate.py").write_text("LINE_FLOOR = 0.90\n", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-qm", "base")
+    (repo / "README.md").write_text("probe\n", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-qm", "second")
+    git("checkout", "-q", "-b", "work")
+    return repo
+
+
+def _compare(monkeypatch, repo: Path, *current) -> list[str]:  # type: ignore[no-untyped-def]
+    import importlib
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    module = importlib.import_module("check_thresholds")
+    monkeypatch.setattr(module, "REPO_ROOT", repo)
+    monkeypatch.delenv(module.BASELINE_ENV, raising=False)
+    monkeypatch.setattr(module, "THRESHOLDS", tuple(module.Threshold(*args, **kw) for args, kw in current))
+    result: list[str] = module.compare()
+    return result
+
+
+def _floors_moved(repo: Path, scripts_floor: int, line_floor: int) -> None:
+    """The #112 shape: both numbers leave their files for one table, in a new unit for one of them."""
+    (repo / "ci.yml").write_text("run: coverage run -m pytest\n", encoding="utf-8")
+    (repo / "gate.py").unlink()
+    (repo / "floors.py").write_text(
+        f"SCRIPTS_COMBINED_FLOOR = {scripts_floor}\nLINE_FLOOR = {line_floor}\n", encoding="utf-8"
+    )
+
+
+def test_a_threshold_moved_under_the_same_name_is_compared_with_where_it_was(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    repo = _watched_repo(tmp_path)
+    _floors_moved(repo, scripts_floor=10, line_floor=90)
+
+    failures = _compare(
+        monkeypatch,
+        repo,
+        (("coverage floor", "floors.py", r"SCRIPTS_COMBINED_FLOOR = (\d+)"), {}),
+        (("line floor", "floors.py", r"LINE_FLOOR = (\d+)"), {"renamed_from": None}),
+    )
+
+    assert any("coverage floor: 83.0 -> 10.0 (lowered)" in failure for failure in failures), failures
+
+
+def test_a_relabelled_threshold_without_renamed_from_fails(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """Relabelling was indistinguishable from adding a new threshold, so it reset the history."""
+    repo = _watched_repo(tmp_path)
+    _floors_moved(repo, scripts_floor=10, line_floor=90)
+
+    failures = _compare(
+        monkeypatch,
+        repo,
+        (("scripts floor (P12)", "floors.py", r"SCRIPTS_COMBINED_FLOOR = (\d+)"), {}),
+        (("line floor", "floors.py", r"LINE_FLOOR = (\d+)"), {}),
+    )
+
+    assert any("coverage floor: watched at the baseline and by nothing now" in failure for failure in failures)
+
+
+def test_a_declared_rename_is_compared_in_the_new_unit(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """0.90 as a fraction is 90 as a percent; lowered to 1 it must still read as lowered."""
+    repo = _watched_repo(tmp_path)
+    _floors_moved(repo, scripts_floor=86, line_floor=1)
+    current = (
+        (
+            ("scripts floor (P12)", "floors.py", r"SCRIPTS_COMBINED_FLOOR = (\d+)"),
+            {"renamed_from": ("coverage floor", 1)},
+        ),
+        (("line floor, per library", "floors.py", r"LINE_FLOOR = (\d+)"), {"renamed_from": ("line floor", 100)}),
+    )
+
+    failures = _compare(monkeypatch, repo, *current)
+
+    assert len(failures) == 1, failures
+    assert "line floor, per library: 90.0 -> 1.0 (lowered)" in failures[0]
+    assert "as 'line floor'" in failures[0]
+
+
+def test_an_honest_move_and_rename_passes(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    repo = _watched_repo(tmp_path)
+    _floors_moved(repo, scripts_floor=86, line_floor=90)
+
+    failures = _compare(
+        monkeypatch,
+        repo,
+        (
+            ("scripts floor (P12)", "floors.py", r"SCRIPTS_COMBINED_FLOOR = (\d+)"),
+            {"renamed_from": ("coverage floor", 1)},
+        ),
+        (("line floor, per library", "floors.py", r"LINE_FLOOR = (\d+)"), {"renamed_from": ("line floor", 100)}),
+    )
+
+    assert failures == []
+
+
+def test_dropping_an_entry_from_the_watch_list_fails(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """The number stays in its file, unwatched: the quietest way to free it for lowering later."""
+    repo = _watched_repo(tmp_path)
+
+    failures = _compare(monkeypatch, repo, (("coverage floor", "ci.yml", r"--cov-fail-under=(\d+)"), {}))
+
+    assert any("line floor: watched at the baseline and by nothing now" in failure for failure in failures)
+
+
+def test_a_new_threshold_needs_no_history(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    repo = _watched_repo(tmp_path)
+    (repo / "budget.py").write_text("MAX_SHARE = 0.75\n", encoding="utf-8")
+
+    failures = _compare(
+        monkeypatch,
+        repo,
+        (("coverage floor", "ci.yml", r"--cov-fail-under=(\d+)"), {}),
+        (("line floor", "gate.py", r"LINE_FLOOR = ([\d.]+)"), {}),
+        (("share ceiling", "budget.py", r"MAX_SHARE = ([\d.]+)"), {"higher_is_stricter": False}),
+    )
+
+    assert failures == []
