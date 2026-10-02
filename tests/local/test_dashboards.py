@@ -119,6 +119,12 @@ def test_there_is_at_least_one_panel_to_check() -> None:
     assert _expressions(), f"no panel expression found under {DASHBOARDS}"
 
 
+#: Discovery refresh plus several 15s scrape intervals. The cost of too short is
+#: a false failure right after every deploy; the cost of too long is only a
+#: slower red, because a healthy target returns as soon as it is `up`.
+SCRAPE_SETTLE_SECONDS = 90
+
+
 def test_the_service_is_actually_being_scraped() -> None:
     """The precondition for every panel, and the one that was false.
 
@@ -126,10 +132,25 @@ def test_the_service_is_actually_being_scraped() -> None:
     target stops being scraped, so a metric existing does not prove collection
     is still happening.
     """
-    with _prometheus() as base:
-        targets = _api(base, "/api/v1/targets?state=active")["data"]["activeTargets"]
+    # Polled, bounded. `make local-serve` restarts the rollout, which gives the
+    # pod a new IP: for one service-discovery refresh plus one 15s scrape
+    # interval the new target is `unknown` and the old one may linger `down`.
+    # "Being scraped" is a steady-state property, and a single look taken
+    # during the transition measured the transition — it failed immediately
+    # after a deploy and passed a minute later, with nothing wrong. The bound
+    # is several intervals; a target that is still not `up` at the end of it
+    # fails exactly as before.
+    deadline = time.monotonic() + SCRAPE_SETTLE_SECONDS
+    while True:
+        with _prometheus() as base:
+            targets = _api(base, "/api/v1/targets?state=active")["data"]["activeTargets"]
+        serving = [t for t in targets if ":8000" in t["scrapeUrl"]]
+        if serving and all(t["health"] == "up" for t in serving):
+            return
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(5)
 
-    serving = [t for t in targets if ":8000" in t["scrapeUrl"]]
     assert serving, f"the service is not a scrape target; Prometheus has {[t['scrapeUrl'] for t in targets]}"
     for target in serving:
         assert target["health"] == "up", f"{target['scrapeUrl']} is {target['health']}: {target.get('lastError')}"
