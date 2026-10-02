@@ -964,3 +964,27 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_local_stack_images.py
   expect: killed
+- id: CD1
+  origin: W-12 derived deviations, author
+  file: scripts/check_contract_deviations.py
+  old: '    for (project, requirement), reason in sorted(known.items()):'
+  new: '    for (project, requirement), reason in sorted(known.items())[:-1]:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_contract_deviations.py
+  expect: killed
+- id: CD2
+  origin: W-12 derived deviations — survived its first run, which found the CLI path untested
+  file: scripts/check_contract_deviations.py
+  old: '        if updated != document:'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_contract_deviations.py
+  expect: killed
+- id: ENV1
+  origin: W-12 environment-only detectors — survived its first run, which found the state untested
+  file: scripts/check_technology_inventory.py
+  old: '                elif "environment" in kinds:'
+  new: '                elif False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_technology_inventory.py
+  expect: killed
