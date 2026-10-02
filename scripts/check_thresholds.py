@@ -7,7 +7,7 @@ it plainly: STOP is declared everywhere and applied nowhere, and lowering a
 threshold is one of the two cases checkable today.
 
 Every number this repository gates on is a literal — `fail_under = 90`,
-`--cov-fail-under=83`, `MAX_ADAPTER_SHARE = 0.75`. Any of them could be edited
+`SCRIPTS_COMBINED_FLOOR = 86`, `MAX_ADAPTER_SHARE = 0.75`. Any of them could be edited
 downward in the same commit as the change that made it fail, and every gate
 would go green while the standard quietly moved.
 
@@ -31,10 +31,18 @@ import argparse
 import os
 import re
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# The floors gate sits beside this file. Imported for its table of package
+# names only; it imports nothing outside the standard library at module level.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from check_coverage_floors import ML_PACKAGES  # noqa: E402
+
+_FLOORS = "scripts/check_coverage_floors.py"
 
 #: Upper bound on every short subprocess this script runs (git, grep). A bound,
 #: not a performance budget: nothing here legitimately takes more than seconds,
@@ -94,11 +102,15 @@ THRESHOLDS = (
     # label colliding with two other meanings — a pending gate row and the
     # cluster tier of the evidence taxonomy. Renaming the step to `P12` broke
     # both thresholds at once, and this gate reported it correctly: *a
-    # threshold that cannot be found cannot be watched.* `--cov=libs` and
-    # `--cov=scripts` say which floor is which without depending on prose
-    # anyone may reword.
-    Threshold("libs coverage in CI", ".github/workflows/ci.yml", r"--cov=libs[\s\S]*?--cov-fail-under=(\d+)"),
-    Threshold("scripts coverage in CI", ".github/workflows/ci.yml", r"--cov=scripts[\s\S]*?--cov-fail-under=(\d+)"),
+    # threshold that cannot be found cannot be watched.*
+    #
+    # Both floors left the workflow when CI moved to one coverage run (W-5):
+    # they are named constants in the floors gate now, which is also where the
+    # per-package floors below live.
+    Threshold("libs combined coverage floor", _FLOORS, r"LIBS_COMBINED_FLOOR = (\d+)"),
+    Threshold("scripts coverage floor (P12)", _FLOORS, r"SCRIPTS_COMBINED_FLOOR = (\d+)"),
+    Threshold("projects combined coverage floor (P17)", _FLOORS, r"PROJECTS_COMBINED_FLOOR = (\d+)"),
+    Threshold("orchestration combined coverage floor (P17)", _FLOORS, r"ORCHESTRATION_COMBINED_FLOOR = (\d+)"),
     Threshold(
         "cloud-specific surface ceiling",
         "scripts/measure_cloud_surface.py",
@@ -130,13 +142,25 @@ THRESHOLDS = (
         "scripts/check_library_reuse.py",
         r'"rag-assistant":\s*(\d+)',
     ),
-    Threshold("L1 line coverage floor", "scripts/check_branch_coverage.py", r"LINE_FLOOR\s*=\s*([\d.]+)"),
-    Threshold("L2 branch coverage floor", "scripts/check_branch_coverage.py", r"BRANCH_FLOOR\s*=\s*([\d.]+)"),
+    Threshold("L1 line coverage floor, per library", _FLOORS, r"LINE_FLOOR = (\d+)"),
+    Threshold("L2 branch coverage floor, per library", _FLOORS, r"BRANCH_FLOOR = (\d+)"),
     Threshold(
         "baseline acceptance ceiling, in days",
         "scripts/check_baselines_expiry.py",
         r"MAX_EXPIRY_DAYS = (\d+)",
         higher_is_stricter=False,
+    ),
+    # One line floor and one branch floor per ML package (P17), derived from
+    # the gate's own table rather than listed again here: a package added to
+    # `ML_PACKAGES` is watched the moment it has a floor, and a second list
+    # would be a place to forget it.
+    *(
+        Threshold(f"{package} {kind} coverage floor (P17)", _FLOORS, rf'"{re.escape(package)}": {pattern}')
+        for package in ML_PACKAGES
+        for kind, pattern in (
+            ("line", r"PackageFloor\(lines=(\d+)"),
+            ("branch", r"PackageFloor\(lines=\d+, branches=(\d+)"),
+        )
     ),
 )
 

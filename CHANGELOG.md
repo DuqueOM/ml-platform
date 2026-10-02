@@ -897,6 +897,57 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Changed
 
+- **Every coverage floor is read from one run of the suite, and the ML code and
+  the orchestration layer have floors** (QA-4 F-11, W-5). CI ran the suite
+  twice, about half an hour each — `--cov=libs --cov-fail-under=90`, then
+  `--cov=scripts --cov-fail-under=83` — because `--cov-fail-under` tests the
+  total of whatever `--cov` names. `projects/` and `orchestration/` were
+  measured by neither, and a third scope that way was a third half hour. CI now
+  runs the suite once under `coverage run` over all four directories, and
+  `scripts/check_coverage_floors.py` (which replaces `check_branch_coverage.py`)
+  applies every floor to that data and reports every miss at once:
+
+  - **libs** — the aggregate at 90 as before, compared unrounded
+    (`--cov-fail-under` rounded to precision 0, so 89.6% cleared it), AND L1/L2
+    in every library. The aggregate check read 89% branches while
+    QA-4 measured `feature_defs` at 70% (F-11). The F-25 tests had since raised it
+    to 90%; its last untested path, the early return when no row can be
+    examined, now has a test and the library is at 100% — and the next library
+    to slip is caught, which the aggregate could not do. A new library is held to L1/L2 without being listed;
+    serving-core is exempt only while it holds one statement.
+  - **scripts** (P12) — ratcheted from 83 to 86, the figure CI measured on
+    `main`.
+  - **projects and orchestration** (P17, new) — a line and a branch floor per
+    package at today's measurement, rounded down; a package with no floor, or a
+    floor over a package nobody measured, fails.
+
+  Orchestration was at 34% of lines and 0% of branches because no test ran a
+  task body — `test_dags.py` said so, beside an AST check that the gate
+  "contains a raise". The DAG's task bodies are now run through the DagBag, the
+  way the scheduler reaches them, and the KFP components through their
+  `python_func`: both quality gates, the month taken from the data interval,
+  the refusal of a missing file before any write, XCom-safe floats, the publish
+  path. Both modules are at 100%. Writing those tests found that **the two
+  gates disagree** — the DAG passes skill ≥ 0.05 with one-sided coverage ≥ 0.85,
+  the pipeline skill > 0 with coverage within 0.05 of 0.90 — recorded as W-14
+  for a decision rather than changed here.
+
+  Every floor is watched by `check_thresholds.py`, the per-package ones derived
+  from the gate's own table. `make verify` runs the same four coverage commands
+  as CI — one run, so the floors no longer double it — and the three
+  `_NOT_LOCAL` exemptions they needed are gone, with a test that an exemption
+  names a command CI still runs. `defusedxml` and its stubs, used only by the
+  old gate, are removed; `coverage` is declared rather than inherited from
+  pytest-cov. The failure classifier recognises the new gate's verdict.
+
+  Measuring all four scopes in one run exposed a race the two runs had been
+  winning: gate tests write short-lived probe files (`_gate_probe.py`,
+  `_clock_probe.py`) into source directories, coverage adds every unexecuted
+  file under `--source` when a measured process exits, and a probe recorded
+  that way made the report die with `No source for code` once its test had
+  deleted it. Probes are omitted from measurement, and a test reads every
+  probe name the tests write and holds it to the omit list.
+
 - **The status document is evaluated once per session for the tests that only
   read it.** Measured with `--durations`: eight tests that regenerate
   `implementation-status.md` took 74% of the whole suite's wall time — each

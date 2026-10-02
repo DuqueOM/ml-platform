@@ -80,7 +80,10 @@ SIGNATURE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("pytest.collection_error", re.compile(r"ERROR collecting|ERROR while loading")),
     ("python.import_error", re.compile(r"ModuleNotFoundError: No module named")),
     ("python.syntax_error", re.compile(r"SyntaxError:")),
-    ("coverage.below_floor", re.compile(r"Coverage failure: total of|--cov-fail-under")),
+    # `[coverage] FAILED` is `check_coverage_floors.py`, which holds every floor
+    # since CI measured in one run; the other two are coverage's and
+    # pytest-cov's own wording, still what a local `--cov-fail-under` prints.
+    ("coverage.below_floor", re.compile(r"\[coverage\] FAILED|Coverage failure: total of|--cov-fail-under")),
     # --- dependencies ------------------------------------------------------
     ("uv.lock_stale", re.compile(r"lockfile .*needs to be updated|`uv lock` .*out of date")),
     ("dependency.unresolved", re.compile(r"No solution found|No matching distribution|Could not find a version")),

@@ -59,7 +59,13 @@ verify: ## Run every repository gate (superset of CI's; see RUNBOOK for what it 
 	uv run python scripts/measure_cloud_surface.py --check
 	uv run python scripts/check_technology_inventory.py --check
 	uv run python scripts/check_implementation_status.py --check
-	uv run pytest -q
+	# The suite, measured exactly as CI measures it: one run, then every
+	# coverage floor. A single run, so the floors cost the tracing overhead
+	# rather than a second pass of the suite.
+	uv run coverage erase
+	uv run coverage run --branch --source=libs,projects,orchestration,scripts -m pytest -q
+	uv run coverage combine
+	uv run python scripts/check_coverage_floors.py --xml coverage.xml
 
 .PHONY: sync
 sync: ## Re-render agentic surfaces and refresh derived docs
