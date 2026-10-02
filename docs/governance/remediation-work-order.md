@@ -742,6 +742,12 @@ on unwired fields, and the ledger entry moves to `adopted`.
 
 ### R11-7 — Small items, one pass
 
+> **Status: done.** Of its three items, only one needed work here. `CODECOV_TOKEN` is documented in
+> `docs/ADOPTION.md` with every setting a fork must reproduce, and *docs: what a fork must configure* adds a test
+> that fails on any workflow secret the guide does not name. The sandbox test that failed when run alone passes on
+> `main` — fixed by a later change, not this one — and the 46-minute invariants lane was split into fast and slow
+> lanes by #83.
+
 **Mode**: AUTO · **Size**: under 1h together
 
 - `CODECOV_TOKEN` is read by CI and documented nowhere. Its step cannot fail a
