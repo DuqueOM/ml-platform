@@ -20,6 +20,7 @@ GKE, the temptation is to write L4 into the table by hand, and this fails.
 
 from __future__ import annotations
 
+import functools
 import shutil
 import subprocess
 import sys
@@ -40,6 +41,26 @@ from check_implementation_status import (  # noqa: E402 — sys.path is extended
 )
 
 DOC = REPO_ROOT / "docs" / "architecture" / "implementation-status.md"
+
+
+@functools.lru_cache(maxsize=1)
+def _evaluated() -> tuple[tuple[tuple, ...], str]:  # type: ignore[type-arg]
+    """One full evaluation per session, for the tests that only READ its result.
+
+    `evaluate()` runs every component's verification command — about a minute
+    here, and longer on a CI runner — and four tests in this module each ran
+    it for themselves: the summary, the L3/L4 check, the committed-document
+    check and the first determinism sample. Measured with `--durations`, the
+    eight tests that regenerate this document took 74% of the whole suite's
+    wall time, which is what made the tests lane take an hour.
+
+    Shared only where the input is identical. Tests that change an input — a
+    new unignored file, an ignored probe, a stale copy — still run their own
+    generation, because the evaluation they need is a different one. The
+    result is a tuple so no caller can mutate what the next one reads.
+    """
+    rows = tuple(evaluate())
+    return rows, render(list(rows))
 
 
 def test_a_component_without_a_command_has_no_layer() -> None:
@@ -95,7 +116,7 @@ def test_nothing_generated_here_displays_l3_or_l4() -> None:
     rollout happens: the answer is to record it as evidence, not to write a
     tick into a derived table.
     """
-    for component, marker, layer, _ in evaluate():
+    for component, marker, layer, _ in _evaluated()[0]:
         assert layer in {"L1", "L2", "—"}, f"{component.name} displays {layer}, which this runner cannot prove"
         assert marker in {"✅", "🟡", "⬜"}
 
@@ -132,8 +153,7 @@ def test_the_summary_counts_what_the_rows_say() -> None:
     A hand-kept total is the defect this document was created to fix, and it
     would be a quiet irony to reintroduce it in the summary.
     """
-    rows = evaluate()
-    generated = render(rows)
+    rows, generated = _evaluated()
 
     l1 = sum(1 for _, _, layer, _ in rows if layer == "L1")
     l2 = sum(1 for _, _, layer, _ in rows if layer == "L2")
@@ -145,15 +165,19 @@ def test_the_summary_counts_what_the_rows_say() -> None:
 
 
 def test_the_committed_document_carries_the_layer_column() -> None:
-    """End to end: the generator's output is what is actually in the file."""
-    result = subprocess.run(
-        [sys.executable, str(REPO_ROOT / "scripts" / "check_implementation_status.py"), "--check"],
-        capture_output=True,
-        text=True,
-        cwd=REPO_ROOT,
-    )
-    assert result.returncode == 0, f"the committed status document is stale:\n{result.stdout}"
-    assert "| :-: | :-: | --- | --- |" in DOC.read_text(encoding="utf-8"), "the layer column is missing from the file"
+    """The generator's output is what is actually in the file, layer column included.
+
+    Compared against the session's shared evaluation rather than by running
+    `--check` again: the generated block appears verbatim in the committed file,
+    which is the property `--check` asserts. The CLI's own glue — argument
+    parsing, reading the file, the STALE exit — is exercised end to end by
+    `tests/test_gate_scripts.py::test_gate_passes_on_the_current_repository`
+    and by its staleness test, so nothing that path covered goes unrun.
+    """
+    _, generated = _evaluated()
+    committed = DOC.read_text(encoding="utf-8")
+    assert generated in committed, "the committed status document is stale: its generated block differs"
+    assert "| :-: | :-: | --- | --- |" in committed, "the layer column is missing from the file"
 
 
 def test_a_shared_verification_command_runs_once() -> None:
@@ -213,8 +237,12 @@ def test_the_generated_document_is_deterministic() -> None:
     rule that a verification command must be reproducible, which
     `Component.verify` states and `why_unverifiable` exists to enforce.
     """
-    outputs = set()
-    for _ in range(3):
+    # The first sample is the session's in-process evaluation; the other two
+    # are fresh CLI runs. That is a stronger comparison than three CLI runs,
+    # not a weaker one: two different execution paths must produce the same
+    # document. `print` appends the newline the CLI output carries.
+    outputs = {_evaluated()[1] + "\n"}
+    for _ in range(2):
         result = subprocess.run(
             [sys.executable, str(REPO_ROOT / "scripts" / "check_implementation_status.py")],
             capture_output=True,
@@ -226,7 +254,7 @@ def test_the_generated_document_is_deterministic() -> None:
         outputs.add(result.stdout)
 
     assert len(outputs) == 1, (
-        f"the generator produced {len(outputs)} different documents across three runs. A derived file "
+        f"the generator produced {len(outputs)} different documents across three samples. A derived file "
         f"that is not deterministic cannot be diffed, and every stale-check failure it causes will be "
         f"blamed on the wrong change. With the pool gone, suspect a verification command that reads host "
         f"state rather than an interleaving."
