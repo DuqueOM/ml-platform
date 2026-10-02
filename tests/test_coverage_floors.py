@@ -121,6 +121,36 @@ def test_the_empty_library_is_exempt_only_while_it_is_empty() -> None:
     assert any("libs/serving-core is exempt as empty" in message for message in failures), failures
 
 
+def test_one_statement_of_code_ends_the_exemption(tmp_path: Path) -> None:
+    """QA-4 round fifteen: a dict of three lambdas is ONE statement, and stayed exempt with no floor.
+
+    The exemption is for a package that holds nothing. Its modules are read,
+    so what counts is whether there is code, not how many statements it takes.
+    """
+    package = tmp_path / "libs" / "serving-core" / "src" / "serving_core"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text(
+        '"""Empty, it says."""\n\n__version__ = "0.1.0"\n'
+        'routes = {"predict": lambda x: x, "health": lambda: "ok", "ready": lambda: True if x else False}\n',
+        encoding="utf-8",
+    )
+
+    failures, _ = gate.check(_healthy(), True, root=tmp_path)
+
+    assert any("libs/serving-core is exempt as empty" in message and "code at" in message for message in failures)
+
+
+def test_an_empty_package_keeps_its_exemption(tmp_path: Path) -> None:
+    package = tmp_path / "libs" / "serving-core" / "src" / "serving_core"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text(
+        '"""Holds no implementation."""\n\nfrom __future__ import annotations\n\n__version__ = "0.1.0"\n',
+        encoding="utf-8",
+    )
+
+    assert gate.check(_healthy(), True, root=tmp_path)[0] == []
+
+
 def test_the_scripts_floor_fails() -> None:
     measured = _healthy()
     measured["scripts"] = {"scripts": _counts(gate.SCRIPTS_COMBINED_FLOOR - 1, gate.SCRIPTS_COMBINED_FLOOR - 1)}

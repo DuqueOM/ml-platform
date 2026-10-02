@@ -28,8 +28,14 @@ the release "feels safe" or not; there is no urgency exception).
 
 ## 2. Run Full Test Suite
 
+Every gate CI runs, then the suite measured once over `libs/`, `scripts/`,
+`projects/` and `orchestration/`, then every coverage floor (L1, L2, P12,
+P17). The inherited `pytest --cov=src --cov-fail-under=90` measured a `src/`
+this repository does not have, so it failed at 0% on every run (QA-4 round
+fifteen); `tests/test_verify_parity.py` holds `make verify` to CI.
+
 ```bash
-pytest --cov=src --cov-report=term-missing --cov-fail-under=90
+make verify
 ```
 
 ## 3. Tag the Release

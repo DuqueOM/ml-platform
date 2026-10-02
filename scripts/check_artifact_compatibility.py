@@ -81,6 +81,17 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 LOCK = REPO_ROOT / "uv.lock"
 READER = REPO_ROOT / "services" / "demand-forecast-serving" / "requirements.txt"
 
+#: The image's SECOND install: the Dockerfile runs
+#: `pip install -r requirements-${CLOUD_PROVIDER}.txt` after the base file, for
+#: each provider its `case` admits. A seam package named there binds too, and
+#: this gate read only the base file (QA-4 round fifteen).
+#: `tests/test_artifact_compatibility.py` holds this tuple to the Dockerfile.
+CLOUD_PROVIDERS = ("gcp", "aws")
+
+#: `FROM python:3.13-slim-bookworm` — the interpreter the image installs for,
+#: which is what pip evaluates a requirement's environment marker against.
+_FROM_PYTHON = re.compile(r"^FROM\s+python:(\d+)\.(\d+)", re.MULTILINE)
+
 #: The ADR whose acceptance ends every exemption below. Read rather than
 #: restated: a status this file asserted would be a second copy, and the copy
 #: is what goes stale.
@@ -142,6 +153,46 @@ def locked_versions() -> dict[str, list[Version]]:
     return found
 
 
+def image_environment() -> dict[str, str]:
+    """The marker environment of the image the reader is installed into.
+
+    Read from the Dockerfile's `FROM python:X.Y` lines. Every stage must agree:
+    a builder and a runtime on different interpreters would install for one
+    and run on the other, and no single answer would be right.
+
+    Raises:
+        ValueError: when the Dockerfile is missing or names no single Python.
+    """
+    dockerfile = READER.parent / "Dockerfile"
+    if not dockerfile.is_file():
+        raise ValueError(f"{dockerfile} is missing, so the image's Python — which markers depend on — is unknown")
+    versions = set(_FROM_PYTHON.findall(dockerfile.read_text(encoding="utf-8")))
+    if len(versions) != 1:
+        found = ", ".join(sorted(".".join(v) for v in versions)) or "none"
+        raise ValueError(f"{dockerfile} must build on exactly one Python; FROM lines name {found}")
+    major, minor = versions.pop()
+    return {
+        "python_version": f"{major}.{minor}",
+        "python_full_version": f"{major}.{minor}.0",
+        "implementation_name": "cpython",
+        "platform_python_implementation": "CPython",
+        "os_name": "posix",
+        "sys_platform": "linux",
+        "platform_system": "Linux",
+        "platform_machine": "x86_64",
+    }
+
+
+def _reader_lines() -> list[str]:
+    """The base requirements, then every cloud file the image may install after it."""
+    lines = READER.read_text(encoding="utf-8").splitlines()
+    for provider in CLOUD_PROVIDERS:
+        cloud = READER.parent / f"requirements-{provider}.txt"
+        if cloud.is_file():
+            lines += cloud.read_text(encoding="utf-8").splitlines()
+    return lines
+
+
 def reader_specifiers() -> dict[str, SpecifierSet]:
     """The specifiers the container installs, from the file it installs from.
 
@@ -153,14 +204,21 @@ def reader_specifiers() -> dict[str, SpecifierSet]:
     A seam package listed with no specifier comes back as an empty
     `SpecifierSet`: present and unpinned, which `unpinned()` reports.
     """
+    environment = image_environment()
     found: dict[str, SpecifierSet] = {}
-    for raw in READER.read_text(encoding="utf-8").splitlines():
+    for raw in _reader_lines():
         line = _NOT_A_REQUIREMENT.sub("", raw).rstrip("\\ \t")
         if not line.strip():
             continue
         try:
             requirement = Requirement(line)
         except InvalidRequirement:  # pragma: no cover - pip would refuse the file first
+            continue
+        # A line whose marker is false on the image is a line pip SKIPS there.
+        # Read regardless, `joblib ~= 1.6.0 ; python_version < "3.12"` counted
+        # as a pin on a Python 3.13 image, where joblib then arrives unpinned
+        # through scikit-learn (QA-4 round fifteen).
+        if requirement.marker is not None and not requirement.marker.evaluate(environment):
             continue
         name = canonicalize_name(requirement.name)
         if name not in SEAM:
@@ -272,13 +330,21 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.show:
-        written, read = locked_versions(), reader_specifiers()
+        try:
+            written, read = locked_versions(), reader_specifiers()
+        except ValueError as unknown:
+            print(f"  FAIL    {unknown}")
+            return 1
         for package in SEAM:
             versions = ", ".join(str(v) for v in sorted(written.get(package, [])))
             print(f"  {package:14} writes {versions or '-':22} reads {read.get(package, '-')}")
         return 0
 
-    found = straddles()
+    try:
+        found = straddles()
+    except ValueError as unknown:
+        print(f"\n[artifact] FAILED\n\n  FAIL    {unknown}")
+        return 1
     open_adr = adr_is_still_open()
     failures: list[str] = [
         f"{package} is exempted but is not in SEAM, so the gate never compares it — its exemption can never be "

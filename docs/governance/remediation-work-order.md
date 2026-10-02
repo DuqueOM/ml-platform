@@ -434,6 +434,12 @@ they are under a day.
 > carries the FULL sha256 (`version` carried a 12-character label), `load` verifies it before unpickling, and an
 > artifact without its sidecar is refused — the pair is the artifact. Watched failing: a flipped byte, a
 > truncation and a missing sidecar all load cleanly on the previous revision.
+>
+> **Narrowed by QA-4 round fifteen (R15-6): integrity against corruption is done; tamper resistance is open.**
+> The digest lives beside the artifact under the same write permission, so whoever can replace the artifact can
+> replace both — the auditor did, and the payload executed before `load` refused it. And the reader that matters
+> never calls the check: the generated service loads with `joblib.load` directly. F-14 named the tampering threat,
+> so F-14 is not closed. What closes it is R15-6 below.
 
 **Mode**: AUTO · **Closes**: F-14 · **Size**: ~30min
 
@@ -548,9 +554,25 @@ broken pipeline, not a near-tie) and calibration two-sided (as the pipeline and
 the model has not quantified). That makes the DAG stricter on over-coverage,
 which can fail a run the DAG passes today, and is why this is CONSULT.
 
-**Acceptance**: one definition of the gate, imported by both orchestrators;
-the thresholds still watched by `check_thresholds.py`; a test that runs the
-same metrics through both and asserts the same verdict.
+**Understated, per QA-4 round fifteen (R15-2).** The table above compares
+thresholds only. The two orchestrators also gate **different backtests**: the
+DAG calls `evaluate(read_demand())` with its default of 5 folds, the pipeline
+defaults to `n_folds=3`. On the same lock-verified data the DAG measures skill
++12.4% and the pipeline +23.0%, because the 3-fold design drops folds 0 and 1 —
+the two the model loses (−18.3%, −1.2%), which the model card warns the average
+hides. And "the thresholds still watched" was never true for the pipeline:
+only the DAG's two constants were in `THRESHOLDS`. The round-fifteen
+remediation registers the pipeline's two numbers and pins both orchestrators'
+backtest arguments in their tests, so neither can drift while this waits; it
+does not choose between them.
+
+The recommendation extends to the folds: **5**, the design that sees the losing
+folds, owned by the same function as the thresholds.
+
+**Acceptance**: one definition of the gate AND of the backtest parameters,
+imported by both orchestrators; every threshold watched by
+`check_thresholds.py`; a test that runs the same metrics through both and
+asserts the same verdict.
 
 ### W-15 — Raise the project floors toward the library floors
 
@@ -638,11 +660,12 @@ Prometheus still scrapes the pod.
 
 ### R11-3 — The container cannot import the model artifact at all
 
-> **Status: done** — *feat(demand-forecast): the artifact carries data, not workspace objects*. Option A as
-> recommended: the estimator stays a scikit-learn object, the conformal regressor becomes the two numbers
-> calibration produces, and `load` rebuilds it. The artifact's bytes name no workspace package, asserted per
-> package. ADR-008 stays `Proposed` — the classification-schema half is untouched, and flipping the status would
-> lift gate P14's exemptions over straddles nobody has fixed.
+> **Status: REOPENED by QA-4 round fifteen (R15-1).** *feat(demand-forecast): the artifact carries data, not
+> workspace objects* fixed the half it targeted — the artifact's bytes name no workspace package, asserted per
+> package — and was recorded as closing this item. It did not: an environment built from the service's
+> `requirements.txt` alone (numpy 1.26.4) still cannot load the artifact, because the fitted estimator carries a
+> numpy-2 `Generator`. Its own "Closes when" was never met: P14 does not check what the pickle imports, and no
+> test loads the artifact under the reader's versions. Options and recommendation: R15-1 below.
 
 **Mode**: CONSULT · **Source**: round eleven P2 · **Size**: depends on the decision
 
@@ -950,6 +973,113 @@ adopter's to resolve, and the service is updated to that release. V8 then
 fails on the two stale exemptions until they are deleted.
 
 ---
+
+## Round fifteen — what stays open, and why each one waits
+
+QA-4 round fifteen audited `98a4359` and reported 0 P0, 0 P1, 8 P2 and 11 P3;
+the report is committed as [`qa4/round-15.txt`](qa4/round-15.txt). Its verdict:
+the claims hold where they were measured — #112's coverage figures, #104's
+re-measured skill and per-fold table, #78's workspace-free pickle all reproduce
+exactly — and do not hold where a closure was declared beyond what was
+executed: R11-3, W-10 as a close of F-14, Codecov as a Core gate, and W-14's
+account of the disagreement.
+
+What closed, in *fix: QA-4 round fifteen*:
+
+| ID | Finding | Closed by |
+| --- | --- | --- |
+| R15-3 | `check_thresholds.py` skipped a threshold that moved file or changed label, so #112 could have lowered every coverage floor with it green | Compared by NAME against the watch list the baseline itself declared; `renamed_from` with a unit factor; dropping a watch entry fails. The auditor's exact attack now fails on all four floors |
+| R15-4 | C6 missed six host-less forms of a repository name | Autolinks, `uses:`, `gh:`, `gh` arguments, `repos/`, Pages; elided names pass only as the prefix of a public repository |
+| R15-7 | Three tests failed under parallel load | The tag probe moved to a `--shared` clone; the status generator's test budget derived from its own bound; the determinism test prints the rows that differ. The determinism failure's cause was not captured — the next occurrence names it |
+| R15-8 | The release workflow's coverage step always failed at 0% | Step 2 is `make verify`; C4 now resolves `--cov=` and `--source=` paths, in gate rows and in agentic workflows |
+| R15-9 | C9 missed `uvx copier@x`, list-item and blockquoted fences, `<pre>`, and took `--vcs-ref HEAD` as a pin | All five; a remote source needs a tag or a commit, a placeholder documents a pin, a local source is exempt |
+| R15-10 | The artifact gate ignored environment markers and the image's second install | Markers evaluated against the Dockerfile's Python; the cloud requirement files read; the provider list held to the Dockerfile |
+| R15-11 | A probe module escaped the coverage-omit guard | Renamed to the convention; the guard matches any underscore-prefixed probe module |
+| R15-12 | The serving-core exemption counted statements | The package's AST: docstring, `__version__` and `__future__` only |
+| R15-13 | `intervals_are_calibrated` refused 0.85 and accepted 0.95 | Inclusive at both bounds, compared with a float tolerance |
+| R15-15 | Local-stack images pinned by tag | Five of six pinned by digest and held there by a test; the sixth is R15-20 |
+| R15-16 | C10's slugs differed from GitHub's in five shapes | Code spans literal, images dropped, entities and escapes resolved |
+| R15-17 | The audit brief and Q-05 described coverage the old way | Both rewritten; Q-05 names the floors table and the rename rule |
+| R15-18 | Rounds twelve to fourteen existed only in a home directory | Rounds 12–15 committed under `qa4/`; the earlier rounds' absence is stated in `QA-4-independent-audit.md` |
+| R15-19 | Parity `pending` entries carried no date | `expires:` required, at most 100 days out (watched as a ceiling); all eight dated 2026-12-31 |
+
+Also corrected in place, because the documents were false: R11-3 is reopened,
+W-10 is narrowed to integrity, W-14 records the fold design, ADR-008 carries a
+dated correction, `persist.py`'s docstring no longer says the image can read
+the artifact, and the inventory reports Codecov as not built. The pipeline's
+two promotion thresholds are now watched, and both orchestrators' backtest
+designs are pinned by tests so neither drifts while W-14 waits.
+
+### R15-1 — The serving image cannot load the artifact
+
+**Mode**: CONSULT · **Reopens**: R11-3 · **Size**: ~1h for A; cross-repository for B
+
+Measured in the remediation session as well as by the auditor: the fitted
+`HistGradientBoostingRegressor` keeps scikit-learn's fit-time
+`_feature_subsample_rng`, a numpy-2 `Generator`, and numpy 1.26 — the image's
+pin — refuses it. With that one attribute removed the same artifact loads AND
+predicts under the image's exact requirements.
+
+- **A.** Drop fit-time random state from the artifact in `persist._payload`,
+  and add a CI step that builds a virtual environment from
+  `services/demand-forecast-serving/requirements.txt` alone and loads a freshly
+  saved artifact. Closes the reader half now; the numpy straddle stays exempt.
+- **B.** Move the image to numpy 2 in `ml-service-template` (the straddle's
+  root, ADR-008), then lift P14's numpy exemption.
+
+**Recommendation**: A now, B as the ADR-008 decision. A alone makes the
+artifact load by removing state it does not need; only B removes the straddle.
+
+### R15-5 — Codecov has never received an upload
+
+**Mode**: CONSULT · **Size**: ~15min once decided
+
+Every upload is rejected for want of credentials (`CODECOV_TOKEN` is empty), so
+none of `codecov.yml`'s statuses has run. The inventory now reports it ⬜ with
+that note; L1/L2/P12/P17 are enforced by `check_coverage_floors.py` either way.
+Decide: OIDC (`use_oidc: true`, `id-token: write`; no secret to rotate — the
+recommendation, and what the inventory detector looks for), a token secret, or
+removing Codecov and `codecov.yml`.
+
+### R15-6 — The artifact digest does not resist tampering
+
+**Mode**: CONSULT · **Narrows**: W-10 · **Size**: ~2h
+
+The digest is written beside the artifact under the same permission, and the
+service loads with `joblib.load` without calling the check. Verify against a
+digest the writer cannot also write — the promotion record, a registry entry,
+a signed sidecar, or a `sha256` pinned in the deploy manifest — in the code
+that actually loads the file. Which of those is a deployment decision, and the
+service side is generated code (ADR-003).
+
+### R15-14 — The DAG trains and publishes on later reads than it validated
+
+**Mode**: AUTO · **Size**: ~1h · **After**: #106, which rewrites the same reads
+
+`ingest_month` returns `snapshot_id` and every later task calls `read_demand()`
+without it. Pass the snapshot through every read, record it in the published
+sidecar, and make the test stub assert it (auditor mutation R15-DAG6).
+
+### R15-20 — The local stack's object store cannot be pulled
+
+**Mode**: CONSULT · **Found by**: round fifteen's remediation, pinning digests ·
+**Size**: ~2h
+
+`minio/minio:RELEASE.2025-04-22T22-12-26Z` no longer resolves anonymously:
+Docker Hub answers 401 for every `minio/minio` tag (Prometheus, the control,
+answers 200), and Quay requires authentication. A clean machine cannot run
+`make local-up`. Decide the replacement: another S3-compatible store that
+publishes images (the lakehouse needs only the S3 API), or authenticated pulls.
+`tests/test_local_stack_images.py` carries the exception, which fails the day
+it no longer applies.
+
+### Not closed by a commit
+
+- **R15-2** stays W-14: which promotion rule and which fold design is a
+  decision, now with both halves watched and pinned.
+- **R15-19**'s second half: a `pending` entry still flips to `adopted` when its
+  file exists, whatever the file holds. Whether the content meets the closing
+  condition is a review judgement; the date makes someone look.
 
 ## Not for an agent
 

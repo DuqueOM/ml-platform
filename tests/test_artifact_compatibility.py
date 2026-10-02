@@ -11,6 +11,7 @@ the repository is touched while proving it.
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -42,9 +43,19 @@ def seam(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-un
     monkeypatch.setattr(gate, "GOVERNING_ADR", adr)
     monkeypatch.setattr(sys, "argv", ["check_artifact_compatibility.py"])
 
-    def write(lock_text: str, reader_text: str, adr_text: str | None = _PROPOSED) -> None:
+    def write(
+        lock_text: str,
+        reader_text: str,
+        adr_text: str | None = _PROPOSED,
+        *,
+        dockerfile: str = "FROM python:3.13-slim-bookworm AS builder\nFROM python:3.13-slim-bookworm AS runtime\n",
+        cloud: dict[str, str] | None = None,
+    ) -> None:
         lock.write_text(lock_text, encoding="utf-8")
         reader.write_text(reader_text, encoding="utf-8")
+        (tmp_path / "Dockerfile").write_text(dockerfile, encoding="utf-8")
+        for provider, text in (cloud or {}).items():
+            (tmp_path / f"requirements-{provider}.txt").write_text(text, encoding="utf-8")
         if adr_text is not None:
             adr.write_text(adr_text, encoding="utf-8")
 
@@ -243,3 +254,40 @@ def test_the_real_adr_and_the_real_seam_agree_with_the_gate() -> None:
     """The committed state, run as CI runs it."""
     assert gate.adr_is_still_open() is True
     assert set(gate.EXEMPT) <= set(gate.SEAM)
+
+
+# --- what pip actually installs on the image (QA-4 round fifteen) ----------
+
+
+def test_a_line_whose_marker_is_false_on_the_image_is_not_a_pin(seam, capsys) -> None:  # type: ignore[no-untyped-def]
+    """pip skips the line on Python 3.13, so joblib arrives unpinned through scikit-learn."""
+    seam(_TODAY_LOCK, _TODAY_READER.replace("joblib~=1.5.2", 'joblib~=1.5.2 ; python_version < "3.12"'))
+    assert gate.main() == 1
+    assert "joblib is not installed by name in the reader" in capsys.readouterr().out
+
+
+def test_a_line_whose_marker_holds_on_the_image_is_a_pin(seam) -> None:  # type: ignore[no-untyped-def]
+    seam(_TODAY_LOCK, _TODAY_READER.replace("joblib~=1.5.2", 'joblib~=1.5.2 ; python_version >= "3.12"'))
+    assert gate.main() == 0
+
+
+@pytest.mark.parametrize("provider", gate.CLOUD_PROVIDERS)
+def test_the_image_s_second_install_binds_too(seam, capsys, provider: str) -> None:  # type: ignore[no-untyped-def]
+    """The cloud file installs after the base one; a seam package named there moves the version."""
+    seam(_TODAY_LOCK, _TODAY_READER, cloud={provider: "google-cloud-storage>=2\njoblib~=1.4.2\n"})
+    assert gate.main() == 1
+    assert "joblib: written by 1.5.2" in capsys.readouterr().out
+
+
+def test_an_image_on_two_pythons_fails_rather_than_guessing(seam, capsys) -> None:  # type: ignore[no-untyped-def]
+    seam(_TODAY_LOCK, _TODAY_READER, dockerfile="FROM python:3.12-slim AS builder\nFROM python:3.13-slim AS runtime\n")
+    assert gate.main() == 1
+    assert "must build on exactly one Python" in capsys.readouterr().out
+
+
+def test_the_cloud_providers_are_the_ones_the_dockerfile_installs() -> None:
+    dockerfile = (REPO_ROOT / "services" / "demand-forecast-serving" / "Dockerfile").read_text(encoding="utf-8")
+    assert "requirements-${CLOUD_PROVIDER}.txt" in dockerfile
+    case = re.search(r"^\s*([a-z|]+)\) pip install .*requirements-\$\{CLOUD_PROVIDER\}", dockerfile, re.MULTILINE)
+    assert case is not None, "the Dockerfile no longer installs a cloud requirements file per provider"
+    assert tuple(case.group(1).split("|")) == gate.CLOUD_PROVIDERS

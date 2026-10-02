@@ -29,6 +29,7 @@ human triggers, not to the function that computed the metric.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -147,8 +148,17 @@ class BacktestReport:
         Checked in both directions. Over-coverage is not a free pass: intervals
         far wider than requested are a model reporting uncertainty it has not
         actually quantified, and they make every downstream decision timid.
+
+        Both bounds are inclusive, and compared with a tolerance for float
+        representation. The plain `<=` was not symmetric: `abs(0.85 - 0.9)` is
+        0.05000000000000004 and `abs(0.95 - 0.9)` is 0.04999999999999993, so
+        coverage of exactly 0.85 was refused while 0.95 was accepted (QA-4
+        round fifteen). A promotion verdict that depends on which side of the
+        target a value falls, at equal distance, is an accident of binary
+        fractions, not a policy.
         """
-        return abs(self.coverage - (1 - ALPHA)) <= tolerance
+        deviation = abs(self.coverage - (1 - ALPHA))
+        return deviation <= tolerance or math.isclose(deviation, tolerance, rel_tol=0.0, abs_tol=1e-12)
 
     def summary(self) -> str:
         lines = [str(fold) for fold in self.folds]

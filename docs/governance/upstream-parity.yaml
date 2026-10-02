@@ -15,7 +15,9 @@
 # upstream, never carried across.
 #
 # STATUS values:
-#   pending  — decided to adopt, not done yet. Must exist upstream.
+#   pending  — decided to adopt, not done yet. Must exist upstream, and carry
+#              `expires: YYYY-MM-DD` at most 100 days out: on that date it is
+#              adopted, re-decided with a new date and reason, or rejected.
 #   adopted  — decided to adopt and DONE. Must exist here, or the gate fails.
 #   rejected — decided not to adopt, with the reason. Must NOT exist here,
 #              or the rejection is stale and the gate fails.
@@ -469,18 +471,22 @@ artifacts:
   # deciding them apart would have adopted a gate without the baseline it reads.
   - path: scripts/check_doc_path_refs.py
     status: pending
+    expires: 2026-12-31
     reason: >-
       Decided to adopt. It verifies that every repo-relative path named in documentation or in a code comment resolves, and this repository has two live instances of exactly that defect, both found by audit rather than by any gate. Three technology-inventory detectors scope docs/governance/compliance-mapping.md, a path that has never existed at any commit — so eu-ai-act, iso-42001 and nist-ai-rmf can never report built no matter what work is done. And the remediation work order's W-7 instructs adding a component whose detector is libs/ml-core/src/ml_core/drift.py, while the contract that landed is the package drift/; executing W-7 literally would create a fourth. Upstream's own rationale is the same class one level over: a Copier migration relocated the scaffolder payload, updated everything that executes because it breaks loudly, and left thirty documents pointing at deleted directories. Closes by porting the script, its baseline and its governance document together, then wiring the pre-commit hook and the CI job.
   - path: .doc-path-baseline.yml
     status: pending
+    expires: 2026-12-31
     reason: >-
       Decided to adopt, as the file check_doc_path_refs.py reads. Adopting the gate without it would fail on every pre-existing dangling path at once with no way to stage the cleanup, which is how a gate gets marked continue-on-error in its first week. Its design earns its place independently: it separates "the documentation promises something never built" — which requires an `expiry:` and fails once past it — from a path that is simply wrong, because those are different claims and only one of them is honestly deferrable.
   - path: docs/governance/doc-path-references.md
     status: pending
+    expires: 2026-12-31
     reason: >-
       Decided to adopt, as the third file of the same mechanism. It records what the gate enforces and, more usefully, what it did NOT enforce for its first weeks: the gate shipped scanning .md and .txt only, which left a security baseline justifying three suppressed HIGH findings against a directory that had been deleted. That is the kind of scoping hole this repository keeps rediscovering under its own names, documented by the people who hit it first.
   - path: scripts/generate_adr_index.py
     status: pending
+    expires: 2026-12-31
     reason: >-
       Decided to adopt. docs/decisions/README.md is maintained by hand here, and this session demonstrated the cost twice in one commit: the index row for ADR-009 was written by hand, and llms.txt asserted "9 ADRs" against ten on disk. The second was caught, but only because test_llms_txt.py happens to test that one count; nothing guards the index itself, so an ADR added without its row is invisible. Upstream wrote this after finding a compliance mapping that cited an ADR index which did not exist and miscounted the directory it pointed at. Closes by porting the script with --check wired into CI, and replacing the hand-maintained index.
   - path: .security-baselines/trivy-config.trivyignore
@@ -489,6 +495,7 @@ artifacts:
       Rejected after establishing that it suppresses findings this repository has never produced. Upstream's file is for `trivy config` over Terraform, running at CRITICAL,HIGH,MEDIUM, and its entries are specific determinations about upstream's own access-log buckets. This repository runs `trivy fs` for VULNERABILITIES at CRITICAL,HIGH with its own .security-baselines/.trivyignore (ci.yml, trivyignores:) and does not scan IaC with trivy at all — checkov and kubescape cover that surface here. Importing another repository's suppression list would mean carrying accepted risk for findings nobody here has seen, against infrastructure that is not the same infrastructure, at a severity this repository does not scan. A suppression is earned per repository against its own output or it is not a suppression, it is a blindfold. Reverses to adopted the day `trivy config` runs on platform/terraform here, and then each entry is earned against what it actually reports.
   - path: scripts/check_control_claims.py
     status: pending
+    expires: 2026-12-31
     reason: >-
       Decided to adopt, and it arrived mid-sweep: upstream gained it while the five above were being decided, which is the ledger demonstrating its own argument. It asserts that an "Enforced by X" claim names a file that exists and that the file actually references what it claims to enforce, over the D-NN anti-pattern table. QA-4 round nine found this repository's two P0s in exactly that class — a docstring requiring a field "see tests/test_status_components.py", a file that had never existed, and five places citing "ADR-001 rule 3" for a claim that ADR does not make. Both were found by a human reading, which is the method upstream's own rationale says cannot work: a comment cannot be verified, only believed. Adoption needs adapting rather than copying: this repository has eleven D-NN rows but only two "Enforced by" clauses, and its equivalent claims live in quality-gates.md, which validate_quality_gates.py already covers in part, and in module docstrings, which nothing covers. Closes by porting the traversal and re-aiming it at those two surfaces.
   # --- QA-4 round ten sweep: nine artifacts, decided together -----------------
@@ -563,6 +570,7 @@ artifacts:
       both imply.
   - path: scripts/check_config_is_read.py
     status: pending
+    expires: 2026-12-31
     reason: >-
       Decided to adopt, and measured before deciding rather than assumed either way. It catches the class where a
       field is declared, loaded from YAML, validated, and read by NOTHING — a config that answers "where do my runs
@@ -579,6 +587,7 @@ artifacts:
       pointed at llm-core's config module with a ratchet on the unwired count.
   - path: docs/DIAGRAMS.md
     status: pending
+    expires: 2026-12-31
     reason: >-
       Decided to adopt as an equivalent, not as a copy. Upstream's four diagrams explain its service template — a
       commit to a verifiable pod, identity and secrets, the closed loop, agent governance — each followed by the
@@ -589,6 +598,7 @@ artifacts:
       implements it, and the doc-path check reads it once check_doc_path_refs.py lands.
   - path: docs/REPOSITORY_STRUCTURE.md
     status: pending
+    expires: 2026-12-31
     reason: >-
       Decided to adopt, after its gate. Upstream replaced a directory tree drawn in its README — which kept
       describing directories months after they moved — with a page where every path is a code span that

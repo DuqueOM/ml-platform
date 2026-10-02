@@ -192,9 +192,13 @@ def _payload(model: ForecastModel) -> dict[str, Any]:
     produced; `load` rebuilds it with
     :meth:`ml_core.conformal.SplitConformalRegressor.from_calibration`.
 
-    The artifact is therefore readable by anything with scikit-learn, numpy and
-    joblib — which is the property a serving container needs and the one
-    `tests/test_artifact_portability.py` holds.
+    The artifact therefore names no workspace package, which is the property
+    `tests/test_artifact_portability.py` holds. It is NOT yet readable by the
+    serving image, and this docstring said it was: the fitted estimator keeps
+    scikit-learn's fit-time `_feature_subsample_rng`, a numpy-2 `Generator`, and
+    numpy 1.26 — the image's pin — refuses to unpickle it ("PCG64 is not a known
+    BitGenerator module", QA-4 round fifteen). That numpy straddle is the one
+    gate P14 exempts under ADR-008; R11-3 is reopened for it.
     """
     return {
         "schema": ARTIFACT_SCHEMA,
