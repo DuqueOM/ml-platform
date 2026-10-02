@@ -21,7 +21,7 @@ Read the current state from what produces it:
 ```bash
 git rev-list --count HEAD                              # commits
 uv run pytest                                          # tests
-uv run pytest --cov=libs --cov-branch                  # coverage
+make verify                                            # every CI gate, then coverage: one run, all floors
 uv run python scripts/check_technology_inventory.py    # technologies
 uv run python scripts/check_implementation_status.py   # components
 uv run python scripts/check_doc_coherence.py           # which gates are green

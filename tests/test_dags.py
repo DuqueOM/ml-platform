@@ -319,10 +319,18 @@ def test_backtest_model_returns_plain_floats_for_xcom(  # type: ignore[no-untype
         n_test=168,
         n_compared=168,
     )
+    calls: list[tuple[str, tuple, dict]] = []  # type: ignore[type-arg]
     monkeypatch.setattr(lakehouse, "read_demand", lambda *a, **k: "table")
-    monkeypatch.setattr(train, "evaluate", lambda table, **k: train.BacktestReport(folds=[fold], seed=42))
+    monkeypatch.setattr(train, "evaluate", _record(calls, "evaluate", train.BacktestReport(folds=[fold], seed=42)))
 
     result = _body(dagbag, "backtest_model")({"month": "2024-03"})
+
+    # The DAG backtests with `evaluate`'s own defaults and overrides none. The
+    # stub used to swallow any keyword, so `n_folds=3` here — the pipeline's
+    # design, which drops the two folds the model loses — survived the suite
+    # (QA-4 round fifteen, R15-DAG4). Which design is right is W-14; this pins
+    # the one in force until that is decided.
+    assert calls == [("evaluate", ("table",), {})]
 
     assert result == {"month": "2024-03", "skill": 0.25, "coverage": 0.9, "model_mae": 3.0, "baseline_mae": 4.0}
     for key in ("skill", "coverage", "model_mae", "baseline_mae"):
@@ -348,3 +356,19 @@ def test_publish_model_fits_on_all_history_and_merges_the_metadata(  # type: ign
         ("save", ("model", Path("models/demand_forecast.joblib")), {}),
     ]
     assert result == {"skill": 0.2, "coverage": 0.9, **metadata}
+
+
+def test_the_dag_gates_on_a_five_fold_backtest() -> None:
+    """The fold count the DAG's verdict rests on, read from where it is defined.
+
+    Five folds include folds 0 and 1, the two the model loses (-18.3%, -1.2%);
+    the model card's +12.4% is a five-fold figure. A default changed in
+    `evaluate` changes what every DAG run promotes on, so it is pinned here
+    rather than discovered from a skill that moved.
+    """
+    import inspect
+
+    from demand_forecast.train import evaluate
+
+    defaults = {name: param.default for name, param in inspect.signature(evaluate).parameters.items()}
+    assert (defaults["n_folds"], defaults["horizon"], defaults["seed"]) == (5, 168, 42)

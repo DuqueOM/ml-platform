@@ -363,3 +363,22 @@ def test_a_fold_with_no_baseline_at_all_is_refused() -> None:
     values = np.array([1.0, 2.0])
     with pytest.raises(ValueError, match="no row with a seasonal baseline"):
         _score_fold(3, values, values, np.array([np.nan, np.nan]), values, values)
+
+
+@pytest.mark.parametrize(
+    ("coverage", "calibrated"),
+    [(0.85, True), (0.95, True), (0.849, False), (0.951, False), (0.90, True)],
+)
+def test_calibration_bounds_are_symmetric_and_inclusive(coverage: float, calibrated: bool) -> None:
+    """QA-4 round fifteen: 0.85 was refused and 0.95 accepted, at equal distance from 0.90.
+
+    `abs(0.85 - 0.9)` is 0.05000000000000004 in binary floating point, so the
+    plain `<=` made the promotion verdict depend on which side of the target a
+    value fell. The pipeline gates promotion on this method.
+    """
+    from demand_forecast.train import BacktestReport, FoldResult
+
+    fold = FoldResult(
+        index=0, model_mae=3.0, baseline_mae=4.0, coverage=coverage, interval_width=5.0, n_test=168, n_compared=168
+    )
+    assert BacktestReport(folds=[fold], seed=42).intervals_are_calibrated() is calibrated

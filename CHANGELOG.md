@@ -18,6 +18,65 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Fixed — QA-4 round fifteen: four closures declared beyond what was executed, and the gates that let them through
+
+QA-4 round fifteen audited `98a4359` (0 P0, 0 P1, 8 P2, 11 P3; report committed
+as `docs/governance/qa4/round-15.txt`, recorded in `ops/audit.jsonl`, marker
+moved). What it measured held; four things declared done did not.
+
+- **Four closures were overstated, and are corrected rather than defended.**
+  - R11-3 is reopened: the serving image still cannot load the artifact. A
+    fitted estimator keeps a numpy-2 `Generator` that numpy 1.26 refuses —
+    reproduced here, and the same artifact loads and predicts once that one
+    attribute is gone. ADR-008 carries a dated correction; `persist.py` no
+    longer says the image can read it.
+  - W-10 is narrowed to integrity: the digest beside the artifact stops
+    corruption, not a writer who replaces both.
+  - W-14 understated the disagreement: the DAG gates a 5-fold backtest
+    (+12.4%) and the pipeline a 3-fold one (+23.0%) that drops the two folds
+    the model loses. The pipeline's two thresholds were never watched; they
+    are now, and both fold designs are pinned by tests while the decision
+    waits.
+  - Codecov has never received an upload. The inventory reported it built
+    because `codecov.yml` exists; it now detects the wiring an upload needs and
+    reports ⬜.
+- **`check_thresholds.py` could not see a threshold that moved.** Each number
+  was compared only under its current path and pattern, so moving or relabelling
+  one skipped the comparison — #112 moved four coverage floors, and the auditor
+  lowered all four to near zero with this gate green. It now compares by name
+  against the watch list the baseline itself declared, a relabel must declare
+  `renamed_from` (with a unit factor: 0.90 became 90), and dropping an entry
+  from the list fails. The auditor's attack, replayed: all four caught.
+- **C6** reads a repository named without a host — autolinks, `uses:`, `gh:`,
+  gh CLI arguments, `repos/`, Pages — for the private account. **C9** sees
+  `uvx copier@x`, fences in list items and blockquotes, and `<pre>`, and a
+  remote `--vcs-ref` must name a tag or a commit. **C10** slugs headings as
+  GitHub renders them. **C4** resolves `--cov=`/`--source=` paths, which is
+  what would have caught the release workflow measuring a `src/` that does not
+  exist — that step, failing at 0% on every run, is `make verify` now.
+- **The artifact gate** evaluates environment markers against the image's
+  Python and reads the image's second, per-cloud install.
+- **Coverage floors**: the serving-core exemption reads the package's AST (a
+  dict of lambdas was one statement), and the probe-module guard matches any
+  probe name.
+- **`intervals_are_calibrated`** accepted 0.95 and refused 0.85 at equal
+  distance from 0.90, by float rounding; both bounds are inclusive now.
+- **Three load-sensitive tests**: the tag probe runs in a `--shared` clone
+  instead of the repository every worktree shares, the status generator's
+  test budget derives from its own bound, and the determinism test prints the
+  rows that differ.
+- **Five of the local stack's six images are pinned by digest**, held by a
+  test. The sixth cannot be: `minio/minio` no longer resolves anonymously on
+  Docker Hub or Quay, so a clean machine cannot run `make local-up` — R15-20,
+  a decision about the replacement.
+- Parity `pending` entries carry an expiry (at most 100 days, watched); the
+  audit brief and rule Q-05 describe coverage as it is measured now; rounds
+  twelve to fourteen are committed beside fifteen.
+
+Open, each with a recommendation in the work order: R15-1 (R11-3), R15-5
+(Codecov), R15-6 (tamper resistance), R15-14 (the DAG's snapshot, after #106),
+R15-20 (MinIO), and W-14.
+
 ### Fixed — QA-4 round fourteen: three gates that each missed a realistic input, and a coverage figure that left two scripts out
 
 - **C6 saw one way of writing a link** (P2-1). A link to a non-public DuqueOM

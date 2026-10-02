@@ -228,7 +228,7 @@ def _with_file(path: Path, content: str) -> AbstractContextManager[None]:
 
 def test_gate_fails_when_a_lib_imports_a_project(lib_packages: set[str], project_packages: set[str]) -> None:
     """The inversion that would make a library depend on a consumer."""
-    probe = REPO_ROOT / "libs" / "ml-core" / "src" / "ml_core" / "_probe.py"
+    probe = REPO_ROOT / "libs" / "ml-core" / "src" / "ml_core" / "_gate_probe.py"
     with (
         _with_file(probe, "from demand_forecast import ingest  # noqa: F401\n"),
         pytest.raises(AssertionError, match="must not import"),
@@ -248,7 +248,7 @@ def test_gate_fails_when_a_project_imports_another_project(project_packages: set
     deployed, versioned or reasoned about separately, and the coupling is
     invisible in any diff that touches only one of them.
     """
-    probe = REPO_ROOT / "projects" / "demand-forecast" / "src" / "demand_forecast" / "_probe.py"
+    probe = REPO_ROOT / "projects" / "demand-forecast" / "src" / "demand_forecast" / "_gate_probe.py"
     with (
         _with_file(probe, "from rag_assistant import chunking  # noqa: F401\n"),
         pytest.raises(AssertionError, match="must not import"),

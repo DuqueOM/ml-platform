@@ -241,8 +241,8 @@ def test_the_generated_document_is_deterministic() -> None:
     # are fresh CLI runs. That is a stronger comparison than three CLI runs,
     # not a weaker one: two different execution paths must produce the same
     # document. `print` appends the newline the CLI output carries.
-    outputs = {_evaluated()[1] + "\n"}
-    for _ in range(2):
+    samples = [("in-process", _evaluated()[1] + "\n")]
+    for run in (1, 2):
         result = subprocess.run(
             [sys.executable, str(REPO_ROOT / "scripts" / "check_implementation_status.py")],
             capture_output=True,
@@ -251,11 +251,23 @@ def test_the_generated_document_is_deterministic() -> None:
             timeout=600,
         )
         assert result.returncode == 0, result.stderr
-        outputs.add(result.stdout)
+        samples.append((f"cli-{run}", result.stdout))
 
-    assert len(outputs) == 1, (
-        f"the generator produced {len(outputs)} different documents across three samples. A derived file "
-        f"that is not deterministic cannot be diffed, and every stale-check failure it causes will be "
+    # The diff, not just a count. QA-4 round fifteen saw this fail twice under
+    # parallel load and could not say which component moved, because the
+    # message reported only how many documents there were; the next occurrence
+    # names the rows that differ, and so the verification command to suspect.
+    import difflib
+
+    first_name, first = samples[0]
+    differences = [
+        "".join(difflib.unified_diff(first.splitlines(True), text.splitlines(True), first_name, name, n=0))
+        for name, text in samples[1:]
+        if text != first
+    ]
+    assert not differences, (
+        f"the generator produced {1 + len(differences)} different documents across three samples. A derived "
+        f"file that is not deterministic cannot be diffed, and every stale-check failure it causes will be "
         f"blamed on the wrong change. With the pool gone, suspect a verification command that reads host "
-        f"state rather than an interleaving."
+        f"state rather than an interleaving — the rows that moved:\n" + "\n".join(differences)
     )

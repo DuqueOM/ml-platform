@@ -83,7 +83,12 @@ def test_every_python_probe_the_tests_write_is_omitted_from_measurement() -> Non
     probes = {
         name
         for source in sources
-        for name in re.findall(r"\b(_[a-z]+_probe[\w{}]*\.py)\b", source.read_text(encoding="utf-8"))
+        # Any underscore-prefixed module with "probe" in its name, not only
+        # `_<word>_probe`: a bare `_probe` module, which
+        # `test_dependency_direction.py` wrote into `ml_core` and
+        # `demand_forecast`, matched neither this pattern nor the omit list
+        # (QA-4 round fifteen). That test now writes `_gate_probe` like the rest.
+        for name in re.findall(r"(?<![\w.])(_\w*?probe[\w{}]*\.py)\b", source.read_text(encoding="utf-8"))
     }
 
     assert probes, "no probe names found — the pattern stopped matching, so this test checks nothing"

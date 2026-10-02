@@ -1,0 +1,355 @@
+Committed copy of the QA-4 round 13 report (the auditor's ~/qa4-round-13-report.md),
+verbatim except that the probe repository the auditor used to test C6 is
+redacted to OWNER/PRIVATE-REPO, as in round fifteen's copy. Committed during
+round fifteen's remediation: that round found that the
+reports of rounds twelve to fourteen existed only in a home directory while the
+audit trail cited them there, so the evidence behind the trail was not in the
+public repository. Plain text, like round fifteen's, so quoted probes stay
+quotations.
+
+-------------------------------------------------------------------------------
+
+# QA-4 round thirteen — independent audit of DuqueOM/ml-platform
+
+- **Audited tree:** `96128c0aff327ef6c5e570b145a26d06d69a661f` (main, #92)
+- **Date:** 2026-09-26
+- **Auditor:** a fresh Claude Code session (Opus 5.5). It has no memory of writing any of this code. Its git author identity matches the repository owner's, because it runs on the owner's machine. ADR-005 rule B independence holds.
+- **Method:** `enterprise-audit` (agentic/skills/enterprise-audit/SKILL.md, read in full) and QA-4 in docs/governance/qa-procedures.md.
+- **Workspace:** a detached worktree at `/tmp/qa4-r13` after `uv sync --all-packages --all-extras --locked`. Read-only clones are at `/tmp/qa4-r13-mlp` (ml-platform from GitHub) and `/tmp/qa4-r13-agent-local` (at `a40bf38`). The owner's checkout was not touched. Every mutation was reverted, and `git status --porcelain` came back empty after each batch.
+
+> **On the skill registration:** this harness did not list `enterprise-audit`. That is **not** a finding against #89. The harness reads skills from the owner's checkout, which is on `feat/verify-the-artifact-digest`. That branch does not contain #89 (`git merge-base --is-ancestor b9bf676 HEAD` gives false) and still has the flat `.claude/skills/*.md` layout. At `96128c0`, `.claude/skills/enterprise-audit/SKILL.md` exists with `name` and `description` front-matter. I loaded the canonical file by reading it.
+
+---
+
+## 1. Scope
+
+**Audited**
+
+1. The round-twelve remediation: `git log 6a4bfe2..origin/pr-87-head` (`4e2da16`, `e22326f` C2, `7f9b238` exporter, `dff4c80` link sweep, `74934cb` work order and brief). `git diff --quiet f8400f7 origin/pr-87-head` succeeded, so the squash tree is identical to the PR head.
+2. Everything after the marker. I took the list from the brief §11 command, not from any document: `61cd79b` (#88), `b9bf676` (#89), `0456854` (#90), `5c4a660` (#91), `96128c0` (#92).
+3. Optional, read-only: DuqueOM/agent-local at `a40bf38` (the `export-provenance` job and a live CI run), and ml-service-template#238 (only its state and its distance from the service's template version).
+4. The six author leads, each one checked.
+5. **The round's question:** 31 mutations that neither round twelve's auditor nor the author chose, run against the tests of each fix.
+
+**Deliberately not audited**
+
+- Phase-1 ML content (conformal, feature-defs, lakehouse). It is unchanged in this range, and earlier rounds covered it.
+- The weekly link sweep's first run. It has not happened yet: `gh run list --workflow docs-quality.yml --event schedule` returns `[]`, and the next cron fire is Monday 2026-09-28 06:00 UTC. This is **unverifiable today**. I did not trigger `workflow_dispatch`, because that is an outward action.
+- ml-service-template#238's own correctness, including its copier-update migration. I only checked that it merged (`241fef1`) and that `services/demand-forecast-serving` predates it (`v0.26.0...241fef1`: ahead_by 102).
+- Actually running Cursor or Codex. Discovery claims were checked against each vendor's current documentation (fetched 2026-09-26), not against a running tool.
+
+---
+
+## 2. Verified-correct surfaces, with the commands
+
+| Surface | Command | Result |
+| --- | --- | --- |
+| Full test suite | `uv run pytest -o addopts="" -q -p no:cacheprovider` | `1441 passed, 53 skipped in 858.71s`, exit 0 |
+| Coherence gate, all checks | `uv run python scripts/check_doc_coherence.py` | exit 0. C1–C10 ok. C7: `last independent audit 3 days ago, 5/10 commits not contained in f8400f7`. C10: `19 links to markdown headings resolve`, which matches the CHANGELOG's "19 such links" |
+| Agentic surface | `uv run python scripts/validate_agentic_surface.py --strict` | exit 0. V7: `131 artifacts`, which is 29 skills × 3 surfaces + 22 commands × 2 surfaces, so the count is right |
+| Renderer drift | `uv run python scripts/sync_agentic_adapters.py --check` | `[sync] OK — 74 artifacts, 4 surfaces, all current` |
+| Derived documents | `check_implementation_status.py --check`, `check_technology_inventory.py --check` | both `OK — matches the filesystem` |
+| Library reuse | `check_library_reuse.py` | demand-forecast 2, rag-assistant 3, store-assistant 1. The rag-assistant imports are real `from llm_core`/`ml_core`/`data_contracts` statements in `src/`, not declared-only dependencies |
+| **Exporter ancestry guard against the REAL remote** (author lead 5) | fresh `git clone https://github.com/DuqueOM/ml-platform`, then `export_llm_core.py --dest <copy>` (write mode) at each ref | `origin/main` (96128c0): `wrote 12 module(s)`, exit 0. `f8400f7`: exit 0, 0 changed. `origin/pr-87-head` (74934cb) and `7f9b238`: `FAILED — HEAD is not an ancestor of origin/main`, exit 1. The guard holds after a real squash |
+| R12-1 against the real CI | `python3 scripts/export_llm_core.py --dest /tmp/qa4-r13-agent-local --check` at f8400f7 | `[export] OK … matches an export of f8400f773d0b` |
+| R12-1, the edit named in the brief | edit `core/policy.py` and update its hash in `EXPORTED_FROM.json` | `DRIFT — 2 file(s) differ …: policy.py, EXPORTED_FROM.json`, exit 1 |
+| R12-1 on GitHub | `gh run view 36246690246 -R DuqueOM/agent-local` | `export-provenance: success`. The log shows `[export] OK … f8400f773d0b` |
+| C2 migrated-tree rule on markdown | append `(ADR-007)` to `projects/store-assistant/README.md`, run `--only C2` | `FAIL [C2] … cites bare ADR-007 in a tree migrated from agent-local` |
+| C2's hand-written allow-list (brief §11 item 2) | grep for bare `ADR-00[1-4]` in `libs/llm-core` and `projects/store-assistant`, reading each context | 20 occurrences. Every one means this repository's decision: ADR-001 boundary, ADR-002 absorption, ADR-003 template, ADR-004 tiers/toolchain. The list is correct today |
+| C6's denylist half covers `.agents/` | read `_check_forbidden_names` | it iterates `git ls-files --cached --others` with no `_is_scannable` filter |
+| C10's real behaviour | probe with an inline dead anchor, and a link to a heading that exists only inside a code block | both `FAIL [C10]`, exit 1 |
+| `--only` "reported neither" path (author lead 6) | read `main()` | it tests the **unfiltered** `failures`/`notes`, so `passing_notes()` cannot make a check look silent. The real interaction is P3-2 below |
+| `.agents/` hand edits | append a link to `.agents/skills/rollback/SKILL.md` | C6 passes, but `sync --check` fails (`1 file(s). Run: python scripts/sync_agentic_adapters.py`), and CI runs it (`ci.yml:117`). Edits to rendered files are covered; new files are not (P2-5) |
+| Codex discovery row in V7 | vendor documentation at learn.chatgpt.com/docs/build-skills | `$CWD/.agents/skills`, parents, `$REPO_ROOT/.agents/skills`; `name` and `description` required. The row is correct |
+| Claude Code discovery row in V7 | code.claude.com/docs/en/skills | `.claude/skills/<name>/SKILL.md`. The row is correct. The docs call all front-matter optional, so V7 is stricter than the tool, which is acceptable |
+| `markdownlint` on the new `.agents/` files | `npx markdownlint-cli2@0.18.1 ".agents/**/*.md"` | `Summary: 0 error(s)` |
+| **Mutations killed** (13 of 31) | harness in the Appendix | C10: same-file skipped, root-relative resolution, H1/H2 only, hyphen dropped from slug. C2: `.yml` dropped, `.toml` dropped, 4-digit malformed allowed. Exporter: ancestry reversed, bare import allowed, indented import kept, version not set, header dropped. V7: description length, name ≠ folder, missing front-matter silent, publish-path check weakened |
+
+---
+
+## 3. Findings, most severe first
+
+### [P2-1] agent-local's export check cannot see a subpackage, so a `core/policy/` package replaces the exported `policy.py` and the check reports OK
+
+```text
+scripts/export_llm_core.py:262
+    return sorted(path.name for path in core.glob("*.py") if path.name not in expected)
+(the same glob is in agent-local tests/test_core_is_exported.py:43)
+
+$ mkdir core/policy && <policy.py with absolute imports, plus SHADOWED = True> > core/policy/__init__.py
+$ python3 scripts/export_llm_core.py --dest /tmp/qa4-r13-al-copy --check     # ml-platform at f8400f7
+[export] OK — /tmp/qa4-r13-al-copy/core matches an export of f8400f773d0b
+exit=0
+$ python3 -c "import core, core.policy as p; print(p.__file__, getattr(p,'SHADOWED',False))"
+/tmp/qa4-r13-al-copy/core/policy/__init__.py True
+```
+
+Python's `FileFinder` returns a package directory before a same-named `.py`. The exported `policy.py` is byte-identical and its hash matches, but it is never imported. The exporter's own docstring promises that a change in agent-local's `core/` fails. It does not for any subpackage (`core/ext/__init__.py` also gives `OK`, exit 0), nor for a `.pyi` or data file. This is R12-1 attacked with an edit neither party chose.
+
+**Fix:** make `stray_modules` recurse and cover every entry, not only `*.py`. For example, flag any path under `core/` other than the twelve modules, `EXPORTED_FROM.json` and `__pycache__/`, and fail on any directory. Mirror the same rule in agent-local's `test_core_is_exported.py`. Add a test that creates `core/policy/__init__.py` and asserts `--check` exits 1.
+
+### [P2-2] The round's question: 12 round-twelve and round-thirteen fixes pass a weakening that neither party chose
+
+The harness is in the Appendix. Each mutation was applied in `/tmp/qa4-r13`, the named tests were run, and the file was restored with `git checkout`. The run ended with `tree clean: True`. I list only the survivors that **weaken** a guarantee. Stricter-only survivors are listed separately.
+
+```text
+$ python3 mutate.py
+C2-migrated-md-exempt SURVIVED  (12 passed, 65 deselected in 24.39s)
+X-untracked-not-dirty SURVIVED  (37 passed in 1.42s)
+X-provenance-not-compared SURVIVED  (37 passed in 0.95s)
+X-stray-ignores-init SURVIVED  (37 passed in 0.87s)
+X-dirty-suffix-dropped SURVIVED  (37 passed in 0.84s)
+C10-fenced-headings-count SURVIVED  (9 passed, 68 deselected in 0.47s)
+V7-empty-desc-ok SURVIVED  (17 passed in 0.07s)
+V7-claude-cmd-desc-dropped SURVIVED  (17 passed in 0.06s)
+I-header-first-only SURVIVED  (37 passed, 1 skipped in 0.29s)
+I-no-rate-limit SURVIVED  (37 passed, 1 skipped in 0.28s)
+I-limit-ignored SURVIVED  (37 passed, 1 skipped in 0.30s)
+tree clean: True
+```
+
+| Mutant | Location | What passes undetected | Missing test |
+| --- | --- | --- | --- |
+| C2-migrated-md-exempt | `check_doc_coherence.py` C2 markdown loop | Markdown in `libs/llm-core` and `projects/store-assistant` escapes the migrated-tree rule. That is the exact 22-wrong-citations class. The rule works today (§2), but only code files are pinned (`tests/test_gate_scripts.py:383`) | a bare `ADR-007` in a migrated-tree `.md` must fail |
+| **X-provenance-not-compared** | `export_llm_core.py:302` | `--check` stops comparing `EXPORTED_FROM.json`. A tampered `library_version` then passes. agent-local's own test also passes it (`4 passed`), so **this comparison is the only guard, and it is untested** | tamper with one provenance field and assert DRIFT |
+| X-stray-ignores-init | `export_llm_core.py:262` | stray `_x.py` modules ignored | a stray with a leading underscore (see P2-1 as well) |
+| X-dirty-suffix-dropped | `source_commit` | `--check --allow-dirty` labels a dirty tree with a clean SHA | assert that `-dirty` appears in the dry-run provenance |
+| X-untracked-not-dirty | `source_commit` | an allow-listed module that exists but is untracked is stamped clean | narrow: an untracked module plus a committed MODULES entry |
+| C10-fenced-headings-count | `check_doc_coherence.py:1297` | a heading inside a code block counts as an anchor. The "skips code" test covers links in code, not headings in code | a link to a heading that exists only in a fence |
+| V7-empty-desc-ok | `validate_agentic_surface.py:326` | `description: ""` passes, although Codex requires one | an empty-description skill |
+| V7-claude-cmd-desc-dropped | `validate_agentic_surface.py:116` | R12-2's closing condition "command pointers carry a description" is unpinned in V7 | a Claude command without `description` |
+| I-header-first-only | `rag_assistant/ingest.py:173` | the User-Agent is sent only on the first request. The #90 control uses one filing (`test_ingest_contact.py:69`) | two filings, assert on both requests |
+| I-no-rate-limit | `ingest.py:177` | the module docstring's SEC rate limit (`ingest.py:9`) is untested; removing the sleep passes | assert that `sleep` is called with `REQUEST_INTERVAL_SECONDS` |
+| I-limit-ignored | `ingest.py:166` | `limit` ignored | limit=1 with two filings |
+
+Survivors that only make a check **stricter** (not findings, listed for completeness): `C10-case` and `C10-no-unquote` (fragment case-folding and percent-decoding are unpinned), `V7-cursor-desc-not-required` (equivalent today, because Codex requires it on the same path), `W-ceiling-exclusive` (360 itself unpinned).
+
+**Assessment against the brief's claims:** "11/11 C2, 11/11 exporter, 18/18 V7, 6/6 C10" were true of the mutations tried. On mutations neither party chose, 12 of 31 weakenings survive. The exporter was the weakest: 4 of 11 survive, including the only guard on provenance fields. The brief §11 hypothesis — tests tuned to two people's guesses — holds.
+
+**Fix:** add the missing tests in the right-hand column. Commit the mutation harness (this one or the author's), so the next round extends it rather than rebuilding it.
+
+### [P2-3] V7's discovery table is wrong about Cursor: Cursor also reads `.claude/skills/`, so every skill is listed twice, and the "listed once" claim is false
+
+```text
+scripts/validate_agentic_surface.py:113-122   (DISCOVERY; comment "checked 2026-09-23")
+agentic/manifest.yaml:138, .cursor_context.md:24
+  "... shared with Codex so that each skill is listed once."
+
+$ WebFetch https://cursor.com/docs/skills   (2026-09-26)
+Project-level: ".agents/skills/", ".cursor/skills/"
+Compatibility directories: ".claude/skills/", ".codex/skills/", "~/.claude/skills/", "~/.codex/skills/"
+"A `.cursor/skills/` (or `.agents/skills/`) folder anywhere inside your repository is picked up"
+
+$ ls .claude/skills | wc -l ; ls .agents/skills | wc -l
+29
+29
+```
+
+Cursor discovers all 29 skills at `.agents/skills/<id>/SKILL.md` and again at `.claude/skills/<id>/SKILL.md`, with the same `name` values. One copy's body says `Adapter surface: claude`. V7 models Cursor as `.cursor/skills` or `.agents/skills` only, so it cannot detect this, and the manifest's user-facing context states the opposite. V7 also does not model nested discovery, which P2-4 depends on. This is a doc/code divergence: a Cursor user reads "listed once" and gets a duplicated skill list. I verified it against vendor documentation, not a running Cursor, so treat the duplication as the documented behaviour.
+
+**Fix:** add Cursor's compatibility directories to the DISCOVERY table, and add a V7 rule that fails when one tool can reach the same skill `name` through two of its paths. Then either stop rendering the Claude surface where Cursor reads it (not possible: Claude needs `.claude/skills`) or make the duplicate explicit and harmless: state it in the manifest text and keep both pointers identical except for the surface line. Re-date the comment and cite the compatibility section.
+
+### [P2-4] `services/demand-forecast-serving` carries the pre-#238 skill layout, and nothing in ml-platform checks nested surfaces
+
+```text
+services/demand-forecast-serving/.cursor/skills/*.md   (20 flat files: INDEX.md + 19)
+services/demand-forecast-serving/.codex/skills/*.md    (19 flat files)
+services/demand-forecast-serving/.claude/skills/<id>/SKILL.md (20 directories)
+services/demand-forecast-serving/.copier-answers.yml: _commit: v0.26.0
+
+$ gh api repos/DuqueOM/ml-service-template/compare/v0.26.0...241fef1 -q '{status,ahead_by}'
+{"ahead_by":102,"status":"ahead"}
+$ comm -12 <(ls .claude/skills) <(ls services/demand-forecast-serving/.claude/skills) | wc -w
+19
+$ grep -rn services scripts/validate_agentic_surface.py scripts/sync_agentic_adapters.py
+(no output)
+```
+
+- The service's flat `.cursor/skills/*.md` and `.codex/skills/*.md` are discovered by neither tool: Cursor needs `SKILL.md`, and Codex reads only `.agents/skills`. They are dead surfaces.
+- Claude Code loads nested `.claude/skills/` "the first time Claude reads or edits a file in that subdirectory" (code.claude.com/docs/en/skills). Working in the service therefore registers 19 skills whose names collide with the root's. `rollback` (STOP) and `enterprise-audit` are among them, and they point at the service's own `agentic/skills/`, which holds the template's versions. Which one runs is decided by the tool, not by this repository.
+- ADR-003 forbids editing the scaffold, so the remedy is `copier update` past #238. But nothing reports the problem, which is the same "unnamed upstream defect" that C9 exists to avoid.
+
+**Fix:** extend V7 (or a new check) to walk `services/*` and `projects/*` for tool discovery directories. Report flat or undiscoverable layouts and cross-level name collisions, as C9 does for inherited defects. Schedule a `copier update` of demand-forecast-serving to a template tag that contains `241fef1`, once one exists.
+
+### [P2-5] C6's link scan skips every generated directory, so a file the generator did not write can publish a non-public repository link past all three gates; #91 added `.agents/` to that set
+
+```text
+scripts/check_doc_coherence.py:165   generated = {".claude", ".cursor", ".codex", ".devin", ".agents"}
+scripts/check_doc_coherence.py:770-771
+    for path in _scannable_files():
+        if not _is_scannable(path):
+
+$ echo "Notes: https://github.com/OWNER/PRIVATE-REPO" > .agents/NOTES.md
+$ uv run python scripts/check_doc_coherence.py --only C6
+  ok  [C6] 897 files scanned for non-public repository links and denylisted names
+$ uv run python scripts/sync_agentic_adapters.py --check
+[sync] OK — 74 artifacts, 4 surfaces, all current
+$ uv run python scripts/validate_agentic_surface.py --strict
+[agentic] OK — surface is coherent across every tool
+# control, same line in docs/_r13.md:
+  FAIL [C6] docs/_r13.md links to non-public repository 'PRIVATE-REPO'
+```
+
+The same result holds for `.claude/NOTES.md`, so the class predates #91. #91 widened it to the directory Cursor and Codex both read. The denylist half of C6 still scans these files, so the one known private name is caught. What is lost is the general half, which catches a repository nobody has added to the denylist yet. The `_is_scannable` exclusion exists to avoid double-reporting mirrored bodies, which does not apply to a privacy scan: a leak in a generated file is still a published leak.
+
+**Fix:** stop applying `_is_scannable`'s generated set in C6's link loop. Only infrastructure directories need excluding. Alternatively, have V1 fail on any file under a surface root that no layout produces, not only under `.agents/skills/`.
+
+### [P3-1] C10 checks inline links only: reference-style and HTML `href` fragments pass unchecked, and a setext heading is reported dead
+
+```text
+scripts/check_doc_coherence.py:1276-1277   _MD_LINK = inline "](...)" only; _HEADING = ATX "#" only
+
+$ printf '...[x][r]\n\n[r]: ../decisions/ADR-001-monorepo-topology.md#no-such-heading-ref\n\n<a href="../decisions/ADR-001-monorepo-topology.md#no-such-heading-html">y</a>\n' > docs/runbooks/_r13_probe.md
+$ uv run python scripts/check_doc_coherence.py --only C10
+(only the unrelated inline probe fails; neither dead reference-style nor HTML anchor is reported)
+
+$ printf 'Setext Title\n============\n\nLink: [s](#setext-title)\n' > docs/runbooks/_r13_probe.md
+  FAIL [C10] docs/runbooks/_r13_probe.md links to #setext-title ... which has no such heading
+```
+
+None of these forms occurs in the tree today (grep found no reference definitions with `#`, no `<a href="…#…">`, and no setext headings outside front-matter), so this is latent. The docstring still says "every link to a heading", and the ok line counts only what it saw.
+
+**Fix:** parse reference definitions (`^\s{0,3}\[[^\]]+\]:\s*(\S+)`) and `<a href="…">`. Add setext headings to `_anchors`. Or state the supported forms in the docstring and fail on the unsupported ones.
+
+### [P3-2] `passing_notes()` drops every note from a failing check, including notes that are not passes
+
+```text
+scripts/check_doc_coherence.py:133, :926-932
+
+# only an inherited (services/) unpinned copier command:
+$ uv run python scripts/check_doc_coherence.py --only C9
+  ok  [C9] 14 runnable copier command(s) against a versioned source, all pinned
+  ok  [C9] 1 unpinned command(s) INHERITED from the template, not fixable here: services/...
+# the same plus one hand-written in docs/:
+$ uv run python scripts/check_doc_coherence.py --only C9
+  FAIL [C9] docs/_r13.md documents an unpinned copier command: ...
+(the INHERITED report is gone)
+```
+
+C9's inherited-defect report ("reported loudly") and C2's "144 in generated code NOT checked" are warnings carried in `ok()`. #90's print-time filter hides them exactly when the check is already red. Separately, the first C9 line says "all pinned" while the next line reports an unpinned command.
+
+**Fix:** add a `note()` or `warn()` channel that `passing_notes()` does not filter, and move C9's inherited report and C2's unchecked count onto it. Reword C9's line to say "N pinned, M inherited unpinned".
+
+### [P3-3] R12-5's class survives in the sibling gate: V6 prints `ok … rules carry a resolvable authority` above its own `--strict` failure
+
+```text
+scripts/validate_agentic_surface.py:279, :286
+$ printf '# 99-probe\n\nA rule citing nothing.\n' > agentic/rules/99-probe.md
+$ uv run python scripts/validate_agentic_surface.py --strict | grep V6
+  ok   [V6] 24 rules carry a resolvable authority
+  warn [V6] rule 99-probe cites no authority (AGENTS.md or an ADR)
+  FAIL (strict) [V6] rule 99-probe cites no authority (AGENTS.md or an ADR)
+```
+
+`ok()` guards only against `failures`, and a warning is a failure under `--strict`, which CI uses (`ci.yml:124`). The work order's closing instruction was to close the class.
+
+**Fix:** in `ok()`, also skip the note when `warnings` has an entry for the check. Or count only the rules that do carry an authority.
+
+### [P3-4] The brief for this round states a false fact: rag-assistant does not sit below C1
+
+```text
+docs/governance/audit-brief.md:306
+  "`rag-assistant`'s shared-library reuse count sits below what charter criterion C1 asks for."
+docs/decisions/ADR-000-charter-and-scope.md:99   | C1 | A second project reuses ≥3 shared libraries with no fork |
+$ uv run python scripts/check_library_reuse.py
+  ok   [reuse] rag-assistant: reuses 3 shared librar(ies) — data-contracts, llm-core, ml-core
+```
+
+The imports are real (`from llm_core` ×2, `ml_core`, `data_contracts` in `src/`). The sentence is stale since llm-core's migration. It is the brief's own "a number restated outside what derives it" failure, with no number in it.
+
+**Fix:** replace the sentence with "run `check_library_reuse.py`", or record that C1 is met by rag-assistant at L1.
+
+### [P3-5] Generated-surface exclusion lists did not follow `.agents/`
+
+```text
+.markdownlint-cli2.yaml:15   ignores: ["services", ".claude", ".cursor", ".codex", ".devin", "templates", ...]
+.github/workflows/docs-quality.yml (markdownlint globs): !.claude/** !.cursor/** !.codex/** !.devin/** !templates/**
+```
+
+#91 added `.agents` to `_is_scannable` "as a generated surface", but markdownlint still lints it (it passes today: `0 error(s)`). The comment "linting them reports every canonical finding four times" is now inaccurate by one surface. This is cosmetic, but it is the same "one list per tool, hand-maintained" shape that produced P2-5.
+
+**Fix:** derive the generated-surface set from `agentic/manifest.yaml` (each surface's layout roots), and use it in the coherence script, the markdownlint config and the workflow. Or at least add `.agents`.
+
+### [P3-6] R12-1's guard is advisory: agent-local's `main` is unprotected, and the job only runs on agent-local's own events
+
+```text
+$ gh api repos/DuqueOM/agent-local/branches/main/protection
+{"message":"Branch not protected", ... "status":"404"}
+/tmp/qa4-r13-agent-local/.github/workflows/ci.yml:8-12   on: push/pull_request to main only (no schedule)
+```
+
+The job works (§2), but a red `export-provenance` does not block a merge. A rewrite of ml-platform history that orphans the recorded commit is not noticed until agent-local's next push.
+
+**Fix:** make `export-provenance` a required check on agent-local `main` (CONSULT, a settings change), and add a weekly `schedule:` trigger.
+
+---
+
+## 4. The author's six leads — disposition
+
+| Lead | Result |
+| --- | --- |
+| C10: setext, reference, HTML | **Confirmed** → P3-1 (plus the fenced-heading survivor in P2-2) |
+| `.agents/` in `_is_scannable` affects C6 | **Confirmed for C6's link half** → P2-5. The denylist half is unaffected. C2 skipping `.agents` is harmless, because its content is rendered from `agentic/`, which C2 scans |
+| V7 table vs current docs | **Confirmed for Cursor** → P2-3. The Claude Code and Codex rows match |
+| services/ flat skills and nested discovery | **Confirmed** → P2-4 |
+| Exporter ancestry vs the real remote | **Holds**: verified in a fresh GitHub clone (§2) |
+| `passing_notes()` × `--only` | The `--only` guard is correct (it reads unfiltered lists). A different interaction is real → P3-2 |
+
+---
+
+## 5. Verdict
+
+The round-twelve remediation and #88–#92 do what their tests say: every gate is green and reproducible, and the exporter's squash-ancestry guard and R12-1 hold against the real remote and CI. But the brief's "11/11, 11/11, 18/18, 6/6" does not survive mutations neither party chose: 12 of 31 weakenings pass. The export check can be bypassed by a shadowing subpackage, and V7's own table misstates Cursor. The claims are trustworthy as far as they were tested, and not beyond that.
+
+---
+
+## 6. For the owner, after review — not run by the auditor
+
+```bash
+uv run python scripts/audit_record.py --action independent-audit --target ml-platform --mode CONSULT --outcome "Round 13 against tree 96128c0. 0 P0, 0 P1, 5 P2, 6 P3. P2: agent-local export check blind to a shadowing core/ subpackage; 12 of 31 unchosen mutations survive the round-12 fixes' tests (exporter provenance comparison untested); V7 omits Cursor's .claude/skills compatibility path (skills listed twice, 'listed once' false); services/demand-forecast-serving pre-#238 skill surfaces unchecked with 19 nested name collisions; C6 link scan skips generated dirs incl. .agents. Remediation verified: suite 1441 passed/53 skipped, all gates green, exporter ancestry guard and R12-1 hold against the real remote and CI." --evidence "Worktree /tmp/qa4-r13 at 96128c0 after uv sync --all-packages --all-extras --locked; uv run pytest -o addopts=''; check_doc_coherence.py; validate_agentic_surface.py --strict; sync_agentic_adapters.py --check; check_implementation_status.py --check; check_technology_inventory.py --check; export_llm_core.py write/--check from a fresh GitHub clone at origin/main, f8400f7, 74934cb, 7f9b238; agent-local a40bf38 tamper probes; gh run view 36246690246 -R DuqueOM/agent-local; 31-mutation harness (appendix). Report: ~/qa4-round-13-report.md"
+```
+
+AGENTS.md marker line:
+
+```text
+Last independent audit: 2026-09-26 (96128c0)
+```
+
+---
+
+## Appendix — mutation harness (31 mutations, restored after each)
+
+The harness was a throwaway script in the auditor's scratchpad. Each row replaced one string in the named file, ran `pytest -o addopts='' -q -x <tests>`, and restored the file with `git checkout`.
+
+| Id | File | Mutation | Tests | Result |
+| --- | --- | --- | --- | --- |
+| C10-case | check_doc_coherence.py | drop `.lower()` on fragment | `-k c10` | survived (stricter) |
+| C10-samefile-skip | 〃 | same-file anchors unresolved | `-k c10` | killed |
+| C10-root-relative | 〃 | resolve from repo root | `-k c10` | killed |
+| C10-h1h2-only | 〃 | `#{1,2}` | `-k c10` | killed |
+| C10-fenced-headings-count | 〃 | headings inside fences count | `-k c10` | **survived** |
+| C10-hyphen-dropped | 〃 | slug drops `-` | `-k c10` | killed |
+| C10-no-unquote | 〃 | no percent-decoding | `-k c10` | survived (stricter) |
+| C2-drop-yml / -toml | 〃 | suffix removed | `-k 'c2 or dangling or adr'` | killed / killed |
+| C2-4digit-ok | 〃 | `\d{4,}` branch removed | 〃 | killed |
+| C2-migrated-md-exempt | 〃 | markdown skips migrated-tree rule | 〃 | **survived** |
+| X-untracked-not-dirty | export_llm_core.py | `--untracked-files=no` | test_export_llm_core.py | **survived** |
+| X-ancestry-reversed | 〃 | swap `--is-ancestor` args | 〃 | killed |
+| X-provenance-not-compared | 〃 | drop provenance diff | 〃 | **survived** |
+| X-stray-ignores-init | 〃 | ignore `_*.py` strays | 〃 | **survived** |
+| X-bare-import-allowed | 〃 | skip `import llm_core` refusal | 〃 | killed |
+| X-indented-import-kept | 〃 | `^()from` | 〃 | killed |
+| X-version-not-set | 〃 | skip `set_version` | 〃 | killed |
+| X-dirty-suffix-dropped | 〃 | no `-dirty` | 〃 | **survived** |
+| X-no-header | 〃 | no GENERATED header | 〃 | killed |
+| V7-desc-len | validate_agentic_surface.py | no length check | test_agentic_discovery.py | killed |
+| V7-name-folder | 〃 | no name==folder | 〃 | killed |
+| V7-empty-desc-ok | 〃 | `key not in fm` | 〃 | **survived** |
+| V7-fm-missing-silent | 〃 | no fail on missing front-matter | 〃 | killed |
+| V7-any-pattern-published | 〃 | publish path unchecked | 〃 | killed |
+| V7-cursor-desc-not-required | 〃 | Cursor requires `name` only | 〃 | survived (equivalent) |
+| V7-claude-cmd-desc-dropped | 〃 | commands need nothing | 〃 | **survived** |
+| I-header-first-only | rag_assistant/ingest.py | header on first request only | projects/rag-assistant/tests | **survived** |
+| I-no-rate-limit | 〃 | drop `time.sleep` | 〃 | **survived** |
+| I-limit-ignored | 〃 | ignore `limit` | 〃 | **survived** |
+| W-ceiling-exclusive | tests/test_workflow_bounds.py | `< 360` | test_workflow_bounds.py | survived (stricter) |

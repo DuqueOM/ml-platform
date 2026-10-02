@@ -147,3 +147,28 @@ a CONSULT-class decision, exactly as recorded above.
 - [ADR-004](ADR-004-tooling-triage.md) — Adopted tooling needs a gate; a
   serving path with no running instance has none.
 - `docs/architecture/technical-plan.md`, Phase 1c.
+
+## Correction, 2026-10-02 — the image still cannot read the artifact
+
+The progress note of 2026-09-22 says "A reader needs scikit-learn, numpy and
+joblib, which the image has." The first half is true; the conclusion is not.
+QA-4 round fifteen built a virtual environment from
+`services/demand-forecast-serving/requirements.txt` alone (Python 3.13, numpy
+1.26.4, scikit-learn 1.9.1, joblib 1.6.0) and loaded a freshly saved artifact:
+
+```text
+ValueError: <class 'numpy.random._pcg64.PCG64'> is not a known BitGenerator module.
+```
+
+Reproduced in the remediation session. The workspace-package half of the fix
+holds — the pickle resolves only `joblib`, `numpy` and `sklearn` names. The
+numpy half does not: the artifact is written under numpy 2.x, and the fitted
+`HistGradientBoostingRegressor` keeps a numpy-2 `Generator`
+(`_feature_subsample_rng`, used only during `fit`). Deleting that one attribute
+makes the same artifact load and predict under numpy 1.26 — measured, not
+assumed — so the straddle this ADR's numpy exemption covers is the whole of the
+remaining defect.
+
+The note above is left as written; this section is the correction. The status
+stays `Proposed`, and R11-3 in the remediation work order is reopened with the
+two ways to close it.

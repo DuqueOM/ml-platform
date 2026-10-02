@@ -47,7 +47,11 @@ categories:
   - name: CI/CD
     items:
       - {id: github-actions, tier: core, detect: [".github/workflows/ci.yml"]}
-      - {id: codecov, tier: core, detect: ["codecov.yml"], note: "Declared L1/L2 coverage thresholds were unenforced until this existed — a published claim with no gate."}
+      # Detected by the wiring an upload needs to SUCCEED, not by its configuration
+      # file. Every upload has been rejected ("Token required - not valid tokenless
+      # upload"; CODECOV_TOKEN is empty), so none of codecov.yml's statuses has ever
+      # run, while `detect: ["codecov.yml"]` reported it built (QA-4 R15).
+      - {id: codecov, tier: core, detect: ["pattern:use_oidc: true|.github/workflows/ci.yml"], note: "Configured but enforcing nothing: every upload is rejected for want of credentials (QA-4 R15, R15-5). L1/L2/P12/P17 are enforced by scripts/check_coverage_floors.py, not by this."}
       - {id: coverage-gate, tier: core, detect: ["pattern:check_coverage_floors.py|.github/workflows/ci.yml"]}
       - {id: release-on-tag, tier: core, detect: [".github/workflows/release-on-tag.yml"], note: "The template added this after finding six tags with zero published releases."}
       - {id: openssf-scorecard, tier: core, detect: [".github/workflows/scorecard.yml"]}

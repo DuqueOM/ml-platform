@@ -322,3 +322,38 @@ def test_the_platform_is_never_less_strict_than_the_vendored_service() -> None:
         f"{sorted(set(platform.values()))} and the service enforces {sorted(set(vendored.values()))}. "
         f"A pod accepted by one and rejected by the other surfaces at deploy time as an outage."
     )
+
+
+@pytest.mark.parametrize(
+    ("expires", "verdict"),
+    [
+        (None, "pending with no `expires:`"),
+        ("2026-09-30", "its date (2026-09-30) has passed"),
+        ("2027-06-30", "days out"),
+        ("soon", "is not a YYYY-MM-DD date"),
+        ("2026-12-31", None),
+    ],
+    ids=["undated", "expired", "too-far", "malformed", "valid"],
+)
+def test_a_pending_entry_carries_a_date_that_makes_someone_look_again(expires: str | None, verdict: str | None) -> None:
+    """QA-4 round fifteen: eight `pending` entries carried no date, the oldest from round nine.
+
+    A decision to adopt with no date is never revisited, and an entry flipped
+    to `adopted` closes on the file existing, whatever its content. The date is
+    the mechanical half: on it, the work is adopted, re-decided, or rejected.
+    """
+    from datetime import date
+
+    import check_upstream_parity as parity
+
+    entry = {"path": "docs/NOT_YET_WRITTEN.md", "status": "pending", "reason": "x" * 60}
+    if expires is not None:
+        entry["expires"] = expires
+    parity.failures.clear()
+    parity.notes.clear()
+    parity.check_offline([entry], today=date(2026, 10, 2))
+
+    if verdict is None:
+        assert parity.failures == []
+    else:
+        assert any(verdict in failure for failure in parity.failures), parity.failures

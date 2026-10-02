@@ -291,7 +291,7 @@ def test_a_marker_outside_the_history_is_refused_rather_than_counted(tmp_path: P
     assert _commits_since_ref("HEAD") == 0, "a reachable marker must still measure, or the check cannot pass at all"
 
 
-def test_a_marker_naming_a_lightweight_tag_still_measures() -> None:
+def test_a_marker_naming_a_lightweight_tag_still_measures(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """A tag is a legitimate marker, and `rev-parse` resolves it to a commit.
 
     QA-4 round six reported this as an untested path — probably working, and
@@ -300,11 +300,25 @@ def test_a_marker_naming_a_lightweight_tag_still_measures() -> None:
     accepts any committish; a tag pointing into `main` is reachable, and one
     pointing at an orphan is not. Both are asserted, because a check that
     accepts every tag is as wrong as one that rejects them.
+
+    The tag is made in a `--shared` clone under `tmp_path`, never in this
+    repository. It was made here, and every worktree of a repository shares one
+    tag namespace: two suites running at once — the arrangement this
+    repository recommends for long measurements — collided on the name and one
+    failed with exit 128 (QA-4 round fifteen). An interrupted run would also
+    have left the tag behind in the user's repository.
     """
     import sys
 
     sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    import check_doc_coherence
     from check_doc_coherence import _commits_since_ref
+
+    head = _git(REPO_ROOT, "rev-parse", "HEAD").strip()
+    clone = tmp_path / "clone"
+    _git(tmp_path, "clone", "-q", "--shared", "--no-checkout", str(REPO_ROOT), str(clone))
+    _git(clone, "checkout", "-q", "--detach", head)
+    monkeypatch.setattr(check_doc_coherence, "REPO_ROOT", clone)
 
     probe = "qa4-probe-lightweight"
     # `-c tag.gpgSign=false`: this machine configures signed tags, so a bare
@@ -312,26 +326,25 @@ def test_a_marker_naming_a_lightweight_tag_still_measures() -> None:
     # depends on the author's git configuration is the defect that made an
     # earlier probe here pass locally and fail on the runner — twice is a
     # pattern, so the setting is overridden rather than assumed.
-    _git(REPO_ROOT, "-c", "tag.gpgSign=false", "tag", "-f", probe, "HEAD~1")
-    try:
-        # Asserted as an EQUIVALENCE, never against a constant. The first
-        # version expected exactly 1, which holds only where `HEAD~1` is one
-        # commit behind `HEAD` — true on a linear local branch and false on a
-        # runner, where `actions/checkout` builds a merge commit whose first
-        # parent is the base, so the range spans the whole branch. It passed on
-        # a one-commit pull request and went red on the next, which is a test
-        # measuring the shape of the history rather than the thing it names.
-        #
-        # What the test is FOR is that a lightweight tag resolves exactly like
-        # the SHA it points at: that is the untested path round six reported,
-        # and it holds whatever the history looks like.
-        by_sha = _commits_since_ref(_git(REPO_ROOT, "rev-parse", "HEAD~1").strip())
-        by_tag = _commits_since_ref(probe)
-        assert by_tag == by_sha, f"a lightweight tag measured {by_tag} where the SHA it names measured {by_sha}"
-        assert by_tag is not None, "a reachable lightweight tag was reported unmeasurable"
-        assert by_tag >= 1, f"a tag naming a reachable commit did not measure the drift behind it: {by_tag}"
-    finally:
-        _git(REPO_ROOT, "tag", "-d", probe)
+    _git(clone, "-c", "tag.gpgSign=false", "tag", "-f", probe, "HEAD~1")
+
+    # Asserted as an EQUIVALENCE, never against a constant. The first version
+    # expected exactly 1, which holds only where `HEAD~1` is one commit behind
+    # `HEAD` — true on a linear local branch and false on a runner, where
+    # `actions/checkout` builds a merge commit whose first parent is the base,
+    # so the range spans the whole branch. It passed on a one-commit pull
+    # request and went red on the next, which is a test measuring the shape of
+    # the history rather than the thing it names.
+    #
+    # What the test is FOR is that a lightweight tag resolves exactly like the
+    # SHA it points at: that is the untested path round six reported, and it
+    # holds whatever the history looks like.
+    by_sha = _commits_since_ref(_git(clone, "rev-parse", "HEAD~1").strip())
+    by_tag = _commits_since_ref(probe)
+    assert by_tag == by_sha, f"a lightweight tag measured {by_tag} where the SHA it names measured {by_sha}"
+    assert by_tag is not None, "a reachable lightweight tag was reported unmeasurable"
+    assert by_tag >= 1, f"a tag naming a reachable commit did not measure the drift behind it: {by_tag}"
+    assert probe not in _git(REPO_ROOT, "tag", "-l", probe), "the probe tag reached the real repository"
 
 
 def test_a_shallow_clone_refuses_rather_than_falling_back_to_dates(tmp_path: Path) -> None:

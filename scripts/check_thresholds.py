@@ -71,6 +71,13 @@ class Threshold:
     path: str
     pattern: str
     higher_is_stricter: bool = True
+    #: The NAME this threshold was watched under at the baseline, and the factor
+    #: that converts the old value into the new unit — `("L1 line coverage
+    #: floor", 100)` for a floor that moved from a fraction (0.90) to a percent
+    #: (90). Needed only for a rename: a threshold whose name is unchanged is
+    #: found at the baseline by name wherever it lived, whatever file or pattern
+    #: it has now. See `compare`.
+    renamed_from: tuple[str, float] | None = None
 
     def read(self, text: str) -> float | None:
         match = re.search(self.pattern, text)
@@ -107,8 +114,18 @@ THRESHOLDS = (
     # Both floors left the workflow when CI moved to one coverage run (W-5):
     # they are named constants in the floors gate now, which is also where the
     # per-package floors below live.
-    Threshold("libs combined coverage floor", _FLOORS, r"LIBS_COMBINED_FLOOR = (\d+)"),
-    Threshold("scripts coverage floor (P12)", _FLOORS, r"SCRIPTS_COMBINED_FLOOR = (\d+)"),
+    Threshold(
+        "libs combined coverage floor",
+        _FLOORS,
+        r"LIBS_COMBINED_FLOOR = (\d+)",
+        renamed_from=("libs coverage in CI", 1),
+    ),
+    Threshold(
+        "scripts coverage floor (P12)",
+        _FLOORS,
+        r"SCRIPTS_COMBINED_FLOOR = (\d+)",
+        renamed_from=("scripts coverage in CI", 1),
+    ),
     Threshold("projects combined coverage floor (P17)", _FLOORS, r"PROJECTS_COMBINED_FLOOR = (\d+)"),
     Threshold("orchestration combined coverage floor (P17)", _FLOORS, r"ORCHESTRATION_COMBINED_FLOOR = (\d+)"),
     Threshold(
@@ -123,6 +140,20 @@ THRESHOLDS = (
     ),
     Threshold("retrain skill floor", "orchestration/dags/demand_forecast_training.py", r"MIN_SKILL = ([\d.]+)"),
     Threshold("retrain coverage floor", "orchestration/dags/demand_forecast_training.py", r"MIN_COVERAGE = ([\d.]+)"),
+    # The pipeline's half of the promotion gate. Only the DAG's two constants
+    # were watched, so the KFP gate — a different rule over a different
+    # backtest (W-14) — could be loosened silently (QA-4 round fifteen, R15-2).
+    Threshold(
+        "pipeline promotion skill floor",
+        "orchestration/pipelines/demand_forecast_pipeline.py",
+        r"if skill <= ([\d.]+):",
+    ),
+    Threshold(
+        "calibration tolerance (pipeline gate)",
+        "projects/demand-forecast/src/demand_forecast/train.py",
+        r"def intervals_are_calibrated\(self, tolerance: float = ([\d.]+)\)",
+        higher_is_stricter=False,
+    ),
     Threshold(
         "ingest reject ceiling",
         "projects/demand-forecast/src/demand_forecast/ingest.py",
@@ -142,8 +173,24 @@ THRESHOLDS = (
         "scripts/check_library_reuse.py",
         r'"rag-assistant":\s*(\d+)',
     ),
-    Threshold("L1 line coverage floor, per library", _FLOORS, r"LINE_FLOOR = (\d+)"),
-    Threshold("L2 branch coverage floor, per library", _FLOORS, r"BRANCH_FLOOR = (\d+)"),
+    Threshold(
+        "L1 line coverage floor, per library",
+        _FLOORS,
+        r"LINE_FLOOR = (\d+)",
+        renamed_from=("L1 line coverage floor", 100),
+    ),
+    Threshold(
+        "L2 branch coverage floor, per library",
+        _FLOORS,
+        r"BRANCH_FLOOR = (\d+)",
+        renamed_from=("L2 branch coverage floor", 100),
+    ),
+    Threshold(
+        "parity pending ceiling, in days",
+        "scripts/check_upstream_parity.py",
+        r"MAX_PENDING_DAYS = (\d+)",
+        higher_is_stricter=False,
+    ),
     Threshold(
         "baseline acceptance ceiling, in days",
         "scripts/check_baselines_expiry.py",
@@ -274,9 +321,97 @@ def _at_head(path: str) -> str | None:
     return result.stdout if result.returncode == 0 else None
 
 
+#: Run inside a throwaway copy of the baseline's `scripts/`: imports that
+#: commit's `check_thresholds` and prints its watch list. Its own imports
+#: (the floors table, today) resolve against the same copy, so the list is
+#: exactly what that commit watched.
+_DEFINITIONS = """
+import json, sys
+sys.path.insert(0, sys.argv[1])
+import check_thresholds as baseline
+print(json.dumps([[t.name, t.path, t.pattern, t.higher_is_stricter] for t in baseline.THRESHOLDS]))
+"""
+
+
+def _baseline_definitions(ref: str) -> list[Threshold] | None:
+    """The watch list as the baseline commit declared it. None when it cannot be read.
+
+    Comparing each threshold only against its CURRENT path and pattern was the
+    hole QA-4 round fifteen found: move a constant to another file, or rename
+    its label, and nothing at the baseline matches — so the comparison is
+    skipped and the number can be anything. #112 moved four coverage floors at
+    once; the auditor lowered all four to near zero and this gate said
+    "none loosened". The baseline's own definitions are what it watched, so they
+    are what the current tree is answerable to.
+
+    Read by importing that commit's module in a separate interpreter, from a
+    `git archive` of its `scripts/`: the list is built by code (the per-package
+    floors are derived from another module), so parsing it would be a second
+    implementation of it.
+    """
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as scratch:
+        archive = subprocess.run(
+            ["git", "-C", str(REPO_ROOT), "archive", "--format=tar", ref, "scripts/"],
+            capture_output=True,
+            check=False,
+            timeout=SUBPROCESS_TIMEOUT_SECONDS,
+        )
+        if archive.returncode != 0:
+            return None
+        subprocess.run(
+            ["tar", "-x", "-C", scratch],
+            input=archive.stdout,
+            capture_output=True,
+            check=True,
+            timeout=SUBPROCESS_TIMEOUT_SECONDS,
+        )
+        listed = subprocess.run(
+            [sys.executable, "-c", _DEFINITIONS, str(Path(scratch) / "scripts")],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=scratch,
+            timeout=SUBPROCESS_TIMEOUT_SECONDS,
+        )
+    if listed.returncode != 0:
+        return None
+    import json
+
+    return [Threshold(name, path, pattern, stricter) for name, path, pattern, stricter in json.loads(listed.stdout)]
+
+
+def _value_at_baseline(threshold: Threshold) -> float | None:
+    committed_text = _at_head(threshold.path)
+    return threshold.read(committed_text) if committed_text is not None else None
+
+
 def compare() -> list[str]:
-    """Return a message for every threshold that moved in the weakening direction."""
+    """Return a message for every threshold that moved in the weakening direction.
+
+    Each current threshold is compared with its value at the baseline, found
+    in this order:
+
+    1. Its current path and pattern, at the baseline — the ordinary case.
+    2. The baseline's own definition of the same NAME — a constant that moved
+       to another file, or whose pattern changed, keeps its history.
+    3. The baseline's definition of the name in `renamed_from`, scaled by its
+       factor — a relabelled threshold, declared as one.
+
+    A name the baseline watched that nothing here claims, by name or by
+    `renamed_from`, FAILS: deleting a watch-list entry stopped watching the
+    number without a word, and relabelling one was indistinguishable from
+    adding a new threshold. A threshold with no baseline at all is new.
+    """
     weakened = []
+    baseline: list[Threshold] | None = None
+
+    def defined(name: str) -> Threshold | None:
+        nonlocal baseline
+        if baseline is None:
+            baseline = _baseline_definitions(_baseline_ref("scripts/check_thresholds.py")) or []
+        return next((old for old in baseline if old.name == name), None)
 
     for threshold in THRESHOLDS:
         current_text = (REPO_ROOT / threshold.path).read_text(encoding="utf-8")
@@ -289,10 +424,19 @@ def compare() -> list[str]:
             )
             continue
 
-        committed_text = _at_head(threshold.path)
-        if committed_text is None:
-            continue
-        previous = threshold.read(committed_text)
+        previous = _value_at_baseline(threshold)
+        source = threshold.path
+        if previous is None:
+            same_name = defined(threshold.name)
+            if same_name is not None:
+                previous, source = _value_at_baseline(same_name), f"{same_name.path} (moved)"
+            elif threshold.renamed_from is not None:
+                old_name, factor = threshold.renamed_from
+                renamed = defined(old_name)
+                if renamed is not None:
+                    value = _value_at_baseline(renamed)
+                    previous = value * factor if value is not None else None
+                    source = f"{renamed.path}, as {old_name!r}"
         if previous is None:
             continue
 
@@ -300,9 +444,23 @@ def compare() -> list[str]:
         if loosened:
             direction = "lowered" if threshold.higher_is_stricter else "raised"
             weakened.append(
-                f"{threshold.name}: {previous} -> {current} ({direction}) in {threshold.path}. "
+                f"{threshold.name}: {previous} -> {current} ({direction}) in {threshold.path}"
+                f"{'' if source == threshold.path else f', compared with {source}'}. "
                 "Loosening a gate is a STOP operation (AGENTS.md, P-10). Re-run with "
                 "--accept and a reason if it is deliberate."
+            )
+
+    claimed = {threshold.name for threshold in THRESHOLDS} | {
+        threshold.renamed_from[0] for threshold in THRESHOLDS if threshold.renamed_from is not None
+    }
+    if baseline is None:
+        baseline = _baseline_definitions(_baseline_ref("scripts/check_thresholds.py")) or []
+    for old in baseline:
+        if old.name not in claimed:
+            weakened.append(
+                f"{old.name}: watched at the baseline and by nothing now. Removing a threshold from "
+                "THRESHOLDS stops watching it, and relabelling one without `renamed_from` loses its "
+                "history — either is how a number gets lowered with this gate green."
             )
 
     return weakened

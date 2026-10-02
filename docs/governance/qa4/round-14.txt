@@ -1,0 +1,331 @@
+Committed copy of the QA-4 round 14 report (the auditor's ~/qa4-round-14-report.md),
+verbatim except that the probe repository the auditor used to test C6 is
+redacted to OWNER/PRIVATE-REPO, as in round fifteen's copy. Committed during
+round fifteen's remediation: that round found that the
+reports of rounds twelve to fourteen existed only in a home directory while the
+audit trail cited them there, so the evidence behind the trail was not in the
+public repository. Plain text, like round fifteen's, so quoted probes stay
+quotations.
+
+-------------------------------------------------------------------------------
+
+# QA-4 round fourteen — independent audit of DuqueOM/ml-platform
+
+- **Audited tree:** `f8b9d2740ac26aded07da9a1f28336101bf52ef5` (`origin/main` once #102 merged; `gh pr view 102 … -q .state` → `MERGED`, merge commit `f8b9d27`)
+- **Date:** 2026-09-29
+- **Auditor:** a fresh Claude Code session (Opus 5.5). It audited round thirteen in the same conversation and wrote none of the code under review, so ADR-005 rule B independence holds. Its git identity matches the owner's, because it runs on the owner's machine.
+- **Method:** `enterprise-audit` (agentic/skills/enterprise-audit/SKILL.md, loaded in full) and QA-4. The harness does not list the skill because the owner's checkout is on `feat/verify-the-artifact-digest`, which predates #89. That is not a finding.
+- **Workspace:** a detached worktree at `/tmp/qa4-r14` after `uv sync --all-packages --all-extras --locked`. Read-only clones under `/tmp`: ml-platform (GitHub), agent-local, and ml-service-template. Everything was removed at the end. The owner's checkout and PRs #76–#82 were not touched. `git status --porcelain` came back empty after every probe batch, and no skip-worktree flag was left behind.
+
+---
+
+## 1. Scope
+
+**Audited.** The marker range, listed with the brief §11 command: `7f1867c` (#93), `e62566a` (#94), `23cdf6d` (#101), `9562457` (#95), `93a06f4` (#98), `e135c4c` (#97), `f9c845d` (#96), `7f93ebe` (#100), `f8b9d27` (#102). That is 9 commits, and C7 says the same (`9/10 commits not contained in 96128c0`). Also audited:
+
+- the author's seven leads and the brief's five weakest points;
+- the round's question, which has two parts: extend the mutation harness, and check whether any existing entry is killed only because the mutated code fails to import.
+
+Optional items, read-only: agent-local's `export-provenance` job, its branch protection and the shadow attack from round thirteen. ml-service-template v0.26.0 and v0.30.2, regenerated from the public URL.
+
+**Not audited.**
+
+- Phase-1 ML content. It is unchanged in this range.
+- Dependabot's five bumps beyond the gates and the suite passing.
+- ml-service-template's own tests.
+- A running Cursor, Codex or Claude Code. Discovery claims were checked against vendor documentation fetched 2026-09-29.
+- Branch protection on ml-platform `main`. It is listed as the owner's call under *Not for an agent*.
+
+---
+
+## 2. Verified-correct surfaces, with the commands
+
+| Surface | Command | Result |
+| --- | --- | --- |
+| Full suite | `uv run pytest -o addopts="" -q -p no:cacheprovider` | `1550 passed, 53 skipped in 728.95s`, exit 0 |
+| Coherence | `check_doc_coherence.py` | exit 0. C7: `9/10 commits not contained in 96128c0`. C10: `20 links … resolve`. C2's unchecked count is now on the `note` channel |
+| Agentic surface | `validate_agentic_surface.py --strict`, `sync_agentic_adapters.py --check` | OK. V7: 131 artifacts. V8: 2 notes (19 collisions each) and no flat pointers, so R13-1's closing condition is met |
+| Every other `make verify` gate | ruff check, ruff format --check, mypy (97 files), validate_quality_gates, check_ci_references, check_action_pins, check_artifact_compatibility, check_baselines_expiry, check_dashboard_inventory, check_gitleaks_pin, check_library_reuse, check_mcp_registry, check_test_clock_isolation, check_template_render_safety, check_thresholds, check_upstream_parity, check_version_consistency, ci_verify_yaml, measure_cloud_surface --check, check_technology_inventory --check, check_implementation_status --check | every one rc=0 |
+| CI on the audited tree | `gh run view 36587573837` | all six jobs `success`. `Required test coverage of 83% reached. Total coverage: 83.66%` |
+| "83.66% twice on main" (#102) | CI logs for runs 36475580510 (`23cdf6d`) and 36506572279 (`7f93ebe`), plus a local run | `83.66%` in both CI runs and locally (`3438 501 1452 188`), identical. The figure is deterministic and correctly reported. Its scope is P2-4 |
+| #100: pre-#100 service byte-identical to v0.26.0 | public URL `copier copy --trust --defaults --vcs-ref v0.26.0` with the runbook's `--data` (including `service_name="Demand Forecast Serving"`), then `diff -rq` against `git archive 7f93ebe^ services/demand-forecast-serving` | `differences: 1  committed files: 627`. The one is `.copier-answers.yml` `_src_path`: the committed file held a local path (`/home/duqueom/projects/main_projects/template_MLOps`). The claim holds exactly as worded |
+| #100: service equals a clean v0.30.2 generation | same, with `--vcs-ref v0.30.2`, against `git archive f8b9d27 …` | `Only in …gen302b: data`, 1 difference. It is five `data/*/.gitkeep` files that the service's own `.gitignore` (`data/raw/*` …) excludes. Without `service_name` the same generation differs in **60** files (P3-5) |
+| Artifact gate SEAM (lead) | built a `ForecastModel` exactly as `persist.fit_final` does, then `joblib.load` with `NumpyUnpickler.find_class` hooked | the modules referenced are `['demand_forecast', 'joblib', 'ml_core', 'numpy', 'sklearn']`. SEAM = {numpy, scikit-learn, joblib} is the right set for the pickle. `uv.lock` does straddle outside it (pandas 3.0.5 vs `~=2.3.3`, scipy 1.18.0 vs `~=1.17.1`, pyarrow 21 vs `~=18.0.0`), but none of those modules is in the pickled graph, and the docstring already discloses it. The gate's real weakness is in how it parses the reader (P2-3) |
+| detect-private-key exemption removal (lead) | `pre-commit run detect-private-key --all-files`, then injection | `Passed`. An injected RSA header fails in `services/demand-forecast-serving/tests/`, `.agents/` and `docs/`. The fixture is assembled at runtime (`"-----BEGIN RSA " + "PRIVATE KEY-----…"`). The one gap is in P3-1 |
+| No secret in history (lead) | `gitleaks git --redact` (repo config) | `222 commits scanned … no leaks found` |
+| The same, without the repo's allow-lists | `gitleaks git --redact --ignore-gitleaks-allow` with `[extend] useDefault = true` | 2 findings, both inline-allowed fixtures in `services/…/test_memory_redaction.py` (`curl-auth-header`, `private-key`). Nothing else |
+| The alerted fake Google key never reached `main` | `git log -G'AIza' HEAD -- …/test_context_files_hygiene.py`; the file at the tip | at the tip, `"AIza" + "Example" * 5`, assembled at runtime. Alert #1 is `resolved used_in_tests`, and its location is `5899dbc`, a rewritten branch commit (still fetchable by SHA on GitHub, and fake). Note: a *different* fake AIza key and the PEM block **were** on `main` from `5b3e2c1` (2026-08-08) to `7f93ebe`, marked `gitleaks:allow`. The CHANGELOG's "neither literal reached `main`" is about the two v0.30.0 literals and is true as worded |
+| R13-2, agent-local | `gh api repos/DuqueOM/agent-local/branches/main/protection` | `{"admins":true,"checks":["export-provenance"],"strict":true}`. A `schedule` run succeeded 2026-09-28 |
+| R13-2, the attack re-run | fresh clone at the recorded `7f1867c`, `export_llm_core.py --check`; then add a `core/policy/` package, then a `core/policy.cpython-312-x86_64-linux-gnu.so` | clean: `[export] OK … 7f1867c6e69b`. Package: `FAILED … holds entries the export does not produce: policy/, policy/__init__.py`. Extension: `FAILED … policy.cpython-312-x86_64-linux-gnu.so` |
+| **Kill causes of all 39 existing entries** (the round's question, part 2) | `killcause.py`: each entry run as the harness does, keeping the full output and each failure's exception type | 37/37 expected kills are **assertion failures** (`E AssertionError`, or `assert 0 == 1` on a gate's return code, or the gate's own `FAIL` lines for P0-claude-skills-flat). None is killed by an import, collection or syntax error. `C10-case` and `W-ceiling-exclusive` survive, as declared |
+| V7 copies-must-agree (brief item 1) | read the code; mutation `R14-V7-reach-name-only` | killed. The renderer emits only `name` and `description` (pinned by `test_a_rendered_skill_carries_name_description_and_mode_and_nothing_else`), and any hand edit to a copy fails `sync --check`. Comparing name, description and canonical source is sufficient for what the renderer can produce |
+| C10 setext heuristic (brief item 2) | probes: indented code then `===`, HTML block then `---`, list item then `===`, multi-line paragraph then `---` | the first three dead links correctly `FAIL`. The multi-line setext heading is reported dead, which is a false positive and the safe direction. Not a finding |
+| Thresholds gate on a lowered floor | mutation `R14-thresholds-scripts-floor-lowered` | `[thresholds] FAILED` |
+
+---
+
+## 3. Findings, most severe first
+
+### [P2-1] C6's link scan misses four equally valid forms of a link to a non-public DuqueOM repository
+
+```text
+scripts/check_doc_coherence.py:790   repo_link = re.compile(r"github\.com/([A-Za-z0-9_-]+)/([A-Za-z0-9_.-]+)")
+scripts/check_doc_coherence.py:871   if owner != PRIVATE_ACCOUNT:          # case-sensitive; GitHub owners are not
+
+$ echo "see https://github.com/OWNER/PRIVATE-REPO" > docs/_r14.md && uv run python scripts/check_doc_coherence.py --only C6
+  FAIL [C6] docs/_r14.md links to non-public repository 'PRIVATE-REPO'          # control
+https://github.com/OWNER/PRIVATE-REPO            ->  ok  [C6] 1389 files scanned …
+git clone git@github.com:OWNER/PRIVATE-REPO.git  ->  ok  [C6] 1389 files scanned …
+https://api.github.com/repos/OWNER/PRIVATE-REPO  ->  ok  [C6] 1389 files scanned …
+https://raw.githubusercontent.com/OWNER/PRIVATE-REPO/main/x  ->  ok  [C6] 1389 files scanned …
+```
+
+GitHub treats `duqueom` and `DuqueOM` as the same owner, and the SSH, API and raw forms all disclose the repository name. The denylist half of C6 still catches the one known private name. This is the general half, which exists for "a repository nobody has thought to add to a denylist yet". A new mutation, **R14-C6-https-prefix-only** (require `https://` in front), also **survives** `tests/test_gate_scripts.py`. So no test pins the scheme-less form either, even though it is the form the pattern was written for.
+
+**Fix:** compare owners case-insensitively. Widen the pattern to `(?:github\.com[/:]|api\.github\.com/repos/|raw\.githubusercontent\.com/)(owner)/(repo)`. Add one test per form, and a catalogue entry for each.
+
+### [P2-2] C9 exempts copier's own shorthand for a GitHub source, and #100's comment stripping and its fence parsing hide real commands
+
+```text
+scripts/check_doc_coherence.py:957   source_is_local = re.search(r"\s(\.|\.\./|/)\S*", command) and "http" not in command
+scripts/check_doc_coherence.py:920   line = re.sub(r"\s#.*$", "", line)
+scripts/check_doc_coherence.py:886   _FENCE = re.compile(r"```[a-z]*\n(.*?)```", re.DOTALL)
+
+$ uv run python scripts/check_doc_coherence.py --only C9      # one probe per run, each in a ```bash fence
+copier copy https://github.com/DuqueOM/ml-service-template out          ->  FAIL [C9] … unpinned   (control)
+copier copy gh:DuqueOM/ml-service-template ./services/x                  ->  ok  [C9] 13 … all pinned
+copier copy gh:DuqueOM/ml-service-template /srv/x                        ->  ok  [C9] 13 … all pinned
+echo 'step #1' && copier copy https://github.com/DuqueOM/ml-service-template out  ->  ok  [C9] …
+```shell-session block, then a ```bash block holding the command   ->  ok  [C9] …
+~~~bash fence                                                         ->  ok  [C9] …
+indented code block                                                   ->  ok  [C9] …
+```
+
+- **The `gh:` exemption.** `gh:owner/repo` is copier's documented shorthand for a GitHub source. The template's own `VALIDATION_LOG.md:2075` records `copier copy gh:DuqueOM/ml-service-template /tmp/adopter` unpinned, and its ADR-030 cites `copier copy gh:org/repo svc/` as what adopters expect. Any such command with a local destination is classified as a local source, because "http" is absent, and is exempted. Unpinned, that command is the one C9 exists for: the docstring cites 582 files deleted upstream.
+- **The `#` lead is confirmed.** A quoted `#` before the command cuts the command off the line.
+- **Fences.** An info string outside `[a-z]*` desynchronises the fence pairing. C10's `_FENCED` already handles `~~~`, and C9 does not.
+- **Tests.** Two new mutations survive the whole gate test file: **R14-C9-http-guard-dropped** and **R14-C9-fence-needs-language**. No test pins either the `http` guard or a fence with no language.
+
+None of these forms occurs in the tree today.
+
+**Fix:** classify the source by copier's own rules. The first positional argument after the subcommand is the source, and it is local only if it is a filesystem path, not `gh:`, `gl:`, `git@`, `git+…` or `https://`. Use `shlex.split` rather than a regex, so quoting is honoured and the comment is stripped by the tokenizer. Reuse C10's `_FENCED` for blocks, and treat 4-space-indented blocks as code too. Add the probes above as tests and catalogue entries.
+
+### [P2-3] The artifact gate silently skips a reader line it cannot match, so a straddle can hide behind a name spelling or a missing pin
+
+```text
+scripts/check_artifact_compatibility.py:150   if name not in SEAM:                          # no PEP 503 normalisation
+scripts/check_artifact_compatibility.py:166   if not versions or specifier is None: continue  # an unpinned reader is skipped
+
+$ uv run python scripts/mutation_harness.py R14-artifact-reader-name-unnormalized R14-artifact-reader-unpinned
+SURVIVED R14-artifact-reader-name-unnormalized      every command passed   <-- unexpected
+SURVIVED R14-artifact-reader-unpinned               every command passed   <-- unexpected
+```
+
+- `scikit_learn ~= 1.5.0` in the container's requirements makes pip install scikit-learn 1.5 against training's 1.9.1. That is a real straddle. The gate exits 0 and the gate tests pass, because `scikit_learn` does not equal `"scikit-learn"`.
+- Dropping joblib's pin (`joblib`) lets the container install any joblib, and the gate says nothing.
+
+Either mistake can arrive in a `copier update`, which is exactly how the joblib straddle closed this round. The gate's docstring promises that a straddling SEAM package "fails the gate". This mutation shows it doesn't.
+
+**Fix:** normalise names (`packaging.utils.canonicalize_name`) on both sides. Fail when a SEAM package has no specifier in the reader, or a specifier that admits more than one minor version. Keep both mutations in the catalogue.
+
+### [P2-4] The scripts/ coverage figure, and the floor of 83 set on it, leave out two tracked scripts that never run
+
+```text
+pyproject.toml:180-191 ([tool.coverage.run]),  .github/workflows/ci.yml:376-379 (--cov=scripts … --cov-fail-under=83)
+
+$ uv run pytest -o addopts="" -q --cov=scripts --cov-branch --cov-report=json:cov.json
+TOTAL                                      3438    501   1452    188    84%
+$ python3 - (compare cov.json files with git ls-files 'scripts/*.py')
+tracked scripts py: 31  measured: 29  tracked-not-measured: ['scripts/datasets/fetch.py', 'scripts/local/preflight.py']
+$ coverage.parser.PythonParser statement counts
+scripts/datasets/fetch.py 210 statements
+scripts/local/preflight.py 105 statements
+{'covered_lines': 2937, 'num_statements': 3438, 'covered_branches': 1154, 'num_branches': 1452, 'percent_covered': 83.66…}
+with 315 unmeasured statements at 0% (their branches ignored, so the true figure is lower still): 78.60%
+```
+
+Coverage reports a never-executed file only if it sits in a package, and `scripts/datasets/` and `scripts/local/` have no `__init__.py`. The published "scripts/ coverage" is therefore coverage of the scripts that some test happened to execute. 315 statements (8.4% of the measured 3,438) are invisible. Counted at 0%, which is the honest value for code no test runs, the figure is at most **78.60%**. That is below the floor of 83 and below the 80.20–80.82% the floor's own comment cites as the pre-#101 baseline. The number is measured correctly, and CI and a local run agree to two decimals. What it measures is not what "scripts/ coverage" says. Setting `include_namespace_packages` at report time does not help: the unexecuted files are never discovered.
+
+The `patch = ["subprocess"]` lead itself is sound. Every counted file is under `scripts/`, nothing from a sandbox or `services/` is counted, and a leftover probe (`scripts/_clock_probe.py`) appears in the data but has no source, so it is not reported.
+
+**Fix:** set `[tool.coverage.run] source = ["scripts"]` with `include_namespace_packages = true` in the **run** section, so coverage discovers them at measurement time (coverage ≥ 7.0). Alternatively, add `__init__.py` to the two directories. Re-measure, and set the floor from that figure. That would lower the literal, which `check_thresholds.py` rightly blocks, so it needs `--accept` with this finding as the reason. Or keep 83 and add tests for `fetch.py` and `preflight.py` first.
+
+### [P3-1] The detect-private-key hook skips four generated directories, and its comment says it fails "everywhere else"
+
+```text
+.pre-commit-config.yaml:36    exclude: '^(\.claude|\.cursor|\.codex|\.devin)/'      (global, every hook)
+.pre-commit-config.yaml:91-93 "…scoped to the one path where a PEM header is the SUBJECT MATTER … Everywhere else in the repo this hook still fails on a key."
+
+$ uvx pre-commit run detect-private-key --files <probe with an RSA header>
+services/demand-forecast-serving/tests/_r14_probe.py -> detect private key ... Failed
+.claude/_r14_probe.md -> detect private key ...(no files to check)Skipped
+.devin/_r14_probe.md  -> detect private key ...(no files to check)Skipped
+.agents/_r14_probe.md -> detect private key ... Failed
+docs/_r14_probe.md    -> detect private key ... Failed
+```
+
+CI's gitleaks job scans the whole repository and backstops this, so it is local-only. The global list is another hand-kept copy of the generated-surface set. It also disagrees with the manifest's, because it lacks `.agents`, which is round thirteen's P3-5 class surviving in a file that fix did not reach. The same exclusion is why `.devin/skills/secret-breach-response.md:60`, the one PEM header outside the hook's scoped `exclude`, passes `--all-files`.
+
+**Fix:** exempt the secret hooks (`detect-private-key`, `gitleaks`) from the global exclude with per-hook `exclude:`. Derive the global list from `agentic/manifest.yaml`, or pin it with the same test as the markdownlint lists. Correct the comment.
+
+### [P3-2] The brief's instruction to extend the harness can't be followed without a commit, and the brief's count is stale
+
+```text
+scripts/mutation_harness.py:84-86 (refuses a dirty tree);  docs/governance/audit-brief.md:437 ("its 36 entries")
+
+$ echo "# probe" >> tests/mutations.yaml && uv run python scripts/mutation_harness.py E1
+[mutation] refused — the tree is dirty; restoring would destroy uncommitted work
+$ python -c "…len(yaml.safe_load(open('tests/mutations.yaml'))['mutations'])"
+39
+```
+
+Adding an entry to `tests/mutations.yaml` makes the tree dirty, so the harness refuses. The auditor ran its additions with `git update-index --skip-worktree tests/mutations.yaml`, which `_restore`'s `git checkout -- .` leaves alone. The catalogue holds 39 entries; the brief says 36, written before #100 added three. Separately, the harness still counts any non-zero exit as a kill. Every current kill was checked and is assertion-based (§2), but nothing stops a future entry from being "killed" by an import error.
+
+**Fix:** let the harness take `--catalogue <path>`, or exclude `tests/mutations.yaml` from the dirty check, and document how an auditor adds entries. Report a kill as `CRASH` when the failing output carries `ERROR collecting`, `ImportError`, `SyntaxError` or a `Traceback` from the gate, and fail the run on it. Replace "36" with "run the harness", per the brief's own rule about restated numbers.
+
+### [P3-3] `check_thresholds.py` falls back to the local `main` branch before the parent its comment promises
+
+```text
+scripts/check_thresholds.py:222   for default in ("origin/main", "main"):
+scripts/check_thresholds.py:227   # … fall through to the parent.
+
+$ uv run python scripts/check_thresholds.py            # worktree at f8b9d27 = origin/main
+[thresholds] OK — 14 watched, none loosened against 7dfec654e1fd2da1942a5af89cf707792863e334
+```
+
+On a commit that is on `origin/main`, the merge base with `origin/main` is `HEAD`. The loop then tries the local `main`, which here is a stale branch 11 commits back, before the #102 ratchet, and compares against that. A later lowering from 83 to 80 on `main` would compare against the old 74 and pass locally. In CI, the local `main` ref is normally absent and `HEAD~1` is used, so this is a "green local run CI cannot reproduce" in reverse: the result depends on the state of the machine.
+
+**Fix:** drop `"main"` from the loop, or use it only when `origin/main` does not exist. Make the fallback `HEAD~1` as the comment says.
+
+### [P3-4] V8 reports copies and different skills the same way, and looks only one level down
+
+```text
+scripts/validate_agentic_surface.py:417   for unit in sorted(p for p in (REPO_ROOT / owner).glob("*") if p.is_dir()):   # owner ∈ projects, services
+scripts/validate_agentic_surface.py:431-440
+
+$ (compare root and service .agents/skills descriptions, mode stripped)
+DIFFERENT: doc-coherence | root: Keep the repository's documents from diverging … | service: Keep enterprise documentation coherent across the repo …
+DIFFERENT: enterprise-audit | root: Staff-level verification audit … | service: Recurring 23-domain enterprise/ISO repository audit …
+same purpose: 17  different: 2
+
+$ mkdir -p libs/llm-core/.agents/skills/rollback && <SKILL.md name: rollback>; uv run python scripts/validate_agentic_surface.py --strict
+  ok   [V8] 2 nested discovery director(ies) inspected …   [agentic] OK      (same for projects/rag-assistant/src/.agents/skills, docs/.cursor/skills)
+control: projects/rag-assistant/.agents/skills/rollback  ->  FAIL [V8] … 1 skill name(s) also defined at the root
+```
+
+On the brief's question 3, the permanent note is defensible for the 17 true copies. Cursor scopes nested skills to their directory (its documentation, fetched 2026-09-29), so "inside it the tool decides which runs" is accurate. But two of the 19 are different skills under one name. Both pointers name `agentic/skills/<name>/SKILL.md` as their canonical source, which resolves to the root's body or the service's depending on where it is read from. A note that treats them like the copies is how that difference stays undecided. V8 also cannot see a discovery directory anywhere except directly under `projects/*/` or `services/*/`, while Cursor picks them up anywhere.
+
+**Fix:** walk the whole tree (excluding infrastructure directories) for the four discovery directories. Split V8's collision report into same-description copies (note) and different-description collisions (fail, or a named exemption per pair recorded against the template). Raise the two differing names upstream as a template-side rename; that is STOP for an agent, so an issue text proposal only.
+
+### [P3-5] The service can't be regenerated from its own answers file: `service_name` is supplied by hand and never recorded
+
+```text
+services/demand-forecast-serving/.copier-answers.yml    (no service_name — the template declares it `when: false`)
+docs/runbooks/consuming-the-template.md:44-46           --vcs-ref=v0.26.0 … --data service_name="Demand Forecast Serving"
+docs/runbooks/consuming-the-template.md:67-68           copier update --trust --vcs-ref=v0.27.0 [--pretend]   (no service_name)
+
+$ copier copy --trust --defaults --vcs-ref v0.30.2 --data <the four recorded answers> https://github.com/DuqueOM/ml-service-template.git gen302
+$ diff -rq gen302 <committed service> | wc -l
+60        # "# DemandForecastServing" vs "# Demand Forecast Serving", Dockerfile, app/main.py, app/schemas.py, …
+```
+
+#100's method, a fresh regeneration, reproduces the committed service only when the runbook's extra `--data service_name=…` is passed. The template's help text for that question says "PascalCase (derived from service_slug)", and the value supplied is not PascalCase. `copier update` to the same ref is a no-op (checked: 0 files changed). But any template line containing the name that changes in a future release will re-render with `DemandForecastServing`, one release at a time. The runbook's generate command still pins v0.26.0, while the service is at v0.30.2.
+
+**Fix:** record the decision. Either accept the template's default name and regenerate, or ask upstream to make `service_name` a recorded question. Until then, put `--data service_name="Demand Forecast Serving"` in the runbook's update commands and in the service's `make scaffold-update` path, and update the pinned tag to v0.30.2.
+
+---
+
+## 4. The author's leads and the brief's weak points — disposition
+
+| Lead | Result |
+| --- | --- |
+| #100 "0 of 627" and equality with a clean v0.30.2 generation | **Both hold** (§2), with the runbook's `service_name`. Without it, 60 files differ (P3-5) |
+| C9 `\s#.*$` | **Confirmed**, and wider than suspected (P2-2) |
+| Artifact SEAM, and scipy/pandas straddles | SEAM matches the pickled graph (verified). scipy, pandas and pyarrow straddle but are not pickled. The reader parsing is the gap (P2-3) |
+| scripts/ coverage 83.66% | Reproduced exactly. Counts nothing it shouldn't, but omits two never-run files: ≤78.60% (P2-4) |
+| detect-private-key exemption removal | **Holds** for services/ (injection fails the hook). Generated directories are skipped (P3-1) |
+| V7 name/description/source | Sufficient for what the renderer can emit (verified, mutation killed) |
+| V8 permanent notes | Defensible for 17 copies. Not for the 2 different skills, and V8 is depth-1 only (P3-4) |
+| Fake key and PEM in files and history | No literal AIza or PEM private-key block remains in any tracked file outside the documented detection-pattern table (4 copies of one header-only table row) and the runtime-assembled fixture. gitleaks is clean over history |
+| Brief 4: exporter refuses any untracked file under `libs/llm-core` | Not too strict: an untracked file there can only be stray work, and `--check --allow-dirty` still permits a dry run. No finding |
+| Brief 5: R13-1 to R13-3 | R13-1 met (V8 reports no flat pointers). R13-2 verified on GitHub and by re-attack. R13-3 not re-audited in depth: ml-service-template#239 is listed as released in v0.30.0 |
+
+---
+
+## 5. Verdict
+
+Round thirteen's remediation holds under direct attack: the existing 37 kills are all real assertions, #100's regeneration is exactly reproducible, the agent-local check refuses both shadow forms, and history is clean. But five of nine new mutations survived, and C6, C9 and the artifact gate each miss a realistic input. The published scripts/ coverage of 83.66% leaves out 315 statements that no test runs. So the round's claims are trustworthy as far as the tests reach, and the tests still stop short of the gates' own promises.
+
+---
+
+## 6. For the owner, after review — not run by the auditor
+
+```bash
+uv run python scripts/audit_record.py --action independent-audit --target ml-platform --mode CONSULT --outcome "Round 14 against tree f8b9d27. 0 P0, 0 P1, 4 P2, 5 P3. P2: C6 link scan misses lowercase-owner, SSH, API and raw forms; C9 exempts copier's gh: shorthand with a local destination and is blinded by a quoted '#' and by non-[a-z] or tilde fences; the artifact gate skips un-normalised or unpinned reader lines; the scripts/ coverage figure (83.66%, floor 83) omits two never-run files, 315 statements, true figure <=78.60%. 5 of 9 new mutations survived; all 37 existing kills verified as assertions. #100 regeneration reproduced exactly; agent-local R13-2 holds under re-attack; gitleaks clean over history." --evidence "Worktree /tmp/qa4-r14 at f8b9d2740ac26aded07da9a1f28336101bf52ef5 after uv sync --all-packages --all-extras --locked; uv run pytest -o addopts='' (1550 passed, 53 skipped); every make-verify gate individually; pytest --cov=scripts --cov-branch with cov.json vs git ls-files; copier copy --vcs-ref v0.26.0 and v0.30.2 from the public URL with diff -rq; gitleaks git --redact (repo config and default rules with --ignore-gitleaks-allow); pre-commit detect-private-key injection; mutation_harness.py with 9 added entries under skip-worktree; kill-cause classification of all 39 entries; gh api agent-local protection; export_llm_core.py --check re-attack at 7f1867c. Report: ~/qa4-round-14-report.md"
+```
+
+AGENTS.md marker line:
+
+```text
+Last independent audit: 2026-09-29 (f8b9d27)
+```
+
+---
+
+## Appendix A — mutations added by this round
+
+These were run with `uv run python scripts/mutation_harness.py <ids>`, with the entries appended to `tests/mutations.yaml` under `git update-index --skip-worktree`, and nothing committed. The harness printed `[mutation] 4/9 expected kills`.
+
+```yaml
+- id: R14-artifact-reader-name-unnormalized     # SURVIVED
+  file: services/demand-forecast-serving/requirements.txt
+  old: 'scikit-learn         ~= 1.9.1'
+  new: 'scikit_learn         ~= 1.5.0'
+  run: [uv run python scripts/check_artifact_compatibility.py,
+        uv run pytest -o addopts= -q -x -p no:randomly tests/test_artifact_compatibility.py]
+- id: R14-artifact-reader-unpinned              # SURVIVED
+  file: services/demand-forecast-serving/requirements.txt
+  old: 'joblib               ~= 1.6.0'
+  new: 'joblib'
+  run: (as above)
+- id: R14-V7-reach-name-only                    # KILLED (AssertionError, test_one_tool_reaching_copies_that_disagree_fails)
+  file: scripts/validate_agentic_surface.py
+  old: 'key = (fm.get("name"), fm.get("description"), source.group(1) if source else None)'
+  new: 'key = (fm.get("name"), None, None)'
+- id: R14-V8-projects-only-reported             # KILLED (1 failed, 17 passed)
+  file: scripts/validate_agentic_surface.py
+  old: 'if owner == "services":'
+  new: 'if owner in ("services", "projects"):'
+- id: R14-C6-https-prefix-only                  # SURVIVED
+  file: scripts/check_doc_coherence.py
+  old: 'repo_link = re.compile(r"github\.com/([A-Za-z0-9_-]+)/([A-Za-z0-9_.-]+)")'
+  new: 'repo_link = re.compile(r"https://github\.com/([A-Za-z0-9_-]+)/([A-Za-z0-9_.-]+)")'
+  run: [uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py]
+- id: R14-C2-store-read-as-english              # KILLED (assert 0 == 1, test_doc_coherence_fails_on_a_dangling_namespaced_reference)
+  file: scripts/check_doc_coherence.py
+  old: '_ENGLISH_PREFIXES = frozenset({"non", "pre"})'
+  new: '_ENGLISH_PREFIXES = frozenset({"non", "pre", "store"})'
+- id: R14-C9-fence-needs-language               # SURVIVED
+  file: scripts/check_doc_coherence.py
+  old: '_FENCE = re.compile(r"```[a-z]*\n(.*?)```", re.DOTALL)'
+  new: '_FENCE = re.compile(r"```[a-z]+\n(.*?)```", re.DOTALL)'
+- id: R14-C9-http-guard-dropped                 # SURVIVED
+  file: scripts/check_doc_coherence.py
+  old: 'source_is_local = re.search(r"\s(\.|\.\./|/)\S*", command) and "http" not in command'
+  new: 'source_is_local = re.search(r"\s(\.|\.\./|/)\S*", command)'
+- id: R14-thresholds-scripts-floor-lowered      # KILLED ([thresholds] FAILED)
+  file: .github/workflows/ci.yml
+  old: '            --cov-fail-under=83'
+  new: '            --cov-fail-under=74'
+  run: [uv run python scripts/check_thresholds.py]
+```
+
+## Appendix B — kill cause of every existing entry
+
+| Result | Entries |
+| --- | --- |
+| Killed by an assertion (`E AssertionError`) | E1, E1b, E2, E3, E4, E5, X-provenance-not-compared, X-stray-ignores-underscore, X-stray-top-level-py-only, X-dirty-suffix-dropped, X-untracked-not-dirty, X-allow-dirty-writes, X-ancestry-unchecked, C2-migrated-md-exempt, C6-generated-links-skipped, C10-never-fails, C10-repeats-unnumbered, C10-fenced-headings-count, C10-setext-ignored, C10-reference-and-html-ignored, V7-empty-description-ok, V7-claude-command-description-dropped, V-ok-above-warning, I-header-first-only, I-no-rate-limit, I-limit-ignored, W3-isinstance, C9-trailing-comment-is-a-command |
+| Killed by an assertion on a gate result (`assert 0 == 1`, `assert gate.main() == 0`, or a missing expected line) | M-C2a, C9-report-channel-dropped, V7-reach-unchecked, V7-cursor-compat-paths-dropped, V8-services-failed-not-reported, V8-collisions-ignored, artifact-joblib-exemption-restored, artifact-scikit-learn-exemption-restored |
+| Killed by the gate's own `FAIL` lines | P0-claude-skills-flat (`30 failure(s).`, V7 `is not where the tool looks`) |
+| Survived, as declared (`expect: survives`) | C10-case, W-ceiling-exclusive |
+| Killed only by an import, collection or syntax error | **none** |

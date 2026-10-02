@@ -1,0 +1,521 @@
+Committed copy of the QA-4 round fifteen report (the auditor's ~/qa4-r15-report.md).
+
+Verbatim, with one exception: the probe repository the auditor used to test C6 is
+redacted to OWNER/PRIVATE-REPO. The probe strings link to a non-public repository by
+construction, and C6 would rightly fail on them here. Plain text rather than
+markdown so the auditor's quoted probes stay quotations: as markdown, C9 reads the
+quoted copier commands as instructions. Round fifteen's own finding, that rounds
+twelve to fourteen exist only in a home directory, is why this file exists.
+
+-------------------------------------------------------------------------------
+
+# QA-4 round fifteen — independent audit of `ml-platform` at 98a4359
+
+Auditor session: separate from the authoring session (ADR-005 rule B). Read-only.
+Nothing was committed, pushed, or edited in the main working tree, PRs, or issues.
+`scripts/audit_record.py`, `AGENTS.md` and `ops/audit.jsonl` were not touched.
+
+- Tree under audit: `98a4359c994808dc69a2724b26bd943f34c98a4a` (origin/main). Previous audit: `f8b9d27`.
+- Worktrees: `/tmp/qa4-r15` and `/tmp/qa4-r15b` (full-suite measurements, two in parallel, each with its
+  own `uv sync --all-packages --all-extras --locked`), plus `/tmp/qa4-r15c` (probes and mutations only).
+  The prompt asked for one worktree. Running the suite and probing in the same tree would have corrupted
+  one or the other, so a third was used. All three are removed at the end.
+- Tool versions: uv 0.11.19, Python 3.11 (workspace), coverage 7.15.3, gitleaks 8.21.2 local
+  (the repository pins 8.30.0).
+- Logs, the probe catalogue, scripts and data files: `~/qa4-r15-logs/`.
+
+### Full-suite runs performed (all on clean trees at 98a4359)
+
+| Run | Tree | Command | Suite | Coverage result |
+| --- | --- | --- | --- | --- |
+| 1 | r15 | `coverage run --branch --source=libs,projects,orchestration,scripts -m pytest -q`, `combine`, floors | 2 failed (tag collision, 180 s timeout) | floors OK; libs 94.55, scripts 86.35, projects 81.66, df 79.07/65.22 |
+| 1′ | r15b (parallel with 1) | `pytest -q --cov=libs --cov-branch --cov-fail-under=90` | 1 failed (180 s timeout) | libs 94.55% (1620 st / 67 miss / 434 br / 35 partial) |
+| 2 | r15b | `make verify` (every gate, then the CI-equivalent run) | 1 failed (determinism) → make exits 2 | data merged afterwards: identical to run 1 except scripts 86.38 |
+| 2′ | r15 (parallel with 2) | `pytest -q --cov=scripts --cov-branch --cov-fail-under=83` | 1 failed (determinism) | scripts 86.38% (3993 st / 475 miss / 1640 br / 192 partial) |
+| 3 | r15 | CI-equivalent run + floors, with an out-of-tree probe plugin | all passed | identical to run 1 |
+| 4 | r15b (parallel with 3) | same as 3 | all passed | identical to run 1 |
+| CI | GitHub, run 37024278381 | the same CI step on 98a4359 | success | identical to run 1, every scope, to 2 decimals |
+
+Plus `pytest -o addopts='' -m "integration or local" -rs`: **1 passed, 45 skipped**. The skips are: no
+local stack or cluster (Docker Desktop is not running, see "Not verifiable here"), service not
+deployed, no EDGAR filings downloaded.
+
+---
+
+## Findings
+
+**Counts: 0 P0 · 0 P1 · 8 P2 · 11 P3**
+
+### P2
+
+[P2] R11-3 is marked done, and the serving environment still cannot load the model artifact
+  projects/demand-forecast/src/demand_forecast/persist.py:195 ("readable by anything with scikit-learn, numpy and joblib — which is the property a serving container needs")
+  docs/decisions/ADR-008-serving-a-forecast-from-a-classification-scaffold.md:124-125 ("A reader needs scikit-learn, numpy and joblib, which the image has")
+  docs/governance/remediation-work-order.md, R11-3 ("Status: done")
+  $ uv run python ~/qa4-r15-logs/make_art.py ~/qa4-r15-logs/art/model.joblib     # fit_final + save on the verified 2024-01/02 files
+  $ uv venv -p 3.13 servenv && VIRTUAL_ENV=servenv uv pip install -r services/demand-forecast-serving/requirements.txt
+  $ servenv/bin/python -c "import sys,numpy,sklearn,joblib; print(sys.version.split()[0], numpy.__version__, sklearn.__version__, joblib.__version__)"
+  3.13.13 1.26.4 1.9.1 1.6.0
+  $ servenv/bin/python -c "import joblib; joblib.load('art/model.joblib')"
+  ValueError: <class 'numpy.random._pcg64.PCG64'> is not a known BitGenerator module.
+  #78 fixed what it targeted. The pickle names no workspace module; every global it resolves is in
+  {joblib, numpy, sklearn} (see Verified). But the artifact is written under numpy 2.4.6/2.5.1 (from
+  uv.lock), and the image pins `numpy ~= 1.26.0`. A numpy-2 Generator pickle does not load under 1.26.
+  `check_artifact_compatibility.py` knows this and EXEMPTS it ("exempt [artifact] numpy: written by
+  2.4.6, 2.5.1, read by ~=1.26.0"). The three documents above still say the image can read the
+  artifact. R11-3's own "Closes when" is unmet on both counts: ADR-008 is still Proposed, and P14 does
+  not assert that every module root the pickle references is importable in the image. The portability
+  test checks the artifact's BYTES for workspace names and never loads it under the reader's versions.
+  Not P0 only because nothing deploys this service today (ADR-008 blocks serving regardless), and round
+  eleven rated this same defect P2.
+  Fix: reopen R11-3. Correct the ADR-008 progress note and the `_payload` docstring to "readable under
+  numpy 2.x only; the image's numpy 1.26 pin refuses it (exempted in P14 under ADR-008)". Add a test or
+  CI step that loads a freshly saved artifact in an environment built from
+  `services/demand-forecast-serving/requirements.txt` alone.
+
+[P2] The two orchestrators gate different backtests, not only different thresholds (W-14 is confirmed and understated)
+  orchestration/dags/demand_forecast_training.py:152 (`evaluate(read_demand())`, 5 folds by default)
+  orchestration/pipelines/demand_forecast_pipeline.py:162 (`n_folds: int = 3`)
+  $ uv run python ~/qa4-r15-logs/w14.py      # the DAG's task body from DagBag, and the KFP component's python_func
+  skill=+0.030 coverage=0.900  DAG=REFUSE   KFP=PROMOTE  DISAGREE
+  skill=+0.100 coverage=0.970  DAG=PROMOTE  KFP=REFUSE   DISAGREE
+  skill=+0.050 coverage=0.850  DAG=PROMOTE  KFP=REFUSE   DISAGREE
+  skill=+0.001 coverage=0.860  DAG=REFUSE   KFP=PROMOTE  DISAGREE
+  skill=+0.124 coverage=0.896  DAG=PROMOTE  KFP=PROMOTE
+  $ uv run python ~/qa4-r15-logs/repro.py    # the model card's own reproduction, on the verified files
+  OVERALL: MAE 3.35 vs baseline 3.82 (skill +12.4%) …          # 5 folds, what the DAG gates on
+  3-fold: OVERALL: MAE 3.32 vs baseline 4.31 (skill +23.0%) …   # 3 folds, what the pipeline gates on
+  W-14's claimed disagreement is real (first four rows). Its table compares thresholds only, though.
+  On the same data the DAG measures +12.4% and the pipeline +23.0%, because the 3-fold design drops
+  folds 0 and 1, the two folds the model LOSES (−18.3%, −1.2%). The model card warns that the average
+  hides those two folds. The pipeline's default never sees them. Nothing pins either design: auditor
+  mutations R15-DAG4 (DAG `n_folds=3`) and R15-KFP4 (pipeline default `n_folds=1`) both SURVIVE,
+  because `test_dags.py` stubs `evaluate` as `lambda table, **k` and `test_pipeline_components.py`
+  never reads the pipeline's defaults. And only the DAG's thresholds are watched:
+  `check_thresholds.py --show` lists `retrain skill floor` and `retrain coverage floor` (DAG) but not
+  the pipeline's `skill <= 0` or `intervals_are_calibrated(tolerance=0.05)`, so the pipeline's half
+  could be loosened silently. W-14's acceptance ("the thresholds still watched") was never true for it.
+  Fix: put the fold design in the W-14 decision. One function in `demand_forecast` should own the
+  gate AND the backtest parameters, and both orchestrators should call it. Register the pipeline
+  thresholds in `THRESHOLDS`. Pin the arguments `evaluate` receives in both test files instead of
+  swallowing them with `**k`.
+
+[P2] `check_thresholds.py` cannot see a threshold that moves to a new file or a new label, and #112 did both
+  scripts/check_thresholds.py:293-297 (`if committed_text is None: continue` / `if previous is None: continue`)
+  $ THRESHOLD_BASELINE_REF=db70d77 uv run python scripts/check_thresholds.py
+  [thresholds] OK — 26 watched, none loosened against db70d77
+  $ sed -i 's/^LIBS_COMBINED_FLOOR = 90/…= 50/; s/^SCRIPTS_COMBINED_FLOOR = 86/…= 10/; s/^LINE_FLOOR = 90/…= 1/; s/^BRANCH_FLOOR = 80/…= 1/' scripts/check_coverage_floors.py
+  $ THRESHOLD_BASELINE_REF=db70d77 uv run python scripts/check_thresholds.py
+  [thresholds] OK — 26 watched, none loosened against db70d77      # exit 0
+  Every coverage floor in the repository could have been gutted inside #112 with the STOP gate green.
+  The labels changed ("libs coverage in CI" → "libs combined coverage floor"; "L1 line coverage
+  floor" in the deleted check_branch_coverage.py → "…, per library" in check_coverage_floors.py), so
+  none of them has a baseline. The author disclosed this. I checked by hand against db70d77 and nothing
+  was lowered: libs 90→90, scripts 83→86, L1 0.90→90 (fraction to percent), L2 0.80→80, pyproject
+  `fail_under` 90→90. The hole is general: renaming a label or moving a constant is the cheapest way to
+  lower it. Mitigated, not closed: `tests/test_coverage_floors.py` caught all four value-level
+  lowerings I made that the regex cannot see (see Verified).
+  Fix: when a watched threshold has no baseline, fail unless the change declares where it came from.
+  Add a `moved_from=(label, path, pattern)` on `Threshold`, compared against the baseline under the old
+  name.
+
+[P2] C6 still misses six ways to name a repository, two of which this repository's own tooling uses
+  scripts/check_doc_coherence.py:791-800 (comment: "Every form that names a repository")
+  $ printf '%s\n' "<form>" > docs/runbooks/_qa4_c6_probe.md && uv run python scripts/check_doc_coherence.py --only C6
+  [control]       FAIL [C6] docs/runbooks/_qa4_c6_probe.md links to non-public repository 'PRIVATE-REPO'   (https://github.com/OWNER/PRIVATE-REPO)
+  [gh-autolink]   ok  [C6] 1396 files scanned …   Fixed in OWNER/PRIVATE-REPO#12.     (GitHub renders this as a link)
+  [actions-uses]  ok  [C6] 1396 files scanned …   uses: OWNER/PRIVATE-REPO@<40-hex>
+  [copier-gh]     ok  [C6] 1396 files scanned …   copier copy gh:OWNER/PRIVATE-REPO ./svc
+  [gh-cli]        ok  [C6] 1396 files scanned …   gh repo clone OWNER/PRIVATE-REPO
+  [gh-api]        ok  [C6] 1396 files scanned …   gh api repos/OWNER/PRIVATE-REPO/pulls
+  [pages]         ok  [C6] 1396 files scanned …   https://OWNER.github.io/PRIVATE-REPO/
+  (codeload.github.com and www.github.com forms ARE caught.)
+  This is round fourteen's P2-1 shape again: a consumer accepts a form the gate does not parse. C9 in
+  the same file already recognises `gh:` as a remote source. The denylist hash scan still catches the
+  one name it knows; the link scan exists for the names nobody has added yet. No such leak exists in
+  the tree today.
+  Fix: also match an `owner/repo` token for the private account (`(?<![\w./-])DuqueOM/<repo>`),
+  covering autolinks, `uses:`, `gh` arguments and the `gh:` and `repos/` prefixes, plus
+  `<owner>.github.io/<repo>`, case-insensitively. Keep the public allow-list and the placeholders.
+
+[P2] Codecov enforces nothing: every upload is rejected, and the inventory marks it ✅ Core because a config file exists
+  codecov.yml:1-14 ("A gate that only comments is a gate that gets ignored"), status targets with `informational: false`
+  docs/architecture/technology-inventory.yaml:50 (`detect: ["codecov.yml"]`, note "Declared L1/L2 coverage thresholds were unenforced until this existed")
+  $ gh run view 37024278381 --repo DuqueOM/ml-platform --log | grep -i "token required"     # CI on 98a4359
+  Upload coverage  error - 2026-10-02 15:29:24,059 -- Upload queued for processing failed: {"message":"Token required - not valid tokenless upload"}
+  $ gh run view 37013404926 --repo DuqueOM/ml-platform --log | grep -i "token required"     # db70d77
+  error - 2026-10-02 14:10:47,009 -- Upload queued for processing failed: {"message":"Token required - not valid tokenless upload"}
+  `CODECOV_TOKEN:` is empty in the step's environment, and `fail_ci_if_error: false` keeps the step
+  green. None of codecov.yml's statuses ever runs. The detector matches a configuration file, which is
+  the "detector matches documentation" class audit-brief §7.2 sends auditors after. L1/L2 ARE enforced,
+  by `check_coverage_floors.py`, so the coverage claim holds. The Codecov claim does not. Known since
+  R11-7 as "documented nowhere", and still unclassified.
+  Fix: set the secret (or `use_oidc: true`) and show a status posting, or demote `codecov` out of Core
+  and require a successful upload in its detector. Correct the inventory note either way.
+
+[P2] W-10 closes F-14 against corruption, not against the threat F-14 named, and the serving path never calls the check
+  projects/demand-forecast/src/demand_forecast/persist.py:258-295
+  services/demand-forecast-serving/app/fastapi_app.py:269 (`_model_pipeline = joblib.load(model_path)`)
+  $ uv run python ~/qa4-r15-logs/tamper.py
+  intact: LOADED
+  flipped byte: REFUSED ValueError: b.joblib does not match the digest recorded beside it.
+  truncated: REFUSED … / sidecar missing: REFUSED … / sidecar digest edited: REFUSED …
+  sidecar corrupt: REFUSED … / sidecar no sha256: REFUSED …
+  both rewritten (malicious pickle + recomputed sidecar): REFUSED KeyError: 'estimator'
+  code executed during load: True
+  W-10's rationale: "Loading a pickle is arbitrary code execution with the serving identity … not
+  low-risk the moment the path is an object-storage URI whose write permissions are broader than the
+  reader's." The digest lives beside the artifact, at the same location and under the same write
+  permission. Whoever can replace one can replace both, and the payload runs before `load` notices
+  anything: the KeyError above comes after the pickle executed. The check also exists only in
+  `persist.load`. The persist docstring says a serving container "does not need this function at all",
+  and the generated app calls `joblib.load` directly. The CHANGELOG describes integrity only ("a
+  damaged file"), which is accurate. W-10's status line claims F-14 closed.
+  Fix: record W-10 as "integrity against corruption: done; tamper resistance: open". For the threat,
+  verify against a digest the writer cannot also write (the promotion record or registry entry, a
+  signed sidecar, or a `sha256` pinned in the deploy manifest), on the reader that actually loads the
+  file.
+
+[P2] The suite is not deterministic under the concurrency the maintainers use: three different tests failed in three of six clean-tree full runs
+  tests/test_status_layers.py:216-256; tests/test_audit_drift_counter.py:315; tests/test_gate_scripts.py:1175 → :45
+  $ make verify                                                   # run 2, /tmp/qa4-r15b, clean tree
+  FAILED tests/test_status_layers.py::test_the_generated_document_is_deterministic
+  E  AssertionError: the generator produced 2 different documents across three samples. …
+  make: *** [Makefile:66: verify] Error 1
+  $ uv run pytest -q --cov=scripts --cov-branch --cov-fail-under=83   # run 2′, /tmp/qa4-r15, same time
+  FAILED tests/test_status_layers.py::test_the_generated_document_is_deterministic
+  $ (run 1, two suites in parallel)
+  E  subprocess.CalledProcessError: Command '['git', '-C', '/tmp/qa4-r15', '-c', 'tag.gpgSign=false', 'tag', '-f', 'qa4-probe-lightweight', 'HEAD~1']' returned non-zero exit status 128.
+  E  subprocess.TimeoutExpired: Command '[…/python', '…/scripts/check_implementation_status.py', '--check']' timed out after 180 seconds   (runs 1 and 1′)
+  $ (runs 3 and 4, two suites in parallel, out-of-tree plugin dumping every determinism sample)
+  pytest_status=0 / pytest_status=0;  md5 of all six samples: 6 × f151baffa282e9158b678cbbd03d63d9
+  $ uv run pytest … test_a_marker_naming_a_lightweight_tag_still_measures test_a_new_unignored_file_is_visible_to_the_status_generator
+  2 passed in 96.93s            # alone, idle machine
+  Three mechanisms, all load- or concurrency-dependent, and each green when run alone:
+  - The tag test uses the real repository's tag namespace, which every worktree shares. Two concurrent
+    suites, the arrangement the maintainers recommend ("at most two parallel runs, each in its own
+    worktree"), collide on one tag name. An interrupted run would leave a tag in the user's
+    repository. None was left this time: `git tag -l 'qa4-probe*'` is empty.
+  - The visibility test gives `check_implementation_status.py --check` 180 s. Measured idle, the
+    command takes 2m04.9s and 2m05.9s (two parallel samples), so the budget is 1.45× an idle run.
+  - The determinism failure was not captured. The test reports only the count of distinct documents.
+    My instrumented attempt to reproduce it under load produced identical samples, and a first
+    instrumented attempt that edited the test file was void (the edit itself made `ruff format
+    --check` fail, which flipped the Lint row; reverted and discarded). Hypothesis, not established: a
+    verification command whose verdict depends on machine load, for example a pytest selection
+    containing a subprocess timeout like the one above. This matches AGENTS.md's escalation trigger "a
+    previously-passing test now failing with no code change to explain it".
+  CI passed on 98a4359, and runs 3 and 4 passed. The cost is a red `make verify` on a clean tree,
+  with nothing in the output saying why.
+  Fix: build the tag probe in a `git clone --shared` under `tmp_path`. Derive the 180 s budget from
+  `VERIFY_TIMEOUT_SECONDS` or test visibility on a reduced component set. Make the determinism test
+  print the unified diff between samples, so the next occurrence names its component.
+
+[P2] The release workflow's test step can never pass
+  agentic/workflows/release.md:28 (rendered to .devin/workflows/release.md:32)
+  $ uv run pytest -o addopts='' -q --cov=src --cov-report=term-missing --cov-fail-under=90 tests/test_namespace_contract.py
+  WARNING: Failed to generate report: No data to report.
+  ERROR: Coverage failure: total of 0 is less than fail-under=90
+  exit=1
+  There is no `src/` at the repository root, so step 2 measures nothing and fails on every run. Other
+  parts of the workflow were adapted for this repository ("Release notes come from the CHANGELOG
+  here"); this step was inherited unchanged. The first release will either stall here or learn to skip
+  the step. C4 resolves commands that name files; `--cov=src` names a directory it never checks.
+  Fix: replace step 2 with `make verify`, or the CI-equivalent `coverage run … && coverage combine &&
+  check_coverage_floors.py`. Extend C4 to resolve `--cov=` and `--source=` paths.
+
+### P3
+
+[P3] C9 still misses copier commands in four shapes GitHub renders as code, and accepts `--vcs-ref HEAD` as a pin
+  scripts/check_doc_coherence.py:906-937 (`_code_blocks`), :991-992 (`_is_pinned`), :894 (dead `_COPIER_COMMAND`)
+  $ printf '<doc>' > docs/runbooks/_qa4_c9_probe.md && uv run python scripts/check_doc_coherence.py --only C9
+  [control]            FAIL [C9] … documents an unpinned copier command: 'copier copy gh:DuqueOM/ml-se…
+  [uvx-at]             ok   …   uvx copier@9.4.1 copy gh:…           (the program token is `copier@9.4.1`)
+  [list-fence-4sp]     ok   …   "10. Generate it:\n    ```bash\n    copier copy gh:…"   (no blank line before the fence)
+  [list-fence-bullet]  ok   …   "- Generate it:\n    ```bash\n    copier copy gh:…"
+  [blockquote]         ok   …   "> ```bash\n> copier copy gh:…"
+  [html-pre]           ok   …   <pre><code>copier copy gh:…</code></pre>
+  [vcs-ref-HEAD]       ok   …   copier copy --vcs-ref HEAD gh:…      (HEAD is not a version)
+  No such command exists in the tree today: every unpinned `copier` mention is prose.
+  `_COPIER_COMMAND` is referenced nowhere (`grep -n _COPIER_COMMAND scripts/*.py tests/*.py` finds
+  only its definition).
+  Fix: strip `> ` prefixes; treat a fence opening inside a list item at any indent as a fence; match
+  `copier(@\S+)?` as the program token; require a tag or SHA for `--vcs-ref`; delete
+  `_COPIER_COMMAND`.
+
+[P3] The artifact gate ignores environment markers and the image's second `pip install`
+  scripts/check_artifact_compatibility.py:145-170
+  $ sed -i 's/^joblib … ~= 1.6.0/joblib ~= 1.6.0 ; python_version < "3.12"/' services/demand-forecast-serving/requirements.txt   # probe tree, reverted
+  $ uv run python scripts/check_artifact_compatibility.py
+  [artifact] OK
+  $ python -c "…Requirement('joblib ~= 1.6.0 ; python_version < \"3.12\"').marker.evaluate({'python_version':'3.13'})"
+  applies on the 3.13 image: False
+  pip skips that line on `python:3.13-slim-bookworm`, joblib then arrives unpinned through
+  scikit-learn, and the gate reports OK. The Dockerfile (lines 79-82) also runs
+  `pip install -r requirements-${CLOUD_PROVIDER}.txt` as a separate install, which can move a seam
+  package. The gate reads neither.
+  Fix: evaluate `requirement.marker` against the image's Python (from the Dockerfile `FROM`), and
+  include the cloud requirement files as readers.
+
+[P3] The probe-name guard misses a probe the suite writes into measured source
+  tests/test_dependency_direction.py:231, :251 (`libs/ml-core/src/ml_core/_probe.py`, `projects/demand-forecast/src/demand_forecast/_probe.py`)
+  tests/test_coverage_scope.py:86 (regex `\b(_[a-z]+_probe[\w{}]*\.py)\b`)
+  `_probe.py` matches neither the guard's regex nor either omit pattern (`*/_gate_probe*`,
+  `*/_clock_probe*`). Today no measured subprocess exits while it exists, so the race does not fire.
+  The guard's docstring says "a new probe name cannot reopen the race unseen", and an existing name
+  already slips past it.
+  Fix: rename those probes `_gate_probe.py`, or derive probe names from the write calls rather than a
+  name pattern.
+
+[P3] The `serving-core` exemption counts lines, so one statement can hold a library
+  scripts/check_coverage_floors.py:131, :282-290
+  $ coverage run --branch --source=pkg run.py   # pkg/__init__.py: route = {"predict": lambda …, "health": lambda …, "ready": lambda …}
+  {'pkg/__init__.py': 1}
+  A dict of three lambdas, conditional expressions included, is one statement and stays exempt with no
+  floor. `test_empty_libraries_say_so.py` constrains the docstring, not the code. Abuse is possible;
+  nothing suggests it has happened.
+  Fix: exempt only while the package's AST holds nothing but its docstring and `__version__`.
+
+[P3] `intervals_are_calibrated` refuses its own lower bound and accepts its upper one
+  projects/demand-forecast/src/demand_forecast/train.py:151
+  $ python -c "print(abs(0.85-0.9), abs(0.95-0.9))"
+  0.05000000000000004 0.04999999999999993
+  At coverage 0.85 the pipeline refuses ("within 0.05" is false), and at 0.95 it accepts. Seen in the
+  W-14 run as `skill=+0.050 coverage=0.850 DAG=PROMOTE KFP=REFUSE`.
+  Fix: compare in integer basis points, or add an epsilon; test both boundaries.
+
+[P3] The DAG validates one read of the table and trains and publishes on later reads, ignoring the snapshot it recorded
+  orchestration/dags/demand_forecast_training.py:130, 152, 195
+  `ingest_month` returns `snapshot_id`, and each later task calls `read_demand()` without it, although
+  `read_demand(snapshot_id=…)` exists for exactly this. `max_active_runs=1` stops the DAG racing
+  itself, but not the KFP pipeline or a manual ingest committing between validate and train. The
+  published sidecar records no snapshot, so the model's input cannot be reconstructed. Auditor mutation
+  R15-DAG6 (publish reads `snapshot_id=1`) SURVIVES: the tests stub `read_demand` as `lambda *a, **k`.
+  Fix: pass `snapshot_id` through every read, record it in the sidecar, and have the stub assert it.
+
+[P3] The local stack's six images are pinned by tag, not digest, and #107 merged with nothing executing the new image
+  platform/local/manifests/40-metrics.yaml:71 (`prom/prometheus:v3.15.0`), :155; 30-observability.yaml:65, :109; 20-minio.yaml:32; 10-postgres.yaml:33 (`pgvector/pgvector:pg17`, a floating major tag)
+  $ gh pr view 107 --repo DuqueOM/ml-platform --json statusCheckRollup
+  Fast gates / Tests and coverage / IaC and Kubernetes security / Supply chain / Secret scan / Repository invariants / Trivy: SUCCESS (merged by app/github-actions 2026-10-01T21:26:31Z)
+  AGENTS.md: "Container images are pinned by digest". `platform/local/README.md:87` defers signature
+  verification to Phase 2, not digests. None of the checks that gated the auto-merge runs Prometheus.
+  The only executing tests are `-m local`, which CI never selects. **Correction to the prompt:** P10
+  (`check_action_pins.py`) governs GitHub Actions only, so it does not cover this bump.
+  Fix: pin as `tag@sha256:…` (Dependabot maintains both), or record the local-stack exception beside
+  the invariant.
+
+[P3] C10's heading slugs diverge from GitHub's for code spans containing `<`, entities, images and escapes
+  scripts/check_doc_coherence.py:1432-1442
+  $ uv run python -c "from check_doc_coherence import heading_slug; …"
+  DIFF  '`<pre>` handling'             ours='handling'           github='pre-handling'
+  DIFF  '`List<T>` contract'           ours='list-contract'      github='listt-contract'
+  DIFF  'Fish &amp; chips'             ours='fish-amp-chips'     github='fish--chips'
+  DIFF  'Logo ![badge](x.svg) status'  ours='logo-badge-status'  github='logo--status'
+  DIFF  'Use \_private names'          ours='use-private-names'  github='use-_private-names'
+  The "github" column applies github-slugger's rule to the rendered text that `gh api markdown`
+  returned: `<code>&lt;pre&gt;</code> handling`, `Fish &amp; chips`, `<img … alt="badge">` (alt is
+  not text content), `Use _private names`. The API returns no anchor ids, so the last step was not
+  executed against github.com. No current heading has these shapes.
+  Fix: slug the rendered text (unescape entities, keep code-span text verbatim including `<`, drop
+  image alt, resolve backslash escapes); test these five cases.
+
+[P3] Two documents still define coverage the old way (KNOWN, classified here)
+  docs/governance/audit-brief.md:24 (`uv run pytest --cov=libs --cov-branch  # coverage`)
+  agentic/rules/25-audit-quality.md:47 (Q-05: "lowering `--cov-fail-under`")
+  The brief's command still gives a correct libs figure (94.55%, identical to the gate's, run 1′), but
+  not the measurement the gate applies (four scopes, per package). Q-05 names a flag CI no longer uses,
+  and the floors are now constants. Together with the rename hole above, nothing written and nothing
+  mechanical names the new location as a weakening surface.
+  Fix: point the brief at `make verify` / `check_coverage_floors.py`; have Q-05 name the constants in
+  `scripts/check_coverage_floors.py`; re-render the surfaces.
+
+[P3] The committed audit record holds rounds one, two and six; rounds twelve to fourteen exist only in a home directory
+  docs/governance/QA-4-independent-audit.md (429 lines; last section "QA-4 Round Six")
+  ops/audit.jsonl evidence: "Report: ~/qa4-round-12-report.md", "~/qa4-round-13-report.md", "~/qa4-round-14-report.md"
+  The prompt describes this file as holding "rounds one to fourteen". It does not. For rounds 4–11 the
+  trail records no report path at all. Open items did land in the work order (R11–R14), so P-14 holds,
+  but the evidence behind them is not in the public repository.
+  Fix: commit each round's report as `docs/governance/qa4/round-NN.md` and cite that path in the trail
+  entry.
+
+[P3] Parity `pending` entries carry no expiry and close on existence alone
+  scripts/check_upstream_parity.py:240-244
+  A `pending` entry whose file appears must flip to `adopted`, whatever the file contains.
+  `docs/DIAGRAMS.md`'s closing condition ("diagrams of THIS platform's flows, every step naming the
+  file that implements it") is checked only for existence. Eight `pending` entries carry no date.
+  Fix: an `expires:` on `pending`, as the (itself pending) `check_doc_path_refs.py` design does for
+  deferred paths.
+
+---
+
+## Verified working
+
+**#112, coverage floors**
+- The single run reproduces both old figures exactly, per file, on this tree:
+  - libs: `pytest --cov=libs --cov-branch --cov-fail-under=90` (run 1′) vs
+    `coverage report --include='libs/*'` on run 1's combined data:
+    `diff` of every `libs/` row is empty; TOTAL `1620 67 434 35 94.55%` in both.
+  - scripts: `pytest --cov=scripts --cov-branch --cov-fail-under=83` (run 2′) vs run 2's data:
+    `diff` of every `scripts/` row is empty; TOTAL `3993 475 1640 192 86.38%` in both.
+  - Run 1 reads scripts 86.35%, one line and one branch lower in `check_implementation_status.py`. Its
+    timed-out test cut a path short. With every test passing (runs 3, 4 and CI) scripts is 86.35%.
+  - The PR's figures (libs 94.45, scripts 86.33) were taken on an earlier main (89916ee). On 98a4359
+    the figures are libs 94.55 and scripts 86.35.
+- Deterministic: runs 1, 3, 4 and CI give byte-identical floor reports (all scopes, two decimals);
+  `diff new3.floors.log new4.floors.log` is empty. demand-forecast reads 79.07/65.22 in all five
+  observations (runs 1–4 and CI). No floor flipped.
+  Observation, not a finding: the margins are thin by design (rounded down from the measurement):
+  demand-forecast 79.07/65.22 vs 79/65, store-assistant 85.25/57.14 vs 85/57, scripts 86.35 vs 86. One
+  newly untested guard clause turns the build red; W-15 is what moves the floors away from the edge.
+- Nothing was lowered across the transition (hand comparison against db70d77; see the P2 above).
+- Rounding: the old gate compared `round(total, 0)` (precision unset, so 0) against the floor; the new
+  gate compares unrounded. Stricter. Mutation R15-CF3 (restore rounding in the failure branch) is
+  KILLED by an assertion.
+- CI step semantics, executed: a failing suite still runs `combine` and the step exits with pytest's
+  status (`step exit=5` with a no-tests selection; data file written).
+- The gate fails when it should: on libs-only data (run 1′) it reports `P12 scripts/: nothing
+  measured`, `P17 projects/…`, `P17 orchestration/…` and exits 1. On a missing data file it exits 1. On
+  `.coverage` without `--branch` it fails (catalogue entry, killed).
+- Behavioural tests catch value-level lowerings that `check_thresholds.py` cannot see:
+  `combined=50` literal in SCOPES, `SCRIPTS_COMBINED_FLOOR - 76`, `LINE_FLOOR // 3`, and zeroed
+  per-package floors in SCOPES. All four turn `tests/test_coverage_floors.py` red (1–4 failures each).
+- Probe omission: removing `"*/_clock_probe*"` (R15-COV1) is KILLED by
+  `test_every_python_probe_the_tests_write_is_omitted_from_measurement` with "probe files coverage
+  would record and then fail to find: ['_clock_probe.py']". `*/tests/*` hides no real source:
+  `git ls-files '*.py' | grep /tests/ | grep -v test_/conftest/__init__` (outside services/) is empty.
+- `include_namespace_packages`: `tests/test_coverage_scope.py` passes, and the catalogue's
+  R14-coverage-namespace-discovery-off is killed.
+
+**#111, status-document cache**
+- No stale read is possible: `_evaluated()` is used only inside `tests/test_status_layers.py`, only by
+  tests that do not change inputs (`grep -rn _evaluated tests/`).
+- Determinism is still proven by the test as written. Mutation R15-ST1 (a `time_ns()` comment in the
+  generated block) is KILLED in 478 s by the in-process vs CLI comparison. Six samples across runs 3/4
+  are byte-identical (md5 `f151baff…`). The failure above is a flake, not a regression of #111's cache.
+
+**#104, F-21 and F-25**
+- `_score_fold` takes both MAEs on `~isnan(baseline)` rows: read, and killed by SF1 and my R15-SF2
+  (`n_compared=len(truth)` → assertion).
+- Model card reproduced from its own command, twice, byte-identical (`diff repro1 repro2` differs only
+  in uv build noise): `OVERALL: MAE 3.35 vs baseline 3.82 (skill +12.4%), coverage 89.6%`. Folds 0–4
+  skill −18.34%, −1.21%, +14.33%, +30.90%, +22.87%, coverage 90.26/90.18/88.86/88.91/89.72. Compared
+  fractions 99.3082% and 99.5387% for folds 0 and 1, 100% for the rest. 3-fold +23.0%. 357,426 rows.
+  Input files sha256 match `datasets.lock.json`.
+- F-25: LK1 killed.
+
+**#78 and #82, the artifact**
+- `find_class` over a real artifact (fit on the verified files) resolves only `joblib.*`, `numpy.*` and
+  `sklearn.*`, so no workspace package. In the serving-only venv, `import demand_forecast` and
+  `import ml_core` both raise `ModuleNotFoundError`. The workspace-package half of the fix holds; the
+  numpy half does not (P2 above).
+- The digest check refuses all six corruption cases (flipped byte, truncation, missing sidecar, edited
+  digest, corrupt sidecar JSON, sidecar without sha256). R15-ART1 (`if False:`) is killed by
+  `test_a_flipped_byte_is_refused` ("DID NOT RAISE").
+
+**#76, namespace roles**: `tests/test_namespace_contract.py` 9 passed. Policies select
+`role.ml-platform.io/{ingress,monitoring}`. `platform/local/manifests/00-namespace.yaml:18` labels the
+monitoring role. The ingress role is honestly recorded as not fulfilled locally. The commit message
+claims no enforcement evidence, and there is none (R11-2 open). L3 NOT ticked.
+
+**#103 re-attack**: C6's lowercase-owner, SSH, `www.` and `codeload.` forms are caught. C9's quoted
+`#`, `~~~` fences and indented blocks are caught (catalogue entries killed). The artifact gate's PEP 503
+normalisation and unpinned-line detection are killed (R14-artifact-reader-*).
+
+**#110 and #107**: the two parity decisions are reasoned and match upstream. In online mode via a
+temporary `/tmp/template_MLOps` symlink to the sibling (HEAD 7bc0a22): `117 comparable artifacts
+upstream, all decided`; offline: `44 adopted, 8 pending, 46 rejected`. #107 passed every required
+check before auto-merge.
+
+**W-14**: confirmed with executed examples (see P2).
+
+**DAG and KFP task-body tests**: they test real wiring with real result types (`IngestReport`,
+`WriteResult`, `BacktestReport`, `WarehouseValidation`). DAG1–3 and KFP1–3 are killed by assertions.
+My R15-DAG5 (density floor argument) is killed: the recorder asserts kwargs. What they do NOT pin is
+listed in the P2/P3 above (fold design, snapshot).
+
+**Regression sweep** (clean trees: `make verify` in r15b, the rest in the restored probe tree):
+- `make verify` (run 2): every gate before the suite passed. ruff check ("All checks passed!"), ruff
+  format (588 files), mypy (97 files), sync, agentic V1–V8, gates, C1–C10 (C7 "10/10 commits not
+  contained in f8b9d27"), ci-refs, actions (25 pinned), artifact, baselines, dashboards,
+  gitleaks-pin, reuse, mcp, clock-isolation, render-safety, thresholds (26), parity, version, yaml
+  (199 files), cloud-surface (68%), inventory, status.
+- `check_doc_coherence.py` → `[coherence] OK`; `check_implementation_status.py --check` → OK;
+  `check_technology_inventory.py --check` → OK; `check_thresholds.py --show` lists 26 thresholds,
+  including all P17 package floors.
+- `gitleaks git --redact -c .gitleaks.toml` → 242 commits scanned, no leaks. With
+  `--ignore-gitleaks-allow` and default rules: 2 hits, both synthetic redaction-test fixtures in
+  `services/demand-forecast-serving/tests/test_memory_redaction.py:74,78`, annotated
+  `gitleaks:allow`.
+
+## Mutations
+
+**Committed catalogue** (`uv run python scripts/mutation_harness.py`, probe tree, 227 s): **95/95
+expected kills**, plus the 2 `expect: survives` entries (C10-case, W-ceiling-exclusive) surviving as
+declared, exit 0.
+
+Kill causes, re-run individually and classified from the first pytest `E` line or the gate's output,
+with the harness's own restore between entries:
+- 86 by an assertion (`AssertionError`/`assert`, `Failed: DID NOT RAISE`).
+- 6 by a gate verdict (`[agentic] FAILED`, `[artifact] FAILED` ×2, `[thresholds] FAILED` ×3, for
+  P0-claude-skills-flat, R14-artifact-reader-*, R14-thresholds-scripts-floor-lowered, CF8, CF10).
+- 3 by a behavioural exception, not a crash: DG3 (`pytest.raises(ValueError)` received
+  `FileNotFoundError`); DG4 and DAG1 (the product raised its own refusal where the test expects success).
+- 0 by an import, collection or syntax error.
+
+**Auditor additions** (`--catalogue ~/qa4-r15-logs/r15.yaml`, not committed): 7 of 10 killed.
+
+| id | mutation | result | cause |
+| --- | --- | --- | --- |
+| R15-DAG4 | DAG backtest `evaluate(…, n_folds=3)` | **SURVIVED** | `evaluate` stubbed as `lambda table, **k` |
+| R15-DAG5 | DAG `check_density(demand, minimum=0.0)` | killed | assertion: recorder compares kwargs |
+| R15-DAG6 | DAG publish `read_demand(snapshot_id=1)` | **SURVIVED** | `read_demand` stubbed as `lambda *a, **k` |
+| R15-KFP4 | pipeline default `n_folds: int = 1` | **SURVIVED** | no test reads the pipeline's defaults |
+| R15-CF2 | `EXEMPT_MAX_STATEMENTS = 10000` | killed | assertion |
+| R15-CF3 | `round(total.combined) < scope.combined` | killed | assertion |
+| R15-COV1 | drop `"*/_clock_probe*"` from omit | killed | assertion (names `_clock_probe.py`) |
+| R15-ART1 | digest comparison → `if False:` | killed | `Failed: DID NOT RAISE` |
+| R15-SF2 | `n_compared=len(truth)` | killed | assertion |
+| R15-ST1 | nondeterministic generated block | killed | assertion (determinism test, 478 s) |
+
+Suggested for the committed catalogue: R15-DAG4, R15-DAG6, R15-KFP4 as `expect: killed` once the
+P2/P3 fixes land, and R15-CF3, R15-COV1, R15-ST1 now.
+
+Probes that were not harness mutations, all reverted: C6 ×9 forms, C9 ×9 shapes, artifact-gate
+marker, `check_thresholds` value-level ×4, threshold transition (baseline db70d77), serving-core
+one-statement library (temp dir).
+
+## Not verifiable here
+
+- **L3 (NetworkPolicy enforcement, local stack, service).** The prompt says Docker is running. It is
+  not: `docker` → "could not be found in this WSL 2 distro"; `kubectl --context kind-ml-platform-local
+  get nodes` → "connection to the server 127.0.0.1:36919 was refused"; `kind get clusters` fails on
+  `docker ps`. I did not start Docker Desktop, which is outside this session's remit. 45 `local` and
+  `integration` tests skipped. L3 is NOT ticked.
+- **Building the serving image.** No Docker. The artifact load was tested in a venv built from
+  `requirements.txt` on the image's Python (3.13.13) instead, which is the property that matters, but
+  not the image itself.
+- **GitHub's final slug step for C10**: the markdown API returns rendered text, not anchor ids.
+- **gitleaks at the pinned version**: run with local 8.21.2; the repository pins 8.30.0.
+- **The in-suite determinism failure's cause**: observed twice, not captured (see P2).
+- **The Codecov dashboard and repository secret**: not readable from here. Evidence is the upload
+  error in the CI log.
+- **Results that depend on the sibling `../template_MLOps`**: my worktrees are in `/tmp`, so like CI
+  they ran without it (parity offline: "ledger checked for consistency only"; C2: "152 citations in
+  generated code NOT checked"). The parity gate was also run online once via a temporary symlink
+  (removed). Every other result is sibling-independent.
+
+## Proposed audit-trail record (for the remediation session to enter)
+
+```text
+--action independent-audit --target ml-platform --mode CONSULT
+--outcome "Round 15 against tree 98a4359. 0 P0, 0 P1, 8 P2, 11 P3. P2: R11-3 marked done while the serving environment (requirements.txt, numpy 1.26.4, py3.13) still cannot load the artifact (numpy-2 Generator pickle; straddle exempted in P14, docs say the image can read it); the DAG and KFP gates evaluate different backtests (5 vs 3 folds: +12.4% vs +23.0%, the 3-fold design drops the two losing folds) on top of W-14's threshold disagreement, and the KFP thresholds are unwatched; check_thresholds.py skips thresholds with a new label or file, so #112 could have lowered every coverage floor with the gate green (verified by hand that it did not); C6 misses six owner/repo forms including gh: and uses:; Codecov uploads all fail (no token) while the inventory marks it Core; W-10's digest stops corruption but not a writer who replaces both files, and the serving path never calls it; three load/concurrency-sensitive tests made make verify red on clean trees in 3 of 6 runs; the release workflow's --cov=src step always fails at 0%. #112's single run reproduces both old figures exactly per file (libs 94.55, scripts 86.38 on matching runs) and is deterministic across 4 local runs and CI. Model card +12.4%/MAE 3.35 and per-fold table reproduced twice. 95/95 catalogue kills (86 assertion, 6 gate verdict, 3 behavioural exception, 0 crash); 7/10 auditor mutations killed. L3 not verified: Docker not running. gitleaks clean over 242 commits."
+--evidence "Worktrees /tmp/qa4-r15, /tmp/qa4-r15b (suites), /tmp/qa4-r15c (probes) at 98a4359c994808dc69a2724b26bd943f34c98a4a after uv sync --all-packages --all-extras --locked (uv 0.11.19, coverage 7.15.3); 4 CI-equivalent coverage runs (coverage run --branch --source=libs,projects,orchestration,scripts -m pytest -q; combine; check_coverage_floors.py), one as make verify; old pytest --cov=libs --cov-fail-under=90 and --cov=scripts --cov-fail-under=83; per-file coverage report diffs; CI run 37024278381 logs; THRESHOLD_BASELINE_REF=db70d77 check_thresholds.py with lowered floors; pytest -o addopts='' -m 'integration or local' -rs (1 passed, 45 skipped); evaluate() on the lock-verified TLC 2024-01/02 files twice; fit_final+save then joblib.load in a uv venv from services/demand-forecast-serving/requirements.txt on Python 3.13.13; artifact tamper script; W-14 gate comparison through DagBag and python_func; C6/C9/C10/artifact-gate probes; mutation_harness.py (97 entries) plus --catalogue with 10 auditor entries and per-entry kill-cause classification; gitleaks 8.21.2 git --redact (repo config, and default rules with --ignore-gitleaks-allow); gh api markdown for C10 rendered text. Report: ~/qa4-r15-report.md"
+```
+
+## Closing verdict
+
+The claims under audit are mostly trustworthy where they were measured: #112's coverage numbers,
+#104's re-measured skill and the per-fold table, and #78's no-workspace-module property all reproduce
+exactly. They are not trustworthy where a closure was declared beyond what was executed: R11-3's
+"done", W-10 as a close of F-14, Codecov as a Core gate, and W-14's account of how far the two
+promotion gates disagree.

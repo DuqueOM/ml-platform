@@ -41,9 +41,32 @@ GATES = {
 }
 
 
+#: The bound on a gate run here: there to turn a hang into a failure, not to
+#: measure speed. 180 s for every gate except the status generator, which runs
+#: every component's verification command and takes about 125 s on an IDLE
+#: machine — 1.45x headroom, which two suites running at once consumed and
+#: turned into a `TimeoutExpired` on a clean tree (QA-4 round fifteen). Its
+#: budget is derived from the generator's own per-command bound instead, so the
+#: two cannot drift apart.
+_GATE_TIMEOUT_SECONDS = 180
+
+
+def _timeout_for(script: Path) -> int:
+    if script.name == "check_implementation_status.py":
+        sys.path.insert(0, str(SCRIPTS))
+        import check_implementation_status
+
+        return int(check_implementation_status.VERIFY_TIMEOUT_SECONDS) + _GATE_TIMEOUT_SECONDS
+    return _GATE_TIMEOUT_SECONDS
+
+
 def _run(script: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, str(script), *args], capture_output=True, text=True, cwd=REPO_ROOT, timeout=180
+        [sys.executable, str(script), *args],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+        timeout=_timeout_for(script),
     )
 
 
@@ -823,6 +846,12 @@ def test_c10_fails_the_anchor_runbook_actually_had() -> None:
         ("ADR-010: the [export](x.md)", "adr-010-the-export"),
         ("snake_case names", "snake_case-names"),
         ("An _emphasised_ word", "an-emphasised-word"),
+        # QA-4 round fifteen: the rendered text of each, from `gh api markdown`.
+        ("`<pre>` handling", "pre-handling"),
+        ("`List<T>` contract", "listt-contract"),
+        ("Fish &amp; chips", "fish--chips"),
+        ("Logo ![badge](x.svg) status", "logo--status"),
+        ("Use \\_private names", "use-_private-names"),
     ],
 )
 def test_c10_slugs_headings_the_way_github_does(heading: str, slug: str) -> None:
@@ -1423,3 +1452,110 @@ def test_every_repository_write_goes_through_a_recording_helper() -> None:
         "a write bypasses temporarily()/temporarily_absent(), so the residue guard cannot see it: "
         + ", ".join(offenders)
     )
+
+
+#: Every form QA-4 round fifteen published past C6, each naming the private
+#: account without a `github.com` host. Assembled at runtime for the same reason
+#: as the test above: written out, this file would fail C6 itself.
+_ACCOUNT = "Duque" + "OM"
+_HIDDEN = "not-a-public" + "-repo"
+_HOSTLESS_FORMS = {
+    "autolink": f"Fixed in {_ACCOUNT}/{_HIDDEN}#12.",
+    "actions-uses": f"uses: {_ACCOUNT}/{_HIDDEN}@{'0' * 40}",
+    "copier-shorthand": f"copier copy gh:{_ACCOUNT}/{_HIDDEN} ./svc",
+    "gh-clone": f"gh repo clone {_ACCOUNT}/{_HIDDEN}",
+    "gh-api": f"gh api repos/{_ACCOUNT}/{_HIDDEN}/pulls",
+    "pages": f"https://{_ACCOUNT.lower()}.github.io/{_HIDDEN}/",
+    # A quotation cut short still names a private repository unless what it
+    # cuts is the prefix of a public one.
+    "elided-private": f"see {_ACCOUNT}/{_HIDDEN[:6]}…",
+}
+
+
+@pytest.mark.parametrize("form", sorted(_HOSTLESS_FORMS))
+def test_c6_reads_a_repository_named_without_a_host(form: str) -> None:
+    probe = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.md"
+    with temporarily(probe, _HOSTLESS_FORMS[form] + "\n"):
+        result = _run(GATES["doc-coherence"], "--only", "C6")
+    assert result.returncode == 1, f"{form} passed C6:\n{result.stdout}"
+    assert "docs/runbooks/_gate_probe.md links to non-public repository" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        f"Generated with {_ACCOUNT}/ml-service-template, tag v0.31.0.",
+        f"quoted: copier copy gh:{_ACCOUNT}/ml-se…",
+        f"`{_ACCOUNT.lower()}/...` is the same account",
+        "uses: actions/checkout@v4 and owner/repo#12 under another account",
+        f"the answers file held a local path (`/home/{_ACCOUNT.lower()}/projects/template`)",
+    ],
+    ids=["public", "elided-public", "ellipsis-prose", "other-account", "filesystem-path"],
+)
+def test_c6_does_not_fail_what_is_public_or_not_a_reference(text: str) -> None:
+    probe = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.md"
+    with temporarily(probe, text + "\n"):
+        result = _run(GATES["doc-coherence"], "--only", "C6")
+    assert result.returncode == 0, result.stdout
+
+
+#: The shapes QA-4 round fifteen hid an unpinned remote copier command in.
+#: Each renders as code on GitHub, and each passed C9.
+_C9_HIDDEN = {
+    "uvx-at-version": "```bash\nuvx copier@9.4.1 copy gh:owner/repo ./svc\n```\n",
+    "fence-in-numbered-item": "10. Generate it:\n    ```bash\n    copier copy gh:owner/repo ./svc\n    ```\n",
+    "fence-in-bullet": "- Generate it:\n    ```bash\n    copier copy gh:owner/repo ./svc\n    ```\n",
+    "blockquoted-fence": "> ```bash\n> copier copy gh:owner/repo ./svc\n> ```\n",
+    "html-pre": "<pre><code>copier copy gh:owner/repo ./svc</code></pre>\n",
+    "vcs-ref-head-remote": "```bash\ncopier copy --vcs-ref HEAD gh:owner/repo ./svc\n```\n",
+    "vcs-ref-branch-remote": "```bash\ncopier copy --vcs-ref=main gh:owner/repo ./svc\n```\n",
+    "update-outside-projects": "```bash\ncd services/x && uvx copier update --vcs-ref HEAD --trust\n```\n",
+}
+
+
+@pytest.mark.parametrize("shape", sorted(_C9_HIDDEN))
+def test_c9_sees_an_unpinned_command_in_every_shape_github_renders_as_code(shape: str) -> None:
+    with temporarily(_ANCHOR_PROBE, "# probe\n\n" + _C9_HIDDEN[shape]):
+        result = _run(GATES["doc-coherence"], "--only", "C9")
+    assert result.returncode == 1, f"{shape} passed C9:\n{result.stdout}"
+    assert "docs/runbooks/_gate_probe.md documents an unpinned copier command" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "```bash\ncopier copy --vcs-ref=v0.31.0 gh:owner/repo ./svc\n```\n",
+        "```bash\ncopier copy -r 0123abc gh:owner/repo ./svc\n```\n",
+        "```bash\nuvx copier copy --vcs-ref HEAD --trust . projects/x\n```\n",
+        "```bash\ncd projects/x && uvx copier update --vcs-ref HEAD --trust\n```\n",
+        "```bash\ncopier update --vcs-ref=<release-tag> --trust\n```\n",
+        '```bash\ncopier copy --vcs-ref "$TEMPLATE_VERSION" gh:owner/repo ./svc\n```\n',
+        "> Scaffolded with `copier copy gh:owner/repo`, as prose.\n",
+    ],
+    ids=["tag", "short-sha", "local-head", "in-repo-update", "placeholder", "variable", "quoted-prose"],
+)
+def test_c9_accepts_a_pin_a_local_source_and_prose(body: str) -> None:
+    with temporarily(_ANCHOR_PROBE, "# probe\n\n" + body):
+        result = _run(GATES["doc-coherence"], "--only", "C9")
+    assert result.returncode == 0, result.stdout
+
+
+@pytest.mark.parametrize(
+    ("command", "fails"),
+    [
+        ("pytest --cov=src --cov-fail-under=90", True),
+        ("uv run coverage run --branch --source=libs,nowhere -m pytest", True),
+        ("uv run coverage run --branch --source=libs,scripts -m pytest", False),
+        ("cd projects/x && pytest --cov=src", False),
+        ('pytest --cov="$PACKAGE"', False),
+    ],
+    ids=["missing-cov", "missing-source", "present", "after-cd", "variable"],
+)
+def test_c4_resolves_what_a_workflow_measures(command: str, fails: bool) -> None:
+    """QA-4 round fifteen: the release workflow measured a `src/` that does not exist, so it failed at 0% always."""
+    probe = REPO_ROOT / "agentic" / "workflows" / "_gate_probe.md"
+    with temporarily(probe, f"# probe\n\n```bash\n{command}\n```\n"):
+        result = _run(GATES["doc-coherence"], "--only", "C4")
+    assert (result.returncode == 1) is fails, result.stdout
+    if fails:
+        assert "agentic/workflows/_gate_probe.md measures" in result.stdout

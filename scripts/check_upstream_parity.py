@@ -39,6 +39,7 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
+from datetime import date
 from pathlib import Path
 
 import yaml
@@ -117,6 +118,15 @@ _UNCOMPARED_PREFIXES = (
 
 VALID_STATUS = {"pending", "adopted", "rejected"}
 
+#: How far ahead a `pending` entry's `expires:` may sit. A decision to adopt
+#: with no date stays a decision forever: QA-4 round fifteen found eight
+#: undated, the oldest from round nine. On the date the entry is done
+#: (`adopted`), re-decided with a new date and a new reason, or `rejected`. One
+#: quarter, as `check_baselines_expiry.py` caps an accepted risk, so extending a
+#: date costs a minute of thought and leaves a trace in the diff. Raising it is
+#: a loosening, watched by `scripts/check_thresholds.py`.
+MAX_PENDING_DAYS = 100
+
 failures: list[str] = []
 notes: list[str] = []
 
@@ -190,8 +200,30 @@ def _upstream_files() -> set[str] | None:
     }
 
 
-def check_offline(entries: list[dict]) -> None:  # type: ignore[type-arg]
+def _expiry_problem(path: str, value: object, today: date) -> str | None:
+    """Why a `pending` entry's `expires:` does not hold, or None when it does."""
+    if value is None:
+        return f"{path}: pending with no `expires:` — a decision to adopt with no date is never revisited"
+    try:
+        expires = value if isinstance(value, date) else date.fromisoformat(str(value))
+    except ValueError:
+        return f"{path}: `expires: {value}` is not a YYYY-MM-DD date"
+    if expires < today:
+        return (
+            f"{path}: pending, and its date ({expires.isoformat()}) has passed. Adopt it, re-decide it with "
+            f"a new date and reason, or reject it"
+        )
+    if (expires - today).days > MAX_PENDING_DAYS:
+        return (
+            f"{path}: expires {expires.isoformat()}, {(expires - today).days} days out — more than "
+            f"{MAX_PENDING_DAYS}, so the date would not make anyone look again"
+        )
+    return None
+
+
+def check_offline(entries: list[dict], today: date | None = None) -> None:  # type: ignore[type-arg]
     """The half that runs everywhere, and the reason this is a gate."""
+    today = today or date.today()
     if not entries:
         fail("the ledger declares no artifacts — it cannot be checked against anything")
         return
@@ -214,6 +246,9 @@ def check_offline(entries: list[dict]) -> None:  # type: ignore[type-arg]
             continue
         if len(reason) < 40:
             fail(f"{path}: the reason is too short to be one — a decision with no argument is a preference")
+
+        if status == "pending" and (problem := _expiry_problem(path, entry.get("expires"), today)):
+            fail(problem)
 
         exists = (REPO_ROOT / path).exists()
         if status == "adopted" and not exists:

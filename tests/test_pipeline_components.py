@@ -181,3 +181,18 @@ def test_the_backtest_hands_the_gate_both_verdicts(
     assert arguments == {"n_folds": 3, "horizon": 168, "seed": 7}
     assert (outcome.skill, outcome.coverage_ok) == (0.25, calibrated)
     assert metrics.metrics == {"model_mae": 3.0, "baseline_mae": 4.0, "skill": 0.25, "coverage": coverage, "seed": 7}
+
+
+def test_the_pipeline_backtest_design_is_pinned(pipeline: ModuleType) -> None:
+    """The pipeline's defaults decide what its gate judges, and no test read them.
+
+    `n_folds=3` drops folds 0 and 1 — the two the model loses — so the pipeline
+    measures skill +23.0% where the DAG measures +12.4% on the same data. A
+    default of 1 survived the whole suite (QA-4 round fifteen, R15-KFP4).
+    Pinned as it stands, not endorsed: W-14 decides the design.
+    """
+    import inspect
+
+    signature = inspect.signature(pipeline.demand_forecast_training.pipeline_func)
+    defaults = {name: param.default for name, param in signature.parameters.items()}
+    assert (defaults["n_folds"], defaults["horizon"], defaults["seed"]) == (3, 168, 42)

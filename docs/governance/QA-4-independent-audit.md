@@ -9,6 +9,19 @@ skill `agentic/skills/enterprise-audit`
 against a `git archive HEAD` snapshot in a scratch directory, never the working
 tree. `git status --porcelain` is empty at the end of this audit.
 
+**Where each round's report lives.** This file holds rounds one, two and six in
+full. The others are not here, and QA-4 round fifteen found that nothing said
+so — an audit prompt described this file as holding rounds one to fourteen.
+From round twelve on, each report is committed verbatim as plain text under
+[`qa4/`](qa4/): `round-12.txt`, `round-13.txt`, `round-14.txt`,
+`round-15.txt`. The trail entries for rounds twelve to fourteen cite
+`~/qa4-round-NN-report.md`, a home directory; the trail is append-only, so
+those citations stand and the committed copies are what they now point to.
+Rounds four, five and seven to eleven are recorded only in `ops/audit.jsonl`
+(outcome and evidence), with their open items in the remediation work order;
+round three appears only in the marker history in `AGENTS.md`. None of those
+reports was committed, and no copy was found on the machine that ran them.
+
 ---
 
 ## 1. Scope
