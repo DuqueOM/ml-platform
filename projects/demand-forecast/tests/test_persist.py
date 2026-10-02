@@ -51,6 +51,21 @@ def model() -> ForecastModel:
     return fit_final(_demand(), seed=7)
 
 
+def _sidecar_for(artifact: Path) -> None:
+    """Write the digest sidecar `load` now requires.
+
+    These tests build artifacts by hand to exercise a refusal further down —
+    a wrong schema, a pickled object. `load` verifies the recorded digest
+    before it unpickles anything (QA-4 W-10), so without this they would all
+    fail on the missing sidecar and stop testing what they are named for.
+    """
+    import hashlib
+    import json
+
+    digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+    artifact.with_suffix(".json").write_text(json.dumps({"sha256": digest}), encoding="utf-8")
+
+
 def test_a_saved_model_predicts_identically_when_loaded(model: ForecastModel, tmp_path: Path) -> None:
     """Round-trip equality, byte for byte.
 
@@ -141,6 +156,7 @@ def test_an_artifact_from_another_schema_is_refused(model: ForecastModel, tmp_pa
     stale = {**_payload(model), "schema": ARTIFACT_SCHEMA + 1}
     artifact = tmp_path / "stale.joblib"
     joblib.dump(stale, artifact)
+    _sidecar_for(artifact)
 
     with pytest.raises(ValueError, match="artifact schema"):
         load(artifact)
@@ -158,6 +174,7 @@ def test_an_artifact_that_pickled_the_model_object_is_refused(model: ForecastMod
 
     artifact = tmp_path / "schema1.joblib"
     joblib.dump(model, artifact)
+    _sidecar_for(artifact)
 
     with pytest.raises(ValueError, match="not an artifact payload"):
         load(artifact)
@@ -184,3 +201,64 @@ def test_the_interval_covers_at_close_to_its_nominal_rate(model: ForecastModel) 
     assert 0.80 <= covered <= 0.97, f"coverage {covered:.3f} against a nominal {1 - model.alpha:.2f}"
     assert np.all(upper > point)
     assert np.all(lower < point)
+
+
+def test_a_flipped_byte_is_refused(model: ForecastModel, tmp_path: Path) -> None:
+    """The artifact recorded its own digest and nobody checked it (QA-4 W-10).
+
+    One byte, in the middle of the file: a truncated copy, a partial download
+    or an edited artifact all look like this, and all loaded cleanly before.
+    """
+    artifact = tmp_path / "model.joblib"
+    save(model, artifact)
+
+    raw = bytearray(artifact.read_bytes())
+    middle = len(raw) // 2
+    raw[middle] ^= 0xFF
+    artifact.write_bytes(bytes(raw))
+
+    with pytest.raises(ValueError, match="does not match the digest"):
+        load(artifact)
+
+
+def test_a_truncated_artifact_is_refused(model: ForecastModel, tmp_path: Path) -> None:
+    """The failure an interrupted copy produces, caught on the digest rather than inside joblib."""
+    artifact = tmp_path / "model.joblib"
+    save(model, artifact)
+    raw = artifact.read_bytes()
+    artifact.write_bytes(raw[: len(raw) // 2])
+
+    with pytest.raises(ValueError, match="does not match the digest"):
+        load(artifact)
+
+
+def test_an_artifact_without_its_sidecar_is_refused(model: ForecastModel, tmp_path: Path) -> None:
+    """The pair is the artifact. Half of it cannot prove what it is."""
+    artifact = tmp_path / "model.joblib"
+    save(model, artifact)
+    artifact.with_suffix(".json").unlink()
+
+    with pytest.raises(ValueError, match="no metadata sidecar"):
+        load(artifact)
+
+
+def test_the_sidecar_records_the_whole_digest_not_a_label(model: ForecastModel, tmp_path: Path) -> None:
+    """`version` carries twelve characters to tell artifacts apart; verification needs all of it."""
+    import hashlib
+    import json
+
+    artifact = tmp_path / "model.joblib"
+    metadata = save(model, artifact)
+    sidecar = json.loads(artifact.with_suffix(".json").read_text(encoding="utf-8"))
+
+    assert len(sidecar["sha256"]) == 64
+    assert sidecar["sha256"] == hashlib.sha256(artifact.read_bytes()).hexdigest()
+    assert sidecar["sha256"].startswith(metadata["version"].split("+")[1])
+
+
+def test_an_intact_artifact_still_loads(model: ForecastModel, tmp_path: Path) -> None:
+    """The converse, so the four refusals above cannot pass by refusing everything."""
+    artifact = tmp_path / "model.joblib"
+    save(model, artifact)
+
+    assert load(artifact).trained_through == model.trained_through
