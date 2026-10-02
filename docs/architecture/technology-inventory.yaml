@@ -24,7 +24,7 @@ categories:
       - {id: ruff, tier: core, detect: ["pattern:tool.ruff|pyproject.toml"]}
       - {id: mypy, tier: core, detect: ["pattern:tool.mypy|pyproject.toml"]}
       - {id: pytest, tier: core, detect: ["pattern:tool.pytest|pyproject.toml"]}
-      - {id: coverage, tier: core, detect: ["pattern:--cov-fail-under|.github/workflows/ci.yml"]}
+      - {id: coverage, tier: core, detect: ["pattern:coverage run --branch|.github/workflows/ci.yml"]}
       - {id: black, tier: rejected, note: "Superseded by ruff format (ADR-004). Keeping both is two formatters disagreeing."}
       - {id: isort, tier: rejected, note: "Superseded by ruff's I rules (ADR-004)."}
       - {id: poetry, tier: rejected, note: "uv chosen (ADR-004); two resolvers is two lockfiles."}
@@ -48,7 +48,7 @@ categories:
     items:
       - {id: github-actions, tier: core, detect: [".github/workflows/ci.yml"]}
       - {id: codecov, tier: core, detect: ["codecov.yml"], note: "Declared L1/L2 coverage thresholds were unenforced until this existed — a published claim with no gate."}
-      - {id: coverage-gate, tier: core, detect: ["pattern:--cov-branch|.github/workflows/ci.yml"]}
+      - {id: coverage-gate, tier: core, detect: ["pattern:check_coverage_floors.py|.github/workflows/ci.yml"]}
       - {id: release-on-tag, tier: core, detect: [".github/workflows/release-on-tag.yml"], note: "The template added this after finding six tags with zero published releases."}
       - {id: openssf-scorecard, tier: core, detect: [".github/workflows/scorecard.yml"]}
       - {id: docs-quality-lint, tier: core, detect: [".github/workflows/docs-quality.yml"], note: "markdownlint over the documentation surface."}

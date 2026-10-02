@@ -258,6 +258,18 @@ entirely at documents. Five tasks that aim it at the machine learning.
 
 ### W-5 — Coverage floors for the ML code and the orchestration layer
 
+> **Status: done** — *feat(gates): coverage floors per package, from one measured run*. CI runs the suite once
+> under `coverage run` over all four scopes instead of twice, and `check_coverage_floors.py` (replacing
+> `check_branch_coverage.py`) applies every floor: the libs aggregate (90, unrounded) and L1/L2 per library, P12 at
+> 86, and P17 — a line and branch floor per ML package at the measurement, rounded down. Step 1 departs from the
+> letter of this task on purpose: a third coverage STEP would have been a third half-hour run of the suite, and
+> measured on `main` the single run reproduces the two old figures exactly (libs 94.45%, scripts 86.33%).
+> Orchestration went from 34%/0% to 100% with tests that run the task bodies, which found the two promotion gates
+> disagreeing (W-14). Acceptance: every floor is in `check_thresholds.py --show`; the gate on `main`'s data fails 7
+> floors, and on this branch's data with `test_persist.py` deleted it fails demand-forecast; `check_thresholds.py`
+> reports none loosened. `feature_defs` was already at 90% branches when this landed — the F-25 tests had raised
+> it — and is at 100% now. The project gaps are W-15.
+
 **Mode**: AUTO · **Closes**: F-11 · **Size**: ~1h
 
 CI measures `--cov=libs` (floor 90) and `--cov=scripts` (floor 74).
@@ -507,6 +519,56 @@ connection reuse and shared breaker state (F-16) need a benchmark and a
 decision about the replica count; the policy gate's keyword matching (F-24) is
 a design question about detection efficacy rather than a defect. Both belong in
 a round with a human in it.
+
+### W-14 — The two promotion gates disagree about what earns a deployment
+
+**Mode**: CONSULT · **Source**: found while writing W-5's tests for both gates ·
+**Size**: ~1h once decided
+
+The same backtest can be promoted by one orchestrator and refused by the other,
+because each carries its own copy of the gate:
+
+| | Airflow DAG (`check_quality_gate`) | KFP pipeline (`check_quality_gate`) |
+| --- | --- | --- |
+| Skill | `skill >= MIN_SKILL` (0.05) | `skill > 0` |
+| Interval coverage | `coverage >= MIN_COVERAGE` (0.85), one-sided | `intervals_are_calibrated()`: within 0.05 of 0.90, **both** sides |
+
+A model at skill 0.03 passes the pipeline and fails the DAG; one at coverage
+0.97 passes the DAG and fails the pipeline. Both module docstrings warn against
+exactly this — "a pipeline step that reimplements the logic it orchestrates is
+a second copy that drifts" — and the gate is the one piece each reimplements.
+W-5's tests pin both behaviours as they are, so neither can move without a red
+test, but pinning a disagreement does not resolve it.
+
+**Decision needed**: which semantics is the promotion policy. The
+recommendation is one function in `demand_forecast` that both orchestrators
+call — skill `>= 0.05` (a positive floor, as the DAG argues: the gate catches a
+broken pipeline, not a near-tie) and calibration two-sided (as the pipeline and
+`BacktestReport.intervals_are_calibrated` argue: over-coverage is uncertainty
+the model has not quantified). That makes the DAG stricter on over-coverage,
+which can fail a run the DAG passes today, and is why this is CONSULT.
+
+**Acceptance**: one definition of the gate, imported by both orchestrators;
+the thresholds still watched by `check_thresholds.py`; a test that runs the
+same metrics through both and asserts the same verdict.
+
+### W-15 — Raise the project floors toward the library floors
+
+**Mode**: AUTO · **Source**: W-5's measurement · **Size**: ~3h, after #106
+
+P17 holds `demand-forecast` at 79% lines / 65% branches and `store-assistant` at
+85% / 57%, against 90 / 80 for a library. The gap is concentrated, not spread:
+
+| File | Measured | What is missing |
+| --- | --- | --- |
+| `demand_forecast/crossover.py` | 0% of 59 statements | Nothing tests it. The scaling curve and the projection are pure arithmetic over measured points and can be tested on synthetic ones |
+| `demand_forecast/lakehouse.py` | 51% | `test_lakehouse.py` is `integration`-marked because it needs MinIO, so the default suite reaches half the module. A SQLite-backed Iceberg catalog over `tmp_path` exercises the same code with no service. **Wait for #106**, which rewrites the catalog handling |
+| `store_assistant/tools.py` | 79%, 4 partial branches | Lines 52, 66, 76, 93 and 110–114: the refusal paths of the tools |
+| `demand_forecast/train.py`, `tracing.py`, `backtest.py` | 85–89% | A handful of guard clauses each |
+
+**Acceptance**: each file above at or over 90% lines and 80% branches, or a
+written reason it cannot be; the P17 floors raised to the new measurement in
+the same commit.
 
 ---
 

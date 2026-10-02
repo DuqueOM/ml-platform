@@ -141,14 +141,13 @@ with the other two jobs in any state.
 gh run list --commit "$(git rev-parse HEAD)" --json name,conclusion
 ```
 
-**`make verify` is not a substitute.** It narrows the type gate to `mypy libs/`
-where CI runs `mypy libs/ scripts/ projects/demand-forecast/src/` — and
-`scripts/` is where every other gate lives, which is exactly the scope that once
-carried 26 type errors behind a green step. It also omits `uv lock --check`, the
-`kubectl kustomize` render of every overlay, and both coverage floors. Its
-`pytest -q` does reach the test wrappers for thresholds, clock isolation, the
-MCP registry, cloud surface and upstream parity, so the gap is narrower than it
-looks — but it is not zero. Use it while working; use CI to decide.
+**`make verify` is not a substitute.** It runs every gate command CI runs —
+`tests/test_verify_parity.py` holds that, type-gate scope included, since the
+day `verify` checked `mypy libs/` while CI checked `scripts/` too, the scope
+that once carried 26 type errors behind a green step — and the coverage floors
+from the same single measured run. What it does not run is CI's environment:
+`uv lock --check`, the `kubectl kustomize` render of every overlay, and the
+jobs that need tools a laptop may lack. Use it while working; use CI to decide.
 
 **Today, one gate is red and it blocks a release.** `scripts/check_doc_coherence.py`
 fails check C7: 37 commits have landed since the independent-audit marker dated
@@ -325,7 +324,9 @@ back — describing a deployment that has never happened, against a path
 (`k8s/overlays/`) that does not exist in this repository, which uses
 `platform/kubernetes/overlays/`. Step 2's `pytest --cov=src --cov-fail-under=90`
 names a `src/` directory that does not exist at the root; the real gates are
-`--cov=libs` at 90 and `--cov=scripts` at a ratchet floor (83 since 2026-09-29).
+the floors in `scripts/check_coverage_floors.py`, applied to one coverage run
+over `libs/`, `scripts/`, `projects/` and `orchestration/` (quality gates L1,
+L2, P12 and P17).
 
 Treat steps 1 through 3 as current and the rest as inherited text awaiting the
 cloud work. This document, not that workflow, is the release procedure for this

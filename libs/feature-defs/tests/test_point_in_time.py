@@ -234,3 +234,36 @@ def test_unexamined_rows_are_reported_even_when_the_frame_is_clean() -> None:
 
     assert report.is_clean
     assert "no timestamp to check" in str(report)
+
+
+@pytest.mark.parametrize(
+    ("event_times", "feature_times"),
+    [
+        pytest.param([BASE, None, BASE], [None, BASE, None], id="every-row-misses-a-timestamp"),
+        pytest.param([], [], id="empty-frame"),
+    ],
+)
+def test_a_frame_with_nothing_to_examine_says_so(
+    event_times: list[datetime | None], feature_times: list[datetime | None]
+) -> None:
+    """Nothing examined is reported as nothing examined, not as a rate.
+
+    The early return for "no row carries both timestamps" had no test, so a
+    regression there — a division by zero, or `examined_rows` set to the
+    frame's height — would have passed the suite. The report stays clean (a
+    missing timestamp is coverage, not leakage) but says it examined nothing,
+    and the rate is 0.0 rather than an exception.
+    """
+    frame = pl.DataFrame(
+        {"event_time": event_times, "feature_time": feature_times},
+        schema={"event_time": pl.Datetime, "feature_time": pl.Datetime},
+    )
+    report = detect_leakage(frame)
+
+    assert report.is_clean
+    assert report.total_rows == len(event_times)
+    assert report.examined_rows == 0
+    assert report.unexamined_rows == len(event_times)
+    assert report.leak_rate == 0.0
+    assert report.max_leak_seconds == 0.0
+    assert "in 0 examined row(s)" in str(report)

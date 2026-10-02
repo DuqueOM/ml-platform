@@ -460,10 +460,10 @@ mutations:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c9_sees_every"
   expect: killed
 - id: R14-thresholds-scripts-floor-lowered
-  origin: QA-4 round 14, auditor
-  file: .github/workflows/ci.yml
-  old: '            --cov-fail-under=83'
-  new: '            --cov-fail-under=74'
+  origin: QA-4 round 14, auditor — re-anchored when the floor moved out of ci.yml (W-5)
+  file: scripts/check_coverage_floors.py
+  old: 'SCRIPTS_COMBINED_FLOOR = 86'
+  new: 'SCRIPTS_COMBINED_FLOOR = 74'
   run:
   - uv run python scripts/check_thresholds.py
   expect: killed
@@ -659,4 +659,156 @@ mutations:
   new: '        return self.leaking_rows / self.total_rows if self.total_rows else 0.0'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly libs/feature-defs/tests/test_point_in_time.py
+  expect: killed
+- id: CF1
+  origin: W-5 coverage floors, author — the aggregate-only check QA-4 F-11 found
+  file: scripts/check_coverage_floors.py
+  old: '            floor = scope.every_package or scope.packages.get(package)'
+  new: '            floor = scope.packages.get(package)'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
+  expect: killed
+- id: CF2
+  origin: W-5 coverage floors, author — the rounding --cov-fail-under applied
+  file: scripts/check_coverage_floors.py
+  old: '        if total.combined < scope.combined:'
+  new: '        if round(total.combined) < scope.combined:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
+  expect: killed
+- id: CF3
+  origin: W-5 coverage floors, author
+  file: scripts/check_coverage_floors.py
+  old: '                if counts.statements > EXEMPT_MAX_STATEMENTS:'
+  new: '                if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
+  expect: killed
+- id: CF4
+  origin: W-5 coverage floors, author — how projects/ started
+  file: scripts/check_coverage_floors.py
+  old: '                if scope.packages:'
+  new: '                if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
+  expect: killed
+- id: CF5
+  origin: W-5 coverage floors, author
+  file: scripts/check_coverage_floors.py
+  old: '            if package.startswith(scope.name + "/"):'
+  new: '            if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
+  expect: killed
+- id: CF6
+  origin: W-5 coverage floors, author
+  file: scripts/check_coverage_floors.py
+  old: '    if not has_branches:'
+  new: '    if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
+  expect: killed
+- id: CF7
+  origin: W-5 coverage floors, author
+  file: scripts/check_coverage_floors.py
+  old: '        if not packages:'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
+  expect: killed
+- id: CF8
+  origin: W-5 coverage floors, author
+  file: scripts/check_coverage_floors.py
+  old: 'LINE_FLOOR = 90'
+  new: 'LINE_FLOOR = 80'
+  run:
+  - uv run python scripts/check_thresholds.py
+  expect: killed
+- id: CF9
+  origin: W-5 coverage floors, author — a scope dropped from the measured run
+  file: .github/workflows/ci.yml
+  old: '          uv run coverage run --branch --source=libs,projects,orchestration,scripts -m pytest -q || status=$?'
+  new: '          uv run coverage run --branch --source=libs,scripts -m pytest -q || status=$?'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
+  expect: killed
+- id: FD1
+  origin: W-5, the early return no test reached
+  file: libs/feature-defs/src/feature_defs/point_in_time.py
+  old: '        return LeakageReport(total_rows=frame.height, examined_rows=0, leaking_rows=0, max_leak_seconds=0.0)'
+  new: '        return LeakageReport(total_rows=frame.height, examined_rows=frame.height, leaking_rows=0, max_leak_seconds=0.0)'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly libs/feature-defs/tests/test_point_in_time.py
+  expect: killed
+- id: DAG1
+  origin: W-5 DAG task bodies, author — the floor is inclusive
+  file: orchestration/dags/demand_forecast_training.py
+  old: '        if metrics["skill"] < MIN_SKILL:'
+  new: '        if metrics["skill"] <= MIN_SKILL:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py
+  expect: killed
+- id: DAG2
+  origin: W-5 DAG task bodies, author
+  file: orchestration/dags/demand_forecast_training.py
+  old: '        written = write_demand(demand, overwrite=True)'
+  new: '        written = write_demand(demand)'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py
+  expect: killed
+- id: DAG3
+  origin: W-5 DAG task bodies, author
+  file: orchestration/dags/demand_forecast_training.py
+  old: '        metadata = save(model, Path("models/demand_forecast.joblib"))'
+  new: '        metadata = save(model, Path("demand_forecast.joblib"))'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py
+  expect: killed
+- id: KFP1
+  origin: W-5 pipeline component bodies, author — a tie has not earned promotion
+  file: orchestration/pipelines/demand_forecast_pipeline.py
+  old: '    if skill <= 0:'
+  new: '    if skill < 0:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_pipeline_components.py
+  expect: killed
+- id: KFP2
+  origin: W-5 pipeline component bodies, author
+  file: orchestration/pipelines/demand_forecast_pipeline.py
+  old: '    if not result.success or not dense:'
+  new: '    if not result.success:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_pipeline_components.py
+  expect: killed
+- id: KFP3
+  origin: W-5 pipeline component bodies, author
+  file: orchestration/pipelines/demand_forecast_pipeline.py
+  old: '    report.log_metric("out_of_month", ingest_report.out_of_month)'
+  new: '    pass'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_pipeline_components.py
+  expect: killed
+- id: CT1
+  origin: W-5, the failure classifier knew only pytest-cov's wording
+  file: scripts/ci_collect_context.py
+  old: '    ("coverage.below_floor", re.compile(r"\[coverage\] FAILED|Coverage failure: total of|--cov-fail-under")),'
+  new: '    ("coverage.below_floor", re.compile(r"Coverage failure: total of|--cov-fail-under")),'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_ci_triage.py
+  expect: killed
+- id: CF10
+  origin: W-5 coverage floors, author — a P17 floor lowered
+  file: scripts/check_coverage_floors.py
+  old: '    "orchestration/dags": PackageFloor(lines=100, branches=100),'
+  new: '    "orchestration/dags": PackageFloor(lines=90, branches=100),'
+  run:
+  - uv run python scripts/check_thresholds.py
+  expect: killed
+- id: COV1
+  origin: W-5, a probe file recorded by coverage and gone before the report
+  file: pyproject.toml
+  old: '    "*/_clock_probe*",'
+  new: ''
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_scope.py
   expect: killed

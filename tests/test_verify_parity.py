@@ -40,20 +40,14 @@ _COMMAND = re.compile(r"uv run [a-z]+ [^|&\"'\n\\]*")
 #: An exemption list is a liability, so it is short, explicit, and asserted
 #: non-empty nowhere — an empty one would be the better outcome.
 _NOT_LOCAL = {
-    # Coverage floors belong to CI: they need the full suite, and running them
-    # in `verify` would double a five-minute suite for a number that cannot
-    # differ from the run `verify` already does.
-    "uv run pytest libs/ -q",
-    "uv run pytest -q",
     # Subsets of the suite `verify` runs whole.
+    #
+    # The coverage floors were exempt here until CI measured every scope in ONE
+    # run (W-5): two runs of the suite would have doubled `verify`, so the
+    # floors could not be reproduced before pushing. With one run, `verify`
+    # runs the same commands CI does and the exemptions are gone.
     "uv run pytest tests/test_dependency_direction.py -q",
     "uv run pytest tests/test_project_generator.py -q",
-    # Reads the `coverage.xml` the libs coverage step writes, and that step is
-    # exempt above. Running it in `verify` would read a stale report from
-    # whenever coverage last ran, which is worse than not running it: a gate
-    # answering about yesterday's tree looks exactly like one answering about
-    # this one.
-    "uv run python scripts/check_branch_coverage.py",
 }
 
 
@@ -72,6 +66,17 @@ def test_every_ci_gate_command_is_in_make_verify() -> None:
         "before pushing:\n  " + "\n  ".join(missing) + "\n\nAdd them to the verify target, or record why they "
         "cannot run locally in _NOT_LOCAL with the reason."
     )
+
+
+def test_every_exemption_still_names_a_command_ci_runs() -> None:
+    """An exemption for a command CI no longer runs is a hole waiting for a command to fill it.
+
+    Three entries here outlived their commands when the coverage steps were
+    merged into one run: had a later change reintroduced `uv run pytest -q` in
+    CI, it would have been exempt from `verify` on a reason that no longer held.
+    """
+    in_ci = _commands(WORKFLOW.read_text(encoding="utf-8"))
+    assert not sorted(_NOT_LOCAL - in_ci), f"exempt, but not in ci.yml: {sorted(_NOT_LOCAL - in_ci)}"
 
 
 def test_the_type_gate_has_the_same_scope_in_both() -> None:
