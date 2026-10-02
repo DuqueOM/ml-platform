@@ -203,3 +203,34 @@ def test_missing_columns_are_refused(events: pl.DataFrame, features: pl.DataFram
 
     with pytest.raises(ValueError, match="must carry"):
         detect_leakage(events)
+
+
+def test_the_leak_rate_is_over_the_rows_that_could_be_checked() -> None:
+    """QA-4 F-25: the rate was divided by every row, including ones never examined.
+
+    One leaking row and one row with no feature timestamp. The leaking row is
+    the ONLY row whose leakage could be decided, so the rate is 100%; the old
+    denominator made it 50%, halving the signal by the share nobody looked at.
+    """
+    frame = pl.DataFrame(
+        {"event_time": [BASE, BASE], "feature_time": [BASE + timedelta(hours=1), None]},
+        schema={"event_time": pl.Datetime, "feature_time": pl.Datetime},
+    )
+    report = detect_leakage(frame)
+
+    assert report.leak_rate == pytest.approx(1.0)
+    assert report.examined_rows == 1
+    assert report.unexamined_rows == 1
+    assert "1 row(s) carried no timestamp" in str(report)
+
+
+def test_unexamined_rows_are_reported_even_when_the_frame_is_clean() -> None:
+    """Clean is still clean — the existing decision — but it no longer hides what it could not see."""
+    frame = pl.DataFrame(
+        {"event_time": [BASE, BASE], "feature_time": [BASE - timedelta(hours=1), None]},
+        schema={"event_time": pl.Datetime, "feature_time": pl.Datetime},
+    )
+    report = detect_leakage(frame)
+
+    assert report.is_clean
+    assert "no timestamp to check" in str(report)
