@@ -193,3 +193,39 @@ def test_every_detector_pattern_in_the_inventory_can_match_itself() -> None:
         if not compiled.search(pattern):
             unsatisfiable.append(f"{pattern!r} -> {compiled.pattern!r} cannot match its own text")
     assert not unsatisfiable, "unsatisfiable detector(s):\n  " + "\n  ".join(unsatisfiable)
+
+
+# --- declared in an environment is not the same as used by code (W-12) ------
+
+
+def _state_of(detect: list[str]) -> str:
+    rows = inventory.evaluate(
+        {"categories": [{"name": "probe", "items": [{"id": "x", "tier": "core", "detect": detect}]}]}
+    )
+    return rows[0][2]
+
+
+def test_an_environment_only_match_is_available_not_implemented() -> None:
+    """pgvector rendered ✅ on an image name in a local manifest while no code used it.
+
+    Neutralising the `environment` branch survived the mutation harness (ENV1),
+    because nothing asserted the state this vocabulary exists to produce.
+    """
+    assert _state_of(["environment:pgvector|platform/local"]) == "available"
+
+
+def test_a_code_match_wins_over_an_environment_match() -> None:
+    """Used by code AND declared somewhere is implemented; the environment adds nothing."""
+    assert _state_of(["environment:pgvector|platform/local", "pyproject.toml"]) == "implemented"
+
+
+def test_an_unmatched_environment_detector_is_still_planned() -> None:
+    assert _state_of(["environment:definitely-not-present-anywhere-zq|platform/local"]) == "planned"
+
+
+def test_available_counts_as_committed_but_not_as_done() -> None:
+    """The headline must not rise because something is merely declared."""
+    rows = [("probe", {"id": "a", "tier": "core"}, "implemented"), ("probe", {"id": "b", "tier": "core"}, "available")]
+    headline = inventory.render(rows, full=False)
+    assert "**1 of 2 committed technologies implemented (50%)**" in headline
+    assert "1 built, 1 available, 0 pending" in headline
