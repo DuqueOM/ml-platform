@@ -50,6 +50,8 @@ import re
 import sys
 from pathlib import Path
 
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 
@@ -69,8 +71,52 @@ _DIGEST = re.compile(r"^[0-9a-f]{40}$")
 #: The tag a digest was resolved from, as it appears in the trailing comment.
 _TAG = re.compile(r"\bv?\d+(?:\.\d+)*\b")
 
+#: A URL that resolves to different bytes over time. `releases/latest` is the
+#: one this repository shipped: CI downloaded a scanner from it for weeks, and
+#: when the asset was renamed upstream the request began 404ing while the job
+#: stayed green, because the step was advisory (QA-4 W-8).
+#:
+#: A `uses:` pinned to a SHA and a binary fetched from a moving URL are the
+#: same class — code that runs in CI, identified by something that can change
+#: underneath. One gate covers both, rather than two that can disagree about
+#: what "pinned" means.
+_MUTABLE_DOWNLOAD = re.compile(
+    r"https://[^\s\"']*?/(?:releases/latest/download|raw/(?:main|master)/|archive/refs/heads/(?:main|master))"
+    r"[^\s\"']*"
+)
+
+#: A release asset fetched in a `run:` block. Pinning its TAG is not enough:
+#: GitHub release assets are mutable — a maintainer, or anyone holding their
+#: token, can delete an asset and upload a different one under the same tag and
+#: the same name. The digest published with the release is what identifies the
+#: bytes, so every such download must be verified against one in the same step.
+_RELEASE_DOWNLOAD = re.compile(r"https://github\.com/[^\s\"']+/releases/download/")
+
+#: What counts as verifying it. `sha256sum -c` and `shasum -a 256 -c` read an
+#: expected digest and exit non-zero on mismatch; anything that merely PRINTS a
+#: digest verifies nothing, so it is deliberately not accepted.
+_DIGEST_CHECK = re.compile(r"\bsha256sum\s+(?:--check|-c)\b|\bshasum\s+-a\s*256\s+(?:--check|-c)\b")
+
 failures: list[str] = []
 notes: list[str] = []
+
+
+def _unverified_downloads(workflow: Path) -> list[str]:
+    """`run:` steps that download a release asset without checking its digest.
+
+    Read per STEP rather than per file: a checksum in one step does not verify
+    a download in another, and a file-wide search would let one verified
+    download vouch for every other.
+    """
+    document = yaml.safe_load(workflow.read_text(encoding="utf-8")) or {}
+    found = []
+    for job_name, job in (document.get("jobs") or {}).items():
+        for index, step in enumerate((job or {}).get("steps") or []):
+            run = (step or {}).get("run") or ""
+            if _RELEASE_DOWNLOAD.search(run) and not _DIGEST_CHECK.search(run):
+                name = step.get("name") or f"step {index}"
+                found.append(f"{workflow.name}:{job_name}: '{name}'")
+    return found
 
 
 def check() -> list[str]:
@@ -110,10 +156,33 @@ def check() -> list[str]:
                     f"or upgraded — append `# vX.Y` naming the tag it was resolved from"
                 )
 
+    downloads = 0
+    for workflow in sorted(WORKFLOWS.glob("*.yml")):
+        for match in _MUTABLE_DOWNLOAD.finditer(workflow.read_text(encoding="utf-8")):
+            downloads += 1
+            found.append(
+                f"{workflow.name}: {match.group(0)} is a moving reference. The bytes behind it change without a "
+                f"commit here, and an asset renamed upstream turns into a 404 that a `continue-on-error` step "
+                f"reports as success — pin the release tag and verify the published digest"
+            )
+
+    verified = 0
+    for workflow in sorted(WORKFLOWS.glob("*.yml")):
+        text = workflow.read_text(encoding="utf-8")
+        verified += len(_RELEASE_DOWNLOAD.findall(text))
+        for where in _unverified_downloads(workflow):
+            found.append(
+                f"{where} downloads a release asset without verifying its digest in the same step. Release assets "
+                f"are mutable — the same tag and name can serve different bytes — so pin the version AND check the "
+                f"published sha256 with `sha256sum -c`"
+            )
+
     if not found:
         # Printed, not implied. A zero here would otherwise be
         # indistinguishable from a glob that stopped matching workflows.
         notes.append(f"{pinned} third-party action reference(s), all pinned to a commit and labelled")
+        notes.append(f"{downloads} moving download reference(s) in workflow run blocks")
+        notes.append(f"{verified} release-asset download(s), each verified against a digest in its own step")
     return found
 
 

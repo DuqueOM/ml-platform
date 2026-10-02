@@ -239,3 +239,97 @@ def test_every_pin_is_a_commit_object() -> None:
         + ". Resolve the tag to the COMMIT it names — `gh api repos/<repo>/git/tags/<sha> -q .object.sha` — "
         "so Dependabot keeps proposing upgrades for it."
     )
+
+
+def test_a_moving_download_url_fails(tmp_path: Path, monkeypatch) -> None:
+    """The class the `uses:` rule never covered, and the one that actually bit.
+
+    CI downloaded kubescape from `releases/latest/download` for weeks. When the
+    asset was renamed upstream the request began 404ing, and because the step
+    carried `continue-on-error` the job stayed green while the scanner never
+    ran — a gate reporting no findings looks exactly like a clean tree
+    (QA-4 W-8).
+    """
+    import importlib
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    module = importlib.import_module("check_action_pins")
+
+    workflows = tmp_path / "workflows"
+    workflows.mkdir()
+    (workflows / "probe.yml").write_text(
+        "jobs:\n  x:\n    steps:\n      - run: |\n"
+        "          curl -sSL https://github.com/acme/tool/releases/latest/download/tool-linux -o tool\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(module, "WORKFLOWS", workflows)
+
+    found = module.check()
+    assert any("moving reference" in message for message in found), found
+
+
+def test_a_pinned_download_with_a_digest_passes(tmp_path: Path, monkeypatch) -> None:
+    """The converse, so the rule cannot pass everything by matching nothing."""
+    import importlib
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    module = importlib.import_module("check_action_pins")
+
+    workflows = tmp_path / "workflows"
+    workflows.mkdir()
+    (workflows / "probe.yml").write_text(
+        "jobs:\n  x:\n    steps:\n      - run: |\n"
+        "          curl -sSLf -o tool https://github.com/acme/tool/releases/download/v1.2.3/tool_1.2.3_linux_amd64\n"
+        '          echo "abc123  tool" | sha256sum -c -\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(module, "WORKFLOWS", workflows)
+
+    assert not [m for m in module.check() if "moving reference" in m]
+
+
+def _check_workflow(tmp_path: Path, monkeypatch, body: str) -> list[str]:
+    import importlib
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    module = importlib.import_module("check_action_pins")
+    workflows = tmp_path / "workflows"
+    workflows.mkdir()
+    (workflows / "probe.yml").write_text(body, encoding="utf-8")
+    monkeypatch.setattr(module, "WORKFLOWS", workflows)
+    return [m for m in module.check() if "without verifying its digest" in m]
+
+
+_PINNED = "curl -sSLf -o tool https://github.com/acme/tool/releases/download/v1.2.3/tool_linux_amd64"
+
+
+def test_a_pinned_release_download_with_no_digest_check_fails(tmp_path: Path, monkeypatch) -> None:
+    """A tag pin is not a byte pin: GitHub release assets can be replaced under the same tag and name."""
+    body = f"jobs:\n  x:\n    steps:\n      - name: fetch\n        run: |\n          {_PINNED}\n"
+    assert _check_workflow(tmp_path, monkeypatch, body), "an unverified release download passed"
+
+
+def test_a_digest_check_in_another_step_does_not_count(tmp_path: Path, monkeypatch) -> None:
+    """Per step, because a checksum elsewhere verifies a different file — or none."""
+    body = (
+        "jobs:\n  x:\n    steps:\n"
+        f"      - name: fetch\n        run: |\n          {_PINNED}\n"
+        '      - name: elsewhere\n        run: |\n          echo "abc  other" | sha256sum -c -\n'
+    )
+    assert _check_workflow(tmp_path, monkeypatch, body), "a checksum in another step vouched for this download"
+
+
+def test_printing_a_digest_is_not_verifying_one(tmp_path: Path, monkeypatch) -> None:
+    """`sha256sum tool` prints a hash and exits 0 whatever it is; only `-c` compares."""
+    body = (
+        f"jobs:\n  x:\n    steps:\n      - name: fetch\n        run: |\n          {_PINNED}\n          sha256sum tool\n"
+    )
+    assert _check_workflow(tmp_path, monkeypatch, body), "printing a digest was accepted as verifying it"
+
+
+def test_a_verified_release_download_passes(tmp_path: Path, monkeypatch) -> None:
+    body = (
+        f"jobs:\n  x:\n    steps:\n      - name: fetch\n        run: |\n          {_PINNED}\n"
+        '          echo "abc123  tool" | sha256sum -c -\n'
+    )
+    assert not _check_workflow(tmp_path, monkeypatch, body)

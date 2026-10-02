@@ -988,3 +988,25 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_technology_inventory.py
   expect: killed
+- id: PD1
+  origin: W-8 moving downloads, author
+  file: scripts/check_action_pins.py
+  old: '        for match in _MUTABLE_DOWNLOAD.finditer(workflow.read_text(encoding="utf-8")):'
+  new: '        for match in []:'
+  run: &pd_run
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_action_pins.py
+  expect: killed
+- id: PD2
+  origin: W-8 digest verification, author
+  file: scripts/check_action_pins.py
+  old: '            if _RELEASE_DOWNLOAD.search(run) and not _DIGEST_CHECK.search(run):'
+  new: '            if False:'
+  run: *pd_run
+  expect: killed
+- id: PD3
+  origin: W-8 digest verification, author — the workflow itself
+  file: .github/workflows/ci.yml
+  old: '          echo "${KUBESCAPE_SHA256}  kubescape" | sha256sum -c -'
+  new: '          true'
+  run: *pd_run
+  expect: killed
