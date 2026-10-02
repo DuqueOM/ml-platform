@@ -1016,6 +1016,19 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   `total_rows` as "Rows examined". It divides by the rows examined now, and
   names the ones it could not check. A missing feature still does not make a
   report unclean; that existing decision is kept.
+- **The parity ledger fell four artifacts behind upstream, and one cause was a
+  list nobody updated.** `.agents/skills/` — the surface Cursor and Codex read,
+  rendered here since QA-4 round twelve — was never added to the parity gate's
+  list of generated surfaces, beside `.claude/`, `.cursor/`, `.codex/` and
+  `.devin/`. So the gate reported upstream's rendered files as undecided
+  artifacts. It is listed now; skill decisions are made in `agentic/`.
+
+  The two documents upstream added are decided as pending with their closing
+  conditions: `docs/DIAGRAMS.md` as an equivalent written for this platform's
+  flows, not a copy of another system's, and `docs/REPOSITORY_STRUCTURE.md`
+  after `check_doc_path_refs.py`, without which it would be the hand-drawn tree
+  upstream deleted for going stale. The online check reports 117 comparable
+  artifacts, all decided.
 
 - **"Every CI job carries `timeout-minutes`" stopped being true a week after
   it was written.** The auto-merge workflow arrived with no bound, which is not

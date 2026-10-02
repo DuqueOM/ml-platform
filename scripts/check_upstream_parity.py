@@ -73,6 +73,14 @@ _UNCOMPARED_PREFIXES = (
     ".cursor/",
     ".codex/",
     ".devin/",
+    # `.agents/skills/` is the surface Cursor and Codex both read, rendered by
+    # sync_agentic_adapters.py since QA-4 round twelve (#89). It is generated
+    # from `agentic/` exactly like the four surfaces above, and was left off
+    # this list when it was added — so the parity gate began reporting
+    # upstream's rendered files (INDEX.md, a template-onboard pointer) as
+    # undecided artifacts. Skill-level decisions are made in `agentic/`, not
+    # per rendered file.
+    ".agents/",
     "agentic/",
     "docs/decisions/",
     "docs/runbooks/",
