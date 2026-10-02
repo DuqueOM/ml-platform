@@ -6,6 +6,9 @@ venv/
 .pytest_cache/
 .ruff_cache/
 .coverage
+# Per-process data under `patch = ["subprocess"]`, merged by `coverage combine`;
+# left behind when a run is interrupted before it.
+.coverage.*
 htmlcov/
 dist/
 build/

@@ -7,13 +7,6 @@ requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 dependencies = [
     "pyyaml>=6.0.3",
-    # `scripts/check_branch_coverage.py` reads `coverage.xml`. bandit flags
-    # stdlib `ElementTree.parse` as B314 — entity expansion — and the answer it
-    # names is this package, not a suppression. The input is a file our own
-    # coverage step writes, so the practical risk is small; adding a
-    # `# nosec` for a small risk is how a scanner becomes decorative, and
-    # `.security-baselines/` holds zero suppressions on purpose.
-    "defusedxml~=0.7",
     # `scripts/check_artifact_compatibility.py` compares a resolved version
     # against a requirement specifier. Hand-parsing `~=` is how a gate quietly
     # gets the compatible-release rule wrong in the permissive direction, and
@@ -40,14 +33,16 @@ orchestration = [
 dev = [
     "pytest~=9.1",
     "pytest-cov~=7.1",
+    # CI measures with `coverage run` rather than through pytest-cov, and
+    # `scripts/check_coverage_floors.py` imports it to read the data. It was
+    # only ever present as pytest-cov's dependency, and available is not
+    # declared. 7.10 is where `patch = ["subprocess"]` arrived.
+    "coverage~=7.15",
     "mypy~=2.3",
     "ruff~=0.16",
     # Without stubs, every `import yaml` in scripts/ is an error under the
     # widened type gate — and silently untyped under the narrow one.
     "types-PyYAML~=6.0",
-    # defusedxml ships no py.typed, so the widened type gate reports its import
-    # as untyped rather than absorbing it in silence.
-    "types-defusedxml~=0.7",
 ]
 
 # uv workspace. Internal dependencies resolve from source, so a breaking change
@@ -200,6 +195,17 @@ omit = [
     # and the honest figure clears it; what changes is that the figure now
     # answers the question the gate asks.
     "*/tests/*",
+    # Probe files the gate tests write into the real tree for a moment — a
+    # module citing ADR-999 for C2, a clock call for the isolation gate. When
+    # any measured process exits, coverage adds every unexecuted file it finds
+    # under `--source` to the data; a probe present at that instant is
+    # recorded, and the report then fails with `No source for code` once the
+    # test has deleted it. Whether that happens is a race between unrelated
+    # tests, which is why two runs of the same tree disagreed (W-5).
+    # `tests/test_coverage_scope.py` holds every probe name the tests write to
+    # these patterns.
+    "*/_gate_probe*",
+    "*/_clock_probe*",
 ]
 
 [tool.coverage.report]

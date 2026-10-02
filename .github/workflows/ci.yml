@@ -316,67 +316,52 @@ jobs:
         run: uv lock --check
 
 
-      - name: Tests with coverage (L1/L2 — libs)
+      - name: Tests with coverage (one run, every scope)
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
-        # THE declared gate. quality-gates.md L1/L2 say >=90% lines and >=80%
-        # branches FOR libs/, and this measures exactly that scope.
+        # ONE run of the suite, measuring libs/, scripts/, projects/ and
+        # orchestration/ together. Every floor is applied by the next step.
         #
-        # It previously measured libs+scripts+projects against the same 90,
-        # so the gate that was declared (libs, passing at 93%) and the gate
-        # that ran (everything, failing at 78%) were different gates. Two
-        # scopes need two thresholds, not one threshold applied to whichever
-        # scope the command happened to name.
+        # This was two runs of about half an hour each: `--cov=libs
+        # --cov-fail-under=90` and `--cov=scripts --cov-fail-under=83`, because
+        # `--cov-fail-under` tests the total of whatever `--cov` names and two
+        # scopes with two floors needed two totals. `projects/` and
+        # `orchestration/` were measured by neither (QA-4 F-11), and a third
+        # scope that way is a third half hour. `coverage run` is used instead
+        # of pytest-cov so that no total is tested here at all: the combined
+        # figure across four scopes means nothing, and pytest-cov would apply
+        # `[tool.coverage.report] fail_under` to it.
         #
-        # The whole suite, measuring `libs/`. It ran `pytest libs/` until the
-        # ADR-002 migration, when the split it forced made that reading wrong:
-        # the agent core's domain-coupled tests moved to
-        # `projects/store-assistant`, so they exercise the library from there.
-        # Measured both ways on the same tree — 76.48% lines and 57.85%
-        # branches from `pytest libs/`, 92.70% and above the branch floor from
-        # the suite that actually runs the code.
+        # The whole suite, not `pytest libs/`. The ADR-002 migration moved the
+        # agent core's domain-coupled tests to `projects/store-assistant`, so
+        # they exercise the library from there: measured both ways on one tree,
+        # 76.48% lines and 57.85% branches from `pytest libs/` against 92.70%
+        # from the suite that actually runs the code.
         #
-        # The floors are unchanged. What changed is which runs count, and the
-        # honest answer is "the ones that execute the library" — the
-        # alternative is a library suite that duplicates a project's, which is
-        # the duplication ADR-001 exists to avoid.
+        # `patch = ["subprocess"]` (pyproject.toml) makes every run parallel:
+        # the gate scripts the suite runs as subprocesses write their own data
+        # files, and `combine` merges them. Without that, `scripts/` measured
+        # 39.78% (#99).
+        #
+        # `combine` runs whether or not a test failed, and the step still exits
+        # with the suite's status: a red suite must stay red, and its coverage
+        # must still reach the floors step, as it did under pytest-cov.
         run: |
-          uv run pytest -q \
-            --cov=libs --cov-branch \
-            --cov-report=term --cov-report=xml \
-            --cov-fail-under=90
+          uv run coverage erase
+          status=0
+          uv run coverage run --branch --source=libs,projects,orchestration,scripts -m pytest -q || status=$?
+          uv run coverage combine
+          exit "$status"
 
-      - name: Coverage floors L1 and L2, read separately
+      - name: Coverage floors — L1, L2, P12, P17
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
-        # `--cov-fail-under` above tests one COMBINED figure that mixes
-        # statements and branches. L1 and L2 are two thresholds — >=90% lines
-        # and >=80% branches — and a suite could fall under the branch floor
-        # while clearing the combined number on line coverage alone. Round
-        # seven: "L2 declares >=80% branches but no command can fail on
-        # branches alone."
-        run: uv run python scripts/check_branch_coverage.py
-
-      - name: Tests with coverage (P12 — gate scripts)
-        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
-        # scripts/ enforces every other claim in this repository and had no
-        # coverage floor at all; two of its files sat at 0% while a green
-        # step implied otherwise.
-        #
-        # A RATCHET floor, set at what the suite measures rather than at an
-        # aspiration nothing meets — a floor above the measurement is a red
-        # build, not a standard. It is not a relaxation of L1/L2: no threshold
-        # for scripts/ existed before this line, which is how two files
-        # reached 0%. Raise it as coverage rises; never lower it (P-10, and a
-        # STOP in AGENTS.md).
-        #
-        # History: 74 when set (measured 74.65%). 83 on 2026-09-29, after
-        # CI measured 83.66% twice on main (23cdf6d, 7f93ebe) once pytest-cov 7
-        # and coverage's own subprocess patch replaced pytest-cov 6 (#101); the
-        # figure just before that was 80.20–80.82%.
-        run: |
-          uv run pytest -q \
-            --cov=scripts --cov-branch \
-            --cov-report=term \
-            --cov-fail-under=83
+        # Every floor, from the data above, in `scripts/check_coverage_floors.py`:
+        # the libs aggregate (90, as `--cov-fail-under` tested it) AND each
+        # library at >=90% lines and >=80% branches — QA-4 measured
+        # `feature_defs` at 70% branches behind a green aggregate — plus
+        # scripts/ (P12) and the ML code and orchestration per package (P17).
+        # All failures at once.
+        # It also writes `coverage.xml` for the upload below.
+        run: uv run python scripts/check_coverage_floors.py --xml coverage.xml
 
       - name: Upload coverage
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7

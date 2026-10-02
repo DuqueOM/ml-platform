@@ -273,6 +273,23 @@ def test_the_repositorys_own_gate_output_is_recognised() -> None:
     assert "gate.threshold_loosened" in signatures
 
 
+def test_the_coverage_floors_gate_reads_as_a_coverage_failure() -> None:
+    """Every floor moved into `check_coverage_floors.py`, which prints its own verdict.
+
+    The collector knew only pytest-cov's wording, which CI no longer produces:
+    without this, a floor missed in CI would classify as unknown and route to
+    STOP instead of to the coverage class that names the fix.
+    """
+    import ci_collect_context as collector
+
+    log = (
+        "  FAIL [coverage] libs/feature-defs: 70.00% branches is below its floor of 80\n"
+        "\n[coverage] FAILED — 1 floor(s) missed\n"
+    )
+
+    assert "coverage.below_floor" in collector.detect_signatures(log)
+
+
 def test_the_gate_lines_survive_verbatim() -> None:
     """For a coherence or parity failure the check id IS the diagnosis.
 

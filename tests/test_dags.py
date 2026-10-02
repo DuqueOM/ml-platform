@@ -16,8 +16,13 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import logging
 import os
+import re
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -124,19 +129,222 @@ def test_no_heavy_import_at_module_level(source: Path) -> None:
     assert not heavy, f"{source.name} imports {heavy} at module level; move them inside the task callables"
 
 
-def test_the_quality_gate_raises_rather_than_logging() -> None:
+# --- The task bodies ---------------------------------------------------------
+#
+# Every test above inspects the DAG's SHAPE, and for a long time nothing ran a
+# task body: `ingest_month` called two attributes `IngestReport` does not have
+# and raised `AttributeError` on its first real run, with nine DAG tests green.
+# Measured coverage of this file was 34% of lines and 0% of branches, so the
+# quality gate's arithmetic — the thing that decides whether a model ships —
+# was asserted only as "the source contains a `raise`".
+#
+# The callables are nested inside the `@dag` function, but the scheduler does
+# not import them by name: it parses the folder and reaches each one through
+# its operator. These tests reach them the same way, so the code under test is
+# the code Airflow runs. The project functions each body calls are replaced by
+# recorders: they are tested in `projects/demand-forecast/tests/`, and what is
+# untested is the WIRING — which arguments go in, which results come out, and
+# which failures stop the run.
+
+UTC_MARCH = datetime(2024, 3, 1, tzinfo=UTC)
+
+
+def _body(dagbag, task_id: str) -> Callable[..., Any]:  # type: ignore[no-untyped-def]
+    """The callable the operator runs, as the scheduler resolved it."""
+    body: Callable[..., Any] = dagbag.dags["demand_forecast_training"].get_task(task_id).python_callable
+    return body
+
+
+def _record(calls: list[tuple[str, tuple, dict]], name: str, result: object) -> Callable[..., object]:  # type: ignore[type-arg]
+    def recorder(*args: object, **kwargs: object) -> object:
+        calls.append((name, args, kwargs))
+        return result
+
+    return recorder
+
+
+def test_the_quality_gate_passes_a_model_at_both_floors(dagbag) -> None:  # type: ignore[no-untyped-def]
+    """The floors are inclusive, and a passing gate hands the metrics on unchanged.
+
+    Read from the body's own module rather than restated, so this test cannot
+    hold a stale copy of a watched threshold.
+    """
+    gate = _body(dagbag, "check_quality_gate")
+    floors = {"skill": gate.__globals__["MIN_SKILL"], "coverage": gate.__globals__["MIN_COVERAGE"]}
+
+    assert gate(dict(floors, month="2024-03")) == dict(floors, month="2024-03")
+
+
+@pytest.mark.parametrize(
+    ("skill_offset", "coverage_offset", "expected"),
+    [
+        pytest.param(-0.01, 0.0, ["skill"], id="skill-only"),
+        pytest.param(0.0, -0.01, ["interval coverage"], id="coverage-only"),
+        # Both reported in ONE failure: an operator who fixes skill and then
+        # meets the coverage failure on the next run paid two cycles for one
+        # lesson, which is what the body's docstring promises not to do.
+        pytest.param(-0.01, -0.01, ["skill", "interval coverage"], id="both"),
+    ],
+)
+def test_the_quality_gate_raises_and_names_every_floor_missed(  # type: ignore[no-untyped-def]
+    dagbag, skill_offset: float, coverage_offset: float, expected: list[str]
+) -> None:
     """A gate that returns on failure is a metric with good intentions.
 
-    Asserted on the source: the callable is nested inside the `@dag` function
-    and cannot be imported on its own, and rewriting the DAG to make it
-    importable would be changing the code to suit the test.
+    Raising is the mechanism: the task fails, so `publish_model` never runs.
     """
-    source = (DAG_FOLDER / "demand_forecast_training.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
+    gate = _body(dagbag, "check_quality_gate")
+    metrics = {
+        "skill": gate.__globals__["MIN_SKILL"] + skill_offset,
+        "coverage": gate.__globals__["MIN_COVERAGE"] + coverage_offset,
+    }
 
-    gate = next(
-        node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == "check_quality_gate"
+    with pytest.raises(ValueError, match="quality gate failed") as failure:
+        gate(metrics)
+
+    message = str(failure.value)
+    for floor in expected:
+        assert floor in message
+    assert message.count("<") == len(expected)
+
+
+def test_ingest_month_reads_the_run_s_month_and_refuses_a_missing_file(  # type: ignore[no-untyped-def]
+    dagbag, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The month comes from the data interval; an absent file stops the run before any write.
+
+    Downloading on a retry loop would be a different failure mode, and writing
+    an empty month would overwrite a real partition with nothing.
+    """
+    from demand_forecast import lakehouse
+
+    calls: list[tuple[str, tuple, dict]] = []  # type: ignore[type-arg]
+    monkeypatch.setattr(lakehouse, "write_demand", _record(calls, "write_demand", None))
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(FileNotFoundError, match=re.escape("yellow_tripdata_2024-03.parquet")):
+        _body(dagbag, "ingest_month")(data_interval_start=UTC_MARCH)
+    assert calls == []
+
+
+def test_ingest_month_writes_the_month_and_returns_its_snapshot(  # type: ignore[no-untyped-def]
+    dagbag, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The real `IngestReport` and `WriteResult`, so a renamed attribute fails here, not in a run."""
+    import polars as pl
+    from demand_forecast import ingest, lakehouse
+
+    source = tmp_path / "data" / "raw" / "yellow_tripdata_2024-03.parquet"
+    source.parent.mkdir(parents=True)
+    source.touch()
+    trips = pl.DataFrame({"trip": [1, 2]})
+    demand = pl.DataFrame({"zone": [1, 2, 3]})
+    report = ingest.IngestReport(source=str(source), rows_read=10, rows_written=7, violations=[])
+
+    calls: list[tuple[str, tuple, dict]] = []  # type: ignore[type-arg]
+    monkeypatch.setattr(ingest, "ingest_file", _record(calls, "ingest_file", (trips, report)))
+    monkeypatch.setattr(ingest, "to_hourly_demand", _record(calls, "to_hourly_demand", demand))
+    written = lakehouse.WriteResult(snapshot_id=42, rows=3, mode="overwrite")
+    monkeypatch.setattr(lakehouse, "write_demand", _record(calls, "write_demand", written))
+    monkeypatch.chdir(tmp_path)
+
+    with caplog.at_level(logging.INFO):
+        result = _body(dagbag, "ingest_month")(data_interval_start=UTC_MARCH)
+
+    assert result == {"month": "2024-03", "rows": 3, "snapshot_id": 42}
+    assert [name for name, _, _ in calls] == ["ingest_file", "to_hourly_demand", "write_demand"]
+    assert calls[0][1] == (Path("data/raw/yellow_tripdata_2024-03.parquet"),)
+    assert calls[1][1] == (trips,)
+    # Overwrite, scoped to the month: a re-run of March replaces March.
+    assert calls[2][1] == (demand,)
+    assert calls[2][2] == {"overwrite": True}
+    assert "3 rows rejected of 10" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("success", "dense", "failure"),
+    [
+        pytest.param(False, True, "warehouse validation failed", id="expectations-fail"),
+        pytest.param(True, False, "hour density 0.500 is below the floor", id="hours-missing"),
+    ],
+)
+def test_validate_warehouse_stops_the_run_before_training(  # type: ignore[no-untyped-def]
+    dagbag, monkeypatch: pytest.MonkeyPatch, success: bool, dense: bool, failure: str
+) -> None:
+    """Either check failing raises; a model fitted on a failed table is discarded anyway."""
+    from demand_forecast import lakehouse, warehouse_checks
+
+    monkeypatch.setattr(lakehouse, "read_demand", lambda *a, **k: "table")
+    verdict = warehouse_checks.WarehouseValidation(
+        success=success, failed=() if success else ("hours_are_unique",), checked=5
     )
-    assert any(isinstance(node, ast.Raise) for node in ast.walk(gate)), (
-        "check_quality_gate does not raise, so a failing model would flow to publish_model"
+    monkeypatch.setattr(warehouse_checks, "validate_warehouse", lambda table, **k: verdict)
+    monkeypatch.setattr(warehouse_checks, "check_density", lambda table, **k: (dense, 0.5))
+
+    with pytest.raises(ValueError, match=failure):
+        _body(dagbag, "validate_warehouse")({"month": "2024-03"})
+
+
+def test_validate_warehouse_passes_the_ingest_result_on_with_its_density(  # type: ignore[no-untyped-def]
+    dagbag, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from demand_forecast import lakehouse, warehouse_checks
+
+    calls: list[tuple[str, tuple, dict]] = []  # type: ignore[type-arg]
+    monkeypatch.setattr(lakehouse, "read_demand", lambda *a, **k: "table")
+    verdict = warehouse_checks.WarehouseValidation(success=True, failed=(), checked=5)
+    monkeypatch.setattr(warehouse_checks, "validate_warehouse", _record(calls, "validate_warehouse", verdict))
+    monkeypatch.setattr(warehouse_checks, "check_density", _record(calls, "check_density", (True, 0.99)))
+
+    result = _body(dagbag, "validate_warehouse")({"month": "2024-03", "snapshot_id": 42})
+
+    assert result == {"month": "2024-03", "snapshot_id": 42, "density": 0.99}
+    # Both checks ran against the table that was read, not a stale copy.
+    assert calls == [("validate_warehouse", ("table",), {}), ("check_density", ("table",), {})]
+
+
+def test_backtest_model_returns_plain_floats_for_xcom(  # type: ignore[no-untyped-def]
+    dagbag, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """XCom serialises; a numpy scalar that round-trips unequal to itself breaks the next task."""
+    import numpy as np
+    from demand_forecast import lakehouse, train
+
+    fold = train.FoldResult(
+        index=0,
+        model_mae=np.float64(3.0),
+        baseline_mae=np.float64(4.0),
+        coverage=np.float64(0.9),
+        interval_width=np.float64(5.0),
+        n_test=168,
+        n_compared=168,
     )
+    monkeypatch.setattr(lakehouse, "read_demand", lambda *a, **k: "table")
+    monkeypatch.setattr(train, "evaluate", lambda table, **k: train.BacktestReport(folds=[fold], seed=42))
+
+    result = _body(dagbag, "backtest_model")({"month": "2024-03"})
+
+    assert result == {"month": "2024-03", "skill": 0.25, "coverage": 0.9, "model_mae": 3.0, "baseline_mae": 4.0}
+    for key in ("skill", "coverage", "model_mae", "baseline_mae"):
+        assert type(result[key]) is float, f"{key} is {type(result[key]).__name__}, not float"
+
+
+def test_publish_model_fits_on_all_history_and_merges_the_metadata(  # type: ignore[no-untyped-def]
+    dagbag, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The path the serving side loads from, and the metrics carried into the run's result."""
+    from demand_forecast import lakehouse, persist
+
+    calls: list[tuple[str, tuple, dict]] = []  # type: ignore[type-arg]
+    monkeypatch.setattr(lakehouse, "read_demand", lambda *a, **k: "history")
+    monkeypatch.setattr(persist, "fit_final", _record(calls, "fit_final", "model"))
+    metadata = {"version": "v1", "trained_through": "2024-03-31T23:00:00"}
+    monkeypatch.setattr(persist, "save", _record(calls, "save", metadata))
+
+    result = _body(dagbag, "publish_model")({"skill": 0.2, "coverage": 0.9})
+
+    assert calls == [
+        ("fit_final", ("history",), {}),
+        ("save", ("model", Path("models/demand_forecast.joblib")), {}),
+    ]
+    assert result == {"skill": 0.2, "coverage": 0.9, **metadata}
