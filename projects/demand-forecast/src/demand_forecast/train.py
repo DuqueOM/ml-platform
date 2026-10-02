@@ -78,7 +78,8 @@ class FoldResult:
 
     Attributes:
         index: Fold number, oldest first.
-        model_mae: Mean absolute error of the model.
+        model_mae: Mean absolute error of the model, on the rows that carry a
+            seasonal-naive baseline — the same rows as ``baseline_mae``.
         baseline_mae: Mean absolute error of seasonal naive on the same rows.
         coverage: Empirical coverage of the conformal intervals.
         interval_width: Mean interval width. Coverage is trivial to achieve
@@ -92,6 +93,7 @@ class FoldResult:
     coverage: float
     interval_width: float
     n_test: int
+    n_compared: int
 
     @property
     def skill(self) -> float:
@@ -215,6 +217,43 @@ def select_modellable_zones(demand: pl.DataFrame, *, min_hours: int = MIN_ZONE_H
     return demand.filter(pl.col("zone_id").is_in(keep))
 
 
+def _score_fold(
+    index: int,
+    predictions: NDArray[np.float64],
+    truth: NDArray[np.float64],
+    baseline: NDArray[np.float64],
+    lower: NDArray[np.float64],
+    upper: NDArray[np.float64],
+) -> FoldResult:
+    """Score one fold: both errors on the same rows, intervals on all of them.
+
+    **Both MAEs are taken over the rows that carry a baseline.** The model's
+    used to be taken over every test row while the baseline's was masked to the
+    rows where a seasonal-naive value exists — so skill compared two means over
+    two different sets, in the document that says `baseline_mae` is measured
+    "on the same rows". The model card quantified the effect at 0.20
+    percentage points in the model's favour (QA-4 F-21). A comparison is only a
+    comparison when both sides are measured on one population.
+
+    Interval coverage and width stay over every test row: they do not involve
+    the baseline, and narrowing them to its rows would discard evidence for no
+    reason.
+    """
+    has_baseline = ~np.isnan(baseline)
+    if not has_baseline.any():
+        raise ValueError(f"fold {index} has no row with a seasonal baseline to compare against")
+    inside = (truth >= lower) & (truth <= upper)
+    return FoldResult(
+        index=index,
+        model_mae=float(np.mean(np.abs(predictions[has_baseline] - truth[has_baseline]))),
+        baseline_mae=float(np.mean(np.abs(baseline[has_baseline] - truth[has_baseline]))),
+        coverage=float(np.mean(inside)),
+        interval_width=float(np.mean(upper - lower)),
+        n_test=len(truth),
+        n_compared=int(has_baseline.sum()),
+    )
+
+
 def evaluate(
     demand: pl.DataFrame,
     *,
@@ -280,23 +319,10 @@ def evaluate(
         predictions, lower, upper = _fit_fold(features, target, times, fold, seed)
         truth = target[fold.test]
 
-        # Compared on the rows where a baseline EXISTS. Including nulls would
-        # make the comparison nan; imputing them would compare the model
-        # against a number nobody could have predicted.
-        has_baseline = ~np.isnan(baseline_values[fold.test])
-        if not has_baseline.any():
-            raise ValueError(f"fold {fold.index} has no row with a seasonal baseline to compare against")
-
-        inside = (truth >= lower) & (truth <= upper)
-        results.append(
-            FoldResult(
-                index=fold.index,
-                model_mae=float(np.mean(np.abs(predictions - truth))),
-                baseline_mae=float(np.mean(np.abs(baseline_values[fold.test][has_baseline] - truth[has_baseline]))),
-                coverage=float(np.mean(inside)),
-                interval_width=float(np.mean(upper - lower)),
-                n_test=len(fold.test),
-            )
-        )
+        # Compared on the rows where a baseline EXISTS — for BOTH sides; see
+        # `_score_fold`. Including nulls would make the comparison nan; imputing
+        # them would compare the model against a number nobody could have
+        # predicted.
+        results.append(_score_fold(fold.index, predictions, truth, baseline_values[fold.test], lower, upper))
 
     return BacktestReport(folds=results, seed=seed, seeded_sources=tuple(report.seeded))

@@ -644,3 +644,19 @@ mutations:
   new: '        "sha256": digest[:12],'
   run: *id001
   expect: killed
+- id: SF1
+  origin: F-21 like-for-like skill, author
+  file: projects/demand-forecast/src/demand_forecast/train.py
+  old: '        model_mae=float(np.mean(np.abs(predictions[has_baseline] - truth[has_baseline]))),'
+  new: '        model_mae=float(np.mean(np.abs(predictions - truth))),'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_training.py
+  expect: killed
+- id: LK1
+  origin: F-25 leak rate denominator, author
+  file: libs/feature-defs/src/feature_defs/point_in_time.py
+  old: '        return self.leaking_rows / self.examined_rows if self.examined_rows else 0.0'
+  new: '        return self.leaking_rows / self.total_rows if self.total_rows else 0.0'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly libs/feature-defs/tests/test_point_in_time.py
+  expect: killed

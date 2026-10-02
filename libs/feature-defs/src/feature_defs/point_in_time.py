@@ -28,29 +28,55 @@ class LeakageReport:
     """Evidence that a feature set does or does not contain future information.
 
     Attributes:
-        total_rows: Rows examined.
-        leaking_rows: Rows whose feature timestamp is AFTER the event.
+        total_rows: Every row in the frame.
+        examined_rows: Rows carrying BOTH timestamps — the only ones whose
+            leakage can be decided. This attribute's docstring used to belong
+            to ``total_rows`` ("Rows examined") while the code passed the whole
+            frame's height, so the leak rate was divided by rows that were
+            never checked and came out lower than it is (QA-4 F-25).
+        leaking_rows: Examined rows whose feature timestamp is AFTER the event.
         max_leak_seconds: The worst offender, in seconds into the future.
     """
 
     total_rows: int
+    examined_rows: int
     leaking_rows: int
     max_leak_seconds: float
 
     @property
     def is_clean(self) -> bool:
+        # A row with no feature timestamp is a coverage problem, not a leakage
+        # one (see test_rows_with_no_matching_feature_are_not_counted_as_leakage),
+        # so unexamined rows do not make a report unclean. They are REPORTED
+        # instead, in `unexamined_rows` and in the text.
         return self.leaking_rows == 0
 
     @property
+    def unexamined_rows(self) -> int:
+        """Rows that could not be checked because a timestamp was null."""
+        return self.total_rows - self.examined_rows
+
+    @property
     def leak_rate(self) -> float:
-        return self.leaking_rows / self.total_rows if self.total_rows else 0.0
+        """Leaking rows as a share of the rows that could be checked.
+
+        Not of every row: a null timestamp is neither leaking nor clean, and
+        counting it in the denominator dilutes the rate by exactly the share of
+        rows nobody looked at.
+        """
+        return self.leaking_rows / self.examined_rows if self.examined_rows else 0.0
 
     def __str__(self) -> str:
+        unchecked = (
+            f"; {self.unexamined_rows} row(s) carried no timestamp to check — a coverage question, not a leakage one"
+            if self.unexamined_rows
+            else ""
+        )
         if self.is_clean:
-            return f"clean: no future information in {self.total_rows} rows"
+            return f"clean: no future information in {self.examined_rows} examined row(s){unchecked}"
         return (
-            f"LEAKAGE: {self.leaking_rows}/{self.total_rows} rows ({self.leak_rate:.2%}) "
-            f"carry future information, worst {self.max_leak_seconds:.0f}s ahead"
+            f"LEAKAGE: {self.leaking_rows}/{self.examined_rows} examined rows ({self.leak_rate:.2%}) "
+            f"carry future information, worst {self.max_leak_seconds:.0f}s ahead{unchecked}"
         )
 
 
@@ -142,7 +168,7 @@ def detect_leakage(
 
     present = frame.drop_nulls([event_time, feature_time])
     if present.height == 0:
-        return LeakageReport(total_rows=frame.height, leaking_rows=0, max_leak_seconds=0.0)
+        return LeakageReport(total_rows=frame.height, examined_rows=0, leaking_rows=0, max_leak_seconds=0.0)
 
     leak_seconds = (
         present.select(((pl.col(feature_time) - pl.col(event_time)).dt.total_seconds()).alias("ahead"))
@@ -156,6 +182,7 @@ def detect_leakage(
     worst = leak_seconds.max()
     return LeakageReport(
         total_rows=frame.height,
+        examined_rows=present.height,
         leaking_rows=int(leak_seconds.len()),
         max_leak_seconds=float(worst) if isinstance(worst, (int, float)) else 0.0,
     )

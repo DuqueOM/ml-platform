@@ -314,3 +314,52 @@ def test_zones_with_too_little_history_are_dropped() -> None:
 
     assert 99 not in kept["zone_id"].to_list(), "a zone with 10 hours of history was kept"
     assert kept["zone_id"].n_unique() == 3
+
+
+# --- both sides of the skill comparison on the same rows (QA-4 F-21) -------
+
+
+def test_both_errors_are_measured_on_the_rows_that_carry_a_baseline() -> None:
+    """The model used to be scored on every row, the baseline only on its own.
+
+    Constructed so the difference is unmissable: the model is exact where a
+    baseline exists and wildly wrong on the one row that has none. Measured
+    like-for-like the model is perfect; the old calculation charged it for a
+    row the baseline was never asked about, and `FoldResult`'s own docstring
+    promised "the same rows".
+    """
+    from demand_forecast.train import _score_fold
+
+    truth = np.array([10.0, 20.0, 30.0, 40.0])
+    predictions = np.array([10.0, 20.0, 30.0, 400.0])
+    baseline = np.array([12.0, 18.0, 33.0, np.nan])
+    lower, upper = predictions - 1.0, predictions + 1.0
+
+    result = _score_fold(0, predictions, truth, baseline, lower, upper)
+
+    assert result.model_mae == 0.0, "the model was charged for a row the baseline never scored"
+    assert result.baseline_mae == pytest.approx((2 + 2 + 3) / 3)
+    assert result.n_compared == 3
+    assert result.n_test == 4
+
+
+def test_coverage_still_counts_every_test_row() -> None:
+    """Intervals do not involve the baseline, so narrowing them would discard evidence."""
+    from demand_forecast.train import _score_fold
+
+    truth = np.array([10.0, 20.0, 30.0, 40.0])
+    predictions = truth.copy()
+    baseline = np.array([10.0, np.nan, np.nan, np.nan])
+    lower, upper = predictions - 1.0, predictions + 1.0
+    lower[3], upper[3] = 100.0, 101.0  # the one row outside its interval has no baseline
+
+    assert _score_fold(0, predictions, truth, baseline, lower, upper).coverage == pytest.approx(0.75)
+
+
+def test_a_fold_with_no_baseline_at_all_is_refused() -> None:
+    """Not a skill of nan, which compares as False with every threshold and passes nothing silently."""
+    from demand_forecast.train import _score_fold
+
+    values = np.array([1.0, 2.0])
+    with pytest.raises(ValueError, match="no row with a seasonal baseline"):
+        _score_fold(3, values, values, np.array([np.nan, np.nan]), values, values)
