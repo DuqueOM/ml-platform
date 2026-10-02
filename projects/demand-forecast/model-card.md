@@ -159,7 +159,7 @@ What it does when it is wrong, and what the system does about it.
 | **A zone it does not cover** | A caller asks for a zone with too little history | `predict` fails rather than extrapolating from other zones. A loud failure, by design |
 | **Intervals too narrow for a particular zone** | Coverage is met on average while a zone is routinely outside its band | **Nothing.** Coverage is measured marginally; see Fairness |
 | **Distribution shift** | Inputs move away from what was fit — a new fare regime, a closed zone | `ml_core.drift` provides the contract and PSI comparison; it is **not wired to this model**. Stated rather than implied |
-| **Silent metric inflation** | A comparison that flatters the model | Found and quantified: the skill figure is inflated 0.20pp by an asymmetric baseline mask, documented above rather than corrected away |
+| **Silent metric inflation** | A comparison that flatters the model | **Corrected**, not only documented: skill was inflated 0.20pp because the model and the baseline were scored on different rows. Both are scored on the rows with a baseline now (`_score_fold`); a test built so the old calculation fails it, and mutation SF1 in the harness, hold that. The same re-measurement showed folds 0 and 1 losing to the baseline — see Evaluation |
 | **No prediction at all** | The system cannot serve a forecast | The current state, by ADR-008. It is the honest headline failure mode: there is no endpoint |
 
 The pattern worth naming: the failures with a mechanism behind them fail
