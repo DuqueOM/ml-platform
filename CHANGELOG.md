@@ -897,6 +897,20 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Changed
 
+- **The status document is evaluated once per session for the tests that only
+  read it.** Measured with `--durations`: eight tests that regenerate
+  `implementation-status.md` took 74% of the whole suite's wall time — each
+  regeneration runs every component's verification command — and that is what
+  made the tests lane take an hour and every queued pull request wait for it.
+
+  Four of them only read the result, so `tests/test_status_layers.py` shares
+  one cached evaluation: the summary check, the L3/L4 check, the
+  committed-document check, and the first determinism sample. The module went
+  from 354s to 177s. The determinism test still takes three samples — now one
+  in-process and two through the CLI, which is a stronger comparison, since two
+  execution paths must agree. Tests that change an input keep their own
+  generation, and the CLI's glue stays covered by the gate-script tests.
+
 - **The demand-forecast model card no longer has four TODO sections.** Intended
   use, fairness, failure modes and human oversight (QA-4 R11-5), written from
   what this repository already measures rather than from what a model card
