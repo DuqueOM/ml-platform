@@ -60,10 +60,10 @@ what was **measured**, with the method:
 
 | Metric | Value | How it was measured |
 | --- | --- | --- |
-| Skill over seasonal naive | **+12.6%** | `evaluate(demand)` at its default 5 folds. Two readings at `seed=42`, byte-identical. Gate: `MIN_SKILL = 0.05` |
+| Skill over seasonal naive | **+12.4%** | `evaluate(demand)` at its default 5 folds, `seed=42`, both errors on the rows that carry a baseline. Gate: `MIN_SKILL = 0.05` |
 | Skill, 3-fold design | **+23.0%** | Same call at `n_folds=3`, reported because the superseded `+55.8%` used three folds and the comparison is otherwise not like for like |
 | Interval coverage | **89.6%** against 90% nominal | Split conformal, `ALPHA = 0.1`, calibrated on the last 168 hours of each training window. Gate: `MIN_COVERAGE = 0.85` |
-| Model MAE | 3.34 trips/zone/hour | Mean over 5 folds |
+| Model MAE | 3.35 trips/zone/hour | Mean over 5 folds, on the same rows as the baseline |
 | Baseline MAE | 3.82 trips/zone/hour | Seasonal naive — same hour last week — on the rows where a baseline exists |
 | Modellable zones | 255 of 261 | `select_modellable_zones`, `MIN_ZONE_HOURS = 336` (two feature windows) |
 
@@ -88,13 +88,31 @@ print(evaluate(to_hourly_demand(pl.concat(frames))).summary())
 computed by row offset on a panel that was never densified to an hourly grid.
 That claim is superseded, not amended: the `[0.1.0]` CHANGELOG entry keeps it.
 
-**One known bias in the number above, quantified rather than mentioned.**
-`evaluate()` computes `model_mae` over every test row but `baseline_mae` only
-over rows carrying a baseline. Those sets differ in folds 0 and 1 (99.31% and
-99.54% of rows), so the asymmetry is live, not latent. Masking both the same
-way gives **+12.4%** — the reported figure is inflated by **0.20 percentage
-points**, and the direction favours the model. Both sides of the comparison
-clear `MIN_SKILL`.
+**The skill figure was +12.6% until 2026-09-29, and the card said why it was
+wrong before the code did.** `evaluate()` took `model_mae` over every test row
+and `baseline_mae` only over rows carrying a baseline — two means over two
+populations, in a result type whose docstring promised "the same rows". This
+card measured the effect as 0.20 percentage points in the model's favour and
+predicted +12.4% like-for-like. The fix (QA-4 F-21) scores both on the rows
+with a baseline, and re-measuring on the same files gave **+12.4%** — the
+prediction, confirmed rather than assumed. Folds 0 and 1 compare 99.31% and
+99.54% of their rows; the other three compare all of theirs, which is why the
+3-fold figure did not move.
+
+**The average hides two folds the model loses.** Per fold, at `seed=42`:
+
+| Fold | Skill | Coverage |
+| --- | --- | --- |
+| 0 | **−18.3%** | 90.3% |
+| 1 | **−1.2%** | 90.2% |
+| 2 | +14.3% | 88.9% |
+| 3 | +30.9% | 88.9% |
+| 4 | +22.9% | 89.7% |
+
+The expanding window gives the earliest folds the least history, and there the
+model does worse than repeating last week. It clears `MIN_SKILL` on the mean,
+not in every fold — which matters for anyone reading +12.4% as "better than
+the baseline, always".
 
 ## Fairness
 
@@ -141,7 +159,7 @@ What it does when it is wrong, and what the system does about it.
 | **A zone it does not cover** | A caller asks for a zone with too little history | `predict` fails rather than extrapolating from other zones. A loud failure, by design |
 | **Intervals too narrow for a particular zone** | Coverage is met on average while a zone is routinely outside its band | **Nothing.** Coverage is measured marginally; see Fairness |
 | **Distribution shift** | Inputs move away from what was fit — a new fare regime, a closed zone | `ml_core.drift` provides the contract and PSI comparison; it is **not wired to this model**. Stated rather than implied |
-| **Silent metric inflation** | A comparison that flatters the model | Found and quantified: the skill figure is inflated 0.20pp by an asymmetric baseline mask, documented above rather than corrected away |
+| **Silent metric inflation** | A comparison that flatters the model | **Corrected**, not only documented: skill was inflated 0.20pp because the model and the baseline were scored on different rows. Both are scored on the rows with a baseline now (`_score_fold`); a test built so the old calculation fails it, and mutation SF1 in the harness, hold that. The same re-measurement showed folds 0 and 1 losing to the baseline — see Evaluation |
 | **No prediction at all** | The system cannot serve a forecast | The current state, by ADR-008. It is the honest headline failure mode: there is no endpoint |
 
 The pattern worth naming: the failures with a mechanism behind them fail

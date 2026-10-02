@@ -1000,6 +1000,23 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ### Fixed
 
+- **Two figures that flattered their subject, each contradicting its own
+  docstring.** QA-4 F-21 and F-25.
+
+  The forecast's skill compared the model's error over every test row with the
+  baseline's over only the rows that have one — while `FoldResult` documented
+  both as "on the same rows". Both are scored on the rows with a baseline now.
+  Re-measured on the verified 2024-01/02 files: **+12.4%**, down from +12.6%,
+  which is the figure the model card had already predicted for the
+  like-for-like comparison. The card now also shows what the mean hid: folds 0
+  and 1 **lose** to the seasonal-naive baseline, at −18.3% and −1.2%.
+
+  The leakage rate divided by every row in the frame, including rows with a
+  null timestamp that were never checked — while `LeakageReport` documented
+  `total_rows` as "Rows examined". It divides by the rows examined now, and
+  names the ones it could not check. A missing feature still does not make a
+  report unclean; that existing decision is kept.
+
 - **"Every CI job carries `timeout-minutes`" stopped being true a week after
   it was written.** The auto-merge workflow arrived with no bound, which is not
   a slow build: GitHub cancels a job after six hours, so a wedged step holds a
