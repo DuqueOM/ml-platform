@@ -65,7 +65,22 @@ prevented that here.
 
 ## Current deviations
 
-`rag-assistant` was built by hand rather than generated, so it has no answers
-file and is outside `copier update`. Closing that means adopting it into the
-generator, which rewrites files and is a CONSULT-class change to a working
-project — recorded rather than done quietly.
+Derived from the data, never retyped. This section narrated a single deviation
+while `KNOWN_DEVIATIONS` held four, across two projects — in the document that
+declares that dictionary authoritative (QA-4 W-12).
+
+<!-- BEGIN GENERATED -->
+
+**4 deviation(s)**, derived from `KNOWN_DEVIATIONS` in
+`tests/test_project_contract.py`. That dictionary is the authority: an exemption
+for a requirement a project now satisfies fails the suite. Edit it there, then run
+`python scripts/check_contract_deviations.py --write`.
+
+| Project | Requirement | Why it is exempt |
+| --- | --- | --- |
+| `rag-assistant` | P1 | Built by hand rather than generated, so there is no answers file and `copier update` cannot reach it. Closing it means adopting the project into the generator, which rewrites files in a working project — CONSULT, recorded rather than done quietly. |
+| `rag-assistant` | P6 | Its gates live in libs/llm-core/retrieval_eval.py (recall@k, and a 0.05 margin over a lexical baseline, already watched by scripts/check_thresholds.py) but are not declared as data. Closing it is writing evals/gates.yaml with those two gates and their checks. |
+| `rag-assistant` | P7 | No model card. The retrieval system has a corpus, an embedding choice and a MEASURED failure — the chunker is broken on real SEC filings, recorded as xfail(strict) — and that failure is exactly what a model card's limitations section is for. Closing it is writing model-card.md with the corpus, the chunking strategy and that measured failure. |
+| `store-assistant` | P1 | Migrated from `agent-local` with its history (ADR-002), not generated, so there is no answers file and `copier update` cannot reach it. Closing it means adopting a working project into the generator, which rewrites its files — CONSULT, and recorded rather than done quietly. The 31 original commits are on the `archive/agent-local` tag, which is the provenance an answers file would otherwise carry. |
+
+<!-- END GENERATED -->

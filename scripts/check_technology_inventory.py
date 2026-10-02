@@ -252,10 +252,26 @@ def _is_stub(path: Path) -> bool:
     return "TODO" in path.read_text(encoding="utf-8", errors="ignore")
 
 
-def implemented(item: dict[str, Any]) -> bool:
-    """True when at least one detector matches a real artifact."""
+def _matched_kinds(item: dict[str, Any]) -> set[str]:
+    """Which KINDS of detector matched: code, environment, or neither.
+
+    The distinction exists because a technology can be present in two very
+    different senses, and this inventory reported both as implemented.
+    `pgvector` matched an image name in a local manifest and rendered ✅ at
+    Core tier, while the technical plan listed pgvector retrieval as open
+    Phase 3 work — both were right, about different things (QA-4 W-12).
+
+    `environment:` means declared in an environment — an image, a manifest, a
+    compose file. Something can be reached if someone writes the code. Every
+    other detector means a code path here uses it.
+    """
+    matched: set[str] = set()
     for spec in item.get("detect") or []:
-        if spec.startswith("filled:"):
+        if spec.startswith("environment:"):
+            _, pattern, scope = spec.split("|")[0], spec.split(":", 1)[1].split("|")[0], spec.split("|")[1]
+            if _content_matches(pattern, scope):
+                matched.add("environment")
+        elif spec.startswith("filled:"):
             # `filled:<glob>` — the artifact exists AND is not a stub. For
             # documents that ARE the deliverable (model cards, ADRs), presence
             # alone is not evidence; a template with the placeholders still in
@@ -263,14 +279,19 @@ def implemented(item: dict[str, Any]) -> bool:
             pattern = spec.split(":", 1)[1]
             matches = list(REPO_ROOT.glob(pattern))
             if matches and not all(_is_stub(match) for match in matches):
-                return True
+                matched.add("code")
         elif spec.startswith("pattern:"):
             _, pattern, scope = spec.split("|")[0], spec.split(":", 1)[1].split("|")[0], spec.split("|")[1]
             if _content_matches(pattern, scope):
-                return True
+                matched.add("code")
         elif _glob_matches(spec):
-            return True
-    return False
+            matched.add("code")
+    return matched
+
+
+def implemented(item: dict[str, Any]) -> bool:
+    """True when a CODE path uses the technology, not merely an environment."""
+    return "code" in _matched_kinds(item)
 
 
 def evaluate(inventory: dict[str, Any]) -> list[tuple[str, dict[str, Any], str]]:
@@ -284,13 +305,20 @@ def evaluate(inventory: dict[str, Any]) -> list[tuple[str, dict[str, Any], str]]
             elif not item.get("detect"):
                 state = "planned"
             else:
-                state = "implemented" if implemented(item) else "planned"
+                kinds = _matched_kinds(item)
+                if "code" in kinds:
+                    state = "implemented"
+                elif "environment" in kinds:
+                    state = "available"
+                else:
+                    state = "planned"
             rows.append((category["name"], item, state))
     return rows
 
 
 _MARK = {
     "implemented": "✅",
+    "available": "🧩",
     "planned": "⬜",
     "studied": "📓",
     "rejected": "🚫",
@@ -313,7 +341,7 @@ def render(rows: list[tuple[str, dict[str, Any], str]], full: bool) -> str:
     for _, _, state in rows:
         counts[state] = counts.get(state, 0) + 1
 
-    committed = counts.get("implemented", 0) + counts.get("planned", 0)
+    committed = counts.get("implemented", 0) + counts.get("planned", 0) + counts.get("available", 0)
     done = counts.get("implemented", 0)
     percent = (100 * done // committed) if committed else 0
 
@@ -327,7 +355,9 @@ def render(rows: list[tuple[str, dict[str, Any], str]], full: bool) -> str:
         "",
         "| | Meaning |",
         "| :-: | --- |",
-        "| ✅ | A real artifact exists. Documentation alone never counts |",
+        "| ✅ | A real artifact exists and CODE here uses it. Documentation alone never counts |",
+        "| 🧩 | Declared in an environment — an image, a manifest — and used by no code path here. "
+        "Reachable if someone writes that code; not built |",
         '| ⬜ | Committed to, not built. **Not** "nearly done" |',
         "| 📓 | Studied: deliberately not wired in (ADR-004) |",
         "| 🚫 | Rejected, with the reason recorded |",
@@ -338,8 +368,16 @@ def render(rows: list[tuple[str, dict[str, Any], str]], full: bool) -> str:
         entries = [(item, state) for name, item, state in rows if name == category]
         built = sum(1 for _, state in entries if state == "implemented")
         pending = sum(1 for _, state in entries if state == "planned")
+        # `available` is named in the heading when present rather than folded
+        # into either number: an environment-only technology is neither built
+        # nor pending, and leaving it out of both made the row invisible in the
+        # summary a reader skims (QA-4 W-12).
+        available = sum(1 for _, state in entries if state == "available")
+        counted = f"{built} built, {pending} pending"
+        if available:
+            counted = f"{built} built, {available} available, {pending} pending"
         lines += [
-            f"## {category} — {built} built, {pending} pending",
+            f"## {category} — {counted}",
             "",
             "| | Technology | Tier | Note |",
             "| :-: | --- | --- | --- |",
