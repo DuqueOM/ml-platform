@@ -577,3 +577,21 @@ artifacts:
       got no language. That is the upstream defect exactly, at one instance instead of twenty-four. Closes by
       fixing `language` first, since a gate landing red teaches people to skip it, then porting the AST analysis
       pointed at llm-core's config module with a ratchet on the unwired count.
+  - path: docs/DIAGRAMS.md
+    status: pending
+    reason: >-
+      Decided to adopt as an equivalent, not as a copy. Upstream's four diagrams explain its service template — a
+      commit to a verifiable pod, identity and secrets, the closed loop, agent governance — each followed by the
+      files that implement it, which is the right shape for a reader's first hour. Its content describes another
+      system: this platform's flows are the lakehouse ingest, the backtest-to-promotion gate, the namespace role
+      contract and the agent core, and no docs/ page here draws any of them (no mermaid block exists in docs/).
+      Closes when docs/DIAGRAMS.md exists with diagrams of THIS platform's flows, every step naming the file that
+      implements it, and the doc-path check reads it once check_doc_path_refs.py lands.
+  - path: docs/REPOSITORY_STRUCTURE.md
+    status: pending
+    reason: >-
+      Decided to adopt, after its gate. Upstream replaced a directory tree drawn in its README — which kept
+      describing directories months after they moved — with a page where every path is a code span that
+      scripts/check_doc_path_refs.py fails CI on if it stops resolving. The page without that checker is the drawn
+      tree upstream deleted, and check_doc_path_refs.py is itself pending here. Closes after it lands: the page
+      first, then the checker pointed at it, so it cannot go stale silently.
