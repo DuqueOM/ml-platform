@@ -103,6 +103,55 @@ def local_catalog(warehouse_uri: str | None = None, catalog_db: str | None = Non
     )
 
 
+#: The one variable that decides which catalogue a process talks to.
+CATALOG_VARIABLE = "LAKEHOUSE_CATALOG"
+
+#: Catalogues with no adapter yet. Named, so asking for one fails with a
+#: sentence about what is missing rather than falling back to a laptop.
+_PLANNED = {"glue": "AWS Glue", "biglake": "GCP BigLake"}
+
+
+def catalog_from_environment() -> Catalog:
+    """The catalogue this process is configured for, or a refusal.
+
+    **Why this exists (QA-4 F-23).** Every public function here used to take
+    `catalog: Catalog | None = None` and fall back to :func:`local_catalog` —
+    a MinIO on localhost with a literal credential. The Airflow DAG called
+    `write_demand(...)` and `read_demand()` with no catalogue at all, so
+    wherever it ran it wrote to and read from a laptop's object store, and in a
+    cloud deployment the first symptom would have been a connection error that
+    reads as the network being down.
+
+    Now the catalogue is a required argument and this is how a process that
+    does not construct one chooses it: from `LAKEHOUSE_CATALOG`, declared, with
+    no default. Unset is a refusal, because the only safe default for "which
+    warehouse am I writing to" is none.
+
+    Raises:
+        RuntimeError: If `LAKEHOUSE_CATALOG` is unset or blank.
+        NotImplementedError: If it names a cloud catalogue with no adapter yet.
+        ValueError: If it names anything else.
+    """
+    choice = os.environ.get(CATALOG_VARIABLE, "").strip().lower()
+    if not choice:
+        raise RuntimeError(
+            f"{CATALOG_VARIABLE} is unset, so there is no catalogue to use. Nothing falls back to a local one: "
+            f"a pipeline that silently writes to localhost looks, from the cloud, like a network failure. "
+            f"Set {CATALOG_VARIABLE}=local for the local stack."
+        )
+    if choice == "local":
+        return local_catalog()
+    if choice in _PLANNED:
+        raise NotImplementedError(
+            f"{CATALOG_VARIABLE}={choice} ({_PLANNED[choice]}) has no adapter yet. The table format is identical "
+            f"everywhere; the catalogue that points at it is cloud work that has not been written."
+        )
+    raise ValueError(
+        f"{CATALOG_VARIABLE}={choice!r} is not a catalogue this code knows. Supported: local. "
+        f"Planned, not built: {', '.join(sorted(_PLANNED))}."
+    )
+
+
 def ensure_table(catalog: Catalog):  # type: ignore[no-untyped-def]
     """Create the table if absent, otherwise return the existing one.
 
@@ -170,7 +219,7 @@ def _next_month(month: datetime) -> datetime:
     return datetime(month.year + (month.month == 12), (month.month % 12) + 1, 1)
 
 
-def write_demand(demand: pl.DataFrame, catalog: Catalog | None = None, *, overwrite: bool = False) -> WriteResult:
+def write_demand(demand: pl.DataFrame, catalog: Catalog, *, overwrite: bool = False) -> WriteResult:
     """Write hourly demand, returning the snapshot it created.
 
     Args:
@@ -193,7 +242,7 @@ def write_demand(demand: pl.DataFrame, catalog: Catalog | None = None, *, overwr
     if overwrite and demand.is_empty():
         raise ValueError("overwrite requires a non-empty frame: an empty one selects no months to replace")
 
-    table = ensure_table(catalog or local_catalog())
+    table = ensure_table(catalog)
     arrow = _to_arrow(demand)
 
     if overwrite:
@@ -213,30 +262,30 @@ def write_demand(demand: pl.DataFrame, catalog: Catalog | None = None, *, overwr
     )
 
 
-def read_demand(catalog: Catalog | None = None, *, snapshot_id: int | None = None) -> pl.DataFrame:
+def read_demand(catalog: Catalog, *, snapshot_id: int | None = None) -> pl.DataFrame:
     """Read the table, optionally as it stood at a given snapshot.
 
     ``snapshot_id`` is the time-travel path. Passing the id recorded in a model
     card reconstructs that model's exact training input — which is what makes
     "retrain on the data as of date D" mechanical instead of archaeological.
     """
-    table = ensure_table(catalog or local_catalog())
+    table = ensure_table(catalog)
     scan = table.scan(snapshot_id=snapshot_id) if snapshot_id is not None else table.scan()
     return pl.from_arrow(scan.to_arrow())  # type: ignore[return-value]
 
 
-def snapshots(catalog: Catalog | None = None) -> list[tuple[int, datetime]]:
+def snapshots(catalog: Catalog) -> list[tuple[int, datetime]]:
     """Every snapshot, newest last, as ``(id, committed_at)`` in UTC.
 
     Timezone-aware deliberately: a naive local-time timestamp compared
     against anything else in this repository — all of which is UTC — is
     wrong by the local offset without ever raising.
     """
-    table = ensure_table(catalog or local_catalog())
+    table = ensure_table(catalog)
     return [(s.snapshot_id, datetime.fromtimestamp(s.timestamp_ms / 1000, tz=UTC)) for s in table.metadata.snapshots]
 
 
-def delete_before(cutoff: datetime, catalog: Catalog | None = None) -> WriteResult:
+def delete_before(cutoff: datetime, catalog: Catalog) -> WriteResult:
     """Delete rows whose ``event_time`` precedes ``cutoff``.
 
     The operation that exists because fixing an ingest does NOT clean what the
@@ -259,7 +308,7 @@ def delete_before(cutoff: datetime, catalog: Catalog | None = None) -> WriteResu
     Returns:
         A :class:`WriteResult` naming the snapshot the delete produced.
     """
-    table = ensure_table(catalog or local_catalog())
+    table = ensure_table(catalog)
     before = len(table.scan().to_arrow())
 
     table.delete(delete_filter=f"event_time < '{cutoff.isoformat()}'")
