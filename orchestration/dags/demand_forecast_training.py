@@ -127,7 +127,12 @@ def demand_forecast_training() -> None:
         from demand_forecast.warehouse_checks import check_density
         from demand_forecast.warehouse_checks import validate_warehouse as run_validation
 
-        demand = read_demand(catalog_from_environment())
+        # The snapshot this run wrote, not the table's current head: another
+        # writer — the KFP pipeline, a manual ingest — can commit between this
+        # task and the next, and `max_active_runs=1` only stops the DAG racing
+        # itself. Every later task reads the same snapshot, so what trains is
+        # what was validated (QA-4 round fifteen, R15-14).
+        demand = read_demand(catalog_from_environment(), snapshot_id=ingested["snapshot_id"])
         result = run_validation(demand)
         dense, density = check_density(demand)
 
@@ -149,7 +154,7 @@ def demand_forecast_training() -> None:
         from demand_forecast.lakehouse import catalog_from_environment, read_demand
         from demand_forecast.train import evaluate
 
-        report = evaluate(read_demand(catalog_from_environment()))
+        report = evaluate(read_demand(catalog_from_environment(), snapshot_id=validated["snapshot_id"]))
         return {
             **validated,
             "skill": report.skill,
@@ -192,8 +197,10 @@ def demand_forecast_training() -> None:
         from demand_forecast.lakehouse import catalog_from_environment, read_demand
         from demand_forecast.persist import fit_final, save
 
-        model = fit_final(read_demand(catalog_from_environment()))
-        metadata = save(model, Path("models/demand_forecast.joblib"))
+        model = fit_final(read_demand(catalog_from_environment(), snapshot_id=metrics["snapshot_id"]))
+        # Recorded in the sidecar, so the model's exact training input can be
+        # read back with `read_demand(..., snapshot_id=...)`.
+        metadata = save(model, Path("models/demand_forecast.joblib"), source_snapshot=metrics["snapshot_id"])
 
         logger.info("published %s trained through %s", metadata["version"], metadata["trained_through"])
         return {**metrics, **metadata}

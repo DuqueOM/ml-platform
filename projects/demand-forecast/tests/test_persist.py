@@ -256,6 +256,26 @@ def test_the_sidecar_records_the_whole_digest_not_a_label(model: ForecastModel, 
     assert sidecar["sha256"].startswith(metadata["version"].split("+")[1])
 
 
+@pytest.mark.parametrize("snapshot", [7_345_120_998_211, None], ids=["from-the-lakehouse", "from-a-file"])
+def test_the_sidecar_records_the_snapshot_the_model_was_fitted_on(
+    model: ForecastModel, tmp_path: Path, snapshot: int | None
+) -> None:
+    """R15-14: a date says when, not what — a month's contents can be rewritten; a snapshot cannot.
+
+    Recorded as given, and `null` when the input did not come from the
+    lakehouse, so the key is always present and its absence never reads as "the
+    snapshot was zero" or as an older sidecar format.
+    """
+    import json
+
+    artifact = tmp_path / "model.joblib"
+    metadata = save(model, artifact, source_snapshot=snapshot)
+    sidecar = json.loads(artifact.with_suffix(".json").read_text(encoding="utf-8"))
+
+    assert sidecar["source_snapshot"] == metadata["source_snapshot"] == snapshot
+    assert load(artifact) is not None, "recording the snapshot must not disturb the digest check"
+
+
 def test_an_intact_artifact_still_loads(model: ForecastModel, tmp_path: Path) -> None:
     """The converse, so the four refusals above cannot pass by refusing everything."""
     artifact = tmp_path / "model.joblib"

@@ -18,6 +18,23 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Fixed — the DAG trained on data it never validated (QA-4 round fifteen, R15-14)
+
+- **Every task after ingest reads the snapshot the run wrote.** `ingest_month`
+  returned `snapshot_id`, and every later task called `read_demand()` without
+  it, reading the table's current head. `max_active_runs=1` stops the DAG
+  racing itself, not the KFP pipeline or a manual ingest committing between
+  validation and training — so the model could be fitted on a table nobody
+  validated. Validation, the backtest and the final fit now read
+  `snapshot_id=` the run's own snapshot.
+- **The published sidecar records it as `source_snapshot`**, so a model's
+  exact training input can be read back with `read_demand(..., snapshot_id=)`.
+  A date cannot do that: a month's contents can be rewritten. `null` when the
+  input did not come from the lakehouse.
+- The DAG's test stub refuses any read that does not name the run's snapshot.
+  The auditor's surviving mutation R15-DAG6 is killed, and three more are
+  registered beside it.
+
 ### Fixed — QA-4 round fifteen: four closures declared beyond what was executed, and the gates that let them through
 
 QA-4 round fifteen audited `98a4359` (0 P0, 0 P1, 8 P2, 11 P3; report committed

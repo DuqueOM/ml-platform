@@ -1081,6 +1081,11 @@ service side is generated code (ADR-003).
 
 ### R15-14 — The DAG trains and publishes on later reads than it validated
 
+> **Status: done** — *fix(orchestration): the DAG trains on the snapshot it validated, and the model records
+> it*. Every read after ingest names the run's `snapshot_id`; `persist.save` records it as `source_snapshot`
+> (`null` when the input was not the lakehouse); the test stub refuses any other read. The auditor's R15-DAG6
+> is killed, with three more mutations beside it.
+
 **Mode**: AUTO · **Size**: ~1h · **After**: #106, which rewrites the same reads
 
 `ingest_month` returns `snapshot_id` and every later task calls `read_demand()`

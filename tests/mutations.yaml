@@ -759,8 +759,8 @@ mutations:
 - id: DAG3
   origin: W-5 DAG task bodies, author
   file: orchestration/dags/demand_forecast_training.py
-  old: '        metadata = save(model, Path("models/demand_forecast.joblib"))'
-  new: '        metadata = save(model, Path("demand_forecast.joblib"))'
+  old: '        metadata = save(model, Path("models/demand_forecast.joblib"), source_snapshot=metrics["snapshot_id"])'
+  new: '        metadata = save(model, Path("demand_forecast.joblib"), source_snapshot=metrics["snapshot_id"])'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py
   expect: killed
@@ -847,8 +847,8 @@ mutations:
 - id: R15-DAG4
   origin: QA-4 round fifteen remediation
   file: orchestration/dags/demand_forecast_training.py
-  old: '        report = evaluate(read_demand(catalog_from_environment()))'
-  new: '        report = evaluate(read_demand(catalog_from_environment()), n_folds=3)'
+  old: '        report = evaluate(read_demand(catalog_from_environment(), snapshot_id=validated["snapshot_id"]))'
+  new: '        report = evaluate(read_demand(catalog_from_environment(), snapshot_id=validated["snapshot_id"]), n_folds=3)'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py
   expect: killed
@@ -1035,8 +1035,8 @@ mutations:
 - id: DAG-CAT1
   origin: F-23 in the DAG, rebased onto W-5's task-body tests — a read that ignores the configured catalogue
   file: orchestration/dags/demand_forecast_training.py
-  old: '        demand = read_demand(catalog_from_environment())'
-  new: '        demand = read_demand(None)'
+  old: '        demand = read_demand(catalog_from_environment(), snapshot_id=ingested["snapshot_id"])'
+  new: '        demand = read_demand(None, snapshot_id=ingested["snapshot_id"])'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py
   expect: killed
@@ -1055,4 +1055,36 @@ mutations:
   new: '| Codecov token secret, or OIDC |'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_adoption_secrets.py
+  expect: killed
+- id: R15-DAG6
+  origin: QA-4 round fifteen, auditor — publish trains on a snapshot it did not validate
+  file: orchestration/dags/demand_forecast_training.py
+  old: '        model = fit_final(read_demand(catalog_from_environment(), snapshot_id=metrics["snapshot_id"]))'
+  new: '        model = fit_final(read_demand(catalog_from_environment(), snapshot_id=1))'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py
+  expect: killed
+- id: R15-DAG7
+  origin: R15-14, author — validation reads the table head instead of the run's snapshot
+  file: orchestration/dags/demand_forecast_training.py
+  old: '        demand = read_demand(catalog_from_environment(), snapshot_id=ingested["snapshot_id"])'
+  new: '        demand = read_demand(catalog_from_environment())'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py
+  expect: killed
+- id: R15-DAG8
+  origin: R15-14, author — the published sidecar loses the snapshot
+  file: orchestration/dags/demand_forecast_training.py
+  old: '        metadata = save(model, Path("models/demand_forecast.joblib"), source_snapshot=metrics["snapshot_id"])'
+  new: '        metadata = save(model, Path("models/demand_forecast.joblib"))'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py
+  expect: killed
+- id: R15-SNAP1
+  origin: R15-14, author — the sidecar records no snapshot
+  file: projects/demand-forecast/src/demand_forecast/persist.py
+  old: '        "source_snapshot": source_snapshot,'
+  new: '        "source_snapshot": None,'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_persist.py
   expect: killed
