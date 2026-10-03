@@ -1139,6 +1139,18 @@ R15-20 (MinIO), and W-14.
   after `check_doc_path_refs.py`, without which it would be the hand-drawn tree
   upstream deleted for going stale. The online check reports 117 comparable
   artifacts, all decided.
+- **The training pipeline would have written to a laptop's object store from
+  anywhere it ran.** QA-4 F-23. Every public lakehouse function defaulted its
+  catalogue to `local_catalog()` — MinIO on localhost, with a literal
+  credential — and the Airflow DAG passed none, so it depended on that
+  fallback. In a cloud deployment the first symptom would have been a
+  connection error that reads as the network being down.
+
+  The catalogue is a required argument now. A process that does not build one
+  calls `catalog_from_environment()`, which reads `LAKEHOUSE_CATALOG` with no
+  default: unset is a refusal, `local` is the local stack, `glue` and
+  `biglake` are refused by name until their adapters exist. A test pins the
+  class — no public function may default its catalogue again.
 
 - **"Every CI job carries `timeout-minutes`" stopped being true a week after
   it was written.** The auto-merge workflow arrived with no bound, which is not

@@ -163,6 +163,33 @@ def _record(calls: list[tuple[str, tuple, dict]], name: str, result: object) -> 
     return recorder
 
 
+@pytest.fixture
+def catalog(monkeypatch: pytest.MonkeyPatch) -> object:
+    """The catalogue the run is configured for, as a sentinel every lakehouse call must receive.
+
+    F-23: the DAG called the lakehouse with NO catalogue, so wherever it ran it
+    wrote to and read from a laptop's MinIO. It now asks
+    `catalog_from_environment()`, and these tests hold every read and write to
+    passing exactly what that returned.
+    """
+    from demand_forecast import lakehouse
+
+    configured = object()
+    monkeypatch.setattr(lakehouse, "catalog_from_environment", lambda: configured)
+    return configured
+
+
+def _read_from(catalog: object, table: object) -> Callable[..., object]:
+    """A `read_demand` that refuses any call but one naming the configured catalogue."""
+
+    def read_demand(*args: object, **kwargs: object) -> object:
+        assert args == (catalog,), f"read the lakehouse with {args}, not the configured catalogue"
+        assert not kwargs, f"read the lakehouse with {kwargs}"
+        return table
+
+    return read_demand
+
+
 def test_the_quality_gate_passes_a_model_at_both_floors(dagbag) -> None:  # type: ignore[no-untyped-def]
     """The floors are inclusive, and a passing gate hands the metrics on unchanged.
 
@@ -209,7 +236,7 @@ def test_the_quality_gate_raises_and_names_every_floor_missed(  # type: ignore[n
 
 
 def test_ingest_month_reads_the_run_s_month_and_refuses_a_missing_file(  # type: ignore[no-untyped-def]
-    dagbag, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    dagbag, catalog, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The month comes from the data interval; an absent file stops the run before any write.
 
@@ -228,7 +255,7 @@ def test_ingest_month_reads_the_run_s_month_and_refuses_a_missing_file(  # type:
 
 
 def test_ingest_month_writes_the_month_and_returns_its_snapshot(  # type: ignore[no-untyped-def]
-    dagbag, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    dagbag, catalog, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     """The real `IngestReport` and `WriteResult`, so a renamed attribute fails here, not in a run."""
     import polars as pl
@@ -256,7 +283,7 @@ def test_ingest_month_writes_the_month_and_returns_its_snapshot(  # type: ignore
     assert calls[0][1] == (Path("data/raw/yellow_tripdata_2024-03.parquet"),)
     assert calls[1][1] == (trips,)
     # Overwrite, scoped to the month: a re-run of March replaces March.
-    assert calls[2][1] == (demand,)
+    assert calls[2][1] == (demand, catalog), "written somewhere other than the configured catalogue"
     assert calls[2][2] == {"overwrite": True}
     assert "3 rows rejected of 10" in caplog.text
 
@@ -269,12 +296,12 @@ def test_ingest_month_writes_the_month_and_returns_its_snapshot(  # type: ignore
     ],
 )
 def test_validate_warehouse_stops_the_run_before_training(  # type: ignore[no-untyped-def]
-    dagbag, monkeypatch: pytest.MonkeyPatch, success: bool, dense: bool, failure: str
+    dagbag, catalog, monkeypatch: pytest.MonkeyPatch, success: bool, dense: bool, failure: str
 ) -> None:
     """Either check failing raises; a model fitted on a failed table is discarded anyway."""
     from demand_forecast import lakehouse, warehouse_checks
 
-    monkeypatch.setattr(lakehouse, "read_demand", lambda *a, **k: "table")
+    monkeypatch.setattr(lakehouse, "read_demand", _read_from(catalog, "table"))
     verdict = warehouse_checks.WarehouseValidation(
         success=success, failed=() if success else ("hours_are_unique",), checked=5
     )
@@ -286,12 +313,12 @@ def test_validate_warehouse_stops_the_run_before_training(  # type: ignore[no-un
 
 
 def test_validate_warehouse_passes_the_ingest_result_on_with_its_density(  # type: ignore[no-untyped-def]
-    dagbag, monkeypatch: pytest.MonkeyPatch
+    dagbag, catalog, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from demand_forecast import lakehouse, warehouse_checks
 
     calls: list[tuple[str, tuple, dict]] = []  # type: ignore[type-arg]
-    monkeypatch.setattr(lakehouse, "read_demand", lambda *a, **k: "table")
+    monkeypatch.setattr(lakehouse, "read_demand", _read_from(catalog, "table"))
     verdict = warehouse_checks.WarehouseValidation(success=True, failed=(), checked=5)
     monkeypatch.setattr(warehouse_checks, "validate_warehouse", _record(calls, "validate_warehouse", verdict))
     monkeypatch.setattr(warehouse_checks, "check_density", _record(calls, "check_density", (True, 0.99)))
@@ -304,7 +331,7 @@ def test_validate_warehouse_passes_the_ingest_result_on_with_its_density(  # typ
 
 
 def test_backtest_model_returns_plain_floats_for_xcom(  # type: ignore[no-untyped-def]
-    dagbag, monkeypatch: pytest.MonkeyPatch
+    dagbag, catalog, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """XCom serialises; a numpy scalar that round-trips unequal to itself breaks the next task."""
     import numpy as np
@@ -320,7 +347,7 @@ def test_backtest_model_returns_plain_floats_for_xcom(  # type: ignore[no-untype
         n_compared=168,
     )
     calls: list[tuple[str, tuple, dict]] = []  # type: ignore[type-arg]
-    monkeypatch.setattr(lakehouse, "read_demand", lambda *a, **k: "table")
+    monkeypatch.setattr(lakehouse, "read_demand", _read_from(catalog, "table"))
     monkeypatch.setattr(train, "evaluate", _record(calls, "evaluate", train.BacktestReport(folds=[fold], seed=42)))
 
     result = _body(dagbag, "backtest_model")({"month": "2024-03"})
@@ -338,13 +365,13 @@ def test_backtest_model_returns_plain_floats_for_xcom(  # type: ignore[no-untype
 
 
 def test_publish_model_fits_on_all_history_and_merges_the_metadata(  # type: ignore[no-untyped-def]
-    dagbag, monkeypatch: pytest.MonkeyPatch
+    dagbag, catalog, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The path the serving side loads from, and the metrics carried into the run's result."""
     from demand_forecast import lakehouse, persist
 
     calls: list[tuple[str, tuple, dict]] = []  # type: ignore[type-arg]
-    monkeypatch.setattr(lakehouse, "read_demand", lambda *a, **k: "history")
+    monkeypatch.setattr(lakehouse, "read_demand", _read_from(catalog, "history"))
     monkeypatch.setattr(persist, "fit_final", _record(calls, "fit_final", "model"))
     metadata = {"version": "v1", "trained_through": "2024-03-31T23:00:00"}
     monkeypatch.setattr(persist, "save", _record(calls, "save", metadata))

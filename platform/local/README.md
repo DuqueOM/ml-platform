@@ -133,6 +133,21 @@ memory. Recreate has the right semantics *and* keeps the quota honest.
 
 All three are now asserted by `make local-verify`, so none can silently return.
 
+## Choosing the catalogue
+
+Nothing in the lakehouse code picks a catalogue for you. A process that reads
+or writes the demand table either passes one it built, or declares which one to
+use:
+
+```bash
+export LAKEHOUSE_CATALOG=local
+```
+
+Unset is a refusal, not a default. The public functions used to fall back to
+this stack's MinIO — a literal credential on localhost — and the training DAG
+relied on that fallback, so wherever it ran it would have written here. `glue`
+and `biglake` are named and refused until their adapters exist (QA-4 F-23).
+
 ## Endpoints
 
 | Service | URL |
