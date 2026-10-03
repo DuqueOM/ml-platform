@@ -85,7 +85,7 @@ def demand_forecast_training() -> None:
         from pathlib import Path
 
         from demand_forecast.ingest import ingest_file, to_hourly_demand
-        from demand_forecast.lakehouse import write_demand
+        from demand_forecast.lakehouse import catalog_from_environment, write_demand
 
         interval_start = context["data_interval_start"]
         source = Path(f"data/raw/yellow_tripdata_{interval_start:%Y-%m}.parquet")
@@ -98,7 +98,7 @@ def demand_forecast_training() -> None:
 
         trips, report = ingest_file(source)
         demand = to_hourly_demand(trips)
-        written = write_demand(demand, overwrite=True)
+        written = write_demand(demand, catalog_from_environment(), overwrite=True)
 
         # `report.rejected` and `report.total` do not exist on `IngestReport`;
         # this line raised `AttributeError` the first time a task body ran.
@@ -123,11 +123,11 @@ def demand_forecast_training() -> None:
         failed validation has to be discarded anyway, and by then it has cost
         the compute and, worse, produced a number someone may quote.
         """
-        from demand_forecast.lakehouse import read_demand
+        from demand_forecast.lakehouse import catalog_from_environment, read_demand
         from demand_forecast.warehouse_checks import check_density
         from demand_forecast.warehouse_checks import validate_warehouse as run_validation
 
-        demand = read_demand()
+        demand = read_demand(catalog_from_environment())
         result = run_validation(demand)
         dense, density = check_density(demand)
 
@@ -146,10 +146,10 @@ def demand_forecast_training() -> None:
         and a dataclass carrying numpy scalars round-trips into something that
         compares unequal to itself in the next task.
         """
-        from demand_forecast.lakehouse import read_demand
+        from demand_forecast.lakehouse import catalog_from_environment, read_demand
         from demand_forecast.train import evaluate
 
-        report = evaluate(read_demand())
+        report = evaluate(read_demand(catalog_from_environment()))
         return {
             **validated,
             "skill": report.skill,
@@ -189,10 +189,10 @@ def demand_forecast_training() -> None:
         """
         from pathlib import Path
 
-        from demand_forecast.lakehouse import read_demand
+        from demand_forecast.lakehouse import catalog_from_environment, read_demand
         from demand_forecast.persist import fit_final, save
 
-        model = fit_final(read_demand())
+        model = fit_final(read_demand(catalog_from_environment()))
         metadata = save(model, Path("models/demand_forecast.joblib"))
 
         logger.info("published %s trained through %s", metadata["version"], metadata["trained_through"])

@@ -751,8 +751,8 @@ mutations:
 - id: DAG2
   origin: W-5 DAG task bodies, author
   file: orchestration/dags/demand_forecast_training.py
-  old: '        written = write_demand(demand, overwrite=True)'
-  new: '        written = write_demand(demand)'
+  old: '        written = write_demand(demand, catalog_from_environment(), overwrite=True)'
+  new: '        written = write_demand(demand, catalog_from_environment())'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py
   expect: killed
@@ -847,8 +847,8 @@ mutations:
 - id: R15-DAG4
   origin: QA-4 round fifteen remediation
   file: orchestration/dags/demand_forecast_training.py
-  old: '        report = evaluate(read_demand())'
-  new: '        report = evaluate(read_demand(), n_folds=3)'
+  old: '        report = evaluate(read_demand(catalog_from_environment()))'
+  new: '        report = evaluate(read_demand(catalog_from_environment()), n_folds=3)'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py
   expect: killed
@@ -1009,4 +1009,34 @@ mutations:
   old: '          echo "${KUBESCAPE_SHA256}  kubescape" | sha256sum -c -'
   new: '          true'
   run: *pd_run
+  expect: killed
+- id: LC1
+  origin: F-23 fail-closed catalogue, author
+  file: projects/demand-forecast/src/demand_forecast/lakehouse.py
+  old: '    if not choice:'
+  new: '    if False:'
+  run: &lc1_id001
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_catalog_selection.py
+  expect: killed
+- id: LC2
+  origin: F-23 fail-closed catalogue, author — the implicit default it removed
+  file: projects/demand-forecast/src/demand_forecast/lakehouse.py
+  old: 'def read_demand(catalog: Catalog, *, snapshot_id: int | None = None) -> pl.DataFrame:'
+  new: 'def read_demand(catalog: Catalog | None = None, *, snapshot_id: int | None = None) -> pl.DataFrame:'
+  run: *lc1_id001
+  expect: killed
+- id: LC3
+  origin: F-23 fail-closed catalogue, author
+  file: projects/demand-forecast/src/demand_forecast/lakehouse.py
+  old: '    if choice in _PLANNED:'
+  new: '    if False:'
+  run: *lc1_id001
+  expect: killed
+- id: DAG-CAT1
+  origin: F-23 in the DAG, rebased onto W-5's task-body tests — a read that ignores the configured catalogue
+  file: orchestration/dags/demand_forecast_training.py
+  old: '        demand = read_demand(catalog_from_environment())'
+  new: '        demand = read_demand(None)'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py
   expect: killed
