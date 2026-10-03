@@ -736,6 +736,12 @@ R15-20 (MinIO), and W-14.
 
 ### Added
 
+- **What a fork must configure, because no file can.** `docs/ADOPTION.md`
+  now lists the repository settings CI depends on and a fork inherits none of
+  — the Codecov secret, "Allow auto-merge", branch protection, automatic branch
+  deletion — each with what silently stops working without it. A test fails on
+  any secret a workflow reads that the guide does not name (QA-4 R11-7).
+
 - **The namespaces the NetworkPolicies depend on are declared as data.**
   `platform/policies/namespace-contract.yaml` (QA-4 R11-1). The serving
   policies admitted traffic from and to namespaces selected by

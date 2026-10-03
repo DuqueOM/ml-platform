@@ -129,6 +129,24 @@ that the governance layer is costing more than it returns for your scale.
 holds itself to: match solution complexity to problem scale. It applies to
 adopting this as much as to building it.
 
+## What a fork must configure, because no file can
+
+Some of what CI depends on lives in the repository's settings, not in its
+files, so a fork inherits none of it. Each item below says what silently stops
+working without it — silently being the reason it is written down.
+
+| Setting | Where | Without it |
+| --- | --- | --- |
+| `CODECOV_TOKEN` secret, or OIDC | Settings → Secrets → Actions; or `use_oidc: true` on the upload step with `id-token: write` | Every upload is rejected — "Token required - not valid tokenless upload" in the step's log — and the step stays green, because it carries `fail_ci_if_error: false` so a Codecov outage cannot block a merge. No report is published and none of `codecov.yml`'s statuses runs. This repository is in that state today (QA-4 round fifteen, R15-5). Optional; the coverage *floors* are enforced by `scripts/check_coverage_floors.py` either way |
+| Allow auto-merge | Settings → General | `.github/workflows/dependabot-auto-merge.yml` fails on every Dependabot pull request: `gh pr merge --auto` is refused |
+| Branch protection on `main` | Settings → Branches | Nothing requires the checks to pass. `docs/governance/branch-protection.md` states the required set and `scripts/setup_branch_protection.sh` applies it |
+| Automatically delete head branches | Settings → General | Merged branches accumulate. **Before merging a pull request that another one is stacked on, retarget the dependent to `main`** — deleting its base branch makes GitHub close it rather than retarget it, which happened here once |
+
+`GITHUB_TOKEN` is provided by Actions and needs nothing. Every other secret a
+workflow reads must appear in this table: `tests/test_adoption_secrets.py`
+fails when one does not, because a secret added to CI and not to this page is
+one every fork will discover by its absence.
+
 ## Getting started
 
 ```bash
