@@ -741,6 +741,30 @@ R15-20 (MinIO), and W-14.
   — the Codecov secret, "Allow auto-merge", branch protection, automatic branch
   deletion — each with what silently stops working without it. A test fails on
   any secret a workflow reads that the guide does not name (QA-4 R11-7).
+- **The NetworkPolicies are now proven enforced, on a cluster rather than in a
+  renderer.** `tests/local/test_network_policies.py` and the local overlay,
+  which includes `platform/policies/` (QA-4 R11-2). Until now every claim about
+  these policies was about YAML: they rendered, `kubectl kustomize` exited
+  zero, and no packet had ever been dropped because of them — while two
+  documents asserted this could not be measured locally at all.
+
+  Measured on kindnetd v20250512: under `default-deny` a probe pod's DNS is
+  denied; `allow-dns` restores it; rewriting its peer selector the way
+  `commonLabels` once did denies it again; and Prometheus scrapes the serving
+  pod through `allow-serving-ingress` once the monitoring role label is on its
+  namespace. That is the round-ten P1 reproduced and then closed, against a
+  cluster.
+
+  **The test polls instead of sleeping, and that is a finding too.**
+  Propagation took 3s on one transition and 41s on another, so the first
+  attempt at this measurement — three-second waits — reported a denial that was
+  really a policy not yet in force, and would have shipped as proof of
+  something it had not shown.
+
+  Re-applying against a cluster created before the selector change is refused
+  for one resource: `spec.selector` is immutable. `platform/local/README.md`
+  carries the remedy, and records that the earlier entry claiming no cluster
+  ran the old manifests was wrong — the local one did.
 
 - **The namespaces the NetworkPolicies depend on are declared as data.**
   `platform/policies/namespace-contract.yaml` (QA-4 R11-1). The serving
@@ -1166,6 +1190,28 @@ R15-20 (MinIO), and W-14.
   scikit-learn, numpy and joblib, exactly the list. Three claims in the gate
   that had gone false are corrected, including that the artifact still pickled
   `ml_core` types.
+- **`make local-serve` reported success while the cluster served last week's
+  binary.** The image tag is fixed (`:local`), so a rebuilt image changed
+  nothing `kubectl apply` could see: no rollout, and the running pod kept the
+  old image. Found on 2026-09-30 while re-measuring the NetworkPolicy evidence
+  after the service was regenerated from ml-service-template v0.30.2 — the pod
+  was still running an image loaded a week earlier, so every L3 measurement
+  taken after that rebuild was measuring the previous service.
+
+  The target now restarts the rollout and waits for it, and
+  `tests/local/test_service_runs.py::test_the_pod_runs_the_image_that_was_loaded`
+  compares the running pod's image with the one the tag resolves to on the
+  node. Watched failing on the live cluster against the stale pod. Its first
+  version compared against `crictl images -q <ref>`, which ignores the
+  reference and lists every image on the node, so it "failed" against an
+  arbitrary image; it resolves the tag with `crictl inspecti` now.
+
+  Restarting the rollout opened a window the local tests had not met before:
+  the old pod lingers while it terminates, and the new pod has a new IP that
+  Prometheus has not scraped yet. The pod-iterating tests ignore pods being
+  deleted, and the scrape check polls to a bound of several scrape intervals
+  instead of looking once. Deploy and the full local suite, back to back: 40
+  passed.
 
 - **"Every CI job carries `timeout-minutes`" stopped being true a week after
   it was written.** The auto-merge workflow arrived with no bound, which is not

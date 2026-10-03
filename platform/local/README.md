@@ -68,6 +68,16 @@ Every one of these is asserted by `make local-verify`, not assumed:
 - A span sent to the collector **arrives in Jaeger**. Each hop can be green
   while the chain is broken: the collector can accept OTLP and drop it, or
   export to an endpoint nothing is listening on.
+- **The NetworkPolicies are enforced, and the wrong selector is denied.** Two
+  documents in this repository said kind could not show this — that its CNI
+  accepts a policy and enforces nothing. Measured instead, on kindnetd
+  v20250512: under `default-deny` a probe pod's DNS is denied; `allow-dns`
+  restores it; rewriting its peer selector the way `commonLabels` once did
+  denies it again; and Prometheus scrapes the serving pod through
+  `allow-serving-ingress` once the monitoring role label is on its namespace.
+  `tests/local/test_network_policies.py` is that measurement, and it polls
+  rather than sleeps — propagation took 3s once and 41s another time, so a
+  fixed short wait reports a denial that is really a policy not yet in force.
 
 ## What local validation CANNOT prove
 
@@ -92,6 +102,28 @@ claimed on the strength of a green local run.
 row of the right-hand table on the strength of a local run is exactly the
 class of false-but-confident statement
 [ADR-005](../../docs/decisions/ADR-005-agentic-governance.md) exists to prevent.
+
+## Re-applying after a selector change
+
+`spec.selector` on a Deployment is immutable. The round-eleven fix that
+replaced `commonLabels` with `labels` narrowed that selector from five labels
+to one, so `make local-serve` against a cluster created before it reports:
+
+```text
+The Deployment "demand-forecast" is invalid: spec.selector: field is immutable
+```
+
+Everything else applies; only that resource is refused. The remedy is to
+recreate it — the serving Deployment is stateless, and nothing here stores
+anything in it:
+
+```bash
+kubectl --context kind-ml-platform-local -n demand-forecast-local delete deployment demand-forecast
+make local-serve
+```
+
+This is recorded rather than smoothed over because the CHANGELOG entry for
+that change said no cluster was running the old manifests. One was: this one.
 
 ## What the first run actually found
 

@@ -122,6 +122,20 @@ VALID_REQUEST = {
 }
 
 
+def _serving_pods() -> list[dict]:  # type: ignore[type-arg]
+    """Pods with `app=demand-forecast` that are not being deleted.
+
+    `make local-serve` restarts the rollout, so for a few seconds after it the
+    previous pod is still listed while it terminates — Ready, and carrying
+    whatever restarts it accumulated. It is not the service any more. Counting
+    it made every test here that iterates pods a race against a teardown the
+    target itself had just started.
+    """
+    result = _kubectl("get", "pod", "-l", "app=demand-forecast", "-o", "json")
+    assert result.returncode == 0, result.stderr
+    return [pod for pod in json.loads(result.stdout)["items"] if not pod["metadata"].get("deletionTimestamp")]
+
+
 def test_the_pod_is_ready_and_has_not_restarted() -> None:
     """Ready once is not the claim. Ready without restarts is.
 
@@ -129,10 +143,7 @@ def test_the_pod_is_ready_and_has_not_restarted() -> None:
     Ready repeatedly, and a snapshot check catches it in the good half of the
     cycle. The restart count is what distinguishes the two.
     """
-    result = _kubectl("get", "pod", "-l", "app=demand-forecast", "-o", "json")
-    assert result.returncode == 0, result.stderr
-
-    pods = json.loads(result.stdout)["items"]
+    pods = _serving_pods()
     assert pods, "no pod matches app=demand-forecast"
 
     for pod in pods:
@@ -143,6 +154,47 @@ def test_the_pod_is_ready_and_has_not_restarted() -> None:
                 f"{pod['metadata']['name']}/{container['name']} restarted "
                 f"{container['restartCount']}x — a probe is failing after startup"
             )
+
+
+def test_the_pod_runs_the_image_that_was_loaded() -> None:
+    """A green `make local-serve` must mean the cluster serves what was just built.
+
+    The image tag is fixed (`:local`), so reloading a rebuilt image changed
+    nothing `kubectl apply` could see: no rollout, and the running pod kept the
+    old binary while the target reported success. Found on 2026-09-30 — after
+    the service was regenerated from ml-service-template v0.30.2, the pod was
+    still running an image loaded a week earlier, and every assertion in this
+    directory was measuring it.
+
+    Both identifiers come from containerd: the node's image store and the
+    pod's `imageID`. Docker's own image id is a different namespace and does
+    not compare with either.
+    """
+    node = "ml-platform-local-control-plane"
+    # `crictl inspecti`, not `crictl images -q <ref>`: the latter ignores the
+    # reference and lists EVERY image on the node, so its first line is an
+    # arbitrary image — the first version of this test compared against one,
+    # and "failed" for a reason unrelated to the defect it names. `inspecti`
+    # resolves the tag to the image it currently points at.
+    loaded = subprocess.run(
+        ["docker", "exec", node, "crictl", "inspecti", "ml-platform/demand-forecast:local"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if loaded.returncode != 0 or not loaded.stdout.strip():
+        pytest.skip(f"cannot read the node's image store: {(loaded.stdout + loaded.stderr).strip()[:200]}")
+    loaded_id = json.loads(loaded.stdout)["status"]["id"]
+
+    served = {pod["metadata"]["name"]: pod["status"]["containerStatuses"][0]["imageID"] for pod in _serving_pods()}
+    assert served, "no serving pod to compare"
+
+    for pod, image_id in served.items():
+        assert image_id.rsplit("@", 1)[-1] == loaded_id, (
+            f"{pod} runs {image_id}, but the image loaded into the node is {loaded_id}. The cluster is "
+            f"serving an older build than the one this measurement is about — run `make local-serve`, which "
+            f"now restarts the rollout"
+        )
 
 
 def test_readiness_and_liveness_answer_over_http() -> None:

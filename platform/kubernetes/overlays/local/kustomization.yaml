@@ -2,24 +2,25 @@
 # one is applied to a kind cluster and its pod either reaches Ready or does
 # not, which is a different and much harder claim.
 #
-# Two things the cloud overlays carry are deliberately absent:
+# One thing the cloud overlays carry is deliberately absent:
 #
 #   - `../../base/secrets` and `secret-store.yaml` need the External Secrets
 #     CRDs and a cloud identity. Installing them here would test a mock of the
-#     thing rather than the thing.
-#   - `../../../policies` are `networking.k8s.io/v1` NetworkPolicies, not
-#     Kyverno policies as this comment said until QA-4 round nine. Its
-#     replacement reason was ALSO wrong, and round eleven proved it on a live
-#     cluster: kind's CNI, kindnetd, does enforce NetworkPolicy — a default-deny
-#     there timed DNS out. So they are absent for a different reason: the
-#     serving policies select `monitoring` and `ingress-nginx` namespaces by
-#     labels nothing here provisions, and applying them would cut Prometheus
-#     off the pod. Recorded as round-eleven items in
-#     docs/governance/remediation-work-order.md, which is where applying them
-#     here — with an enforcement probe — waits.
+#     thing rather than the thing. `secret.yaml` supplies the Secret they would
+#     have produced, with values that are not secrets and say so — without it
+#     the container cannot start at all, which went unnoticed for weeks because
+#     a running pod does not re-resolve its Secret.
+#   The NetworkPolicies under `../../../policies` ARE included, and that took
+#   two corrections. This comment first called them Kyverno policies; then it
+#   said kind cannot enforce NetworkPolicy at all. Both were wrong. Measured on
+#   this cluster with kindnetd v20250512: under `default-deny` a probe pod's
+#   DNS is denied, `allow-dns` restores it, rewriting the peer selector denies
+#   it again, and Prometheus scrapes the serving pod through
+#   `allow-serving-ingress` once the monitoring role label is on its namespace.
+#   `tests/local/test_network_policies.py` is that measurement, kept.
 #
-# Both are named here rather than silently omitted, so the difference between
-# "runs locally" and "runs in a cloud" stays legible.
+# The secrets half is still named rather than silently omitted, so the
+# difference between "runs locally" and "runs in a cloud" stays legible.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -28,7 +29,9 @@ namespace: demand-forecast-local
 resources:
   - namespace.yaml
   - prometheus-rbac.yaml
+  - secret.yaml
   - ../../base
+  - ../../../policies
 
 patches:
   - path: local-runtime.yaml
