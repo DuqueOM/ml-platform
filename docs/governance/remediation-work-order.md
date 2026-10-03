@@ -693,6 +693,11 @@ module root the pickle references is importable in the image.
 
 ### R11-4 — The serving-seam gate compares a hand-written package list
 
+> **Status: done** — *fix(gates): hold the serving-seam package list to the artifact itself*. The portability test
+> records every module the loader resolves while reading a real artifact and fails if one belongs to a package
+> `SEAM` does not compare. Measured: scikit-learn, numpy, joblib — exactly `SEAM`. Runtime-only imports (scipy
+> under scikit-learn) are out of scope by decision, and the gate says so.
+
 **Mode**: AUTO after R11-3 · **Source**: round eleven P2 · **Size**: ~2h
 
 `SEAM` names numpy, scikit-learn and joblib. A straddle in any other package

@@ -50,13 +50,23 @@ straddle is reportable, but a new numpy straddle still hides behind its
 exemption, and a straddle OUTSIDE the seam — scipy, pandas — is not
 looked at (QA-4 round eleven put both in the container's requirements and got
 OK). A new straddle becomes reportable only by adding its package to `SEAM`
-without an exemption, and `SEAM` is still a hand-written list rather than the
-module roots the pickled object graph actually references. Nor does it check
-that those roots are importable in the container at all: the artifact pickles
-`ml_core` types and the image installs no workspace library — recorded against
-ADR-008, whose interface decision owns it. Shipping it red would mean shipping a red CI step, and a red step is
-one people learn to skip; shipping it with no exemption mechanism would mean
-deleting the finding to get green, which is worse.
+without an exemption. `SEAM` is written by hand, and is held to the artifact
+rather than trusted: `projects/demand-forecast/tests/test_artifact_portability.py`
+builds a real artifact, records every module the loader resolves while reading
+it, and fails if one of them belongs to a package this list does not compare
+(QA-4 R11-4). Measured when that test landed: the artifact needs exactly
+scikit-learn, numpy and joblib. It no longer pickles workspace types — that
+closed with R11-3 — so nothing here needs `ml_core` in the container.
+
+What the pickle cannot show, stated rather than implied: packages a module
+imports at RUNTIME without any of its classes being serialised. scikit-learn
+imports scipy, and a scipy straddle could change behaviour without appearing in
+the object graph. That is a dependency-drift question with a different answer
+than this gate's, and it is out of scope here by decision, not by omission.
+
+Shipping it red would mean shipping a red CI step, and a red step is one people
+learn to skip; shipping it with no exemption mechanism would mean deleting the
+finding to get green, which is worse.
 
 The exemption expires mechanically, not on a promise: it lifts the day ADR-008
 stops saying `Status: Proposed`. An exemption whose end condition is a date
@@ -105,8 +115,8 @@ SEAM = ("numpy", "scikit-learn", "joblib")
 
 #: Straddles that exist and are already the subject of a recorded decision.
 #: Each names what closes it. A straddling `SEAM` package absent from this
-#: mapping fails the gate — which today means none can, since every `SEAM`
-#: package is listed; see the module docstring. An entry whose straddle has been
+#: mapping fails the gate — today a scikit-learn or joblib straddle would, since
+#: only numpy is exempt. An entry whose straddle has been
 #: fixed also fails it, because an exemption that outlives its cause is how a
 #: list like this becomes the place findings go to die. Every key must be in
 #: `SEAM`: an exemption for a package the gate never compares can never be

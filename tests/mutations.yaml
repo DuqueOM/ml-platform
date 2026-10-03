@@ -1040,3 +1040,11 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py
   expect: killed
+- id: SM1
+  origin: R11-4 seam held to the artifact, author
+  file: scripts/check_artifact_compatibility.py
+  old: SEAM = ("numpy", "scikit-learn", "joblib")
+  new: SEAM = ("numpy", "joblib")
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_artifact_portability.py
+  expect: killed

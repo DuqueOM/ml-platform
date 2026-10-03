@@ -17,6 +17,7 @@ the defect it exists to catch.
 
 from __future__ import annotations
 
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -127,3 +128,62 @@ def test_a_reconstructed_model_matches_the_one_that_was_saved(artifact: Path) ->
     assert restored.conformal.n_calibration == payload["conformal_n_calibration"]
     assert restored.feature_columns == tuple(payload["feature_columns"])
     assert restored.conformal.alpha == payload["alpha"]
+
+
+# --- the seam gate compares every package the artifact needs (QA-4 R11-4) ----
+
+
+def _packages_the_artifact_needs(path: Path) -> set[str]:
+    """Distributions whose classes the loader resolves while reading `path`.
+
+    Recorded through joblib's own unpickler rather than by disassembling the
+    file: joblib embeds raw numpy buffers in the stream, so `pickletools` stops
+    at the first one with "opcode unknown". Loading here is safe — the
+    artifact is this test's own.
+    """
+    import importlib.metadata
+    import sys as _sys
+
+    from joblib import numpy_pickle
+
+    roots: set[str] = set()
+    original = numpy_pickle.NumpyUnpickler.find_class
+
+    def recording(self, module: str, name: str):  # type: ignore[no-untyped-def]
+        roots.add(module.split(".")[0])
+        return original(self, module, name)
+
+    numpy_pickle.NumpyUnpickler.find_class = recording  # type: ignore[method-assign]
+    try:
+        joblib.load(path)
+    finally:
+        numpy_pickle.NumpyUnpickler.find_class = original  # type: ignore[method-assign]
+
+    distributions = importlib.metadata.packages_distributions()
+    needed = set()
+    for root in roots:
+        if root in _sys.stdlib_module_names or root == "builtins":
+            continue
+        needed.update(distributions.get(root, [root]))
+    return needed
+
+
+def test_every_package_the_artifact_needs_is_compared_across_the_seam(artifact: Path) -> None:
+    """`SEAM` in check_artifact_compatibility.py is written by hand; this holds it to the artifact.
+
+    Gate P14 compares versions only for the packages in `SEAM`. A model change
+    that put a new package's classes into the pickle would leave that package's
+    version unchecked between training and serving, and the gate would stay
+    green. Measured when this landed: scikit-learn, numpy and joblib — exactly
+    `SEAM`.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "scripts"))
+    from check_artifact_compatibility import SEAM
+
+    needed = _packages_the_artifact_needs(artifact)
+    assert needed, "the artifact resolved no package at all — the recording broke, not the seam"
+    missing = needed - set(SEAM)
+    assert not missing, (
+        f"the artifact needs {sorted(missing)}, which gate P14 does not compare. Add them to SEAM in "
+        f"scripts/check_artifact_compatibility.py, or a version straddle there passes the gate"
+    )

@@ -1151,6 +1151,15 @@ R15-20 (MinIO), and W-14.
   default: unset is a refusal, `local` is the local stack, `glue` and
   `biglake` are refused by name until their adapters exist. A test pins the
   class — no public function may default its catalogue again.
+- **The serving-seam gate's package list is held to the artifact, not
+  trusted.** QA-4 R11-4. Gate P14 compares training and serving versions for a
+  hand-written list of packages. The portability test now records every module
+  joblib's loader resolves while reading a real artifact and fails if one
+  belongs to a package the gate does not compare — so a model change that pulls
+  a new package into the pickle cannot leave its version unchecked. Measured:
+  scikit-learn, numpy and joblib, exactly the list. Three claims in the gate
+  that had gone false are corrected, including that the artifact still pickled
+  `ml_core` types.
 
 - **"Every CI job carries `timeout-minutes`" stopped being true a week after
   it was written.** The auto-merge workflow arrived with no bound, which is not
