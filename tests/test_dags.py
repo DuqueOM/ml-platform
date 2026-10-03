@@ -179,12 +179,21 @@ def catalog(monkeypatch: pytest.MonkeyPatch) -> object:
     return configured
 
 
+#: The snapshot `ingest_month` wrote, carried through every later task.
+SNAPSHOT = 42
+
+
 def _read_from(catalog: object, table: object) -> Callable[..., object]:
-    """A `read_demand` that refuses any call but one naming the configured catalogue."""
+    """A `read_demand` that refuses any call but one naming the configured catalogue AND the run's snapshot.
+
+    The snapshot half is R15-14: every task read the table's current head, so
+    a writer committing between validation and training — the KFP pipeline, a
+    manual ingest — would have the DAG train on data it never validated.
+    """
 
     def read_demand(*args: object, **kwargs: object) -> object:
         assert args == (catalog,), f"read the lakehouse with {args}, not the configured catalogue"
-        assert not kwargs, f"read the lakehouse with {kwargs}"
+        assert kwargs == {"snapshot_id": SNAPSHOT}, f"read {kwargs}, not the snapshot this run wrote"
         return table
 
     return read_demand
@@ -309,7 +318,7 @@ def test_validate_warehouse_stops_the_run_before_training(  # type: ignore[no-un
     monkeypatch.setattr(warehouse_checks, "check_density", lambda table, **k: (dense, 0.5))
 
     with pytest.raises(ValueError, match=failure):
-        _body(dagbag, "validate_warehouse")({"month": "2024-03"})
+        _body(dagbag, "validate_warehouse")({"month": "2024-03", "snapshot_id": SNAPSHOT})
 
 
 def test_validate_warehouse_passes_the_ingest_result_on_with_its_density(  # type: ignore[no-untyped-def]
@@ -323,9 +332,9 @@ def test_validate_warehouse_passes_the_ingest_result_on_with_its_density(  # typ
     monkeypatch.setattr(warehouse_checks, "validate_warehouse", _record(calls, "validate_warehouse", verdict))
     monkeypatch.setattr(warehouse_checks, "check_density", _record(calls, "check_density", (True, 0.99)))
 
-    result = _body(dagbag, "validate_warehouse")({"month": "2024-03", "snapshot_id": 42})
+    result = _body(dagbag, "validate_warehouse")({"month": "2024-03", "snapshot_id": SNAPSHOT})
 
-    assert result == {"month": "2024-03", "snapshot_id": 42, "density": 0.99}
+    assert result == {"month": "2024-03", "snapshot_id": SNAPSHOT, "density": 0.99}
     # Both checks ran against the table that was read, not a stale copy.
     assert calls == [("validate_warehouse", ("table",), {}), ("check_density", ("table",), {})]
 
@@ -350,7 +359,7 @@ def test_backtest_model_returns_plain_floats_for_xcom(  # type: ignore[no-untype
     monkeypatch.setattr(lakehouse, "read_demand", _read_from(catalog, "table"))
     monkeypatch.setattr(train, "evaluate", _record(calls, "evaluate", train.BacktestReport(folds=[fold], seed=42)))
 
-    result = _body(dagbag, "backtest_model")({"month": "2024-03"})
+    result = _body(dagbag, "backtest_model")({"month": "2024-03", "snapshot_id": SNAPSHOT})
 
     # The DAG backtests with `evaluate`'s own defaults and overrides none. The
     # stub used to swallow any keyword, so `n_folds=3` here — the pipeline's
@@ -359,7 +368,14 @@ def test_backtest_model_returns_plain_floats_for_xcom(  # type: ignore[no-untype
     # the one in force until that is decided.
     assert calls == [("evaluate", ("table",), {})]
 
-    assert result == {"month": "2024-03", "skill": 0.25, "coverage": 0.9, "model_mae": 3.0, "baseline_mae": 4.0}
+    assert result == {
+        "month": "2024-03",
+        "snapshot_id": SNAPSHOT,
+        "skill": 0.25,
+        "coverage": 0.9,
+        "model_mae": 3.0,
+        "baseline_mae": 4.0,
+    }
     for key in ("skill", "coverage", "model_mae", "baseline_mae"):
         assert type(result[key]) is float, f"{key} is {type(result[key]).__name__}, not float"
 
@@ -376,13 +392,14 @@ def test_publish_model_fits_on_all_history_and_merges_the_metadata(  # type: ign
     metadata = {"version": "v1", "trained_through": "2024-03-31T23:00:00"}
     monkeypatch.setattr(persist, "save", _record(calls, "save", metadata))
 
-    result = _body(dagbag, "publish_model")({"skill": 0.2, "coverage": 0.9})
+    result = _body(dagbag, "publish_model")({"skill": 0.2, "coverage": 0.9, "snapshot_id": SNAPSHOT})
 
     assert calls == [
         ("fit_final", ("history",), {}),
-        ("save", ("model", Path("models/demand_forecast.joblib")), {}),
+        # The snapshot reaches the sidecar, so the model's input can be read back.
+        ("save", ("model", Path("models/demand_forecast.joblib")), {"source_snapshot": SNAPSHOT}),
     ]
-    assert result == {"skill": 0.2, "coverage": 0.9, **metadata}
+    assert result == {"skill": 0.2, "coverage": 0.9, "snapshot_id": SNAPSHOT, **metadata}
 
 
 def test_the_dag_gates_on_a_five_fold_backtest() -> None:

@@ -216,7 +216,7 @@ def _payload(model: ForecastModel) -> dict[str, Any]:
     }
 
 
-def save(model: ForecastModel, path: Path) -> dict[str, Any]:
+def save(model: ForecastModel, path: Path, *, source_snapshot: int | None = None) -> dict[str, Any]:
     """Write the artifact and a readable metadata sidecar.
 
     The sidecar is not decoration. Everything an operator needs to answer "what
@@ -228,6 +228,11 @@ def save(model: ForecastModel, path: Path) -> dict[str, Any]:
         model: From :func:`fit_final`.
         path: Destination for the joblib artifact. The sidecar is written
             beside it with a ``.json`` suffix.
+        source_snapshot: The lakehouse snapshot the model was fitted on, when
+            the caller read one. Recorded so the exact training input can be
+            read back with ``read_demand(..., snapshot_id=...)``; a date alone
+            cannot do that, because a month's contents can be rewritten.
+            ``None`` when the input did not come from the lakehouse.
 
     Returns:
         The metadata written, including ``version``.
@@ -254,6 +259,7 @@ def save(model: ForecastModel, path: Path) -> dict[str, Any]:
         "nominal_coverage": 1.0 - model.alpha,
         "feature_columns": list(model.feature_columns),
         "seed": model.seed,
+        "source_snapshot": source_snapshot,
     }
     path.with_suffix(".json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
     return metadata
