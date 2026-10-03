@@ -112,10 +112,19 @@ local-dashboards: ## Sync platform/observability/dashboards/ into Grafana
 	kubectl --context $(CTX) -n ml-platform rollout status deploy/grafana --timeout=180s
 
 .PHONY: local-serve
-local-serve: ## Build the service image, load it into kind, and wait for a Ready pod
+local-serve: ## Build the service image, load it into kind, roll the Deployment onto it, and wait for Ready
 	docker build -t $(SERVICE_IMAGE) services/demand-forecast-serving
 	kind load docker-image $(SERVICE_IMAGE) --name $(CLUSTER)
 	kubectl --context $(CTX) apply -k platform/kubernetes/overlays/local
+	# The tag is fixed, so a rebuilt image changes nothing `apply` can see: the
+	# Deployment is identical, no rollout happens, and the running pod keeps the
+	# OLD binary while this target reports success. Measured 2026-09-30: after a
+	# rebuild from ml-service-template v0.30.2 the pod still ran the image loaded
+	# a week earlier, and every L3 measurement taken after it measured that.
+	# Restarting the rollout is what makes a rebuild reach the cluster, and
+	# tests/local/test_service_runs.py checks that it did.
+	kubectl --context $(CTX) -n $(SERVICE_NS) rollout restart deployment/demand-forecast
+	kubectl --context $(CTX) -n $(SERVICE_NS) rollout status deployment/demand-forecast --timeout=300s
 	@echo "waiting for a Ready pod — the first claim in this repository that is not about YAML…"
 	kubectl --context $(CTX) -n $(SERVICE_NS) wait --for=condition=ready \
 	  pod -l app=demand-forecast --timeout=300s
