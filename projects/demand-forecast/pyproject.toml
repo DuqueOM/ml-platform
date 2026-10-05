@@ -10,7 +10,7 @@ dependencies = [
     # pyiceberg-core: the Rust transforms. Required for PARTITIONED writes; a
     # missing extra surfaces as NotInstalledError at the first partitioned
     # write, not at install.
-    "pyiceberg[s3fs,sql-sqlite,pyiceberg-core]~=0.10",
+    "pyiceberg[s3fs,sql-sqlite,pyiceberg-core]~=0.12",
     # Explicit: pyiceberg accepts Arrow tables but does not pull pyarrow, and
     # the failure is an ImportError at first write rather than at install.
     "pyarrow~=21.0",
