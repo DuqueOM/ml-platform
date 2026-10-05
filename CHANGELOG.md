@@ -18,6 +18,46 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Fixed — the Trivy gate could not fail, and a critical CVE sat behind it; five dependency updates
+
+- **"BLOCKING" Trivy step that could not block.** Its comment said blocking
+  and it had no `exit-code`; trivy-action's default is `"0"`. So it passed with
+  a CRITICAL in `uv.lock` — pyjwt 2.13.0, CVE-2026-102268 — and seven HIGHs in
+  pyjwt and urllib3, all visible in code scanning since they were published
+  and none failing a build. Found when Dependabot's #116 surfaced them; they
+  were on `main`, not introduced by it. The gate is now its own step with
+  `exit-code: "1"` and table output, because SARIF ignores the severity filter
+  and would fail on LOW; a second step reports every severity to code scanning
+  and never blocks.
+- **`tests/test_security_controls.py` read the absent key as blocking.** It
+  knew `exit-code: "0"` written out, and not an action whose default is not to
+  fail. It knows now, and the mutation that drops the gate's exit code is
+  killed (DEP1).
+- **The two CVEs are fixed.** pyjwt 2.13.0 → 2.15.1 (fixed in 2.14.0;
+  CVE-2026-102268 and twelve more). urllib3 2.7.0 → 2.8.0 (CVE-2026-97687,
+  -97688, -97689) through a `[tool.uv]` override, because kfp 2.17.0 — the
+  latest release — pins `urllib3==2.7.0` exactly; kfp is used here only to
+  compile pipeline specifications. `tests/test_dependency_overrides.py` fails
+  the day kfp admits the fixed version, so the override cannot outlive its
+  reason. Trivy over the tree, as CI runs it: 8 findings (1 CRITICAL) on `main`,
+  0 on this change.
+- **Dependabot's five updates, verified and applied together** — one commit
+  where five would have spent the audit-grace budget C7 has left: mypy 2.4,
+  ruff 0.16.10, duckdb 1.5.6, pyiceberg 0.12, coverage 7.16 and pyarrow 25.
+  #116–#120 are closed as superseded.
+- **The lakehouse tests ran nowhere, so the pyiceberg and pyarrow upgrades
+  were verified by nothing.** Their only backend was MinIO, which CI deselects
+  and whose image can no longer be pulled (R15-20). The same seven tests now
+  also run against `local_catalog()` with a `file://` warehouse — real Iceberg
+  snapshots, real Parquet — on every build (mutation LH1).
+- **pre-commit's ruff was not CI's ruff, and it rewrote generated code.** The
+  hook pinned v0.16.1 against a locked 0.16.9; aligned to 0.16.10, its first
+  run rewrote 15 Markdown files under `services/` — ruff now formats Python
+  blocks inside Markdown, and `services/` carries its own pyproject.toml, so
+  the root exclusions never reached the hook. The hooks exclude `services/`,
+  and `tests/test_tool_versions.py` holds both the version and the exclusions
+  to the lock and to `[tool.ruff]` (DEP3, DEP4).
+
 ### Fixed — the DAG trained on data it never validated (QA-4 round fifteen, R15-14)
 
 - **Every task after ingest reads the snapshot the run wrote.** `ingest_month`
