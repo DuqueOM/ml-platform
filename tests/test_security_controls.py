@@ -77,6 +77,11 @@ def _mentions(step: dict, tool: str) -> bool:  # type: ignore[type-arg]
     return tool.lower() in haystack
 
 
+#: Actions that do NOT fail the build unless told to, and the key that tells
+#: them. Absent means the default, and the default is "report and pass".
+_NON_BLOCKING_BY_DEFAULT = {"aquasecurity/trivy-action": "exit-code"}
+
+
 def _blocks(step: dict, job: dict | None = None) -> bool:  # type: ignore[type-arg]
     """A step blocks unless something, anywhere, tells it not to.
 
@@ -114,6 +119,16 @@ def _blocks(step: dict, job: dict | None = None) -> bool:  # type: ignore[type-a
         return False
     if str(with_block.get("exit-code", "")).strip() == "0":
         return False
+    # The FIFTH spelling, and the quietest: saying nothing. An action whose
+    # default is not to fail suppresses its exit status when the key is simply
+    # absent. trivy-action's `exit-code` defaults to "0", so the Trivy step —
+    # whose comment said "BLOCKING" — passed with a CRITICAL pyjwt CVE in
+    # uv.lock, and this function, which knew `exit-code: "0"` written out,
+    # read the absence as blocking (dependency-update round, 2026-10-05).
+    uses = str(step.get("uses", ""))
+    for action, key in _NON_BLOCKING_BY_DEFAULT.items():
+        if action in uses and str(with_block.get(key, "0")).strip() == "0":
+            return False
 
     # `|| true` and `; true` swallow the exit status inside the shell, where no
     # YAML key records it.
@@ -160,8 +175,9 @@ def test_a_control_claimed_blocking_can_actually_fail_the_build(control: str, to
     assert steps, f"{tool} is claimed blocking and invoked nowhere"
     assert any(_blocks(step, job) for step, job in steps), (
         f"SECURITY.md claims {control!r} blocks the build, but every step invoking {tool} suppresses its "
-        f"exit status. Six spellings do that: `continue-on-error` on the step OR on the job, "
-        f'`soft_fail`, `exit-code: "0"`, `if: false`, and `|| true` inside the run body. '
+        f"exit status. Seven spellings do that: `continue-on-error` on the step OR on the job, "
+        f'`soft_fail`, `exit-code: "0"` — or no `exit-code` at all, Trivy\'s default — `if: false`, '
+        f"and `|| true` inside the run body. "
         f"Either remove the suppression or change the row to advisory."
     )
 

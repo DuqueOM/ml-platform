@@ -595,7 +595,7 @@ P17 holds `demand-forecast` at 79% lines / 65% branches and `store-assistant` at
 | File | Measured | What is missing |
 | --- | --- | --- |
 | `demand_forecast/crossover.py` | 0% of 59 statements | Nothing tests it. The scaling curve and the projection are pure arithmetic over measured points and can be tested on synthetic ones |
-| `demand_forecast/lakehouse.py` | 51% | `test_lakehouse.py` is `integration`-marked because it needs MinIO, so the default suite reaches half the module. A SQLite-backed Iceberg catalog over `tmp_path` exercises the same code with no service. **Wait for #106**, which rewrites the catalog handling |
+| ~~`demand_forecast/lakehouse.py`~~ | ~~51%~~ | **Done** in the dependency round: the seven lakehouse tests also run against `local_catalog()` with a `file://` warehouse on every build, and demand-forecast's floors were ratcheted to 83% lines / 71% branches |
 | `store_assistant/tools.py` | 79%, 4 partial branches | Lines 52, 66, 76, 93 and 110–114: the refusal paths of the tools |
 | `demand_forecast/train.py`, `tracing.py`, `backtest.py` | 85–89% | A handful of guard clauses each |
 

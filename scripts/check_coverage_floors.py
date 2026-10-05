@@ -119,10 +119,14 @@ SCRIPTS_COMBINED_FLOOR = 86
 #:   store-assistant 85.25% lines, 57.14% branches
 #:   orchestration/  100% — the task bodies had no test before this change,
 #:                   and measured 33.85% / 0% (dags), 35.29% / 0% (pipelines)
-PROJECTS_COMBINED_FLOOR = 81
+#:
+#: Ratcheted 2026-10-05, when the lakehouse tests gained a filesystem catalogue
+#: and ran on every build for the first time: projects/ 82.11% -> 84.62%
+#: combined, demand-forecast 79.70% / 67.35% -> 83.25% / 71.43%.
+PROJECTS_COMBINED_FLOOR = 84
 ORCHESTRATION_COMBINED_FLOOR = 100
 ML_PACKAGES = {
-    "projects/demand-forecast": PackageFloor(lines=79, branches=65),
+    "projects/demand-forecast": PackageFloor(lines=83, branches=71),
     "projects/rag-assistant": PackageFloor(lines=96, branches=90),
     "projects/store-assistant": PackageFloor(lines=85, branches=57),
     "orchestration/dags": PackageFloor(lines=100, branches=100),

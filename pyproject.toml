@@ -37,8 +37,8 @@ dev = [
     # `scripts/check_coverage_floors.py` imports it to read the data. It was
     # only ever present as pytest-cov's dependency, and available is not
     # declared. 7.10 is where `patch = ["subprocess"]` arrived.
-    "coverage~=7.15",
-    "mypy~=2.3",
+    "coverage~=7.16",
+    "mypy~=2.4",
     "ruff~=0.16",
     # Without stubs, every `import yaml` in scripts/ is an error under the
     # widened type gate — and silently untyped under the narrow one.
@@ -50,6 +50,23 @@ dev = [
 # whole value proposition (ADR-001).
 [tool.uv.workspace]
 members = ["libs/*", "projects/*"]
+
+[tool.uv]
+# Security overrides: a dependency pinned EXACTLY to a vulnerable release by a
+# package that has not published a fix. Each entry names the CVEs it closes and
+# the pin it overrides, and `tests/test_dependency_overrides.py` fails the day
+# the pinning package admits the fixed version — so an override cannot outlive
+# its reason.
+#
+# urllib3 >= 2.8.0 fixes CVE-2026-97687 (HIGH, traffic interception through an
+# HTTPS proxy's TLS configuration), CVE-2026-97689 (HIGH, unbounded memory) and
+# CVE-2026-97688. kfp 2.17.0 — the latest release — pins `urllib3==2.7.0`.
+# This repository uses kfp only to COMPILE pipeline specifications, never as a
+# client of a KFP server, and `tests/test_pipeline_spec.py` compiles it under
+# the override; airflow, botocore, google-cloud-storage and great-expectations
+# all reach urllib3 through `requests`, so the fix covers code that does make
+# HTTP requests.
+override-dependencies = ["urllib3>=2.8.0"]
 
 [tool.uv.sources]
 ml-core = { workspace = true }

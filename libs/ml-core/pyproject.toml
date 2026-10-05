@@ -8,7 +8,7 @@ dependencies = [
     # models in practice, and a bare >= would let that in silently.
     "numpy~=2.1",
     "polars~=1.44",
-    "duckdb~=1.1",
+    "duckdb~=1.5",
     "scikit-learn~=1.9",
 ]
 

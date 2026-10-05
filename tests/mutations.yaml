@@ -1088,3 +1088,43 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_persist.py
   expect: killed
+- id: DEP1
+  origin: dependency round — the Trivy gate's exit code dropped back to the action default
+  file: .github/workflows/ci.yml
+  old: '          exit-code: "1"'
+  new: '          format: table'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_security_controls.py
+  expect: killed
+- id: DEP2
+  origin: dependency round — the urllib3 security override removed
+  file: pyproject.toml
+  old: 'override-dependencies = ["urllib3>=2.8.0"]'
+  new: 'override-dependencies = []'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependency_overrides.py
+  expect: killed
+- id: DEP3
+  origin: dependency round — the pre-commit ruff hook drifts from the locked ruff
+  file: .pre-commit-config.yaml
+  old: '    rev: v0.16.10'
+  new: '    rev: v0.16.1'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_tool_versions.py
+  expect: killed
+- id: DEP4
+  origin: dependency round — the ruff hooks reach generated code again
+  file: .pre-commit-config.yaml
+  old: "        exclude: '^(templates/project|services)/'\n      - id: ruff-format"
+  new: "        exclude: '^templates/project/'\n      - id: ruff-format"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_tool_versions.py
+  expect: killed
+- id: LH1
+  origin: dependency round — time travel ignored, caught on the filesystem catalogue
+  file: projects/demand-forecast/src/demand_forecast/lakehouse.py
+  old: '    scan = table.scan(snapshot_id=snapshot_id) if snapshot_id is not None else table.scan()'
+  new: '    scan = table.scan()'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_lakehouse.py
+  expect: killed
