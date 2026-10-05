@@ -37,7 +37,7 @@ dev = [
     # `scripts/check_coverage_floors.py` imports it to read the data. It was
     # only ever present as pytest-cov's dependency, and available is not
     # declared. 7.10 is where `patch = ["subprocess"]` arrived.
-    "coverage~=7.15",
+    "coverage~=7.16",
     "mypy~=2.3",
     "ruff~=0.16",
     # Without stubs, every `import yaml` in scripts/ is an error under the
