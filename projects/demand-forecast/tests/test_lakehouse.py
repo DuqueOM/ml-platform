@@ -1,10 +1,18 @@
 """Iceberg gives reproducibility only if time travel actually works.
 
-These run against the local MinIO stack and are skipped when it is absent, so
-the default suite stays runnable without Docker. They are integration tests by
-rule 03-testing's trigger — the code crosses a boundary it does not own — and
-they use the REAL object store rather than a mock, because a mocked S3 tests
-the mock.
+Every test runs against TWO backends of the same `local_catalog()`:
+
+- **filesystem** — the SQL catalogue with a `file://` warehouse under
+  `tmp_path`. Real pyiceberg, real pyarrow, real Parquet and real snapshots;
+  only the object store is a directory. It runs in every suite, CI included.
+- **minio** — the local stack's S3 endpoint. An integration test by rule
+  03-testing's trigger (the code crosses a boundary it does not own), skipped
+  when the stack is absent. A mocked S3 would test the mock, so there is none.
+
+The filesystem half exists because the MinIO half ran nowhere: CI deselects
+`integration`, and the stack's image can no longer be pulled (R15-20). So a
+pyiceberg 0.11 -> 0.12 and pyarrow 21 -> 25 upgrade had no test that wrote a
+table — this module's seven properties were verified by nothing on any build.
 """
 
 from __future__ import annotations
@@ -22,12 +30,6 @@ def _minio_up() -> bool:
             return True
     except OSError:
         return False
-
-
-pytestmark = [
-    pytest.mark.integration,
-    pytest.mark.skipif(not _minio_up(), reason="local stack not running — run `make local-up`"),
-]
 
 
 def _demand_at(zone: int, when: datetime, count: int) -> pl.DataFrame:
@@ -59,15 +61,24 @@ def _demand(zone: int, hour: int, count: int) -> pl.DataFrame:
     )
 
 
-@pytest.fixture
-def catalog(tmp_path):  # type: ignore[no-untyped-def]
+@pytest.fixture(
+    params=[
+        pytest.param("filesystem"),
+        pytest.param(
+            "minio",
+            marks=[
+                pytest.mark.integration,
+                pytest.mark.skipif(not _minio_up(), reason="local stack not running — run `make local-up`"),
+            ],
+        ),
+    ]
+)
+def catalog(request, tmp_path):  # type: ignore[no-untyped-def]
     """A catalogue isolated per test, so one test cannot see another's writes."""
     from demand_forecast.lakehouse import local_catalog
 
-    return local_catalog(
-        warehouse_uri="s3://lakehouse/",
-        catalog_db=f"sqlite:///{tmp_path}/catalog.db",
-    )
+    warehouse = f"file://{tmp_path}/warehouse" if request.param == "filesystem" else "s3://lakehouse/"
+    return local_catalog(warehouse_uri=warehouse, catalog_db=f"sqlite:///{tmp_path}/catalog.db")
 
 
 def test_a_write_returns_a_citable_snapshot(catalog) -> None:  # type: ignore[no-untyped-def]
