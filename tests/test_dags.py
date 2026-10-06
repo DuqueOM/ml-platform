@@ -199,49 +199,58 @@ def _read_from(catalog: object, table: object) -> Callable[..., object]:
     return read_demand
 
 
-def test_the_quality_gate_passes_a_model_at_both_floors(dagbag) -> None:  # type: ignore[no-untyped-def]
-    """The floors are inclusive, and a passing gate hands the metrics on unchanged.
+@pytest.mark.parametrize("bound", ["floors", "ceiling"])
+def test_the_quality_gate_passes_a_model_at_its_bounds(dagbag, bound: str) -> None:  # type: ignore[no-untyped-def]
+    """Every bound is inclusive, and a passing gate hands the metrics on unchanged.
 
-    Read from the body's own module rather than restated, so this test cannot
-    hold a stale copy of a watched threshold.
+    Read from `demand_forecast.promotion`, the one definition both
+    orchestrators call, so this test cannot hold a stale copy of a watched
+    threshold (W-14).
     """
-    gate = _body(dagbag, "check_quality_gate")
-    floors = {"skill": gate.__globals__["MIN_SKILL"], "coverage": gate.__globals__["MIN_COVERAGE"]}
+    from demand_forecast import promotion
 
-    assert gate(dict(floors, month="2024-03")) == dict(floors, month="2024-03")
+    gate = _body(dagbag, "check_quality_gate")
+    coverage = promotion.MIN_COVERAGE if bound == "floors" else promotion.MAX_COVERAGE
+    metrics = {"skill": promotion.MIN_SKILL, "coverage": coverage, "month": "2024-03"}
+
+    assert gate(dict(metrics)) == metrics
 
 
 @pytest.mark.parametrize(
-    ("skill_offset", "coverage_offset", "expected"),
+    ("skill_offset", "coverage", "expected"),
     [
-        pytest.param(-0.01, 0.0, ["skill"], id="skill-only"),
-        pytest.param(0.0, -0.01, ["interval coverage"], id="coverage-only"),
+        pytest.param(-0.01, "floor", ["skill"], id="skill-only"),
+        pytest.param(0.0, "under", ["is below 0.85"], id="under-covered"),
+        # The DAG's own copy had no ceiling and promoted this (W-14).
+        pytest.param(0.0, "over", ["is above 0.95"], id="over-covered"),
         # Both reported in ONE failure: an operator who fixes skill and then
         # meets the coverage failure on the next run paid two cycles for one
         # lesson, which is what the body's docstring promises not to do.
-        pytest.param(-0.01, -0.01, ["skill", "interval coverage"], id="both"),
+        pytest.param(-0.01, "under", ["skill", "is below 0.85"], id="both"),
     ],
 )
-def test_the_quality_gate_raises_and_names_every_floor_missed(  # type: ignore[no-untyped-def]
-    dagbag, skill_offset: float, coverage_offset: float, expected: list[str]
+def test_the_quality_gate_raises_and_names_every_rule_missed(  # type: ignore[no-untyped-def]
+    dagbag, skill_offset: float, coverage: str, expected: list[str]
 ) -> None:
     """A gate that returns on failure is a metric with good intentions.
 
     Raising is the mechanism: the task fails, so `publish_model` never runs.
     """
+    from demand_forecast import promotion
+
     gate = _body(dagbag, "check_quality_gate")
     metrics = {
-        "skill": gate.__globals__["MIN_SKILL"] + skill_offset,
-        "coverage": gate.__globals__["MIN_COVERAGE"] + coverage_offset,
+        "skill": promotion.MIN_SKILL + skill_offset,
+        "coverage": {"floor": promotion.MIN_COVERAGE, "under": 0.84, "over": 0.96}[coverage],
     }
 
     with pytest.raises(ValueError, match="quality gate failed") as failure:
         gate(metrics)
 
     message = str(failure.value)
-    for floor in expected:
-        assert floor in message
-    assert message.count("<") == len(expected)
+    for rule in expected:
+        assert rule in message
+    assert message.count(";") == len(expected) - 1, message
 
 
 def test_ingest_month_reads_the_run_s_month_and_refuses_a_missing_file(  # type: ignore[no-untyped-def]
@@ -344,7 +353,7 @@ def test_backtest_model_returns_plain_floats_for_xcom(  # type: ignore[no-untype
 ) -> None:
     """XCom serialises; a numpy scalar that round-trips unequal to itself breaks the next task."""
     import numpy as np
-    from demand_forecast import lakehouse, train
+    from demand_forecast import lakehouse, promotion, train
 
     fold = train.FoldResult(
         index=0,
@@ -357,16 +366,15 @@ def test_backtest_model_returns_plain_floats_for_xcom(  # type: ignore[no-untype
     )
     calls: list[tuple[str, tuple, dict]] = []  # type: ignore[type-arg]
     monkeypatch.setattr(lakehouse, "read_demand", _read_from(catalog, "table"))
-    monkeypatch.setattr(train, "evaluate", _record(calls, "evaluate", train.BacktestReport(folds=[fold], seed=42)))
+    monkeypatch.setattr(promotion, "backtest", _record(calls, "backtest", train.BacktestReport(folds=[fold], seed=42)))
 
     result = _body(dagbag, "backtest_model")({"month": "2024-03", "snapshot_id": SNAPSHOT})
 
-    # The DAG backtests with `evaluate`'s own defaults and overrides none. The
-    # stub used to swallow any keyword, so `n_folds=3` here — the pipeline's
-    # design, which drops the two folds the model loses — survived the suite
-    # (QA-4 round fifteen, R15-DAG4). Which design is right is W-14; this pins
-    # the one in force until that is decided.
-    assert calls == [("evaluate", ("table",), {})]
+    # The DAG backtests through `promotion.backtest` — the design the pipeline
+    # uses too — and passes it nothing else. A stub that swallowed keywords let
+    # `n_folds=3` survive here (QA-4 round fifteen, R15-DAG4); W-14 moved the
+    # design out of every orchestrator, and this holds the DAG to that.
+    assert calls == [("backtest", ("table",), {})]
 
     assert result == {
         "month": "2024-03",
@@ -400,30 +408,3 @@ def test_publish_model_fits_on_all_history_and_merges_the_metadata(  # type: ign
         ("save", ("model", Path("models/demand_forecast.joblib")), {"source_snapshot": SNAPSHOT}),
     ]
     assert result == {"skill": 0.2, "coverage": 0.9, "snapshot_id": SNAPSHOT, **metadata}
-
-
-def test_the_dag_gates_on_a_five_fold_backtest() -> None:
-    """The fold count the DAG's verdict rests on, read from where it is defined.
-
-    Five folds include folds 0 and 1, the two the model loses (-18.3%, -1.2%);
-    the model card's +12.4% is a five-fold figure. A default changed in
-    `evaluate` changes what every DAG run promotes on, so it is pinned here
-    rather than discovered from a skill that moved.
-    """
-    import inspect
-
-    from demand_forecast.train import evaluate
-
-    defaults = {name: param.default for name, param in inspect.signature(evaluate).parameters.items()}
-    assert (defaults["n_folds"], defaults["horizon"], defaults["seed"]) == (5, 168, 42)
-
-
-def test_the_promotion_floors_hold_their_values(dagbag) -> None:  # type: ignore[no-untyped-def]
-    """QA-4 round sixteen: `MIN_SKILL = 0.0` passed 34 DAG tests, which read the floors rather than pin them.
-
-    The tests above derive their probes from the constants, so they cannot
-    notice the constants falling; `check_thresholds.py` watches the change,
-    and this pins the decision itself.
-    """
-    gate = _body(dagbag, "check_quality_gate")
-    assert (gate.__globals__["MIN_SKILL"], gate.__globals__["MIN_COVERAGE"]) == (0.05, 0.85)

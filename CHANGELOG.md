@@ -18,6 +18,30 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Changed — one promotion rule, and an artifact the serving image can load (W-14, R15-1)
+
+- **The two orchestrators promoted on different rules over different
+  backtests.** The DAG required skill ≥ 0.05 and coverage ≥ 0.85 over five
+  folds; the KFP pipeline required skill > 0 and coverage within 0.05 of 0.90
+  over three folds, which drop the two folds the model loses (+23.0% against
+  +12.4% on the same data). `demand_forecast.promotion` now holds the rule —
+  skill ≥ 0.05, coverage within [0.85, 0.95], both bounds inclusive — and the
+  backtest it is judged on (5 folds, horizon 168, seed 42); both orchestrators
+  call it, and the pipeline takes no backtest parameters. 34 metric pairs run
+  through both gates in `tests/test_promotion_agreement.py` and reach one
+  verdict. **Behaviour change:** the DAG now refuses coverage above 0.95,
+  which it promoted.
+- **The serving image could not load the artifact** (R15-1, reopening R11-3).
+  The fitted estimator kept scikit-learn's fit-time `Generator`, which the
+  image's numpy 1.26 refuses. `persist` drops it — prediction never reads it —
+  and gate **P18** (`scripts/check_serving_can_load_artifact.py`, Fast gates)
+  builds an environment from the service's requirements alone and loads and
+  predicts there, identically to the writer. The numpy straddle itself stays
+  open as ADR-008's decision.
+- The merged thresholds are watched under every predecessor's name, the fold
+  count as a floor; eleven mutations, each killed — one by P18 itself — and
+  P18's own judgement tested offline, with only the environment build replaced.
+
 ### Fixed — QA-4 round sixteen: the dependency gate read half the lock
 
 - **Trivy examined 150 of 275 locked packages and reported success.** Its uv

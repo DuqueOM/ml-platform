@@ -23,6 +23,7 @@ produces a false one.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from dataclasses import dataclass
@@ -175,6 +176,36 @@ def fit_final(
     )
 
 
+#: numpy's random-state types. Pickled under numpy 2, a `Generator` names a
+#: bit-generator module path numpy 1.x does not have, so the reader refuses the
+#: whole artifact: "PCG64 is not a known BitGenerator module" (QA-4 round
+#: fifteen, R15-1).
+_RANDOM_STATE = (np.random.Generator, np.random.BitGenerator, np.random.RandomState)
+
+
+def _without_fit_time_random_state(estimator: HistGradientBoostingRegressor) -> HistGradientBoostingRegressor:
+    """A shallow copy of a FITTED estimator with its random-state objects removed.
+
+    scikit-learn keeps the `Generator` it subsampled features with during `fit`
+    (`_feature_subsample_rng`) on the fitted object. Prediction never reads it,
+    and refitting creates a new one from `random_state`, which stays — so the
+    model predicts identically without it, and the artifact stops carrying the
+    one object that ties it to the writer's numpy major version. Measured
+    before this change: removing that attribute made a real artifact load and
+    predict under the serving image's numpy 1.26.
+
+    A copy, so the model in memory keeps everything it was fitted with. Found
+    by type rather than by attribute name, so a future release that keeps a
+    random-state object under another name is covered, and
+    `tests/test_persist.py` walks the whole artifact for any that remain.
+    """
+    copied = copy.copy(estimator)
+    for name, value in list(vars(copied).items()):
+        if isinstance(value, _RANDOM_STATE):
+            delattr(copied, name)
+    return copied
+
+
 def _payload(model: ForecastModel) -> dict[str, Any]:
     """The artifact's contents: the estimator, and everything else as data.
 
@@ -193,16 +224,20 @@ def _payload(model: ForecastModel) -> dict[str, Any]:
     :meth:`ml_core.conformal.SplitConformalRegressor.from_calibration`.
 
     The artifact therefore names no workspace package, which is the property
-    `tests/test_artifact_portability.py` holds. It is NOT yet readable by the
-    serving image, and this docstring said it was: the fitted estimator keeps
-    scikit-learn's fit-time `_feature_subsample_rng`, a numpy-2 `Generator`, and
-    numpy 1.26 — the image's pin — refuses to unpickle it ("PCG64 is not a known
-    BitGenerator module", QA-4 round fifteen). That numpy straddle is the one
-    gate P14 exempts under ADR-008; R11-3 is reopened for it.
+    `tests/test_artifact_portability.py` holds. It also carries no fit-time
+    random state: the fitted estimator kept scikit-learn's
+    `_feature_subsample_rng`, a numpy-2 `Generator`, and numpy 1.26 — the
+    image's pin — refused the whole artifact over it ("PCG64 is not a known
+    BitGenerator module", QA-4 round fifteen, R15-1). Without it the artifact
+    loads and predicts in an environment built from the service's
+    `requirements.txt` alone, which gate P18
+    (`scripts/check_serving_can_load_artifact.py`) checks on every build. The
+    numpy straddle itself remains, exempted in P14 under ADR-008: this makes
+    the artifact independent of it, it does not remove it.
     """
     return {
         "schema": ARTIFACT_SCHEMA,
-        "estimator": model.estimator,
+        "estimator": _without_fit_time_random_state(model.estimator),
         "conformal_alpha": model.conformal.alpha,
         "conformal_quantile": model.conformal.quantile,
         "conformal_n_calibration": model.conformal.n_calibration,
