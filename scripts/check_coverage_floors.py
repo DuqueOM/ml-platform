@@ -257,7 +257,12 @@ def _implementation(package: Path) -> str:
     `__version__` string and `from __future__` imports.
     """
     for module in sorted(package.rglob("*.py")):
-        if "tests" in module.relative_to(package).parts:
+        # The distribution's own test suite, `libs/<x>/tests/`, and nothing
+        # else. Skipping a `tests` directory at ANY depth also skipped
+        # `src/<pkg>/tests/`, which is inside the import package: code there is
+        # importable (`serving_core.tests.engine`), so a library could ship an
+        # implementation under the exemption with no floor (QA-4 round sixteen).
+        if module.relative_to(package).parts[0] == "tests":
             continue
         for node in ast.parse(module.read_text(encoding="utf-8")).body:
             if (

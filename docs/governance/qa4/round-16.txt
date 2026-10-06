@@ -1,0 +1,642 @@
+Committed copy of the QA-4 round sixteen report (the auditor's ~/qa4-r16-report.md).
+
+Verbatim, with one exception: the probe repository the auditor used to test C6 is
+redacted to OWNER/PRIVATE-REPO (and its URL-encoded and image forms), because the
+probe strings name a non-public repository by construction and C6 would rightly
+fail on them here. Plain text, like the earlier rounds' copies, so quoted probes
+stay quotations.
+
+-------------------------------------------------------------------------------
+
+# QA-4 round sixteen — independent audit of `ml-platform` at aea1410
+
+Auditor session: separate from the authoring session (ADR-005 rule B). Read-only. Nothing was committed or
+pushed. No PR, issue, setting, label or secret was touched, and neither was the main working tree.
+`scripts/audit_record.py`, `AGENTS.md` and `ops/audit.jsonl` were not touched. Data files in the main tree
+(`data/nyc-tlc/*.parquet`) were read by absolute path. Nothing there was written.
+
+- Tree under audit: `aea1410702a9ff314cb1bbfb2e5358ee59e45c5e` (origin/main). Previous audit: `98a4359`.
+  `git rev-list --count 98a4359..aea1410` = 10, all non-merge. This matches the prompt.
+- Worktrees, each after `uv sync --all-packages --all-extras --locked`:
+  - `~/qa4-r16`: the plain suite, later the cloud-requirements probe. Reverted, and nothing else was
+    running in it at that point.
+  - `~/qa4-r16b`: `make verify`.
+  - `~/qa4-r16-probe`: probes, mutations, the harness and the classifier.
+  All three are removed at the end.
+- Tools: uv 0.11.19, Python 3.11 (workspace), coverage 7.16.2, trivy 0.71.0 locally (CI's action runs
+  0.70.0, DB 2026-10-05), gitleaks 8.21.2 locally (the repository pins 8.30.0), bandit 1.9.4 (via `uvx`, as
+  CI uses it), Docker Desktop engine **not running**.
+- Logs, probe scripts and the auditor mutation catalogue: `~/qa4-r16-logs/`.
+
+### Runs performed (clean trees at aea1410)
+
+| Run | Tree | Command | Result |
+| --- | --- | --- | --- |
+| 1 | r16 | `uv run pytest -o addopts='' -q -rs` | **2038 passed, 58 skipped, 0 failed**, 945.7 s (15:45) |
+| 2 | r16b (in parallel with 1, plus the harness) | `make verify` | **exit 0**. Every gate OK. Suite 2038 passed, 0 failed |
+| CI | GitHub run 37337543901 (CI on aea1410) | same floors step | success |
+
+Coverage, `make verify` against CI, identical in every scope to two decimals: libs 94.55, scripts 86.70,
+projects 84.62, demand-forecast 83.25 / 71.43, rag-assistant 96.34 / 90.00, store-assistant 85.25 / 57.14,
+orchestration 100 / 100. These are two observations, local and CI.
+
+The round-fifteen flakes did not recur. Run 1 and run 2 ran in parallel, with the mutation harness also
+running during run 2. That is one parallel observation, not a proof.
+
+The 58 skips, grouped, all reasons read from `-rs`:
+- `tests/local/test_local_stack.py` ×11: local cluster not running.
+- `tests/local/test_service_runs.py` ×7: service not deployed.
+- `test_lakehouse.py` ×7: the MinIO half; local stack not running.
+- `tests/local/test_network_policies.py` ×4: policies not applied.
+- `tests/local/test_dashboards.py` ×18: local stack not running.
+- `test_ingest.py` ×2: nyc-tlc not fetched into the worktree.
+- `test_tracing.py` ×1: local stack.
+- `test_chunking.py` ×1: no EDGAR filings.
+- `test_upstream_parity.py` ×1: no upstream checkout.
+- `test_gitops_manifests.py` ×1: no cluster.
+- `test_gates_in_a_bare_environment.py` ×1: no sibling template.
+- `test_project_contract.py` ×4: recorded deviations P1 ×2, P6, P7.
+
+---
+
+## Findings
+
+**Counts: 0 P0 · 1 P1 · 4 P2 · 10 P3**
+
+### P1
+
+```text
+[P1] The Trivy gate scans 150 of the 275 locked packages. A CRITICAL in numpy, scikit-learn, pyarrow, pyiceberg, duckdb, kfp, dvc, great-expectations or any workspace member passes it, and three HIGH CVEs are in uv.lock today
+  .github/workflows/ci.yml:575-582 (the gate), :590-597 (the SARIF report, same blind spot)
+  SECURITY.md:81 ("Dependency vulnerabilities | Trivy | yes | … CRITICAL and HIGH")
+  $ trivy fs --scanners vuln,secret --severity CRITICAL,HIGH --ignorefile .security-baselines/.trivyignore --skip-dirs .venv --exit-code 1 .
+  INFO  Suppressing dependencies for development and testing. To display them, try the '--include-dev-deps' flag.
+  uv.lock │ uv │ 0          exit=0
+  $ (CI log, run 37337543901, "Trivy filesystem scan — the gate")
+  2026-10-05T16:01:50Z INFO Suppressing dependencies for development and testing. …   Number of language-specific files num=1
+  $ trivy fs --format json --list-all-pkgs …  → scanned 150, uv.lock holds 275
+    not scanned: numpy, scikit-learn, pandas, pyarrow, pyiceberg, duckdb, kfp, kubernetes, oauthlib, dvc*, great-expectations, joblib, scipy, virtualenv, gitpython, … and every workspace member
+  # probe tree: pyarrow 25.0.1 → 14.0.0 in uv.lock (CVE-2023-47248, CRITICAL, RCE on loading IPC)
+  $ trivy fs … --exit-code 1 .                   → default-exit=0  "uv.lock │ uv │ 0"
+  $ trivy fs … --include-dev-deps --exit-code 1 . → pyarrow CVE-2023-47248 CRITICAL … with-dev-exit=1
+  $ trivy fs --include-dev-deps --severity CRITICAL,HIGH . on the UNMODIFIED tree:
+  HIGH virtualenv 21.7.1 CVE-2026-102925 (fixed 21.7.13), CVE-2026-102930, CVE-2026-102937 (fixed 21.7.12)
+  (plus MEDIUM: gitpython GHSA-59cr-6r3x-644w, oauthlib CVE-2026-49264/-49265, diskcache CVE-2025-69872, virtualenv CVE-2026-102938)
+  $ (the pre-#121 lock, aea1410~1:uv.lock) default: Total 8 (HIGH 7, CRITICAL 1); --include-dev-deps: Total 12 (HIGH 11, CRITICAL 1), incl.
+  pyarrow 21.0.0 CVE-2026-25087 HIGH (fixed 23.0.1)
+```
+
+Trivy's uv analyser treats every package not reachable from the root project's `[project].dependencies` as
+"development". Here that is every workspace member and its whole closure, including `pre-commit`'s.
+
+#121 fixed pyarrow CVE-2026-25087 (21.0.0 → 25.0.1) by accident while claiming "two CVE fixes". The gate
+never saw it. The demonstration that #121 asked for passes: the pyjwt pin-back to 2.13.0 does fail, with
+1 CRITICAL and 5 HIGH, exit 1. pyjwt is a root-reachable package, which is why it was visible.
+
+The serving image's own manifest is not scanned either. `services/demand-forecast-serving/requirements.txt`
+uses `~=`, which Trivy's pip parser ignores, and Trivy reports `num=1` language file.
+
+Scorecard's open alert #20 ("VulnerabilitiesID", commit aea1410) lists 11 advisories that come from exactly
+this blind spot:
+- pyarrow PYSEC-2026-113 / CVE-2026-25087. The image pins `pyarrow ~= 18.0.0`, inside the 15.0.0–23.0.0
+  range.
+- filelock ×2.
+- diskcache.
+- gitpython.
+- oauthlib ×2.
+- virtualenv ×4.
+
+So "0 open CVE alerts in code scanning" holds for the Trivy tool only. See the prompt corrections (P3).
+
+`.security-baselines/.trivyignore:15-17` says "uv.lock clean" from a run that "reproduced the CI step
+exactly (trivy 0.71.0 …)". CI runs 0.70.0, and the run covered half the lock.
+
+**Fix:** add `--include-dev-deps` to both Trivy steps (`TRIVY_INCLUDE_DEV_DEPS: true` in `env`). Bump
+virtualenv (≥21.7.13) and gitpython (≥3.1.62), or baseline them with owner and expiry. Scan the image's
+requirement files: either resolve them to a pinned lock that Trivy reads, for example a `uv pip compile`
+output under a scanned path, or add an `osv-scanner` step. Make the gate report how many packages it
+examined (P-20). Correct SECURITY.md:81 and the `.trivyignore` note.
+
+### P2
+
+```text
+[P2] check_thresholds.py can still be beaten four ways with the gate and its tests green, and it reports OK against a baseline it cannot read
+  scripts/check_thresholds.py:443 (direction read from the CURRENT definition), :429-440 (step 1 uses the CURRENT pattern), :378-379 + `or []` (fail-open)
+  $ ~/qa4-r16-logs/thr_attacks.sh        # each: MIN_SKILL 0.05 lowered, uncommitted, gate + tests/test_thresholds.py + tests/test_dags.py
+  A1 flip higher_is_stricter=False on "retrain skill floor", MIN_SKILL 0.05→0.0   gate exit=0 "[thresholds] OK — 29 watched…"  tests 34 passed
+  A2 retarget its pattern to r"MIN_COVERAGE = ([\d.]+)", MIN_SKILL→0.0            gate exit=0                                      tests 34 passed
+  A3 add "# Historically MIN_SKILL = 0.05; …" above MIN_SKILL = 0.0              gate exit=0                                      tests 34 passed
+  A4 rename constant + label, renamed_from=("retrain skill floor", 0.09), 0.005  gate exit=0                                      tests 34 passed
+  (controls: plain lowering → FAILED; move+rename without renamed_from → FAILED "watched at the baseline and by nothing now"; delete entry → FAILED)
+  $ THRESHOLD_BASELINE_REF=origin/mian uv run python scripts/check_thresholds.py   # with MIN_SKILL lowered
+  [thresholds] OK — 29 watched, none loosened against origin/mian      exit=0
+```
+
+#113 closed R15-3's exact attack, and the controls above confirm it. The class it was meant to close stays
+open: every attribute of a `Threshold` (pattern, direction, rename factor) is editable in the same commit as
+the value, and the baseline's own definition is consulted only when the current one finds nothing.
+
+`re.search` takes the first match, so a comment or docstring can stand in for the constant.
+
+An unresolvable baseline ref makes `git archive`, `git show` and the import all fail, so every comparison
+is skipped and the result reads "OK". CI was checked and is not affected: PR run 37333483976 resolved the
+merge-base `fbd1eb0`, and main resolves `HEAD~1`. But the env var is the documented PR-lane override.
+
+Importing the baseline's module is otherwise sound here. It is code already on main, it runs in a subprocess
+with a scratch cwd, and it loaded at all 12 historical revisions of the file (7 to 29 definitions each).
+
+`tests/test_dags.py` does not pin `MIN_SKILL`'s value: 0.0 passes 34 tests.
+
+**Fix:**
+- Compare against the BASELINE's direction and pattern, not the current ones. Fail when either changed
+  without `--accept`.
+- Require `renamed_from` factors to come from a closed set (1, 100), or record them at the baseline.
+- Anchor patterns at line start, `^NAME\s*=`, and fail on more than one match.
+- Treat an unreadable baseline (archive or show failure, or an unresolvable ref) as FAILED, never as
+  "nothing to compare".
+- Add a value assertion for `MIN_SKILL` and `MIN_COVERAGE` in `test_dags.py`.
+
+```text
+[P2] Bandit, claimed blocking over "first-party code", never scans orchestration/ — a planted MEDIUM there passes CI's invocation
+  .github/workflows/ci.yml:153 (`uvx bandit -c pyproject.toml -r libs/ scripts/ projects/ -ll -q`)
+  SECURITY.md:84 ("Python security lint | Bandit | yes | First-party code at MEDIUM and above")
+  $ printf 'import yaml\ndef f(s):\n    return yaml.load(s)\n' > orchestration/dags/_qa4_bandit_probe.py
+  $ uvx bandit -c pyproject.toml -r libs/ scripts/ projects/ -ll -q ; echo rc=$?
+  rc=0
+  $ uvx bandit -c pyproject.toml -r orchestration/ -ll -q
+  >> Issue: [B506:yaml_load] Use of unsafe yaml load. …   Severity: Medium   Confidence: High
+  $ grep -c '^name = "bandit"' uv.lock
+  0
+```
+
+`orchestration/` holds the DAG and the KFP components: first-party Python that runs with catalogue
+credentials. It is inside mypy's and coverage's scope but not Bandit's. The clean tree has no finding there
+today (`rc=0`).
+
+Separately, `uvx bandit` resolves whatever PyPI serves at run time. This is the "a subverted scanner reports
+no findings" argument that `check_action_pins.py` and `check_gitleaks_pin.py` make for every other scanner.
+Bandit is in neither `uv.lock` nor `.pre-commit-config.yaml`.
+
+**Fix:** add `orchestration/` to the step, or pass `-r .` with the existing `exclude_dirs` plus
+`services`. Pin it with `uvx bandit==1.9.4`, or add it to the dev group and `uv run` it. Hold the
+target list to mypy's scope in a test.
+
+```text
+[P2] test_security_controls.py lets any step that MENTIONS a tool vouch for it: the real gitleaks scan can be disarmed with the test green, and two _blocks rules have no test at all
+  tests/test_security_controls.py:176 (`assert any(_blocks(step, job) for step, job in steps)`), :74-77 (`_mentions` by name/run/uses substring)
+  $ sed -i 's/^      - name: gitleaks$/&\n        continue-on-error: true/' .github/workflows/ci.yml
+  $ uv run pytest -o addopts='' -q tests/test_security_controls.py
+  19 passed in 0.36s
+  (rows→steps: gitleaks matches "Secret scanner is pinned and consistent" (a pin check, blocks=True) and "gitleaks" (the scan))
+  $ uv run python scripts/mutation_harness.py --catalogue ~/qa4-r16-logs/r16.yaml   (classified individually)
+  R16-SEC1  _NON_BLOCKING_BY_DEFAULT = {}               SURVIVED
+  R16-SEC2  job-level continue-on-error check → if False  SURVIVED
+```
+
+The same shape protects Trivy only by luck. The gate step is the only blocking Trivy step, so `any()` works
+there. The control-removal mutation, where `exit-code: "1"` is deleted, is caught: 1 failed.
+
+But removing the `exit-code` default rule (R16-SEC1) survives. The one step it governs carries an explicit
+`exit-code`, and no test feeds `_blocks` a step without one. The job-level rule (R16-SEC2) is likewise
+unexercised.
+
+Asked which other actions default to non-blocking: of the actions in use, `codecov/codecov-action`
+(`fail_ci_if_error` defaults false) and `ossf/scorecard-action` (it never fails) are non-blocking by
+default. Neither is a "blocking" row, so the dictionary is complete for today's rows. `checkov-action`,
+`gitleaks-action`, both markdown actions and `kubescape` (a `run:` step) fail by default or are already
+marked advisory.
+
+**Fix:** match each row to the step that RUNS the tool, by `uses:` action or the binary invoked in `run:`,
+not by name. Require ALL such steps to block, or name the advisory ones explicitly. Add unit cases for
+`_blocks`: a trivy-action step with no `exit-code`, and a job-level `continue-on-error`. Add R16-SEC1 and
+R16-SEC2 to the committed catalogue.
+
+```text
+[P2] C6 still passes a private repository named behind a "/" — including ghcr.io, which this repository's own pipeline uses
+  scripts/check_doc_coherence.py:847-850 (`(?<![\w./-])` lookbehind; comment: "a URL under another host is the link pattern's question" — the link pattern knows only github.com, api.github.com and raw.githubusercontent.com)
+  $ printf '%s\n' "<form>" > docs/runbooks/_qa4_c6_probe.md && uv run python scripts/check_doc_coherence.py --only C6
+  control             https://github.com/OWNER/PRIVATE-REPO                 FAIL [C6] … non-public repository 'PRIVATE-REPO'
+  github.dev          https://github.dev/OWNER/PRIVATE-REPO                 ok  [C6] 1409 files scanned …
+  vscode.dev          https://vscode.dev/github/OWNER/PRIVATE-REPO          ok
+  ghcr                image: ghcr.io/OWNER/PRIVATE-REPO:1.0                 ok
+  shields             ![v](https://img.shields.io/github/v/release/OWNER/PRIVATE-REPO)  ok
+  codecov             https://codecov.io/gh/OWNER/PRIVATE-REPO              ok
+  deepwiki            https://deepwiki.com/OWNER/PRIVATE-REPO               ok
+  root-relative       [design](/OWNER/PRIVATE-REPO/blob/main/x.md)          ok
+  url-encoded         https://github.com/OWNER%2FPRIVATE-REPO               ok
+  gist                https://gist.github.com/OWNER/abc123                      FAIL … non-public repository 'abc123'   (false positive: a gist id)
+  (caught: Pages over https, --repo=, uppercase host, autolink, the round-15 six)
+```
+
+Every "ok" line prints the private account and repository name verbatim into a public file. That is what
+C6 exists to stop, and none of these forms needs to resolve as a link to disclose the name.
+
+`orchestration/pipelines/demand_forecast_pipeline.py:53` already writes
+`ghcr.io/duqueom/ml-platform/...`, so the image form is one this repository uses. No such leak exists in the
+tree today.
+
+Asked "can a real private reference hide behind a leading `/`": yes. GitHub resolves a root-relative link
+inside a repository file against the repository root, not github.com, so it does not link out, but the
+name is still published.
+
+**Fix:** after any `/`, match `(?i)\bDuqueOM[/%]2?F?<repo>` for the private account. The account is the
+privacy question, not the host. Keep `/home/<user>/` exempt by requiring the account token to be followed
+by a repository-shaped segment and preceded by a host or a known prefix (`github/`, `gh/`, `ghcr.io/`).
+Exclude `gist.github.com`. Add the nine forms above to the C6 test parametrisation.
+
+### P3
+
+```text
+[P3] The KFP pipeline's comment says each component runs in "a single built image, NOT packages_to_install"; the compiled spec pip-installs kfp from PyPI at every step start, into an image referenced by `:latest`
+  orchestration/pipelines/demand_forecast_pipeline.py:47-53
+  $ uv run python -c "…compiler.Compiler().compile(demand_forecast_training, 'pipeline.yaml')"; grep -n "pip install" pipeline.yaml
+  88: … python3 -m pip install --quiet --no-warn-script-location 'kfp==2.17.0' '--no-deps' …   (and :140, :175)
+  $ grep -c "image: ghcr.io/duqueom/ml-platform/demand-forecast:latest" pipeline.yaml
+  4
+```
+
+The comment's reason is that installing at start-up "makes each run depend on what the index served that
+minute". That is exactly what the KFP compiler does when `install_kfp_package` is left at its default.
+`:latest` contradicts AGENTS.md's "Container images are pinned by digest".
+
+`--no-deps` means the step does not pull urllib3 2.7.0, so the override question (4.B) does not arise there.
+
+**Fix:** `@dsl.component(base_image=…, install_kfp_package=False)` with kfp baked into the image. Reference
+the image by digest, or by an unresolvable placeholder as the overlays do. Assert both on the compiled spec in
+`test_pipeline_spec.py`.
+
+```text
+[P3] delete_before refuses a timezone-aware cutoff, reports a no-op as the previous write's snapshot, and has no behavioural test on any backend
+  projects/demand-forecast/src/demand_forecast/lakehouse.py:314, :316-324
+  $ uv run python ~/qa4-r16-logs/lakehouse_probe.py      # file:// catalogue, pyiceberg 0.12.0, pyarrow 25.0.1
+  delete_before naive Feb 1      delete 1 rows -> snapshot 6357797741250484839 [('2024-02', 7)]
+  delete_before aware Feb 1 UTC  RAISED ValueError: Zone offset provided, but not expected: 2024-02-01T00:00:00+00:00
+  delete_before no-op: write snap 5479648703701390941 -> delete result delete 0 rows -> snapshot 5479648703701390941 same snapshot? True
+  R16-LH2 (`<` → `<=`) SURVIVED: projects/demand-forecast/tests passes
+```
+
+`snapshots()` deliberately returns UTC-aware datetimes ("all of which is UTC"). A cutoff taken from it, or
+from `datetime.now(UTC)`, raises.
+
+A delete that matches nothing commits no snapshot. The function then returns the prior write's id labelled
+`mode="delete"`, and the guard "a delete produced no snapshot" cannot fire.
+
+Only `test_catalog_selection.py` touches the function, to check its signature.
+
+**Fix:** convert the cutoff to naive UTC. Compare the snapshot id before and after, and return `None` (or
+raise) when nothing committed. Add a filesystem-backend test covering the boundary, aware input and the
+no-op.
+
+```text
+[P3] write_demand returns whatever snapshot is current after refresh, so a concurrent writer's commit is recorded as this run's — the window R15-14's comment names
+  projects/demand-forecast/src/demand_forecast/lakehouse.py:248-262; orchestration/dags/demand_forecast_training.py:130-135
+  $ uv run python ~/qa4-r16-logs/snapshot_race.py   # Table.refresh patched to let a second writer commit first
+  snapshots: [8527527087050840249, 8166476718126999789, 721085466794909938]
+  write_demand returned 721085466794909938 == our commit? False == the other writer's? True
+  rows at the 'validated' snapshot: [(2024-03-05, 999), (2024-02-05, 7), (2024-01-05, 1)]
+```
+
+#114 holds within the DAG: every read after ingest names one id. R16-DAG7, R16-DAG8 and R16-PER1 are all
+killed by assertions, and `source_snapshot` equals what `fit_final` read.
+
+But the id comes from `table.current_snapshot()` after `refresh()`, not from the commit this write made.
+The DAG comment says "another writer — the KFP pipeline, a manual ingest — can commit between this task and
+the next". It can also commit between `append`/`overwrite` and `refresh`, and then the run validates, trains
+on and records the other writer's snapshot, including its rows.
+
+The interleaving was forced; the race itself is real but narrow. The KFP pipeline does not use the
+lakehouse (it passes `dsl.Dataset` artifacts), so today the other writer would be a manual ingest.
+
+**Fix:** take the snapshot from the transaction's own commit. In pyiceberg 0.12, run the write through
+`table.transaction()` and read `txn.table_metadata.current_snapshot_id` before commit returns, or pick the
+newest snapshot whose `parent_snapshot_id` equals the pre-write head. Assert it in a test that forces the
+interleaving.
+
+```text
+[P3] The pre-commit mypy hook checks 3 of CI's 6 paths and does not trigger on orchestration/, while its comment says it must stay "character-identical" to CI
+  .pre-commit-config.yaml:166-171 (comment), :206 (`entry: uv run mypy libs/ scripts/ projects/demand-forecast/src/`), :209 (`files: '^(libs|scripts|projects)/.*\.py$'`)
+  $ (probe tree: `def _qa4_probe() -> int: return "not an int"` appended to the DAG and to store_assistant/tools.py)
+  $ uv run mypy libs/ scripts/ projects/demand-forecast/src/            → Success: no issues found in 88 source files
+  $ uv run mypy <CI's six paths>                                        → Found 2 errors in 2 files (checked 98 source files)
+```
+
+CI and `make verify` agree: Makefile:40 equals ci.yml:111. Ruff hook, CI and `make verify` also agree.
+`pre-commit run ruff-check/ruff-format --all-files` passed. A Python block in a `.md` file is reformatted
+by both the hook (v0.16.10 hook types include markdown) and `ruff format --check .` (596 files: 195 .py +
+401 .md).
+
+**Fix:** copy CI's entry exactly. Widen `files:` to include `orchestration/`. Hold the hook's entry to
+ci.yml's in `tests/test_tool_versions.py`, as is already done for ruff.
+
+```text
+[P3] C9 exempts `cd projects/../services/… && copier update`, lets a later `--vcs-ref HEAD` override a pinned one, and does not read `.markdown`
+  scripts/check_doc_coherence.py:1125 (`return cwd.startswith("projects/")`), :1093-1112 (`_is_pinned` returns on the first ref), :1170 (`rglob("*.md")`)
+  $ printf '<doc>' > docs/runbooks/_qa4_c9_probe.<ext> && uv run python scripts/check_doc_coherence.py --only C9
+  control                  FAIL [C9] … unpinned copier command
+  cd-projects-dotdot       ok  [C9] 12 runnable copier command(s) …, all pinned   (cd projects/../services/demand-forecast-serving && copier update --defaults)
+  double-vcs-ref           ok   (copier copy --vcs-ref v0.30.2 --vcs-ref HEAD gh:…; the CLI's last value wins)
+  dot-markdown (.markdown) ok   (GitHub renders .markdown)
+  shell-var-HEAD           ok   (REF=HEAD; … --vcs-ref $REF — a placeholder by design; noted, not counted)
+  (round-15 shapes, list fences, blockquotes, <pre>, `uvx copier@x`, `python -m copier`: caught)
+```
+
+None of these is in the tree today. The in-repo project's answers file records `_src_path: .`, so the
+`cd projects/<x>` exemption is correct when the path stays under `projects/`.
+
+**Fix:** normalise `cwd` (`posixpath.normpath`) before the prefix test. Read the LAST `--vcs-ref`. Scan
+`*.md` and `*.markdown`.
+
+```text
+[P3] The serving-core exemption and coverage both skip any `tests` directory inside the package, and code there is importable
+  scripts/check_coverage_floors.py:260; pyproject.toml:214 (`"*/tests/*"` in coverage omit)
+  $ mkdir libs/serving-core/src/serving_core/tests && printf 'def predict(x): …' > …/tests/engine.py
+  $ uv run python -c "…check_coverage_floors._implementation(Path('libs/serving-core'))"
+  router.py added  -> 'code at libs/serving-core/src/serving_core/router.py:1'
+  only tests/engine.py -> ''
+  $ uv run python -c "import serving_core.tests.engine as e; print(e.predict(3))"
+  6
+  R16-CF4 (skip any subdirectory deeper than 3 parts) SURVIVED
+```
+
+R15-12's AST rule is correct for modules it reads (a top-level `router.py` is refused). A library can still
+ship implementation under `serving_core/tests/` with no floor and no measurement. Abuse is possible, and
+nothing suggests it has happened.
+
+**Fix:** skip only a `tests` directory at the distribution root (`libs/<x>/tests`), not inside the import
+package. Fail if any `src/**/tests/*.py` exists in an exempt library.
+
+```text
+[P3] P10's download check accepts a digest check of a different file, `|| true`, a commented-out check, raw.githubusercontent.com/<branch>, and curl|sh from other hosts
+  scripts/check_action_pins.py:83-98, :104-120
+  $ (probe step inserted into ci.yml; uv run python scripts/check_action_pins.py)
+  control-latest / control-unverified   FAIL [actions] … moving reference / … without verifying its digest
+  raw.githubusercontent.com/…/main/install.sh | sh   [actions] OK
+  https://get.trivy.dev/install.sh | sh              [actions] OK
+  download + `echo "deadbeef  README.md" | sha256sum -c - || true`   [actions] OK
+  download + `# verify: sha256sum -c t.sha256` (comment)              [actions] OK
+```
+
+This is latent: the only download in the workflows today (kubescape, ci.yml:525) is pinned and verified
+correctly. R16-P10 (`_DIGEST_CHECK` matches anything) is killed by an assertion.
+
+**Fix:** treat `raw.githubusercontent.com/<o>/<r>/<branch>/` and any `| sh`/`| bash` as moving. Require
+the `sha256sum -c` input to name the downloaded file, with no `|| true` on that line. Strip shell comments
+before matching.
+
+```text
+[P3] COMPLIANCE_MAPPING.md says no cluster has observed the NetworkPolicies enforced; the work order marks R11-2 done "on a cluster"
+  docs/COMPLIANCE_MAPPING.md:141 ("What remains is evidence rather than design: no cluster has yet been observed enforcing these policies")
+  docs/governance/remediation-work-order.md:656 ("Status: done — feat(k8s): prove the NetworkPolicies are enforced, on a cluster")
+  platform/local/README.md:71 ("The NetworkPolicies are enforced, and the wrong selector is denied.")
+```
+
+At most one of these is true. I could not establish which: L3 is not runnable here (see "Not verifiable
+here").
+
+**Fix:** after #105's run is recorded with its evidence (cluster, kindnetd version, date), update
+COMPLIANCE_MAPPING's PR.PS row to cite it, or downgrade the two "done/enforced" claims until it is re-run.
+
+```text
+[P3] The override comment says the test "fails the day the pinning package admits the fixed version"; it fails only once someone re-locks kfp
+  pyproject.toml:57-58; tests/test_dependency_overrides.py:54-66 (reads installed metadata)
+  $ uv run python ~/qa4-r16-logs/override_probe.py
+  real kfp                                     PASS (override kept)      installed kfp: ['urllib3==2.6.3; python_version < "3.10"', 'urllib3==2.7.0; python_version >= "3.10"']
+  admits 2.8 (>=1.26,<3)                       FAIL: kfp now admits urllib3 2.8.0 on its own …
+  ==2.7.0 only on py<3.12, >=2.8 on 3.12+      PASS (override kept)      — correct: 3.11 still binds
+  ==2.7.0 only on py<3.11                      FAIL: … no longer depends …
+  ==2.7.0 under an extra / on win32 only       FAIL: … no longer depends …  (conservative)
+  !=2.8.0,>=2.7                                PASS (override kept)      — 2.8.1 would be admitted; the override is then redundant
+```
+
+The test's own docstring is accurate ("the newest locked version"). The pyproject comment overstates it: a
+kfp release that admits the fix does nothing until a Dependabot bump lands. The marker evaluation over
+3.11, 3.12 and 3.13 holds.
+
+**Fix:** reword the comment to say "the newest locked kfp". Optionally test `specifier.contains` on the
+highest patch of the fixed minor as well as on the first fixed version.
+
+```text
+[P3] Two statements in the audit prompt are wrong
+  (prompt §4.A) "Code scanning on main shows 0 open CVE alerts."
+  $ gh api 'repos/DuqueOM/ml-platform/code-scanning/alerts?state=open' → 12 open, all Scorecard; #20 VulnerabilitiesID on aea1410: "score is 0: 11 existing vulnerabilities detected" (pyarrow, filelock ×2, diskcache, gitpython, oauthlib ×2, virtualenv ×4)
+  (prompt §0) "a full suite takes ~25 min"
+  run 1: 2038 passed, 58 skipped in 945.73s (0:15:45), under parallel load
+```
+
+Zero CVE alerts is true of the Trivy tool only. That is because of the P1 above, not because the
+dependencies are clean.
+
+**Fix:** state the alert count per tool, and treat Scorecard's VulnerabilitiesID as a finding source until
+the Trivy gate covers the whole lock.
+
+---
+
+## Verified working
+
+**#121, Trivy gate (the part that works).**
+- The gate fails on a vulnerable root-reachable package. With pyjwt pinned back to 2.13.0 in `uv.lock`:
+  `Total: 6 (HIGH: 5, CRITICAL: 1)`, exit=1. The local command matches the CI step.
+- CI log for aea1410 shows `INPUT_EXIT_CODE: 1`, severity `CRITICAL,HIGH`, format table, and the
+  `.trivyignore` content echoed. The SARIF step runs with exit-code 0.
+- The two-step design is sound as written:
+  - The SARIF step and `upload-sarif` both carry `if: ${{ !cancelled() }}`, so a red gate still uploads.
+  - The report step's exit 0 cannot mask the gate's failure, because the job is red when any step fails.
+  - DB download failure is fail-closed.
+- One caveat: both steps apply the same `.trivyignore`, so an accepted finding also disappears from the
+  Security tab.
+- Control: deleting `exit-code: "1"` makes
+  `test_a_control_claimed_blocking_can_actually_fail_the_build[…Trivy]` fail.
+
+**#121, urllib3 override.**
+- `uv.lock` resolves urllib3 2.8.0. `test_each_override_is_in_force` passes.
+- kfp 2.17.0 imports, compiles the pipeline, and constructs `kfp.Client`/`kfp_server_api.ApiClient` on
+  urllib3 2.8.0. A call reaches the network layer: `MaxRetryError … /apis/v2beta1/healthz` against a closed
+  port.
+- Nothing in the repository uses the client. `git grep` finds only `from kfp import dsl` and
+  `from kfp import compiler`.
+- `test_pipeline_spec.py`, `test_pipeline_components.py` and `test_dependency_overrides.py`: 20 passed.
+- The override test fails when kfp's metadata admits 2.8.0 (simulated). See P3.
+
+**#121, versions.** Every bump in the prompt matches `git show aea1410~1:uv.lock` against `uv.lock`: pyjwt
+2.13.0→2.15.1, urllib3 2.7.0→2.8.0, mypy 2.3.1→2.4.0, ruff 0.16.9→0.16.10, duckdb 1.5.5→1.5.6, pyiceberg
+0.11.1→0.12.0, coverage 7.15.3→7.16.2, pyarrow 21.0.0→25.0.1.
+
+**#121, the lakehouse on file://.** pyiceberg 0.12.0 and pyarrow 25.0.1 on a `file://` warehouse
+(`~/qa4-r16-logs/lakehouse_probe.py`):
+- Overwrite of January replaces January only: `[('2024-01', 100), ('2024-02', 7), ('2024-03', 11)]`.
+- Overwrite of January and March leaves February: `[…100…, …7…, …50…]`.
+- A row at `2024-01-31T23:59:59.999999` is scoped to January.
+- ns→µs: 999 ns truncated, dtype `Datetime(us)`. This is expected, given the explicit cast.
+- R16-LH1 (unscoped overwrite) is KILLED by `test_overwrite_does_not_double_count` on the filesystem
+  backend. The filesystem tests therefore exercise overwrite semantics, not only the predicate string.
+
+**#113 re-attacks that held.**
+- check_thresholds rename, move and delete attacks: all FAILED as they should (A5–A7). R16-TH1 (direction
+  ignored) and R16-TH2 (definitions unreadable) are both killed by assertions.
+- C6: `--repo=`, uppercase host, Pages over https and autolinks are caught.
+- C9: `python -m copier` is caught. R16-C9c (every `update` counts as local) is killed by 3 assertions in
+  `test_gate_scripts.py -k "c9 or copier"`.
+- `intervals_are_calibrated` is symmetric and inclusive: 0.85 True, 0.95 True, 0.849999999 False,
+  0.950000000001 False. R16-CAL2 (`abs_tol=1e-2`) is killed.
+- Artifact gate:
+  - A `python_version < "3.12"` marker on joblib is now FAILED. It was OK in round 15.
+  - `joblib==1.4.2` appended to `requirements-gcp.txt` is FAILED, so the cloud files are read.
+- Serving-core AST: a top-level `router.py` is refused.
+
+**#114.**
+- Every DAG read after ingest passes the run's `snapshot_id` (lines 135, 157 and 200).
+- `save(..., source_snapshot=…)` is recorded in the sidecar. `fit_final+save` without a lakehouse writes
+  `'source_snapshot': None`.
+- R16-DAG7, R16-DAG8 and R16-PER1 are killed by assertions. The race caveat is in the P3 above.
+
+**#106.** `LAKEHOUSE_CATALOG` is required. LC1–LC3 are killed. No platform manifest deploys Airflow, so
+nothing needs to set it yet. `platform/local/README.md:175` documents `export LAKEHOUSE_CATALOG=local`.
+
+**R15-7 (determinism).** Two suites ran in parallel with the harness also running: no failures. That is one
+observation.
+
+**Branch protection.**
+- The required checks on `main` are "Repository invariants", "IaC and Kubernetes security",
+  "Supply chain" and "Secret scan".
+- "Repository invariants" `needs: [gates, tests]` with `if: always()` and asserts both results
+  (ci.yml:458-476), so "Fast gates" and "Tests and coverage" are required transitively.
+- #115 (Dependabot) merged at 06:42:20Z, after every check had completed (the last at 06:41:56Z).
+
+**Open items verified as described (G).**
+- **R15-1**: accurate.
+  - A fresh artifact from `fit_final+save` on the lock-verified TLC 2024-01/02 files (sha256 prefixes
+    `c4d59da7…` and `c76c43c1…` match `datasets.lock.json`).
+  - Loaded in a venv built from `services/demand-forecast-serving/requirements.txt` on Python 3.13.13
+    (numpy 1.26.4, scikit-learn 1.9.1, joblib 1.6.0, pyarrow 18.0.0):
+    `ValueError: <class 'numpy.random._pcg64.PCG64'> is not a known BitGenerator module.`
+  - The remedy claim also holds. The only `Generator` in the payload is `estimator._feature_subsample_rng`.
+    With it deleted, the artifact loads and predicts in the same venv (`[0.0698 0.0698]`).
+- **R15-5**: accurate. CI on aea1410 shows `use_oidc: false`, an empty `CODECOV_TOKEN`, and
+  `Upload queued for processing failed: {"message":"Token required - not valid tokenless upload"}`. The
+  inventory reports it as not built (detector `use_oidc: true` absent).
+- **R15-6**: accurate. `services/.../app/fastapi_app.py:269` still calls `joblib.load(model_path)` directly.
+- **R15-20**: accurate.
+  - Docker Hub token and manifest for `minio/minio:RELEASE.2025-04-22T22-12-26Z` → HTTP 401.
+  - `prom/prometheus:v3.15.0` → HTTP 200 (the control).
+  - quay.io → 401.
+  - `tests/test_local_stack_images.py` carries the dated exception.
+- **W-14**: accurate.
+  - DAG: `skill >= 0.05`, one-sided coverage `>= 0.85`, 5 folds.
+  - Pipeline: `skill > 0`, `intervals_are_calibrated()` two-sided, `n_folds: int = 3`.
+  - Both pipeline thresholds now appear in `check_thresholds.py --show`.
+  - R15-DAG4 and R15-KFP4 are in the catalogue and killed.
+
+**Regression sweep (clean trees).**
+- `make verify` → exit 0:
+  - ruff check: "All checks passed!".
+  - ruff format: 596 files.
+  - mypy: 98 files.
+  - sync, agentic, gates.
+  - coherence OK. C7: "10/10 commits not contained in 98a4359", exactly at the grace limit.
+  - ci-refs (26), actions, artifact, baselines, deviations (4), dashboards, gitleaks-pin (v8.30.0 both),
+    reuse, mcp, clock-isolation (5), render-safety (9), thresholds (29), parity (offline), version, yaml
+    (200), cloud-surface 68%, inventory, status.
+  - Floors identical to CI (above).
+- `check_doc_coherence.py` → `[coherence] OK`. C2 notes 152 generated-code citations not checked, because
+  there is no sibling template.
+- `check_implementation_status.py --check` → `[status] OK` (inside `make verify`).
+- `check_technology_inventory.py --check` → OK.
+- `check_thresholds.py --show` → 29 thresholds, including the pipeline's two.
+- `trivy fs` (4.A command) on the unmodified tree → 0 findings, exit 0, over 150 packages (see P1).
+- gitleaks 8.21.2:
+  - `gitleaks git --redact -c .gitleaks.toml .` → 208 commits scanned (all refs), no leaks.
+  - With default rules and `--ignore-gitleaks-allow`: 2 hits, both the known synthetic fixtures at
+    `services/demand-forecast-serving/tests/test_memory_redaction.py:74,78` (commit 5b3e2c1).
+  - Round 15 counted 242 commits because more local refs existed then.
+
+## Mutations
+
+**Committed catalogue** (`uv run python scripts/mutation_harness.py`, probe tree):
+`[mutation] 135/135 expected kills`, `HARNESS_EXIT=0`. The two `expect: survives` entries (C10-case,
+W-ceiling-exclusive) survived as declared.
+
+Kill causes, each entry re-run individually by `~/qa4-r16-logs/classify.py` (first pytest `E` line, or the
+gate's output):
+- **124 assertion** (`AssertionError`, `assert`, `DID NOT RAISE`).
+- **6 gate verdict** (a gate's FAILED output).
+- **5 behavioural exception**:
+  - DG3: `FileNotFoundError` where `ValueError` is expected.
+  - DG4: the digest refusal.
+  - DAG1: the gate's own refusal.
+  - LC1 and LC3: the catalogue refusal `ValueError` where another type or message is expected.
+- **0 import, collection or syntax crash.**
+
+**Auditor additions** (`~/qa4-r16-logs/r16.yaml`, not committed): **9 of 13 killed**, all by assertion.
+
+| id | mutation | result | cause |
+| --- | --- | --- | --- |
+| R16-SEC1 | `_NON_BLOCKING_BY_DEFAULT = {}` | **SURVIVED** | no test feeds `_blocks` a trivy step without `exit-code` |
+| R16-SEC2 | job-level `continue-on-error` rule → `if False:` | **SURVIVED** | rule never exercised |
+| R16-TH1 | direction ignored in `compare` | killed | assertion (`assert 0 == 1`) |
+| R16-TH2 | baseline definitions never readable | killed | assertion |
+| R16-LH1 | `table.overwrite(arrow)` unscoped | killed | assertion ("overwrite appended instead of replacing") |
+| R16-LH2 | `delete_before` `<` → `<=` | **SURVIVED** | no behavioural test |
+| R16-DAG7 | validate reads the table head | killed | assertion ("not the snapshot this run wrote") |
+| R16-DAG8 | publish records no snapshot | killed | assertion |
+| R16-PER1 | sidecar `source_snapshot: None` | killed | assertion |
+| R16-CAL2 | `abs_tol=1e-2` | killed | assertion |
+| R16-P10 | `_DIGEST_CHECK` matches anything | killed | assertion |
+| R16-C9c | every `copier update` local | killed | assertion (3 C9 cases) |
+| R16-CF4 | exemption skips any deep subdir | **SURVIVED** | no test of a nested module in an exempt library |
+
+Suggested for the committed catalogue:
+- Now: R16-TH1, TH2, LH1, DAG7, DAG8, PER1, CAL2, P10, C9c.
+- Once their fixes land: R16-SEC1, SEC2, LH2, CF4.
+
+Probes that were not harness mutations, all reverted (`git status` clean after each):
+- Trivy: lock pins ×2 and the pre-#121 lock.
+- gitleaks step disarm.
+- Thresholds: ×7, plus the invalid ref.
+- mypy hook against CI.
+- Ruff hook against CI on Markdown.
+- C6: ×15 forms.
+- C9: ×11 shapes.
+- P10: ×6.
+- Artifact gate: ×2.
+- Serving-core: `tests/` and `router.py`.
+- Bandit plant.
+- Lakehouse and snapshot race in temporary catalogues under `~/qa4-r16-logs/lh/`.
+
+## Not verifiable here
+
+- **L3, NetworkPolicy enforcement (#105), the local stack and the service.** Not run and NOT ticked.
+  - `docker` is "could not be found in this WSL 2 distro".
+  - `docker.exe info` fails: "open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file
+    specified" (the Docker Desktop engine is not running).
+  - `kind get clusters` fails on `docker ps`.
+  - The `kind-ml-platform-local` context exists in kubeconfig, but nothing answers it.
+  - Starting Docker Desktop is outside this session's remit. Even running, a clean pull of the stack would
+    fail on minio (R15-20).
+  - 29 `tests/local` tests and the MinIO lakehouse half skipped.
+- **What the file:// lakehouse tests do not exercise:** S3 FileIO (PyArrow's S3 filesystem), the endpoint
+  and credential properties, and object-store overwrite and delete semantics (eventual listing, multipart).
+  These can be verified only against MinIO or a cloud store.
+- **Building the serving image.** The artifact was loaded in a venv from `requirements.txt` on Python
+  3.13.13 instead, not in the image itself.
+- **gitleaks at the pinned 8.30.0**: run with local 8.21.2.
+- **Trivy at CI's 0.70.0**: local 0.71.0. CI's log shows the same dev-dependency suppression and
+  `num=1`, so the P1 is confirmed on CI's version too.
+- **Sibling-dependent results** (parity online, C2's 152 generated citations): no `template_MLOps`
+  checkout beside these worktrees, as in CI.
+
+## Proposed audit-trail record (for the remediation session to enter)
+
+```text
+--action independent-audit --target ml-platform --mode CONSULT
+--outcome "Round 16 against tree aea1410. 0 P0, 1 P1, 4 P2, 10 P3. P1: the Trivy gate scans 150 of 275 locked packages (Trivy suppresses as 'dev' everything not reachable from the root project: every workspace member and its closure); pyarrow pinned to 14.0.0 (CVE-2023-47248, CRITICAL) passes it, three HIGH virtualenv CVEs are in uv.lock today, #121 fixed pyarrow CVE-2026-25087 without the gate ever showing it, and the serving image's ~= requirements are not scanned at all (Scorecard's open VulnerabilitiesID alert lists them). The pyjwt pin-back does fail the gate (1 CRITICAL, 5 HIGH). P2: check_thresholds.py is still beaten by flipping higher_is_stricter, retargeting a pattern, a decoy comment, or a doctored renamed_from factor (gate and tests green in all four) and reports OK against an unresolvable THRESHOLD_BASELINE_REF; Bandit never scans orchestration/ (a planted yaml.load passes CI's invocation) and runs unpinned via uvx; test_security_controls lets any step mentioning a tool vouch for it, so the real gitleaks scan can be disarmed with the test green; C6 passes github.dev, ghcr.io, vscode.dev, shields, codecov, deepwiki and root-relative forms of a private repository. make verify exit 0 and the plain suite 2038 passed/58 skipped, in parallel with no flake; coverage identical to CI in every scope (libs 94.55, scripts 86.70, demand-forecast 83.25/71.43). urllib3 override holds for everything the repo does with kfp. R15-1, R15-5, R15-6, R15-20 and W-14 verified as described; R15-1's remedy reproduced (artifact loads and predicts with _feature_subsample_rng removed). 135/135 catalogue kills (124 assertion, 6 gate verdict, 5 behavioural exception, 0 crash); 9/13 auditor mutations killed. L3 not verified: Docker Desktop engine not running. gitleaks clean over 208 commits."
+--evidence "Worktrees ~/qa4-r16 (plain suite), ~/qa4-r16b (make verify), ~/qa4-r16-probe (probes, harness) at aea1410702a9ff314cb1bbfb2e5358ee59e45c5e after uv sync --all-packages --all-extras --locked (uv 0.11.19, Python 3.11, coverage 7.16.2); uv run pytest -o addopts='' -q -rs; make verify; CI run 37337543901 and PR run 37333483976 logs; trivy 0.71.0 fs (default, --include-dev-deps, --list-all-pkgs, pyjwt 2.13.0 and pyarrow 14.0.0 lock probes, aea1410~1 lock); gh api code-scanning alerts + osv.dev lookups; test_security_controls mutations; kfp client/compile under urllib3 2.8.0 and simulated kfp metadata for test_dependency_overrides; check_thresholds attack script (7 attacks) and invalid-ref run; lakehouse_probe.py and snapshot_race.py on file:// catalogues (pyiceberg 0.12.0, pyarrow 25.0.1); mypy hook vs CI entry; pre-commit ruff hooks --all-files; C6 x15 / C9 x11 / P10 x6 / artifact-gate x2 / serving-core / bandit probes; fit_final+save on lock-verified TLC 2024-01/02 then joblib.load in a uv venv from services/demand-forecast-serving/requirements.txt on Python 3.13.13; Docker Hub/Quay manifest requests; branch protection via gh api; mutation_harness.py (137 entries) plus per-entry kill-cause classification and 13 auditor entries; gitleaks 8.21.2 git --redact (repo config, and default rules with --ignore-gitleaks-allow); bandit 1.9.4 via uvx. Report: ~/qa4-r16-report.md"
+```
+
+## Closing verdict
+
+The round-fifteen remediation is trustworthy where it was measured: coverage reproduces CI exactly, the
+snapshot threading, calibration bounds, cloud-requirement reading and every round-15 exact attack hold.
+
+The security claim #121 was built to make true is not trustworthy. "A Trivy gate that can fail" fails only
+for the half of the lockfile Trivy chooses to read, and the open Scorecard alert has been listing the other
+half all along.

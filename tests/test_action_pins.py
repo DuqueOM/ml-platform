@@ -333,3 +333,68 @@ def test_a_verified_release_download_passes(tmp_path: Path, monkeypatch) -> None
         '          echo "abc123  tool" | sha256sum -c -\n'
     )
     assert not _check_workflow(tmp_path, monkeypatch, body)
+
+
+def _all_failures(tmp_path: Path, monkeypatch, body: str) -> list[str]:  # type: ignore[no-untyped-def]
+    import importlib
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    module = importlib.import_module("check_action_pins")
+    workflows = tmp_path / "workflows"
+    workflows.mkdir()
+    (workflows / "probe.yml").write_text(body, encoding="utf-8")
+    monkeypatch.setattr(module, "WORKFLOWS", workflows)
+    result: list[str] = module.check()
+    return result
+
+
+def _step(*lines: str) -> str:
+    return "jobs:\n  x:\n    steps:\n      - name: fetch\n        run: |\n" + "".join(
+        f"          {line}\n" for line in lines
+    )
+
+
+@pytest.mark.parametrize(
+    ("lines", "expected"),
+    [
+        # QA-4 round sixteen: each passed P10.
+        pytest.param(
+            [
+                "curl -sSLf https://raw.githubusercontent.com/acme/tool/main/install.sh -o install.sh",
+                'echo "abc  install.sh" | sha256sum -c -',
+            ],
+            "moving reference",
+            id="raw-githubusercontent-branch",
+        ),
+        pytest.param(
+            ["curl -sSLf https://get.example.dev/install.sh | sh"], "pipes a download into a shell", id="curl-pipe-sh"
+        ),
+        pytest.param(
+            [_PINNED, 'echo "deadbeef  README.md" | sha256sum -c -'],
+            "without verifying its digest",
+            id="checks-another-file",
+        ),
+        pytest.param(
+            [_PINNED, 'echo "abc123  tool" | sha256sum -c - || true'],
+            "without verifying its digest",
+            id="check-swallowed",
+        ),
+        pytest.param(
+            [_PINNED, '# echo "abc123  tool" | sha256sum -c -'],
+            "without verifying its digest",
+            id="check-commented-out",
+        ),
+    ],
+)
+def test_p10_sees_every_way_a_download_escaped_it(tmp_path: Path, monkeypatch, lines: list[str], expected: str) -> None:  # type: ignore[no-untyped-def]
+    failures = _all_failures(tmp_path, monkeypatch, _step(*lines))
+    assert any(expected in failure for failure in failures), failures
+
+
+def test_p10_accepts_a_download_verified_by_name(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """The converse, so the rules above cannot pass by refusing every download."""
+    body = _step(
+        "curl -sSLf -o tool https://raw.githubusercontent.com/acme/tool/" + "a" * 40 + "/tool",
+        'echo "abc123  tool" | sha256sum -c -',
+    )
+    assert _all_failures(tmp_path, monkeypatch, body) == []

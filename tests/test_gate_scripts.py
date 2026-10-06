@@ -1469,6 +1469,16 @@ _HOSTLESS_FORMS = {
     # A quotation cut short still names a private repository unless what it
     # cuts is the prefix of a public one.
     "elided-private": f"see {_ACCOUNT}/{_HIDDEN[:6]}…",
+    # QA-4 round sixteen: behind a `/`, under any host. None needs to resolve
+    # as a link to publish the name.
+    "github-dev": f"https://github.dev/{_ACCOUNT}/{_HIDDEN}",
+    "vscode-dev": f"https://vscode.dev/github/{_ACCOUNT}/{_HIDDEN}",
+    "ghcr-image": f"image: ghcr.io/{_ACCOUNT.lower()}/{_HIDDEN}:1.0",
+    "shields-badge": f"![v](https://img.shields.io/github/v/release/{_ACCOUNT}/{_HIDDEN})",
+    "codecov": f"https://codecov.io/gh/{_ACCOUNT}/{_HIDDEN}",
+    "deepwiki": f"https://deepwiki.com/{_ACCOUNT}/{_HIDDEN}",
+    "root-relative": f"[design](/{_ACCOUNT}/{_HIDDEN}/blob/main/x.md)",
+    "url-encoded": f"https://github.com/{_ACCOUNT}%2F{_HIDDEN}",
 }
 
 
@@ -1489,8 +1499,20 @@ def test_c6_reads_a_repository_named_without_a_host(form: str) -> None:
         f"`{_ACCOUNT.lower()}/...` is the same account",
         "uses: actions/checkout@v4 and owner/repo#12 under another account",
         f"the answers file held a local path (`/home/{_ACCOUNT.lower()}/projects/template`)",
+        f"on macOS it was `/Users/{_ACCOUNT}/projects/template`",
+        f"a snippet at https://gist.github.com/{_ACCOUNT}/abc123def456",
+        f"the image is ghcr.io/{_ACCOUNT.lower()}/ml-platform/demand-forecast",
     ],
-    ids=["public", "elided-public", "ellipsis-prose", "other-account", "filesystem-path"],
+    ids=[
+        "public",
+        "elided-public",
+        "ellipsis-prose",
+        "other-account",
+        "filesystem-path",
+        "macos-home",
+        "gist-id",
+        "public-image",
+    ],
 )
 def test_c6_does_not_fail_what_is_public_or_not_a_reference(text: str) -> None:
     probe = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.md"
@@ -1510,6 +1532,9 @@ _C9_HIDDEN = {
     "vcs-ref-head-remote": "```bash\ncopier copy --vcs-ref HEAD gh:owner/repo ./svc\n```\n",
     "vcs-ref-branch-remote": "```bash\ncopier copy --vcs-ref=main gh:owner/repo ./svc\n```\n",
     "update-outside-projects": "```bash\ncd services/x && uvx copier update --vcs-ref HEAD --trust\n```\n",
+    # QA-4 round sixteen.
+    "dotdot-out-of-projects": "```bash\ncd projects/../services/x && copier update --defaults\n```\n",
+    "last-vcs-ref-wins": "```bash\ncopier copy --vcs-ref v0.30.2 --vcs-ref HEAD gh:owner/repo ./svc\n```\n",
 }
 
 
@@ -1559,3 +1584,12 @@ def test_c4_resolves_what_a_workflow_measures(command: str, fails: bool) -> None
     assert (result.returncode == 1) is fails, result.stdout
     if fails:
         assert "agentic/workflows/_gate_probe.md measures" in result.stdout
+
+
+def test_c9_reads_dot_markdown_files_too() -> None:
+    """GitHub renders `.markdown`; a command there is as pasteable as one in `.md` (QA-4 round sixteen)."""
+    probe = REPO_ROOT / "docs" / "runbooks" / "_gate_probe.markdown"
+    with temporarily(probe, "# probe\n\n```bash\ncopier copy gh:owner/repo ./svc\n```\n"):
+        result = _run(GATES["doc-coherence"], "--only", "C9")
+    assert result.returncode == 1, result.stdout
+    assert "docs/runbooks/_gate_probe.markdown documents an unpinned copier command" in result.stdout

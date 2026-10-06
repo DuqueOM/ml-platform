@@ -94,3 +94,35 @@ def test_every_python_probe_the_tests_write_is_omitted_from_measurement() -> Non
     assert probes, "no probe names found — the pattern stopped matching, so this test checks nothing"
     unomitted = sorted(name for name in probes if not any(fnmatch.fnmatch(f"src/pkg/{name}", p) for p in omit))
     assert not unomitted, f"probe files coverage would record and then fail to find: {unomitted}"
+
+
+def test_the_omit_list_drops_the_test_suites_and_nothing_inside_a_package() -> None:
+    """Every distribution's own suite is omitted; no module under `src/` is.
+
+    The list said `*/tests/*`, which also omitted a `tests/` directory inside an
+    import package — `src/serving_core/tests/engine.py` is importable code, and
+    it was never measured (QA-4 round sixteen). Read with coverage's own
+    matcher, because its glob is not fnmatch's: `*` stops at a `/`.
+    """
+    import tomllib
+
+    from coverage.files import GlobMatcher, prep_patterns
+
+    omit = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["coverage"]["run"]["omit"]
+    matcher = GlobMatcher(prep_patterns(omit), "omit")
+    tracked = subprocess.run(
+        ["git", "ls-files", "libs", "projects"], cwd=REPO_ROOT, capture_output=True, text=True, check=True
+    ).stdout.split()
+
+    modules = [path.split("/") for path in tracked if path.endswith(".py") and path.count("/") >= 3]
+    suites = ["/".join(parts) for parts in modules if parts[2] == "tests"]
+    package_code = ["/".join(parts) for parts in modules if parts[2] == "src"]
+    assert suites, "no test suite found; the layout this test reads has changed"
+    assert package_code, "no package module found; the layout this test reads has changed"
+
+    measured_suites = sorted(path for path in suites if not matcher.match(str(REPO_ROOT / path)))
+    assert not measured_suites, f"test suites coverage would measure as if they were code: {measured_suites}"
+    omitted_code = sorted(path for path in package_code if matcher.match(str(REPO_ROOT / path)))
+    assert not omitted_code, f"package modules coverage would never measure: {omitted_code}"
+    for planted in ("libs/serving-core/src/serving_core/tests/engine.py", "projects/x/src/x/tests/model.py"):
+        assert not matcher.match(str(REPO_ROOT / planted)), f"{planted} is importable code, and it is omitted"

@@ -158,16 +158,41 @@ def test_an_inline_skip_with_a_reason_is_counted_and_passes(tmp_path: Path) -> N
     assert "(1 inline)" in result.stdout, "the reasoned inline skip was not counted"
 
 
-def test_the_empty_state_is_stated_rather_than_implied() -> None:
-    """A printed zero can be noticed; a green tick over nothing cannot.
+def _real_acceptances() -> int:
+    """Accepted findings in the real baselines, counted without the gate's own parser.
 
-    This is the whole reason the summary carries a count. If someone ever
-    rewires the parser and it silently stops finding entries, the number is
-    where that shows up.
+    The `.trivyignore` lines that name an ID, plus the YAML baselines' list
+    entries. Independent on purpose: the count the gate prints is what this
+    test checks, so the test cannot borrow the gate's arithmetic.
+    """
+    import yaml
+
+    directory = REPO_ROOT / ".security-baselines"
+    count = sum(
+        1
+        for line in (directory / ".trivyignore").read_text(encoding="utf-8").splitlines()
+        if line.split("#", 1)[0].strip()
+    )
+    for name, key in (("checkov.yml", "skip-check"), ("tfsec.yml", "exclude")):
+        document = yaml.safe_load((directory / name).read_text(encoding="utf-8")) or {}
+        count += len(document.get(key) or [])
+    return count
+
+
+def test_the_count_is_stated_rather_than_implied() -> None:
+    """A printed count can be checked; a green tick over nothing cannot.
+
+    The summary carries the number of entries it examined. If someone rewires
+    the parser and it silently stops finding entries, the number is where that
+    shows up — so it is compared with an independent count of the real files.
+    The first acceptance (pyarrow in the serving image, round sixteen) turned
+    this from "the count is zero" into "the count is the count".
     """
     result = _run()
-    assert "0 entr(ies) examined" in result.stdout
-    assert "armed, not satisfied" in result.stdout
+    expected = _real_acceptances()
+    assert f"{expected} entr(ies) examined" in result.stdout, result.stdout
+    if expected == 0:
+        assert "armed, not satisfied" in result.stdout
 
 
 def test_a_well_formed_entry_passes(tmp_path: Path) -> None:
@@ -337,7 +362,8 @@ def test_the_probe_left_no_suppression_behind() -> None:
     """A probe surviving its test IS the finding this gate reports."""
     result = _run()
     assert result.returncode == 0, f"the real baselines are not clean:\n{result.stdout}"
-    assert "0 entr(ies) examined" in result.stdout
+    for path in (REPO_ROOT / ".security-baselines").iterdir():
+        assert "probe, restored by the test" not in path.read_text(encoding="utf-8"), f"a probe survived in {path}"
 
 
 def test_the_readme_wiring_table_matches_the_workflows() -> None:

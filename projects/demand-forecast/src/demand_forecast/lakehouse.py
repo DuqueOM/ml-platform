@@ -30,6 +30,7 @@ from pyiceberg.catalog.sql import SqlCatalog
 from pyiceberg.exceptions import NoSuchTableError
 from pyiceberg.partitioning import PartitionField, PartitionSpec
 from pyiceberg.schema import Schema
+from pyiceberg.table import Table
 from pyiceberg.transforms import MonthTransform
 from pyiceberg.types import DoubleType, IntegerType, LongType, NestedField, TimestampType
 
@@ -65,8 +66,8 @@ class WriteResult:
         snapshot_id: The snapshot this write created. A model card that records
             it can reconstruct its exact training input; one that records only
             a date cannot, because the date's contents may have been rewritten.
-        rows: Rows written.
-        mode: ``append`` or ``overwrite``.
+        rows: Rows written, or for a delete, rows removed.
+        mode: ``append``, ``overwrite`` or ``delete``.
     """
 
     snapshot_id: int
@@ -152,7 +153,7 @@ def catalog_from_environment() -> Catalog:
     )
 
 
-def ensure_table(catalog: Catalog):  # type: ignore[no-untyped-def]
+def ensure_table(catalog: Catalog) -> Table:
     """Create the table if absent, otherwise return the existing one.
 
     Idempotent on purpose: an ingestion that must be told whether it is the
@@ -244,22 +245,39 @@ def write_demand(demand: pl.DataFrame, catalog: Catalog, *, overwrite: bool = Fa
 
     table = ensure_table(catalog)
     arrow = _to_arrow(demand)
+    head = table.metadata.current_snapshot_id
 
     if overwrite:
         table.overwrite(arrow, overwrite_filter=overwrite_filter(demand))
     else:
         table.append(arrow)
 
-    table.refresh()
-    snapshot = table.current_snapshot()
-    if snapshot is None:
+    snapshot_id = _committed_head(table, head)
+    if snapshot_id is None:
         # Not an assert: `python -O` strips those, and this guards the one
         # value the caller uses to find the data again. A stripped guard
         # returns a WriteResult with no snapshot id and no complaint.
         raise RuntimeError("a write produced no snapshot; the table did not commit")
-    return WriteResult(
-        snapshot_id=snapshot.snapshot_id, rows=demand.height, mode="overwrite" if overwrite else "append"
-    )
+    return WriteResult(snapshot_id=snapshot_id, rows=demand.height, mode="overwrite" if overwrite else "append")
+
+
+def _committed_head(table: Table, head: int | None) -> int | None:
+    """The snapshot THIS table object's last commit produced, or None if it produced none.
+
+    Read from the metadata the commit itself returned — pyiceberg replaces
+    ``table.metadata`` with the catalogue's commit response — and NOT from a
+    ``refresh()``. A refresh reads the catalogue's head at that moment, and
+    another writer (a manual ingest, a second DAG run) can commit between this
+    commit and that read; the caller would then validate, train on and record
+    the other writer's snapshot, rows included. QA-4 round sixteen forced
+    exactly that interleaving and got the other writer's id back.
+
+    ``head`` is the snapshot the table stood at before the operation. An
+    operation that commits nothing leaves the head where it was, and reporting
+    that id would label the previous write's snapshot as this one's.
+    """
+    current = table.metadata.current_snapshot_id
+    return None if current is None or current == head else current
 
 
 def read_demand(catalog: Catalog, *, snapshot_id: int | None = None) -> pl.DataFrame:
@@ -285,7 +303,7 @@ def snapshots(catalog: Catalog) -> list[tuple[int, datetime]]:
     return [(s.snapshot_id, datetime.fromtimestamp(s.timestamp_ms / 1000, tz=UTC)) for s in table.metadata.snapshots]
 
 
-def delete_before(cutoff: datetime, catalog: Catalog) -> WriteResult:
+def delete_before(cutoff: datetime, catalog: Catalog) -> WriteResult | None:
     """Delete rows whose ``event_time`` precedes ``cutoff``.
 
     The operation that exists because fixing an ingest does NOT clean what the
@@ -302,23 +320,34 @@ def delete_before(cutoff: datetime, catalog: Catalog) -> WriteResult:
     protocol makes EXPIRY a STOP operation and this one merely CONSULT.
 
     Args:
-        cutoff: Rows strictly before this instant are removed.
+        cutoff: Rows strictly before this instant are removed. Naive values
+            are read as UTC, as ``event_time`` is stored; aware values are
+            converted to it. :func:`snapshots` and ``datetime.now(UTC)`` both
+            give aware instants, and the column is a naive timestamp, so
+            passing one straight to pyiceberg raised ("Zone offset provided,
+            but not expected") — round sixteen.
         catalog: Defaults to the local MinIO-backed catalogue.
 
     Returns:
-        A :class:`WriteResult` naming the snapshot the delete produced.
+        A :class:`WriteResult` naming the snapshot the delete produced, or
+        ``None`` when no row precedes ``cutoff``. Iceberg commits no snapshot
+        for a delete that matches nothing, and this used to return the
+        previous write's snapshot labelled ``delete`` — a citation of an
+        operation that did not happen.
     """
+    if cutoff.tzinfo is not None:
+        cutoff = cutoff.astimezone(UTC).replace(tzinfo=None)
+
     table = ensure_table(catalog)
-    before = len(table.scan().to_arrow())
+    head = table.metadata.current_snapshot_id
 
     table.delete(delete_filter=f"event_time < '{cutoff.isoformat()}'")
 
-    table.refresh()
-    snapshot = table.current_snapshot()
-    if snapshot is None:
-        # Not an assert: `python -O` strips those, and this guards the one
-        # value the caller uses to find the data again. A stripped guard
-        # returns a WriteResult with no snapshot id and no complaint.
-        raise RuntimeError("a delete produced no snapshot; the table did not commit")
-    after = len(table.scan().to_arrow())
-    return WriteResult(snapshot_id=snapshot.snapshot_id, rows=before - after, mode="delete")
+    snapshot_id = _committed_head(table, head)
+    if snapshot_id is None:
+        return None
+    # Counted at the two named snapshots, not at "the table now": a scan of
+    # the live table after the delete would include a concurrent writer's rows.
+    before = len(table.scan(snapshot_id=head).to_arrow())
+    after = len(table.scan(snapshot_id=snapshot_id).to_arrow())
+    return WriteResult(snapshot_id=snapshot_id, rows=before - after, mode="delete")
