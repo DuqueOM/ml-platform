@@ -18,6 +18,52 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Fixed — QA-4 round sixteen: the dependency gate read half the lock
+
+- **Trivy examined 150 of 275 locked packages and reported success.** Its uv
+  analyser treats everything not reachable from the root project as a dev
+  dependency and skips it — every workspace member and its closure: numpy,
+  scikit-learn, pyarrow, pyiceberg, kfp. It could not read the serving image's
+  `~=` requirements at all. Every Trivy fs step now sets
+  `TRIVY_INCLUDE_DEV_DEPS`; `scripts/resolve_serving_requirements.py` resolves
+  the image's requirements per variant on the Dockerfile's Python; and
+  `scripts/check_scan_coverage.py` fails a scan that did not examine every
+  registry package in `uv.lock` and every resolved pin. Locally 149 of 268
+  before, 268 of 268 after. Upgraded what it then surfaced: virtualenv 21.14.5,
+  mako 1.4.3, multidict 6.9.1, gitpython 3.2.0, oauthlib 4.0.0.
+- **pyarrow 18.0.0 in the serving image (CVE-2026-25087) is accepted for
+  thirty days**, until 2026-11-05. The pin is ml-service-template's, and
+  `services/` is generated (ADR-003); the fix is upstream, tracked as R16-1.
+- **The thresholds gate read the definition being edited.** Flipping a
+  threshold's direction, retargeting its pattern, a decoy comment, a doctored
+  `renamed_from` factor and an unresolvable baseline ref all passed. Value and
+  direction now come from the baseline's own definition, patterns are anchored
+  and must match once, factors are 1 or 100, and a baseline that cannot be
+  read fails.
+- **Bandit** is pinned through `uv.lock` and scans `orchestration/`, the same
+  roots as mypy; **`test_security_controls.py`** matches a control to the steps
+  that run it rather than any step that mentions it.
+- **C6** reads the private account behind any host — github.dev, vscode.dev,
+  ghcr.io, badges, root-relative links, `%2F` — with one pattern instead of
+  two that overlapped. **C9** normalises `cd` paths, reads the last
+  `--vcs-ref`, and scans `.markdown`. **P10** requires the digest check to name
+  the downloaded file, unswallowed, and fails a download piped to a shell.
+- **KFP components installed kfp from PyPI at every step start**, into an image
+  tagged `:latest`, under a comment forbidding both. `install_kfp_package=False`
+  and the deploy-pipeline placeholder; the compiled spec is asserted.
+- **`write_demand` could report another writer's snapshot as its own**, read
+  through a `refresh()`; it now takes the id from its own commit.
+  **`delete_before`** accepts an aware cutoff and returns `None` for a delete
+  that committed nothing, instead of the previous write's snapshot.
+- **The pre-commit type hook checked three of CI's six roots.** It runs CI's
+  line now, and a test holds the hook, AGENTS.md and CONTRIBUTING to it.
+- **A `tests/` directory inside an import package escaped coverage** and the
+  serving-core exemption; only the distribution's own suite is skipped now.
+- **COMPLIANCE_MAPPING said no cluster had observed the NetworkPolicies
+  enforced**; #105 had. PR.PS and PR.IR cite it, and a dated notice lists the
+  other statements in that document found stale (R16-2).
+- 28 mutations added, among them all 13 of the auditor's; each is killed.
+
 ### Fixed — the Trivy gate could not fail, and a critical CVE sat behind it; five dependency updates
 
 - **"BLOCKING" Trivy step that could not block.** Its comment said blocking

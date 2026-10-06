@@ -16,6 +16,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = REPO_ROOT / "scripts" / "check_thresholds.py"
 
@@ -315,7 +317,7 @@ class Threshold:
     higher_is_stricter: bool = True
 
 THRESHOLDS = (
-    Threshold("coverage floor", "ci.yml", r"--cov-fail-under=(\\d+)"),
+    Threshold("coverage floor", "ci.yml", r"run: pytest --cov-fail-under=(\\d+)"),
     Threshold("line floor", "gate.py", r"LINE_FLOOR = ([\\d.]+)"),
 )
 """
@@ -383,7 +385,7 @@ def test_a_threshold_moved_under_the_same_name_is_compared_with_where_it_was(tmp
         monkeypatch,
         repo,
         (("coverage floor", "floors.py", r"SCRIPTS_COMBINED_FLOOR = (\d+)"), {}),
-        (("line floor", "floors.py", r"LINE_FLOOR = (\d+)"), {"renamed_from": None}),
+        (("line floor", "floors.py", r"LINE_FLOOR = (\d+)"), {}),
     )
 
     assert any("coverage floor: 83.0 -> 10.0 (lowered)" in failure for failure in failures), failures
@@ -411,9 +413,9 @@ def test_a_declared_rename_is_compared_in_the_new_unit(tmp_path: Path, monkeypat
     current = (
         (
             ("scripts floor (P12)", "floors.py", r"SCRIPTS_COMBINED_FLOOR = (\d+)"),
-            {"renamed_from": ("coverage floor", 1)},
+            {"renamed_from": (("coverage floor", 1),)},
         ),
-        (("line floor, per library", "floors.py", r"LINE_FLOOR = (\d+)"), {"renamed_from": ("line floor", 100)}),
+        (("line floor, per library", "floors.py", r"LINE_FLOOR = (\d+)"), {"renamed_from": (("line floor", 100),)}),
     )
 
     failures = _compare(monkeypatch, repo, *current)
@@ -432,9 +434,9 @@ def test_an_honest_move_and_rename_passes(tmp_path: Path, monkeypatch) -> None: 
         repo,
         (
             ("scripts floor (P12)", "floors.py", r"SCRIPTS_COMBINED_FLOOR = (\d+)"),
-            {"renamed_from": ("coverage floor", 1)},
+            {"renamed_from": (("coverage floor", 1),)},
         ),
-        (("line floor, per library", "floors.py", r"LINE_FLOOR = (\d+)"), {"renamed_from": ("line floor", 100)}),
+        (("line floor, per library", "floors.py", r"LINE_FLOOR = (\d+)"), {"renamed_from": (("line floor", 100),)}),
     )
 
     assert failures == []
@@ -444,7 +446,7 @@ def test_dropping_an_entry_from_the_watch_list_fails(tmp_path: Path, monkeypatch
     """The number stays in its file, unwatched: the quietest way to free it for lowering later."""
     repo = _watched_repo(tmp_path)
 
-    failures = _compare(monkeypatch, repo, (("coverage floor", "ci.yml", r"--cov-fail-under=(\d+)"), {}))
+    failures = _compare(monkeypatch, repo, (("coverage floor", "ci.yml", r"run: pytest --cov-fail-under=(\d+)"), {}))
 
     assert any("line floor: watched at the baseline and by nothing now" in failure for failure in failures)
 
@@ -456,9 +458,107 @@ def test_a_new_threshold_needs_no_history(tmp_path: Path, monkeypatch) -> None: 
     failures = _compare(
         monkeypatch,
         repo,
-        (("coverage floor", "ci.yml", r"--cov-fail-under=(\d+)"), {}),
+        (("coverage floor", "ci.yml", r"run: pytest --cov-fail-under=(\d+)"), {}),
         (("line floor", "gate.py", r"LINE_FLOOR = ([\d.]+)"), {}),
         (("share ceiling", "budget.py", r"MAX_SHARE = ([\d.]+)"), {"higher_is_stricter": False}),
     )
 
     assert failures == []
+
+
+# --- QA-4 round sixteen: four ways past the by-name comparison ---------------
+#
+# Each beat the gate with it and its tests green: every attribute of a watched
+# threshold was editable in the same commit as its value, and the baseline's
+# definition was consulted only when the current one found nothing.
+
+
+def test_flipping_the_direction_fails(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """A floor declared a ceiling makes any lowering read as tightening."""
+    repo = _watched_repo(tmp_path)
+    (repo / "ci.yml").write_text("run: pytest --cov-fail-under=0\n", encoding="utf-8")
+
+    failures = _compare(
+        monkeypatch,
+        repo,
+        (("coverage floor", "ci.yml", r"run: pytest --cov-fail-under=(\d+)"), {"higher_is_stricter": False}),
+        (("line floor", "gate.py", r"LINE_FLOOR = ([\d.]+)"), {}),
+    )
+
+    assert any("coverage floor: its direction changed from floor to ceiling" in f for f in failures), failures
+
+
+def test_retargeting_the_pattern_at_another_constant_fails(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """The entry points at a decoy that holds; the real constant falls. The baseline's pattern still reads it."""
+    repo = _watched_repo(tmp_path)
+    (repo / "gate.py").write_text("LINE_FLOOR = 0.10\nOTHER = 0.95\n", encoding="utf-8")
+
+    failures = _compare(
+        monkeypatch,
+        repo,
+        (("coverage floor", "ci.yml", r"run: pytest --cov-fail-under=(\d+)"), {}),
+        (("line floor", "gate.py", r"OTHER = ([\d.]+)"), {}),
+    )
+
+    assert any("line floor: 0.9 -> 0.1 (lowered)" in f and "baseline's own pattern" in f for f in failures), failures
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        pytest.param(
+            "# Historically LINE_FLOOR = 0.90\nLINE_FLOOR = 0.10\n", "0.9 -> 0.1 (lowered)", id="decoy-comment"
+        ),
+        pytest.param("LINE_FLOOR = 0.90\nLINE_FLOOR = 0.10\n", "2 lines match", id="defined-twice"),
+    ],
+)
+def test_a_decoy_cannot_stand_in_for_the_constant(  # type: ignore[no-untyped-def]
+    tmp_path: Path, monkeypatch, content: str, expected: str
+) -> None:
+    """`re.search` took the first match, so a comment above a lowered constant read as the old value."""
+    repo = _watched_repo(tmp_path)
+    (repo / "gate.py").write_text(content, encoding="utf-8")
+
+    failures = _compare(
+        monkeypatch,
+        repo,
+        (("coverage floor", "ci.yml", r"run: pytest --cov-fail-under=(\d+)"), {}),
+        (("line floor", "gate.py", r"LINE_FLOOR = ([\d.]+)"), {}),
+    )
+
+    assert any(expected in f for f in failures), failures
+
+
+def test_a_rename_factor_outside_the_closed_set_fails(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """0.90 x 0.09 = 0.081, so 0.09 "is not lowered" — a free factor lowers without the number moving."""
+    repo = _watched_repo(tmp_path)
+    _floors_moved(repo, scripts_floor=86, line_floor=9)
+
+    failures = _compare(
+        monkeypatch,
+        repo,
+        (
+            ("scripts floor (P12)", "floors.py", r"SCRIPTS_COMBINED_FLOOR = (\d+)"),
+            {"renamed_from": (("coverage floor", 1),)},
+        ),
+        (("line floor, per library", "floors.py", r"LINE_FLOOR = (\d+)"), {"renamed_from": (("line floor", 10),)}),
+    )
+
+    assert any("renamed_from factor 10" in f for f in failures), failures
+
+
+def test_an_unresolvable_baseline_fails_rather_than_passing(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """`THRESHOLD_BASELINE_REF=origin/mian` skipped every comparison and printed "none loosened"."""
+    import importlib
+
+    repo = _watched_repo(tmp_path)
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    module = importlib.import_module("check_thresholds")
+    monkeypatch.setattr(module, "REPO_ROOT", repo)
+    monkeypatch.setenv(module.BASELINE_ENV, "origin/mian")
+    monkeypatch.setattr(module, "THRESHOLDS", (module.Threshold("line floor", "gate.py", r"LINE_FLOOR = ([\d.]+)"),))
+
+    failures = module.compare()
+
+    assert len(failures) == 1
+    assert "does not resolve to a commit" in failures[0]

@@ -23,7 +23,8 @@ git add -A                                              # 1. stage FIRST
 uv run python scripts/check_implementation_status.py --write
 uv run python scripts/check_technology_inventory.py --write
 uv run python scripts/measure_cloud_surface.py --write
-uv run ruff format . && uv run ruff check . && uv run mypy libs/ scripts/
+uv run ruff format . && uv run ruff check .
+uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/ projects/store-assistant/src/ orchestration/
 uv run pytest -q
 uv run python scripts/check_doc_coherence.py
 uv run python scripts/check_upstream_parity.py

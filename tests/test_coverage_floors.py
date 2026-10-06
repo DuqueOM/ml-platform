@@ -140,6 +140,34 @@ def test_one_statement_of_code_ends_the_exemption(tmp_path: Path) -> None:
     assert any("libs/serving-core is exempt as empty" in message and "code at" in message for message in failures)
 
 
+def test_code_in_a_tests_directory_inside_the_package_ends_the_exemption(tmp_path: Path) -> None:
+    """QA-4 round sixteen: `src/serving_core/tests/engine.py` is importable code, and it was skipped.
+
+    Only the distribution's own suite, `libs/serving-core/tests/`, is not the
+    package; a `tests` directory under `src/` ships with it.
+    """
+    distribution = tmp_path / "libs" / "serving-core"
+    package = distribution / "src" / "serving_core"
+    (package / "tests").mkdir(parents=True)
+    (package / "__init__.py").write_text('"""Holds no implementation."""\n', encoding="utf-8")
+    (package / "tests" / "engine.py").write_text("def predict(x):\n    return 2 * x\n", encoding="utf-8")
+
+    failures, _ = gate.check(_healthy(), True, root=tmp_path)
+
+    assert any("serving_core/tests/engine.py" in message for message in failures), failures
+
+
+def test_the_distributions_own_suite_does_not_end_the_exemption(tmp_path: Path) -> None:
+    distribution = tmp_path / "libs" / "serving-core"
+    package = distribution / "src" / "serving_core"
+    package.mkdir(parents=True)
+    (distribution / "tests").mkdir()
+    (package / "__init__.py").write_text('"""Holds no implementation."""\n', encoding="utf-8")
+    (distribution / "tests" / "test_empty.py").write_text("def test_it():\n    assert True\n", encoding="utf-8")
+
+    assert gate.check(_healthy(), True, root=tmp_path)[0] == []
+
+
 def test_an_empty_package_keeps_its_exemption(tmp_path: Path) -> None:
     package = tmp_path / "libs" / "serving-core" / "src" / "serving_core"
     package.mkdir(parents=True)

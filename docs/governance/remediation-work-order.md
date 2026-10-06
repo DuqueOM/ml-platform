@@ -1113,6 +1113,89 @@ it no longer applies.
   file exists, whatever the file holds. Whether the content meets the closing
   condition is a review judgement; the date makes someone look.
 
+## Round sixteen — what stays open, and why each one waits
+
+QA-4 round sixteen audited `aea1410` and reported 0 P0, 1 P1, 4 P2 and 10 P3;
+the report is committed as [`qa4/round-16.txt`](qa4/round-16.txt). Its verdict:
+every figure #121 and round fifteen's remediation published reproduces, and
+the dependency gate #121 made blocking examined 150 of the 275 packages in the
+lock — so it could fail, but not on most of what this repository installs.
+
+What closed, in *fix(gates): QA-4 round sixteen remediation*:
+
+| ID | Finding | Closed by |
+| --- | --- | --- |
+| P1 | Trivy treated every workspace member's closure as a dev dependency and skipped it, and could not read the serving image's `~=` requirements at all | `TRIVY_INCLUDE_DEV_DEPS` on every Trivy fs step, held there by a test; the image's requirements resolved to exact pins per variant (`scripts/resolve_serving_requirements.py`); `scripts/check_scan_coverage.py` fails a scan that did not examine every registry package in `uv.lock` and every resolved pin. Locally: 149 of 268 before, 268 of 268 after. The HIGH and MEDIUM findings it then surfaced are fixed by upgrade (virtualenv, mako, multidict, gitpython, oauthlib) except R16-1 |
+| P2 | `check_thresholds.py` was beaten by a flipped direction, a retargeted pattern, a decoy comment, a doctored `renamed_from` factor, and an unresolvable baseline | Value and direction read through the BASELINE's definition; patterns anchored at line start and required to match once; factors restricted to 1 and 100; an unresolvable or unloadable baseline fails. All seven of the auditor's attacks now fail |
+| P2 | Bandit never scanned `orchestration/` and ran unpinned through `uvx` | Declared in the dev extra so `uv.lock` pins it; CI and `make verify` scan the mypy roots, held equal by a test |
+| P2 | `test_security_controls.py` let any step that MENTIONED a tool vouch for it | A control is matched to the steps that RUN it (action or invoked binary); every running step must block unless listed as advisory with a reason |
+| P2 | C6 passed the private account behind github.dev, vscode.dev, ghcr.io, shields, codecov, deepwiki, a root-relative link and `%2F` | The account matched behind any host; home directories and gists excluded by what precedes them. The per-host link pattern it superseded is removed — narrowing it no longer changed anything |
+| P3 | KFP components pip-installed kfp at every step start, into `:latest` | `install_kfp_package=False`; the image is the base Deployment's unresolvable placeholder; the compiled spec is asserted to install nothing and to name a digest or the placeholder. W-8 recorded "the image tag half" closed; this was the half it missed |
+| P3 | `delete_before` refused an aware cutoff and reported a no-op as the previous write's snapshot | Aware cutoffs converted to naive UTC; a delete that commits nothing returns `None`; rows counted at the two named snapshots; the boundary, three zones and the no-op tested on the filesystem backend (kills R16-LH2) |
+| P3 | `write_demand` reported whatever snapshot a `refresh()` found, so a concurrent writer's commit became this run's | The id is read from the commit's own response metadata; a test forces the interleaving in both modes |
+| P3 | The pre-commit mypy hook checked three of CI's six roots and was not triggered by `orchestration/` | The hook's entry is CI's `run:` line, `files:` covers every root, and a test holds both — and AGENTS.md's and CONTRIBUTING's documented commands, which also differed |
+| P3 | C9 exempted `cd projects/../`, read the first `--vcs-ref`, and skipped `.markdown` | Directory normalised, the last ref read, both extensions scanned |
+| P3 | The serving-core exemption and the coverage omit list skipped any `tests/` directory, including one inside the import package | Only the distribution's own `tests/` is skipped or omitted; a test reads the omit list with coverage's own matcher |
+| P3 | P10 accepted a digest check of another file, `\|\| true`, a commented-out check, a branch on raw.githubusercontent.com, and `curl \| sh` | The check must name each downloaded file and not be swallowed; comments are not read; a branch URL is moving; a download piped to a shell fails |
+| P3 | COMPLIANCE_MAPPING said no cluster had observed the NetworkPolicies enforced; this file and the local README said one had | The README and R11-2 are right: PR.PS and PR.IR now cite #105's measurement. The rest of that document is R16-2 |
+| P3 | The override comment said the test fails "the day the pinning package admits" the fix | It fails once the newest LOCKED kfp does; the comment says so |
+| P3 | Two statements in the audit prompt were wrong | See below; the next prompt states alert counts per tool and the measured suite time |
+
+All thirteen of the auditor's mutations are in the catalogue, re-anchored
+where this round moved their code, and all are killed — including the four that
+survived the audit (R16-SEC1, R16-SEC2, R16-LH2, R16-CF4). Every fix above
+carries at least one mutation of its own.
+
+**The prompt's two wrong statements.** "Code scanning shows 0 open CVE alerts"
+was true of Trivy alone, and only because of the P1: Scorecard's
+VulnerabilitiesID alert listed 11. "A full suite takes ~25 min" was not
+measured — 15m45s under parallel load. The next prompt gives the alert count per
+tool and treats Scorecard's VulnerabilitiesID as a finding source.
+
+### R16-1 — The serving image ships pyarrow 18.0.0 (CVE-2026-25087)
+
+**Mode**: CONSULT · cross-repository · **Expires**: 2026-11-05 · **Size**: ~30min upstream, ~30min here
+
+The resolution the P1 fix added made the image's dependencies visible, and the
+first thing visible was `pyarrow ~= 18.0.0` from
+`services/demand-forecast-serving/requirements.txt` — inside CVE-2026-25087's
+range, fixed in 23.0.1. The workspace runs 25.0.1; only the image is affected.
+`services/` is generated (ADR-003), and ml-service-template pins `~= 18.0.0`
+at its HEAD, so the fix cannot be taken here without forking.
+
+Accepted in `.security-baselines/.trivyignore` for thirty days, not the
+quarter the policy allows: the fix is one line upstream. **Closes when** the
+template moves pyarrow to `>= 23.0.1`, a release is tagged, and this service is
+updated to it with `copier update --vcs-ref <tag>` — then the entry is deleted,
+and the expiry test fails if it is not.
+
+### R16-2 — COMPLIANCE_MAPPING is stale beyond the row the audit named
+
+**Mode**: AUTO · **Size**: ~3h
+
+Correcting PR.PS meant reading the rest, and five other statements are no
+longer true — Bandit "invoked by no workflow", Trivy "cannot fail a build",
+`.security-baselines/` "holds zero entries", branch protection "two of four",
+C7 "red at 37 commits" and "55 audit entries". Each is listed, dated, in a
+notice at the top of that document, so none is read as current meanwhile. All
+understate the controls. Re-verify every row against the tree and re-run
+every command in its re-derive section; then build
+`scripts/check_compliance_mapping.py` (quality-gates C3) at least for the
+figures that section derives, which is the only thing that stops this
+recurring.
+
+### R16-3 — diskcache 5.6.3 has an advisory with no fixed release
+
+**Mode**: CONSULT · **Size**: none until a fix exists
+
+CVE-2025-69872 (MODERATE): an attacker who can write to a diskcache directory
+can execute code when the cache is read, through pickle. Reached only through
+`dvc-data`, whose cache lives in the repository's own `.dvc/` directory, owned by
+the user who runs DVC — so the attacker the advisory needs already has that
+user's files. Below the gate's HIGH threshold, so it does not block, and no
+release fixes it. Revisit when diskcache publishes a fix (Dependabot proposes
+it) or a scanner rates it HIGH, at which point the gate fails and decides it.
+
 ## Not for an agent
 
 Three items where doing the work autonomously would itself be the error,
