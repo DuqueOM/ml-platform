@@ -21,6 +21,7 @@ Order matters and the reason is specific.
 ```bash
 git add -A                                              # 1. stage FIRST
 uv run python scripts/check_implementation_status.py --write
+uv run python scripts/check_readme.py --write          # after the status: the README reads it
 uv run python scripts/check_technology_inventory.py --write
 uv run python scripts/measure_cloud_surface.py --write
 uv run ruff format . && uv run ruff check .

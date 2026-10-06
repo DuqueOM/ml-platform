@@ -1408,3 +1408,43 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_serving_can_load_artifact.py
   expect: killed
+- id: P19-1
+  origin: P19 — a hand-typed status block passes
+  file: scripts/check_readme.py
+  old: '    elif block.strip() != generated.strip():'
+  new: '    elif False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py
+  expect: killed
+- id: P19-2
+  origin: P19 — sections are not compared with the standard
+  file: scripts/check_readme.py
+  old: '    if found != SECTIONS:'
+  new: '    if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py
+  expect: killed
+- id: P19-3
+  origin: P19 — the related-repositories table may drift between the two READMEs
+  file: scripts/check_readme.py
+  old: '    elif carried is None or carried.strip() != canonical.strip():'
+  new: '    elif carried is None:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py
+  expect: killed
+- id: P19-4
+  origin: P19 — any badge passes, claims included
+  file: scripts/check_readme.py
+  old: '        if not any(pattern.search(url) for pattern in (*ALLOWED_BADGES, *(gated for gated, _ in GATED_BADGES))):'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py
+  expect: killed
+- id: P19-5
+  origin: P19 — the word budget is not enforced
+  file: scripts/check_readme.py
+  old: '    if words > MAX_WORDS:'
+  new: '    if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py
+  expect: killed
