@@ -57,24 +57,30 @@ def _body(pipeline: ModuleType, name: str) -> Any:
 # --- the promotion gate -----------------------------------------------------
 
 
-def test_the_gate_promotes_a_model_that_beats_the_baseline_with_calibrated_intervals(pipeline: ModuleType) -> None:
-    assert _body(pipeline, "check_quality_gate")(skill=0.124, coverage_ok=True) is None
+def test_the_gate_promotes_a_model_that_clears_the_rule(pipeline: ModuleType) -> None:
+    assert _body(pipeline, "check_quality_gate")(skill=0.124, coverage=0.896) is None
 
 
 @pytest.mark.parametrize(
-    ("skill", "coverage_ok", "reason"),
+    ("skill", "coverage", "reason"),
     [
-        # Zero is a tie with "same hour last week", and a tie has not earned a
-        # deployment: the comparison is strict.
-        pytest.param(0.0, True, "does not beat the seasonal baseline", id="tie-with-baseline"),
-        pytest.param(-0.183, True, "does not beat the seasonal baseline", id="loses-to-baseline"),
-        pytest.param(0.124, False, "not calibrated", id="miscalibrated"),
+        # A tie with "same hour last week" has not earned a deployment — and
+        # neither, now, has a skill under the floor the DAG always held.
+        pytest.param(0.0, 0.90, "skill", id="tie-with-baseline"),
+        pytest.param(0.03, 0.90, "skill", id="below-the-skill-floor"),
+        pytest.param(-0.183, 0.90, "skill", id="loses-to-baseline"),
+        pytest.param(0.124, 0.84, "is below 0.85", id="under-covered"),
+        pytest.param(0.124, 0.97, "is above 0.95", id="over-covered"),
     ],
 )
-def test_the_gate_refuses_promotion(pipeline: ModuleType, skill: float, coverage_ok: bool, reason: str) -> None:
-    """Raising is what fails the run; a gate that returned would let promotion proceed."""
-    with pytest.raises(RuntimeError, match=reason):
-        _body(pipeline, "check_quality_gate")(skill=skill, coverage_ok=coverage_ok)
+def test_the_gate_refuses_promotion(pipeline: ModuleType, skill: float, coverage: float, reason: str) -> None:
+    """Raising is what fails the run; a gate that returned would let promotion proceed.
+
+    The rule is `demand_forecast.promotion.check`, the DAG's too (W-14).
+    """
+    with pytest.raises(ValueError, match="quality gate failed") as refused:
+        _body(pipeline, "check_quality_gate")(skill=skill, coverage=coverage)
+    assert reason in str(refused.value)
 
 
 # --- the steps before it ----------------------------------------------------
@@ -153,46 +159,54 @@ def test_validation_logs_its_evidence_and_fails_the_run_on_either_check(
     }
 
 
-@pytest.mark.parametrize(("coverage", "calibrated"), [(0.9, True), (0.97, False)])
-def test_the_backtest_hands_the_gate_both_verdicts(
-    pipeline: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, coverage: float, calibrated: bool
+def test_the_backtest_is_the_promotion_design_and_hands_the_gate_raw_numbers(
+    pipeline: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """`coverage_ok` comes from the report, never a literal — and over-coverage is not calibrated."""
+    """The design comes from `promotion`, not from a parameter; the verdict is the gate's, not this step's.
+
+    The step returned `coverage_ok`, a verdict computed here by a calibration
+    rule the DAG did not share, over a 3-fold backtest the DAG did not run
+    (QA-4 R15-2). It returns the two numbers now, and the gate judges them.
+    """
     import polars as pl
-    from demand_forecast import train
+    from demand_forecast import promotion, train
 
     pl.DataFrame({"zone": [1]}).write_parquet(tmp_path / "demand.parquet")
     fold = train.FoldResult(
-        index=0, model_mae=3.0, baseline_mae=4.0, coverage=coverage, interval_width=5.0, n_test=168, n_compared=168
+        index=0, model_mae=3.0, baseline_mae=4.0, coverage=0.97, interval_width=5.0, n_test=168, n_compared=168
     )
-    arguments: dict[str, Any] = {}
+    received: list[object] = []
 
-    def evaluate(frame: pl.DataFrame, **kwargs: Any) -> train.BacktestReport:
-        arguments.update(kwargs)
-        return train.BacktestReport(folds=[fold], seed=kwargs["seed"])
+    def backtest(frame: pl.DataFrame) -> train.BacktestReport:
+        received.append(frame)
+        return train.BacktestReport(folds=[fold], seed=promotion.DESIGN.seed)
 
-    monkeypatch.setattr(train, "evaluate", evaluate)
+    monkeypatch.setattr(promotion, "backtest", backtest)
     metrics = Artifact(tmp_path / "metrics")
 
-    outcome = _body(pipeline, "backtest_model")(
-        demand=Artifact(tmp_path / "demand.parquet"), n_folds=3, horizon=168, seed=7, metrics=metrics
-    )
+    outcome = _body(pipeline, "backtest_model")(demand=Artifact(tmp_path / "demand.parquet"), metrics=metrics)
 
-    assert arguments == {"n_folds": 3, "horizon": 168, "seed": 7}
-    assert (outcome.skill, outcome.coverage_ok) == (0.25, calibrated)
-    assert metrics.metrics == {"model_mae": 3.0, "baseline_mae": 4.0, "skill": 0.25, "coverage": coverage, "seed": 7}
+    assert len(received) == 1
+    assert (outcome.skill, outcome.coverage) == (0.25, 0.97)
+    assert metrics.metrics == {
+        "model_mae": 3.0,
+        "baseline_mae": 4.0,
+        "skill": 0.25,
+        "coverage": 0.97,
+        "n_folds": promotion.DESIGN.n_folds,
+        "seed": promotion.DESIGN.seed,
+    }
 
 
-def test_the_pipeline_backtest_design_is_pinned(pipeline: ModuleType) -> None:
-    """The pipeline's defaults decide what its gate judges, and no test read them.
+def test_no_run_can_choose_its_own_backtest(pipeline: ModuleType) -> None:
+    """The pipeline takes its source and nothing else.
 
-    `n_folds=3` drops folds 0 and 1 — the two the model loses — so the pipeline
-    measures skill +23.0% where the DAG measures +12.4% on the same data. A
-    default of 1 survived the whole suite (QA-4 round fifteen, R15-KFP4).
-    Pinned as it stands, not endorsed: W-14 decides the design.
+    `n_folds`, `horizon` and `seed` were pipeline parameters, defaulting to a
+    3-fold design that drops the folds the model loses; a default of 1 survived
+    the whole suite (R15-KFP4). A parameter is a way for one run to be judged
+    on a different backtest than another, so there is none (W-14).
     """
     import inspect
 
-    signature = inspect.signature(pipeline.demand_forecast_training.pipeline_func)
-    defaults = {name: param.default for name, param in signature.parameters.items()}
-    assert (defaults["n_folds"], defaults["horizon"], defaults["seed"]) == (3, 168, 42)
+    assert list(inspect.signature(pipeline.demand_forecast_training.pipeline_func).parameters) == ["source_uri"]
+    assert "n_folds" not in inspect.signature(pipeline.backtest_model.python_func).parameters

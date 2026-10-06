@@ -110,7 +110,8 @@ prediction, confirmed rather than assumed. Folds 0 and 1 compare 99.31% and
 | 4 | +22.9% | 89.7% |
 
 The expanding window gives the earliest folds the least history, and there the
-model does worse than repeating last week. It clears `MIN_SKILL` on the mean,
+model does worse than repeating last week. It clears the promotion skill floor
+(`promotion.MIN_SKILL`) on the mean,
 not in every fold — which matters for anyone reading +12.4% as "better than
 the baseline, always".
 
@@ -172,11 +173,15 @@ ones, and they are listed here for that reason.
 Which decisions require a human, and what enforces that rather than expecting
 it.
 
-- **Promotion is gated on measurements, in code.** The retraining DAG refuses
-  to promote a model whose skill is below `MIN_SKILL = 0.05` or whose interval
-  coverage is below `MIN_COVERAGE = 0.85`, and it reports **both** failures
-  rather than the first — an operator who fixes skill to find coverage was
-  failing all along has been told half the truth.
+- **Promotion is gated on measurements, in code, by one rule.**
+  `demand_forecast/promotion.py` refuses a model whose skill is below
+  `MIN_SKILL = 0.05` or whose interval coverage falls outside
+  `[MIN_COVERAGE, MAX_COVERAGE] = [0.85, 0.95]`, judged on a five-fold backtest
+  (the design that includes the two folds this model loses). It reports every
+  failure rather than the first — an operator who fixes skill to find coverage
+  was failing all along has been told half the truth. The retraining DAG and
+  the KFP pipeline both call it; each used to carry its own copy, and the
+  copies disagreed on all three (W-14).
 - **Lowering any threshold is STOP.** `evals/gates.yaml` declares each
   threshold with the reason it holds that value, and changing one requires a
   recorded reason and a named decision-maker ([AGENTS.md](../../AGENTS.md)).

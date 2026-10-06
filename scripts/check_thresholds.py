@@ -43,6 +43,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from check_coverage_floors import ML_PACKAGES  # noqa: E402
 
 _FLOORS = "scripts/check_coverage_floors.py"
+_PROMOTION = "projects/demand-forecast/src/demand_forecast/promotion.py"
 
 #: Upper bound on every short subprocess this script runs (git, grep). A bound,
 #: not a performance budget: nothing here legitimately takes more than seconds,
@@ -75,7 +76,8 @@ class Threshold:
     #: factor that converts the old value into the new unit —
     #: `(("L1 line coverage floor", 100),)` for a floor that moved from a
     #: fraction (0.90) to a percent (90). More than one when thresholds MERGE:
-    #: the merged number is compared with every predecessor. Factors come from
+    #: the merged number is compared with every predecessor, so it may not be
+    #: looser than any of them. Factors come from
     #: `RENAME_FACTORS` only. Needed only for a rename: a threshold whose name
     #: is unchanged is found at the baseline by name. See `compare`.
     renamed_from: tuple[tuple[str, float], ...] = ()
@@ -154,21 +156,34 @@ THRESHOLDS = (
         "libs/llm-core/src/llm_core/retrieval_eval.py",
         r"def beats_baseline\(.*\bmargin: float = ([\d.]+)",
     ),
-    Threshold("retrain skill floor", "orchestration/dags/demand_forecast_training.py", r"MIN_SKILL = ([\d.]+)"),
-    Threshold("retrain coverage floor", "orchestration/dags/demand_forecast_training.py", r"MIN_COVERAGE = ([\d.]+)"),
-    # The pipeline's half of the promotion gate. Only the DAG's two constants
-    # were watched, so the KFP gate — a different rule over a different
-    # backtest (W-14) — could be loosened silently (QA-4 round fifteen, R15-2).
+    # The promotion rule, defined once for both orchestrators (W-14). The DAG
+    # and the pipeline each held their own copy — `MIN_SKILL`/`MIN_COVERAGE`
+    # in the DAG, `skill <= 0` and a tolerance in the pipeline — and the merged
+    # numbers answer to every one of those predecessors, so none may be looser
+    # than either copy was.
     Threshold(
-        "pipeline promotion skill floor",
-        "orchestration/pipelines/demand_forecast_pipeline.py",
-        r"if skill <= ([\d.]+):",
+        "promotion skill floor",
+        _PROMOTION,
+        r"MIN_SKILL = ([\d.]+)",
+        renamed_from=(("retrain skill floor", 1), ("pipeline promotion skill floor", 1)),
     ),
     Threshold(
-        "calibration tolerance (pipeline gate)",
+        "promotion coverage floor",
+        _PROMOTION,
+        r"MIN_COVERAGE = ([\d.]+)",
+        renamed_from=(("retrain coverage floor", 1),),
+    ),
+    Threshold("promotion coverage ceiling", _PROMOTION, r"MAX_COVERAGE = ([\d.]+)", higher_is_stricter=False),
+    # A FLOOR, and the reason is specific to this model: fewer folds drop the
+    # OLDEST first, and those are the folds it loses. The pipeline's 3-fold
+    # default reported skill +23.0% where five folds give +12.4% (QA-4 R15-2).
+    Threshold("promotion backtest folds", _PROMOTION, r"n_folds: int = (\d+)"),
+    Threshold(
+        "calibration tolerance (backtest summary)",
         "projects/demand-forecast/src/demand_forecast/train.py",
         r"def intervals_are_calibrated\(self, tolerance: float = ([\d.]+)\)",
         higher_is_stricter=False,
+        renamed_from=(("calibration tolerance (pipeline gate)", 1),),
     ),
     Threshold(
         "ingest reject ceiling",

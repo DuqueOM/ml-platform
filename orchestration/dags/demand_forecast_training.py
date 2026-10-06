@@ -36,17 +36,11 @@ from airflow.sdk import dag, task
 
 logger = logging.getLogger(__name__)
 
-#: Skill is `1 - model_mae / baseline_mae` against a seasonal-naive baseline.
-#: A model that cannot beat "same hour last week" has not earned a deployment,
-#: and 0.05 is deliberately low: this gate exists to catch a broken pipeline,
-#: not to express an ambition. Raising it is a threshold change and therefore
-#: watched by `scripts/check_thresholds.py`.
-MIN_SKILL = 0.05
-
-#: Conformal intervals claim 90% coverage. Below this they are claiming
-#: something false, which is worse than having no interval at all — a decision
-#: made against a wrong interval is made with false confidence.
-MIN_COVERAGE = 0.85
+# The promotion rule and the backtest it is judged on live in ONE place,
+# `demand_forecast.promotion`, which the KFP pipeline calls too. This file held
+# `MIN_SKILL = 0.05` and a one-sided `MIN_COVERAGE = 0.85` while the pipeline
+# held `skill > 0` and a two-sided band over a 3-fold backtest, so the same model
+# could be promoted by one orchestrator and refused by the other (W-14).
 
 
 @dag(
@@ -152,9 +146,9 @@ def demand_forecast_training() -> None:
         compares unequal to itself in the next task.
         """
         from demand_forecast.lakehouse import catalog_from_environment, read_demand
-        from demand_forecast.train import evaluate
+        from demand_forecast.promotion import backtest
 
-        report = evaluate(read_demand(catalog_from_environment(), snapshot_id=validated["snapshot_id"]))
+        report = backtest(read_demand(catalog_from_environment(), snapshot_id=validated["snapshot_id"]))
         return {
             **validated,
             "skill": report.skill,
@@ -167,19 +161,13 @@ def demand_forecast_training() -> None:
     def check_quality_gate(metrics: dict[str, Any]) -> dict[str, Any]:
         """Raise, so the run fails and nothing downstream publishes.
 
-        Both conditions are reported before raising. Failing on the first one
-        hides the second, and an operator who fixes skill only to meet the
-        coverage failure on the next run has paid for two cycles to learn one
-        thing.
+        Every rule missed is reported in one failure, by
+        :func:`demand_forecast.promotion.check` — the same function the KFP
+        pipeline's gate calls, so the two cannot reach different verdicts.
         """
-        failures = []
-        if metrics["skill"] < MIN_SKILL:
-            failures.append(f"skill {metrics['skill']:.4f} < {MIN_SKILL} against the seasonal-naive baseline")
-        if metrics["coverage"] < MIN_COVERAGE:
-            failures.append(f"interval coverage {metrics['coverage']:.4f} < {MIN_COVERAGE}")
+        from demand_forecast.promotion import check
 
-        if failures:
-            raise ValueError("quality gate failed: " + "; ".join(failures))
+        check(metrics["skill"], metrics["coverage"])
 
         logger.info("gate passed: skill %.4f, coverage %.4f", metrics["skill"], metrics["coverage"])
         return metrics

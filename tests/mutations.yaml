@@ -741,12 +741,12 @@ mutations:
   - uv run pytest -o addopts= -q -x -p no:randomly libs/feature-defs/tests/test_point_in_time.py
   expect: killed
 - id: DAG1
-  origin: W-5 DAG task bodies, author — the floor is inclusive
-  file: orchestration/dags/demand_forecast_training.py
-  old: '        if metrics["skill"] < MIN_SKILL:'
-  new: '        if metrics["skill"] <= MIN_SKILL:'
+  origin: 'W-5 DAG task bodies, author — the floor is inclusive (re-anchored by W-14: the rule moved to demand_forecast.promotion)'
+  file: projects/demand-forecast/src/demand_forecast/promotion.py
+  old: '    if not _at_least(skill, MIN_SKILL):'
+  new: '    if skill <= MIN_SKILL:'
   run:
-  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_promotion.py
   expect: killed
 - id: DAG2
   origin: W-5 DAG task bodies, author
@@ -765,12 +765,12 @@ mutations:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py
   expect: killed
 - id: KFP1
-  origin: W-5 pipeline component bodies, author — a tie has not earned promotion
+  origin: 'W-5 pipeline component bodies, author — the pipeline''s gate stops gating (re-anchored by W-14: it calls the shared rule)'
   file: orchestration/pipelines/demand_forecast_pipeline.py
-  old: '    if skill <= 0:'
-  new: '    if skill < 0:'
+  old: '    check(skill, coverage)'
+  new: '    pass'
   run:
-  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_pipeline_components.py
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_pipeline_components.py tests/test_promotion_agreement.py
   expect: killed
 - id: KFP2
   origin: W-5 pipeline component bodies, author
@@ -845,20 +845,20 @@ mutations:
   - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_training.py
   expect: killed
 - id: R15-DAG4
-  origin: QA-4 round fifteen remediation
-  file: orchestration/dags/demand_forecast_training.py
-  old: '        report = evaluate(read_demand(catalog_from_environment(), snapshot_id=validated["snapshot_id"]))'
-  new: '        report = evaluate(read_demand(catalog_from_environment(), snapshot_id=validated["snapshot_id"]), n_folds=3)'
+  origin: 'QA-4 round fifteen remediation — promotion judged on three folds (re-anchored by W-14: the design lives in one place)'
+  file: projects/demand-forecast/src/demand_forecast/promotion.py
+  old: '    n_folds: int = 5'
+  new: '    n_folds: int = 3'
   run:
-  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_promotion.py
   expect: killed
 - id: R15-KFP4
-  origin: QA-4 round fifteen remediation
-  file: orchestration/pipelines/demand_forecast_pipeline.py
-  old: '    n_folds: int = 3,'
-  new: '    n_folds: int = 1,'
+  origin: QA-4 round fifteen remediation — the DAG's gate stops calling the shared rule (re-anchored by W-14)
+  file: orchestration/dags/demand_forecast_training.py
+  old: '        check(metrics["skill"], metrics["coverage"])'
+  new: '        pass'
   run:
-  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_pipeline_components.py
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py tests/test_promotion_agreement.py
   expect: killed
 - id: R15-C6a
   origin: QA-4 round fifteen remediation
@@ -1351,4 +1351,60 @@ mutations:
   new: '    "*/tests/*",'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_scope.py -k omit_list_drops
+  expect: killed
+- id: W14-PER1
+  origin: W-14 / R15-1 — the artifact keeps the fit-time Generator numpy 1.26 refuses
+  file: projects/demand-forecast/src/demand_forecast/persist.py
+  old: '        "estimator": _without_fit_time_random_state(model.estimator),'
+  new: '        "estimator": model.estimator,'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_persist.py
+  expect: killed
+- id: W14-P18
+  origin: W-14 / R15-1 — the same artifact, read by the gate that loads it under the image's requirements
+  file: projects/demand-forecast/src/demand_forecast/persist.py
+  old: '        "estimator": _without_fit_time_random_state(model.estimator),'
+  new: '        "estimator": model.estimator,'
+  run:
+  - uv run python scripts/check_serving_can_load_artifact.py
+  expect: killed
+- id: W14-PRO1
+  origin: W-14 — the coverage ceiling the DAG never had is lifted
+  file: projects/demand-forecast/src/demand_forecast/promotion.py
+  old: MAX_COVERAGE = 0.95
+  new: MAX_COVERAGE = 1.0
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_promotion.py
+  expect: killed
+- id: W14-PRO2
+  origin: W-14 — the skill floor moved by less than the gap between two probes
+  file: projects/demand-forecast/src/demand_forecast/promotion.py
+  old: MIN_SKILL = 0.05
+  new: MIN_SKILL = 0.04
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_promotion.py
+  expect: killed
+- id: W14-PRO3
+  origin: W-14 — the verdict reports the first refusal only
+  file: projects/demand-forecast/src/demand_forecast/promotion.py
+  old: '    return PromotionVerdict(promote=not reasons, reasons=tuple(reasons))'
+  new: '    return PromotionVerdict(promote=not reasons, reasons=tuple(reasons[:1]))'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_promotion.py
+  expect: killed
+- id: W14-P18b
+  origin: W-14 / R15-1 — P18 passes a reader that can import the workspace
+  file: scripts/check_serving_can_load_artifact.py
+  old: '    if result["leaked"]:'
+  new: '    if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_serving_can_load_artifact.py
+  expect: killed
+- id: W14-P18c
+  origin: W-14 / R15-1 — P18 compares predictions loosely enough to pass a different model
+  file: scripts/check_serving_can_load_artifact.py
+  old: '    if not np.allclose(result["predictions"], expected, rtol=1e-9, atol=1e-9):'
+  new: '    if not np.allclose(result["predictions"], expected, rtol=1e-3, atol=1e-3):'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_serving_can_load_artifact.py
   expect: killed
