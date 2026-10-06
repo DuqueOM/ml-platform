@@ -18,6 +18,28 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Changed — the README states what exists, under a standard shared with ml-service-template
+
+- **The README described the repository's first day for two months.** It was
+  edited twice, both in the first two days, and still said "Phase 0 — the
+  projects are not built yet" over three projects that were built and in CI;
+  its layout omitted a library and it mentioned none of the gates, audits or
+  infrastructure since. Every other document here had a gate; this one had
+  none. Rewritten to the current tree.
+- **One README standard for both templates.**
+  `docs/governance/readme-standard.md` — the same file in ml-service-template —
+  fixes ten sections in one order (status, what it is, quick start, what you
+  get, architecture, how claims are verified, documentation, related
+  repositories, contributing/security/support, licence), a budget of 250 lines
+  and 2,000 words, badges that report checks only, and one related-repositories
+  table both READMEs carry verbatim. It draws on GitHub's guidance on READMEs,
+  the standard-readme convention and the Diátaxis split for the documentation
+  map.
+- **Gate P19** (`scripts/check_readme.py`, CI and `make verify`) holds the README
+  to it. The status block is generated — from the implementation status, the
+  audit marker and the committed QA-4 reports — so the README can say only what
+  that chain has proven; `make sync` regenerates it. Five mutations, each killed.
+
 ### Changed — one promotion rule, and an artifact the serving image can load (W-14, R15-1)
 
 - **The two orchestrators promoted on different rules over different
