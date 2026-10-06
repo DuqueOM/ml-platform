@@ -121,28 +121,33 @@ def validate_warehouse_table(
 @dsl.component(**COMPONENT)
 def backtest_model(
     demand: dsl.Input[dsl.Dataset],
-    n_folds: int,
-    horizon: int,
-    seed: int,
     metrics: dsl.Output[dsl.Metrics],
-) -> NamedTuple("BacktestOutcome", [("skill", float), ("coverage_ok", bool)]):  # type: ignore[valid-type]
-    """Backtest forward in time and emit both gate inputs.
+) -> NamedTuple("BacktestOutcome", [("skill", float), ("coverage", float)]):  # type: ignore[valid-type]
+    """Backtest forward in time, on the one design promotion is judged on, and emit both gate inputs.
 
-    Returns BOTH values because the gate needs both. An earlier version returned
-    only the skill and the pipeline passed `coverage_ok=True` as a literal —
-    so the calibration half of the gate could not fail, whatever the model did.
-    That is the third time in this repository a gate has been written with its
-    own verdict supplied from outside the thing it judges.
+    No fold count, horizon or seed is a parameter any more. The pipeline took
+    `n_folds=3` by default while the DAG backtested five folds, and three folds
+    drop the two the model loses: on the same data this step reported skill
+    +23.0% where the DAG reported +12.4% (QA-4 round fifteen). A parameter here
+    is a way for one run to be judged on a different backtest than another, so
+    the design lives in `demand_forecast.promotion` and nowhere else (W-14).
+
+    Returns BOTH numbers, raw, because the gate judges both. An earlier version
+    returned only the skill and the pipeline passed `coverage_ok=True` as a
+    literal — a gate handed its own verdict. The next returned a boolean
+    computed here by a rule the DAG did not share; now the gate computes the
+    verdict, from the same function the DAG calls.
     """
     import polars as pl
-    from demand_forecast.train import evaluate
+    from demand_forecast.promotion import DESIGN, backtest
 
-    report = evaluate(pl.read_parquet(demand.path), n_folds=n_folds, horizon=horizon, seed=seed)
+    report = backtest(pl.read_parquet(demand.path))
 
     metrics.log_metric("model_mae", report.model_mae)
     metrics.log_metric("baseline_mae", report.baseline_mae)
     metrics.log_metric("skill", report.skill)
     metrics.log_metric("coverage", report.coverage)
+    metrics.log_metric("n_folds", DESIGN.n_folds)
     metrics.log_metric("seed", report.seed)
 
     # Functional syntax, not a class: KFP introspects the RETURN ANNOTATION
@@ -151,33 +156,30 @@ def backtest_model(
     # inside the isolated container this function runs in.
     # The variable name must match the type name for the checker to bind
     # them; KFP only cares about the annotation, so both are satisfiable.
-    BacktestOutcome = NamedTuple("BacktestOutcome", [("skill", float), ("coverage_ok", bool)])  # noqa: UP014
-    return BacktestOutcome(report.skill, report.intervals_are_calibrated())
+    BacktestOutcome = NamedTuple("BacktestOutcome", [("skill", float), ("coverage", float)])  # noqa: UP014
+    return BacktestOutcome(report.skill, report.coverage)
 
 
 @dsl.component(**COMPONENT)
-def check_quality_gate(skill: float, coverage_ok: bool) -> None:
+def check_quality_gate(skill: float, coverage: float) -> None:
     """Fail the run when the model has not earned promotion.
 
-    A step, not a note in a report. The pipeline must stop here so nothing
-    downstream can consume a model that lost to repeating last week.
+    A step, not a note in a report: the pipeline stops here, so nothing
+    downstream can consume a model that has not earned it. The rule is
+    :func:`demand_forecast.promotion.check`, the function the Airflow DAG's gate
+    calls; this step used to hold `skill <= 0` and a calibration flag of its
+    own, which disagreed with the DAG's copy (W-14).
     """
-    if skill <= 0:
-        raise RuntimeError(f"model does not beat the seasonal baseline (skill {skill:+.1%}); refusing to promote")
-    if not coverage_ok:
-        raise RuntimeError("prediction intervals are not calibrated; refusing to promote")
+    from demand_forecast.promotion import check
+
+    check(skill, coverage)
 
 
 @dsl.pipeline(
     name="demand-forecast-training",
     description="Ingest, validate the warehouse, backtest, and gate on beating the seasonal baseline.",
 )
-def demand_forecast_training(
-    source_uri: str,
-    n_folds: int = 3,
-    horizon: int = 168,
-    seed: int = 42,
-) -> None:
+def demand_forecast_training(source_uri: str) -> None:
     """Ingest → validate → backtest → gate.
 
     Validation sits between ingestion and training deliberately: a corrupt
@@ -187,12 +189,7 @@ def demand_forecast_training(
 
     validated = validate_warehouse_table(demand=ingested.outputs["demand"])
 
-    backtest = backtest_model(
-        demand=ingested.outputs["demand"],
-        n_folds=n_folds,
-        horizon=horizon,
-        seed=seed,
-    )
+    backtest = backtest_model(demand=ingested.outputs["demand"])
     # An explicit edge: without it KFP is free to run the backtest alongside
     # validation, and the run would train on a table already known to be bad.
     backtest.after(validated)
@@ -201,5 +198,5 @@ def demand_forecast_training(
         skill=backtest.outputs["skill"],
         # Read from the backtest, never passed as a literal: a gate handed its
         # own verdict is not a gate.
-        coverage_ok=backtest.outputs["coverage_ok"],
+        coverage=backtest.outputs["coverage"],
     )

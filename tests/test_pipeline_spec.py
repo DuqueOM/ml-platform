@@ -67,10 +67,12 @@ def test_the_gate_reads_both_verdicts_from_the_backtest(spec: dict) -> None:
     calibration half could not fail whatever the model did. A gate handed its
     own verdict is not a gate, and this repository has now written that defect
     three times — in the MCP registry, in a warehouse expectation, and here.
+    The gate now receives the raw coverage and judges it with the same
+    function the DAG calls (W-14).
     """
     inputs = spec["root"]["dag"]["tasks"]["check-quality-gate"]["inputs"]["parameters"]
 
-    for name in ("skill", "coverage_ok"):
+    for name in ("skill", "coverage"):
         assert "taskOutputParameter" in inputs[name], (
             f"{name} is a constant, not a value produced by the backtest: {inputs[name]}"
         )
@@ -124,7 +126,7 @@ def test_the_pipeline_does_not_reimplement_the_project(spec: dict) -> None:  # t
     for expected in (
         "from demand_forecast.ingest import",
         "from demand_forecast.warehouse_checks import",
-        "from demand_forecast.train import",
+        "from demand_forecast.promotion import",
     ):
         assert expected in source, f"the pipeline does not call {expected!r}"
 

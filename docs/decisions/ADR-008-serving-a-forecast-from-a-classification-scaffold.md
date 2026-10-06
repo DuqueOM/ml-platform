@@ -172,3 +172,23 @@ remaining defect.
 The note above is left as written; this section is the correction. The status
 stays `Proposed`, and R11-3 in the remediation work order is reopened with the
 two ways to close it.
+
+## Progress, 2026-10-06 — the image's environment loads the artifact, and a gate checks it
+
+R15-1's option A is in place. `persist._payload` drops the fitted estimator's
+`_feature_subsample_rng` — fit-time state that prediction never reads, and the
+one object numpy 1.26 refused. Gate P18 (`scripts/check_serving_can_load_artifact.py`,
+in CI's Fast gates job) now does what the correction above did by hand: it fits
+and saves a model through `persist.save`, builds an environment from
+`services/demand-forecast-serving/requirements.txt` alone on the Dockerfile's
+Python, asserts no workspace package is importable there, and loads and
+predicts — identically to the writer, under numpy 1.26.4, scikit-learn 1.9.1
+and joblib 1.6.0.
+
+**The status stays `Proposed`.** Both halves this ADR records are still open:
+the artifact is still written under numpy 2.x and read under 1.26 — it loads
+across that straddle because nothing in it now depends on numpy 2, not because
+the straddle is gone, so P14's numpy exemption stands — and the service's own
+loader still expects a classification pipeline, which P18 deliberately does not
+exercise. Option B, numpy 2 in ml-service-template, is what removes the
+straddle; P18 is what will show whether a future artifact still crosses it.

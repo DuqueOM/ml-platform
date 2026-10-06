@@ -539,6 +539,15 @@ a round with a human in it.
 
 ### W-14 — The two promotion gates disagree about what earns a deployment
 
+> **Status: done** — *feat: one promotion rule for both orchestrators, and an artifact the serving image can
+> load*. As recommended: `demand_forecast.promotion` defines the rule (skill ≥ 0.05; coverage within
+> [0.85, 0.95], both bounds inclusive) and the backtest it is judged on (5 folds, horizon 168, seed 42), and both
+> the DAG and the pipeline call it. The pipeline takes no backtest parameters any more, so no run can choose its
+> own design. Every predecessor threshold is claimed by the merged one (`renamed_from` names each of them), the
+> fold count is watched as a floor, and `tests/test_promotion_agreement.py` runs 34 metric pairs — the auditor's
+> four disagreements among them — through both orchestrators' gates and asserts one verdict. The DAG is stricter
+> on over-coverage than it was: a model at coverage 0.97, which it promoted, is now refused.
+
 **Mode**: CONSULT · **Source**: found while writing W-5's tests for both gates ·
 **Size**: ~1h once decided
 
@@ -682,6 +691,14 @@ Prometheus still scrapes the pod.
 > `requirements.txt` alone (numpy 1.26.4) still cannot load the artifact, because the fitted estimator carries a
 > numpy-2 `Generator`. Its own "Closes when" was never met: P14 does not check what the pickle imports, and no
 > test loads the artifact under the reader's versions. Options and recommendation: R15-1 below.
+>
+> **Status: done again, on the property that matters** — *feat: an artifact the serving image can load, checked by
+> loading it* (R15-1, option A). `persist` drops the fitted estimator's fit-time random state, which prediction
+> never reads, and gate P18 (`scripts/check_serving_can_load_artifact.py`, in CI's Fast gates job) fits and
+> saves a model, builds an environment from the service's `requirements.txt` alone on the Dockerfile's Python,
+> and loads and predicts there — identical predictions under numpy 1.26.4, scikit-learn 1.9.1, joblib 1.6.0. The
+> numpy straddle itself remains, exempted against ADR-008: this artifact loads across it, which is not the same as
+> the straddle being gone (option B).
 
 **Mode**: CONSULT · **Source**: round eleven P2 · **Size**: depends on the decision
 
@@ -1038,6 +1055,12 @@ two promotion thresholds are now watched, and both orchestrators' backtest
 designs are pinned by tests so neither drifts while W-14 waits.
 
 ### R15-1 — The serving image cannot load the artifact
+
+> **Status: A done; B open as ADR-008's decision** — *feat: an artifact the serving image can load, checked by
+> loading it*. The fit-time `Generator` is dropped in `persist._payload` (a test asserts its absence and that the
+> estimator still predicts identically), and P18 loads a freshly saved artifact under the image's requirements on
+> every CI run — the step that would have caught R11-3's false close. P18 failing is what reopens
+> this.
 
 **Mode**: CONSULT · **Reopens**: R11-3 · **Size**: ~1h for A; cross-repository for B
 

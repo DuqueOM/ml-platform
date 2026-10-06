@@ -282,3 +282,52 @@ def test_an_intact_artifact_still_loads(model: ForecastModel, tmp_path: Path) ->
     save(model, artifact)
 
     assert load(artifact).trained_through == model.trained_through
+
+
+def _random_state_in(obj: object, path: str = "artifact", seen: set[int] | None = None) -> list[str]:
+    """Every numpy random-state object reachable from ``obj``, by attribute path."""
+    seen = set() if seen is None else seen
+    if id(obj) in seen:
+        return []
+    seen.add(id(obj))
+    if isinstance(obj, np.random.Generator | np.random.BitGenerator | np.random.RandomState):
+        return [path]
+    if isinstance(obj, dict):
+        children = [(f"{path}[{key!r}]", value) for key, value in obj.items()]
+    elif isinstance(obj, list | tuple):
+        children = [(f"{path}[{index}]", value) for index, value in enumerate(obj)]
+    elif hasattr(obj, "__dict__") and not isinstance(obj, type):
+        children = [(f"{path}.{name}", value) for name, value in vars(obj).items()]
+    else:
+        return []
+    return [found for child_path, child in children for found in _random_state_in(child, child_path, seen)]
+
+
+def test_the_artifact_carries_no_random_state(model: ForecastModel, tmp_path: Path) -> None:
+    """R15-1: a numpy-2 `Generator` in the pickle made numpy 1.26 — the serving image's — refuse the file.
+
+    scikit-learn leaves the `Generator` it used during `fit` on the fitted
+    estimator. Walked over everything the artifact holds, so a random-state
+    object kept under any other name, anywhere, fails here too.
+    """
+    import joblib
+
+    artifact = tmp_path / "model.joblib"
+    save(model, artifact)
+
+    assert _random_state_in(joblib.load(artifact)) == []
+
+
+def test_removing_it_changes_no_prediction_and_leaves_the_model_in_memory_alone(
+    model: ForecastModel, tmp_path: Path
+) -> None:
+    """The state is fit-time only — and the copy is what loses it, not the model being saved."""
+    import joblib
+
+    artifact = tmp_path / "model.joblib"
+    save(model, artifact)
+    loaded = joblib.load(artifact)["estimator"]
+    features = np.random.default_rng(3).normal(size=(50, len(model.feature_columns)))
+
+    np.testing.assert_array_equal(loaded.predict(features), model.estimator.predict(features))
+    assert _random_state_in(model.estimator) != [], "the in-memory estimator lost its fit-time state"
