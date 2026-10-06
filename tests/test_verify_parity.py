@@ -48,6 +48,12 @@ _NOT_LOCAL = {
     # runs the same commands CI does and the exemptions are gone.
     "uv run pytest tests/test_dependency_direction.py -q",
     "uv run pytest tests/test_project_generator.py -q",
+    # The dependency-scan coverage check reads a Trivy JSON report the Supply
+    # chain job writes, and Trivy is a binary installed by its action, not a
+    # workspace dependency `verify` can run. The resolution exists only to
+    # feed that scan. SECURITY.md gives the commands to reproduce both locally.
+    "uv run python scripts/resolve_serving_requirements.py",
+    "uv run python scripts/check_scan_coverage.py trivy-packages.json",
 }
 
 

@@ -18,7 +18,7 @@ table — this module's seven properties were verified by nothing on any build.
 from __future__ import annotations
 
 import socket
-from datetime import datetime
+from datetime import UTC, datetime, timedelta, timezone
 
 import polars as pl
 import pytest
@@ -188,3 +188,109 @@ def test_types_survive_the_round_trip(catalog) -> None:  # type: ignore[no-untyp
     assert row["zone_id"] == 7
     assert row["trip_count"] == 42
     assert row["event_time"] == datetime(2024, 3, 1, 14)
+
+
+# --- what QA-4 round sixteen found with no behavioural test -----------------
+
+
+def _three_months(catalog) -> None:  # type: ignore[no-untyped-def]
+    """January, the first instant of February, and March: the cutoff's boundary is the middle row."""
+    from demand_forecast.lakehouse import write_demand
+
+    write_demand(
+        pl.concat(
+            [
+                _demand_at(1, datetime(2024, 1, 5), 1),
+                _demand_at(2, datetime(2024, 2, 1), 2),
+                _demand_at(3, datetime(2024, 3, 5), 3),
+            ]
+        ),
+        catalog,
+    )
+
+
+@pytest.mark.parametrize(
+    "cutoff",
+    [
+        pytest.param(datetime(2024, 2, 1), id="naive-utc"),
+        pytest.param(datetime(2024, 2, 1, tzinfo=UTC), id="aware-utc"),
+        pytest.param(datetime(2024, 2, 1, 1, tzinfo=timezone(timedelta(hours=1))), id="aware-plus-one"),
+    ],
+)
+def test_delete_before_removes_strictly_earlier_rows(catalog, cutoff: datetime) -> None:  # type: ignore[no-untyped-def]
+    """Strictly before, at the boundary, whatever zone the cutoff is written in.
+
+    Failure looks like: a row stamped exactly at the cutoff deleted with the
+    ones before it (`<` read as `<=`), or an aware cutoff — which is what
+    `snapshots()` and `datetime.now(UTC)` give — refused by pyiceberg with
+    "Zone offset provided, but not expected". `09:00+01:00` and `08:00` UTC are
+    the same instant; the stored column is naive UTC.
+    """
+    from demand_forecast.lakehouse import delete_before, read_demand, snapshots
+
+    _three_months(catalog)
+    ((written, _),) = snapshots(catalog)
+
+    result = delete_before(cutoff, catalog)
+
+    assert result is not None
+    assert result.mode == "delete"
+    assert result.rows == 1
+    assert sorted(read_demand(catalog)["zone_id"].to_list()) == [2, 3], "the boundary row went with the earlier one"
+    assert snapshots(catalog)[-1][0] == result.snapshot_id
+    # Reversible: the state before the delete is still a readable snapshot.
+    assert read_demand(catalog, snapshot_id=written).height == 3
+
+
+def test_a_delete_that_matches_nothing_reports_nothing(catalog) -> None:  # type: ignore[no-untyped-def]
+    """No snapshot committed, so no snapshot reported.
+
+    Failure looks like: the previous write's snapshot returned as this delete's
+    — a citation of an operation that did not happen, which a caller would
+    record as "cleaned at snapshot N" when N is the uncleaned table.
+    """
+    from demand_forecast.lakehouse import delete_before, snapshots
+
+    _three_months(catalog)
+    history = snapshots(catalog)
+
+    assert delete_before(datetime(2023, 1, 1), catalog) is None
+    assert snapshots(catalog) == history
+
+
+@pytest.mark.parametrize("overwrite", [False, True], ids=["append", "overwrite"])
+def test_a_write_reports_its_own_snapshot_when_another_writer_follows_it(  # type: ignore[no-untyped-def]
+    catalog, monkeypatch: pytest.MonkeyPatch, overwrite: bool
+) -> None:
+    """The id is the one THIS write committed, not whatever the catalogue holds next.
+
+    Forces the interleaving round sixteen used: a second writer commits
+    immediately after this write's commit and before anything else runs. The
+    DAG validates, trains on and records the id `write_demand` returns, so
+    returning the other writer's id would put its rows — `trip_count=999`
+    here — into the model's training input under this run's name.
+    """
+    from demand_forecast.lakehouse import read_demand, snapshots, write_demand
+    from pyiceberg.table import Table
+
+    write_demand(_demand_at(1, datetime(2024, 1, 5), 1), catalog)
+
+    real_commit = Table._do_commit
+    interleaved: list[int] = []
+
+    def commit_then_let_another_writer_in(self: Table, *args: object, **kwargs: object) -> None:
+        real_commit(self, *args, **kwargs)  # type: ignore[arg-type]
+        if not interleaved:
+            interleaved.append(1)
+            write_demand(_demand_at(3, datetime(2024, 3, 5), 999), catalog)
+
+    monkeypatch.setattr(Table, "_do_commit", commit_then_let_another_writer_in)
+    ours = write_demand(_demand_at(2, datetime(2024, 2, 5), 7), catalog, overwrite=overwrite)
+    monkeypatch.undo()
+
+    ids = [snapshot_id for snapshot_id, _ in snapshots(catalog)]
+    assert interleaved, "the second writer never ran; the test proves nothing"
+    assert ours.snapshot_id == ids[-2], (
+        f"reported {ours.snapshot_id}, committed {ids[-2]}; the other writer's is {ids[-1]}"
+    )
+    assert 999 not in read_demand(catalog, snapshot_id=ours.snapshot_id)["trip_count"].to_list()

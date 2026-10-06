@@ -406,16 +406,16 @@ mutations:
 - id: R14-C6-https-prefix-only
   origin: QA-4 round 14, auditor
   file: scripts/check_doc_coherence.py
-  old: 'r"(?:github\.com[/:]|api\.github\.com/repos/|raw\.githubusercontent\.com/)([A-Za-z0-9_-]+)/([A-Za-z0-9_.-]+)",'
-  new: 'r"https://github\.com/([A-Za-z0-9_-]+)/([A-Za-z0-9_.-]+)",'
+  old: '        rf"(?<![\w.-])({account})(?:/|%2F)([A-Za-z0-9_.-]+)|(?<![\w.-])({account})\.github\.io/([A-Za-z0-9_.-]+)",'
+  new: '        rf"https://github\.com/({account})/([A-Za-z0-9_.-]+)|(?<![\w.-])({account})\.github\.io/([A-Za-z0-9_.-]+)",'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c6_fails_every_form"
   expect: killed
 - id: R14-C6-owner-case-sensitive
   origin: QA-4 round 14 remediation
   file: scripts/check_doc_coherence.py
-  old: '            if owner.lower() != PRIVATE_ACCOUNT.lower():'
-  new: '            if owner != PRIVATE_ACCOUNT:'
+  old: '        flags=re.IGNORECASE,  # GitHub accounts are case-insensitive: `duqueom` is `DuqueOM`'
+  new: '        flags=0,'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c6_fails_every_form"
   expect: killed
@@ -815,8 +815,8 @@ mutations:
 - id: R15-TH1
   origin: QA-4 round fifteen remediation
   file: scripts/check_thresholds.py
-  old: '            same_name = defined(threshold.name)'
-  new: '            same_name = None'
+  old: '        same_name = defined(threshold.name)'
+  new: '        same_name = None'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
   expect: killed
@@ -831,8 +831,8 @@ mutations:
 - id: R15-TH3
   origin: QA-4 round fifteen remediation
   file: scripts/check_thresholds.py
-  old: '                    previous = value * factor if value is not None else None'
-  new: '                    previous = value'
+  old: '                        previous.append((value * factor, f"{renamed.path}, as {old_name!r}"))'
+  new: '                        previous.append((value, f"{renamed.path}, as {old_name!r}"))'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
   expect: killed
@@ -895,8 +895,8 @@ mutations:
 - id: R15-C9c
   origin: QA-4 round fifteen remediation
   file: scripts/check_doc_coherence.py
-  old: '        return value == "<" or bool(_VERSION_REF.match(value) or _PLACEHOLDER_REF.match(value))'
-  new: '        return True'
+  old: '    return value == "<" or bool(_VERSION_REF.match(value) or _PLACEHOLDER_REF.match(value))'
+  new: '    return True'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c9_sees_an
   expect: killed
@@ -999,8 +999,8 @@ mutations:
 - id: PD2
   origin: W-8 digest verification, author
   file: scripts/check_action_pins.py
-  old: '            if _RELEASE_DOWNLOAD.search(run) and not _DIGEST_CHECK.search(run):'
-  new: '            if False:'
+  old: '                    if not any(re.search(rf"(?<![\w./-]){re.escape(target)}(?![\w.-])", check) for check in checks):'
+  new: '                    if False:'
   run: *pd_run
   expect: killed
 - id: PD3
@@ -1127,4 +1127,228 @@ mutations:
   new: '    scan = table.scan()'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_lakehouse.py
+  expect: killed
+- id: R16-SEC1
+  origin: QA-4 round sixteen, auditor — the Trivy default rule removed
+  file: tests/test_security_controls.py
+  old: '_NON_BLOCKING_BY_DEFAULT = {"aquasecurity/trivy-action": "exit-code"}'
+  new: '_NON_BLOCKING_BY_DEFAULT: dict[str, str] = {}'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_security_controls.py
+  expect: killed
+- id: R16-SEC2
+  origin: QA-4 round sixteen, auditor — the job-level suppression rule removed
+  file: tests/test_security_controls.py
+  old: '    if job is not None and job.get("continue-on-error") in (True, "true"):'
+  new: '    if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_security_controls.py
+  expect: killed
+- id: R16-SEC3
+  origin: QA-4 round sixteen, auditor — the real gitleaks scan disarmed while a pin check vouched for it
+  file: .github/workflows/ci.yml
+  old: "      - name: gitleaks\n"
+  new: "      - name: gitleaks\n        continue-on-error: true\n"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_security_controls.py
+  expect: killed
+- id: R16-BAN1
+  origin: QA-4 round sixteen — Bandit loses orchestration/ again
+  file: .github/workflows/ci.yml
+  old: '        run: uv run bandit -c pyproject.toml -r libs/ scripts/ projects/ orchestration/ -ll -q'
+  new: '        run: uv run bandit -c pyproject.toml -r libs/ scripts/ projects/ -ll -q'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_security_controls.py
+  expect: killed
+- id: R16-SCAN1
+  origin: QA-4 round sixteen — the Trivy gate reads half the lock again
+  file: .github/workflows/ci.yml
+  old: "          TRIVY_INCLUDE_DEV_DEPS: \"true\"\n        with:\n          scan-type: fs\n          scan-ref: .\n          format: table"
+  new: "          TRIVY_INCLUDE_DEV_DEPS: \"false\"\n        with:\n          scan-type: fs\n          scan-ref: .\n          format: table"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_security_controls.py
+  expect: killed
+- id: R16-P10a
+  origin: QA-4 round sixteen — a download piped into a shell passes again
+  file: scripts/check_action_pins.py
+  old: '                if _PIPED_TO_SHELL.search(line):'
+  new: '                if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_action_pins.py
+  expect: killed
+- id: R16-P10b
+  origin: QA-4 round sixteen — a swallowed digest check counts again
+  file: scripts/check_action_pins.py
+  old: '            checks = [line for line in lines if _DIGEST_CHECK.search(line) and not _SWALLOWED.search(line)]'
+  new: '            checks = [line for line in lines if _DIGEST_CHECK.search(line)]'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_action_pins.py
+  expect: killed
+- id: R16-C6a
+  origin: QA-4 round sixteen — the private account behind a host is invisible again
+  file: scripts/check_doc_coherence.py
+  old: '        rf"(?<![\w.-])({account})(?:/|%2F)([A-Za-z0-9_.-]+)|(?<![\w.-])({account})\.github\.io/([A-Za-z0-9_.-]+)",'
+  new: '        rf"(?<![\w./-])({account})/([A-Za-z0-9_.-]+)|(?<![\w.-])({account})\.github\.io/([A-Za-z0-9_.-]+)",'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c6_reads
+  expect: killed
+- id: R16-C9a
+  origin: QA-4 round sixteen — `cd projects/../` counts as local again
+  file: scripts/check_doc_coherence.py
+  old: '        normalised = posixpath.normpath(cwd) if cwd else ""'
+  new: '        normalised = cwd'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c9_sees_an
+  expect: killed
+- id: R16-KFP1
+  origin: QA-4 round sixteen — every step pip-installs kfp from PyPI at start-up again
+  file: orchestration/pipelines/demand_forecast_pipeline.py
+  old: 'COMPONENT = {"base_image": BASE_IMAGE, "install_kfp_package": False}'
+  new: 'COMPONENT = {"base_image": BASE_IMAGE}'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_pipeline_spec.py
+  expect: killed
+- id: R16-KFP2
+  origin: QA-4 round sixteen — the component image is a moving tag again
+  file: orchestration/pipelines/demand_forecast_pipeline.py
+  old: 'BASE_IMAGE = "ghcr.io/duqueom/ml-platform/demand-forecast:set-by-deploy-pipeline"'
+  new: 'BASE_IMAGE = "ghcr.io/duqueom/ml-platform/demand-forecast:latest"'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_pipeline_spec.py
+  expect: killed
+- id: R16-TH1
+  origin: QA-4 round sixteen, auditor — direction ignored
+  file: scripts/check_thresholds.py
+  old: '                loosened = now < value if threshold.higher_is_stricter else now > value'
+  new: '                loosened = now < value'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
+  expect: killed
+- id: R16-TH2
+  origin: QA-4 round sixteen, auditor — baseline definitions unreadable (fail-open path)
+  file: scripts/check_thresholds.py
+  old: '    if listed.returncode != 0:'
+  new: '    if True:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
+  expect: killed
+- id: R16-LH1
+  origin: QA-4 round sixteen, auditor — overwrite with no scope (deletes every month)
+  file: projects/demand-forecast/src/demand_forecast/lakehouse.py
+  old: '        table.overwrite(arrow, overwrite_filter=overwrite_filter(demand))'
+  new: '        table.overwrite(arrow)'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_lakehouse.py projects/demand-forecast/tests/test_overwrite_scope.py
+  expect: killed
+- id: R16-LH2
+  origin: QA-4 round sixteen, auditor — delete_before deletes the cutoff instant too
+  file: projects/demand-forecast/src/demand_forecast/lakehouse.py
+  old: '    table.delete(delete_filter=f"event_time < ''{cutoff.isoformat()}''")'
+  new: '    table.delete(delete_filter=f"event_time <= ''{cutoff.isoformat()}''")'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests
+  expect: killed
+- id: R16-DAG7
+  origin: QA-4 round sixteen, auditor — validation reads the table head, not the run's snapshot
+  file: orchestration/dags/demand_forecast_training.py
+  old: '        demand = read_demand(catalog_from_environment(), snapshot_id=ingested["snapshot_id"])'
+  new: '        demand = read_demand(catalog_from_environment())'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py
+  expect: killed
+- id: R16-DAG8
+  origin: QA-4 round sixteen, auditor — sidecar records no snapshot
+  file: orchestration/dags/demand_forecast_training.py
+  old: '        metadata = save(model, Path("models/demand_forecast.joblib"), source_snapshot=metrics["snapshot_id"])'
+  new: '        metadata = save(model, Path("models/demand_forecast.joblib"))'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py
+  expect: killed
+- id: R16-PER1
+  origin: QA-4 round sixteen, auditor — persist drops source_snapshot from the sidecar
+  file: projects/demand-forecast/src/demand_forecast/persist.py
+  old: '        "source_snapshot": source_snapshot,'
+  new: '        "source_snapshot": None,'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_persist.py tests/test_dags.py
+  expect: killed
+- id: R16-CAL2
+  origin: QA-4 round sixteen, auditor — float tolerance widened to a real margin
+  file: projects/demand-forecast/src/demand_forecast/train.py
+  old: '        return deviation <= tolerance or math.isclose(deviation, tolerance, rel_tol=0.0, abs_tol=1e-12)'
+  new: '        return deviation <= tolerance or math.isclose(deviation, tolerance, rel_tol=0.0, abs_tol=1e-2)'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_training.py
+  expect: killed
+- id: R16-P10
+  origin: QA-4 round sixteen, auditor — any text counts as a digest check
+  file: scripts/check_action_pins.py
+  old: _DIGEST_CHECK = re.compile(r"\bsha256sum\s+(?:--check|-c)\b|\bshasum\s+-a\s*256\s+(?:--check|-c)\b")
+  new: _DIGEST_CHECK = re.compile(r"")
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_action_pins.py tests/test_gate_scripts.py
+  expect: killed
+- id: R16-C9c
+  origin: QA-4 round sixteen, auditor — every `copier update` counts as local
+  file: scripts/check_doc_coherence.py
+  old: '        return normalised.startswith("projects/") and normalised != "projects"'
+  new: '        return True'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py
+  expect: killed
+- id: R16-LH3
+  origin: QA-4 round sixteen — an aware cutoff reaches pyiceberg and is refused
+  file: projects/demand-forecast/src/demand_forecast/lakehouse.py
+  old: '        cutoff = cutoff.astimezone(UTC).replace(tzinfo=None)'
+  new: '        pass'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_lakehouse.py
+  expect: killed
+- id: R16-LH4
+  origin: QA-4 round sixteen — a delete that commits nothing reports the previous write's snapshot
+  file: projects/demand-forecast/src/demand_forecast/lakehouse.py
+  old: '    return None if current is None or current == head else current'
+  new: '    return current'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_lakehouse.py
+  expect: killed
+- id: R16-LH5
+  origin: QA-4 round sixteen — the snapshot is read from a refresh, so a concurrent writer's id is reported
+  file: projects/demand-forecast/src/demand_forecast/lakehouse.py
+  old: '    current = table.metadata.current_snapshot_id'
+  new: '    current = (table.refresh(), table.metadata.current_snapshot_id)[1]'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_lakehouse.py
+  expect: killed
+- id: R16-MY1
+  origin: QA-4 round sixteen — the type hook is not triggered by orchestration/
+  file: .pre-commit-config.yaml
+  old: '        files: ''^(libs|scripts|projects|orchestration)/.*\.py$'''
+  new: '        files: ''^(libs|scripts|projects)/.*\.py$'''
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_tool_versions.py
+  expect: killed
+- id: R16-MY2
+  origin: QA-4 round sixteen — the type hook checks fewer roots than CI
+  file: .pre-commit-config.yaml
+  old: '        entry: uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/ projects/store-assistant/src/ orchestration/'
+  new: '        entry: uv run mypy libs/ scripts/ projects/demand-forecast/src/'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_tool_versions.py
+  expect: killed
+- id: R16-CF4
+  origin: QA-4 round sixteen, auditor — exemption ignores every subdirectory, not only tests/
+  file: scripts/check_coverage_floors.py
+  old: '        if module.relative_to(package).parts[0] == "tests":'
+  new: '        if len(module.relative_to(package).parts) > 3:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
+  expect: killed
+- id: R16-CF5
+  origin: QA-4 round sixteen — the omit list drops a tests/ directory inside a package again
+  file: pyproject.toml
+  old: '    "*/libs/*/tests/*",'
+  new: '    "*/tests/*",'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_scope.py -k omit_list_drops
   expect: killed

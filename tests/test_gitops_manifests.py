@@ -209,18 +209,18 @@ def test_nothing_prunes_automatically() -> None:
 
 
 @pytest.mark.local
-def test_the_local_cluster_cannot_validate_networkpolicies() -> None:
-    """Asserts the local CNI is kindnet — and nothing more, which is the open item.
+def test_the_local_cni_is_the_one_enforcement_was_measured_on() -> None:
+    """The local CNI is kindnet, which `tests/local/test_network_policies.py` was measured against.
 
-    Its docstring claimed kindnet has no NetworkPolicy implementation, so a
-    default-deny applied locally would enforce nothing. QA-4 round eleven
-    disproved that on a live kind v0.30 cluster: kindnetd timed DNS out under
-    the rendered policies. What this test should become is an enforcement
-    probe — DNS allowed under the policies as written, denied when the peer
-    selector is wrong — and that waits on a running cluster and on the
-    namespace-label decision recorded in the remediation work order, round
-    eleven. Until then it is kept, renamed in intent rather than in name so
-    the history of the claim stays findable.
+    This was `test_the_local_cluster_cannot_validate_networkpolicies`, and its
+    docstring claimed kindnet has no NetworkPolicy implementation. QA-4 round
+    eleven disproved that on a live kind v0.30 cluster, and R11-2 (#105) turned
+    the disproof into the enforcement probe — DNS allowed under the policies as
+    written, denied when the peer selector is wrong — on kindnetd v20250512.
+    What is left here is the precondition that measurement depends on: a
+    different CNI enforces differently, or not at all, and the probe's evidence
+    would then describe a cluster that no longer exists. Renamed in QA-4 round
+    sixteen, when the old name was the last place still asserting the claim.
     """
     result = subprocess.run(
         ["kubectl", "get", "daemonset", "-n", "kube-system", "-o", "name"],
@@ -230,7 +230,8 @@ def test_the_local_cluster_cannot_validate_networkpolicies() -> None:
         pytest.skip("no cluster reachable")
 
     assert "kindnet" in result.stdout, (
-        "the CNI is no longer kindnet; the enforcement probe planned as R11-2 must be re-validated against it"
+        "the CNI is no longer kindnet; tests/local/test_network_policies.py was measured on kindnetd and must be "
+        "re-run against this one before any document cites it"
     )
 
 

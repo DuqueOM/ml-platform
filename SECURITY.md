@@ -78,7 +78,7 @@ every commit.
 | Control | Tool | Blocking | What it covers |
 | --- | --- | :-: | --- |
 | Secret scanning | gitleaks | **yes** | Full history, on every push. Zero suppressions today; see `.gitleaks.toml` |
-| Dependency vulnerabilities | Trivy | **yes** | Filesystem scan for vulnerabilities and secrets, CRITICAL and HIGH. **Not images**: nothing here builds or publishes one, so there is none to scan — this row said "and image" until QA-4 W-12 |
+| Dependency vulnerabilities | Trivy | **yes** | Filesystem scan for vulnerabilities and secrets, CRITICAL and HIGH, over **every** package `uv.lock` installs (`TRIVY_INCLUDE_DEV_DEPS`; without it Trivy skipped every workspace member's dependencies — 119 of 268 — until QA-4 round sixteen) and over the serving image's requirements resolved to exact versions per image variant (`scripts/resolve_serving_requirements.py`; Trivy cannot read their `~=`). `scripts/check_scan_coverage.py` fails the job if the scan examined less than all of it. Reproduce locally: `uv run python scripts/resolve_serving_requirements.py && TRIVY_INCLUDE_DEV_DEPS=true trivy fs --severity CRITICAL,HIGH --ignorefile .security-baselines/.trivyignore --skip-dirs .venv --exit-code 1 .`. **Not images**: nothing here builds or publishes one, so there is none to scan — this row said "and image" until QA-4 W-12 |
 | Dependency updates | Dependabot | no — opens PRs | Pinned actions and Python dependencies |
 | Supply chain posture | Scorecard | no — reports | The repository's own configuration |
 | Python security lint | Bandit | **yes** | First-party code at MEDIUM and above; suppressions argued in `pyproject.toml` and inline |

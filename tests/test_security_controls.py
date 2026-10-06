@@ -32,6 +32,7 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SECURITY = REPO_ROOT / "SECURITY.md"
 WORKFLOWS = sorted((REPO_ROOT / ".github" / "workflows").glob("*.yml"))
+WORKFLOW_FILE = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 
 #: Names that appear in the table but are not invoked by a workflow step —
 #: they are GitHub features configured by a file. Listed explicitly, with the
@@ -71,10 +72,31 @@ def _steps() -> list[tuple[Path, dict, dict]]:  # type: ignore[type-arg]
     return found
 
 
-def _mentions(step: dict, tool: str) -> bool:  # type: ignore[type-arg]
-    """Whether a step invokes a tool, by action name, run body or step name."""
-    haystack = " ".join(str(step.get(key, "")) for key in ("uses", "run", "name")).lower()
-    return tool.lower() in haystack
+def _runs(step: dict, tool: str) -> bool:  # type: ignore[type-arg]
+    """Whether a step RUNS a tool: its action in `uses:`, or its binary invoked in `run:`.
+
+    Not by name, and not by any substring. The previous `_mentions` matched the
+    step name and the run body as text, so "Secret scanner is pinned and
+    consistent" — a step that runs `check_gitleaks_pin.py` and never runs
+    gitleaks — vouched for the gitleaks row, and the real scan could carry
+    `continue-on-error: true` with this module green (QA-4 round sixteen).
+    """
+    action = str(step.get("uses", "")).split("@", 1)[0].lower()
+    if action and tool.lower() in action.split("/")[-1]:
+        return True
+    commands = "\n".join(line for line in str(step.get("run", "")).splitlines() if not line.lstrip().startswith("#"))
+    invocation = rf"(?:^|[\s;&|(])(?:uv run |uvx )?{re.escape(tool.lower())}(?:[=@]=?\S+)?(?=\s|$)"
+    return re.search(invocation, commands.lower(), re.MULTILINE) is not None
+
+
+#: Steps that run a blocking control's tool and deliberately do not block,
+#: each with its reason. Every other step that runs the tool must block, and
+#: an entry here that names no such step fails — a stale exemption is a
+#: suppression nobody can see.
+ADVISORY_STEPS = {
+    "Trivy filesystem scan — report to code scanning": "every severity to the Security tab; the gate step blocks",
+    "Trivy package inventory": "lists what the scan examined, for check_scan_coverage.py, which blocks",
+}
 
 
 #: Actions that do NOT fail the build unless told to, and the key that tells
@@ -156,7 +178,7 @@ def test_each_claimed_control_actually_exists(control: str, tool: str, blocking:
         assert configured.is_file(), f"{tool} is claimed and {CONFIGURED_ELSEWHERE[tool]} does not exist"
         return
 
-    matching = [path for path, step, _job in _steps() if _mentions(step, tool)]
+    matching = [path for path, step, _job in _steps() if _runs(step, tool)]
     assert matching, (
         f"SECURITY.md claims {control!r} via {tool!r}, and no workflow step invokes it. "
         f"Either wire it, or remove the row — a policy naming a control that does not run is read "
@@ -171,8 +193,20 @@ def test_a_control_claimed_blocking_can_actually_fail_the_build(control: str, to
     if not claims_blocking or tool in CONFIGURED_ELSEWHERE:
         return
 
-    steps = [(step, job) for _, step, job in _steps() if _mentions(step, tool)]
+    steps = [(step, job) for _, step, job in _steps() if _runs(step, tool)]
     assert steps, f"{tool} is claimed blocking and invoked nowhere"
+    # ALL of them, not any: one blocking step vouched for every other step
+    # running the same tool, including one that had been disarmed.
+    unblocking = [
+        str(step.get("name") or step.get("uses"))
+        for step, job in steps
+        if not _blocks(step, job) and step.get("name") not in ADVISORY_STEPS
+    ]
+    assert not unblocking, (
+        f"SECURITY.md claims {control!r} blocks the build, but these steps running {tool} cannot fail it: "
+        f"{unblocking}. Declare a deliberately advisory step in ADVISORY_STEPS with its reason, or remove "
+        f"the suppression."
+    )
     assert any(_blocks(step, job) for step, job in steps), (
         f"SECURITY.md claims {control!r} blocks the build, but every step invoking {tool} suppresses its "
         f"exit status. Seven spellings do that: `continue-on-error` on the step OR on the job, "
@@ -204,7 +238,7 @@ def test_no_control_row_claims_a_scanner_covers_what_it_is_not_configured_to_sca
     than trying to model every scanner's coverage, which would be a second
     source of truth that drifts from the workflows.
     """
-    trivy = [step for _, step, _job in _steps() if _mentions(step, "trivy")]
+    trivy = [step for _, step, _job in _steps() if _runs(step, "trivy")]
     assert trivy, "no Trivy step found"
 
     scanners = " ".join(str((step.get("with") or {}).get("scanners", "")) for step in trivy)
@@ -247,3 +281,90 @@ def test_the_lockfile_check_can_actually_fail() -> None:
             f"`{line.strip()}` may rewrite uv.lock. Any lockfile check after it is asking a repaired tree, "
             f"so the gate cannot fail — add --locked."
         )
+
+
+def test_every_trivy_scan_includes_the_dependencies_trivy_calls_development() -> None:
+    """Without TRIVY_INCLUDE_DEV_DEPS, Trivy reads half the lock (QA-4 round sixteen, P1).
+
+    Asserted on EVERY filesystem Trivy step, not just one: the coverage check
+    reads the inventory step's report, so a gate step that lost the variable
+    while the inventory kept it would scan half the lock behind a green check.
+    """
+    trivy = [
+        step
+        for _, step, _job in _steps()
+        if "aquasecurity/trivy-action" in str(step.get("uses", ""))
+        and (step.get("with") or {}).get("scan-type") == "fs"
+    ]
+    assert trivy, "no Trivy filesystem step found"
+    blind = [
+        step.get("name")
+        for step in trivy
+        if str((step.get("env") or {}).get("TRIVY_INCLUDE_DEV_DEPS")).lower() != "true"
+    ]
+    assert not blind, f"these Trivy steps skip every workspace member's dependencies: {blind}"
+
+
+def test_bandit_scans_every_root_the_type_gate_checks() -> None:
+    """QA-4 round sixteen: Bandit, "First-party code at MEDIUM and above", never read orchestration/.
+
+    The DAG and the KFP components are first-party code with catalogue
+    credentials, inside mypy's and coverage's scope and outside Bandit's. The
+    type gate's roots are the list of first-party code this repository already
+    agrees on; Bandit is held to it, and run from the lock, never `uvx`.
+    """
+    workflow = WORKFLOW_FILE.read_text(encoding="utf-8")
+    mypy = re.search(r"uv run mypy ([^\n]+)", workflow)
+    bandit = re.search(r"(\S+) bandit -c pyproject.toml -r ([^\n]+?) -ll", workflow)
+    assert mypy is not None, "no mypy invocation found"
+    assert bandit is not None, "no bandit invocation found"
+
+    assert bandit.group(1) == "run", f"bandit runs through {bandit.group(1)!r}, not the locked `uv run`"
+    roots = {path.strip("/").split("/")[0] for path in mypy.group(1).split()}
+    scanned = {path.strip("/").split("/")[0] for path in bandit.group(2).split()}
+    assert roots <= scanned, f"first-party roots bandit does not scan: {sorted(roots - scanned)}"
+
+
+def test_every_advisory_step_still_runs_its_tool() -> None:
+    """A renamed or removed step leaves an exemption that exempts nothing — or the next step given that name."""
+    names = {str(step.get("name")) for _, step, _job in _steps()}
+    assert not sorted(set(ADVISORY_STEPS) - names), f"stale advisory entries: {sorted(set(ADVISORY_STEPS) - names)}"
+
+
+@pytest.mark.parametrize(
+    ("step", "job", "blocks"),
+    [
+        pytest.param({"uses": "aquasecurity/trivy-action@x", "with": {"exit-code": "1"}}, {}, True, id="trivy-exit-1"),
+        # The default: trivy-action's exit-code is "0" when the key is absent.
+        pytest.param({"uses": "aquasecurity/trivy-action@x", "with": {}}, {}, False, id="trivy-no-exit-code"),
+        pytest.param({"uses": "aquasecurity/trivy-action@x", "with": {"exit-code": "0"}}, {}, False, id="trivy-exit-0"),
+        pytest.param({"run": "gitleaks git"}, {"continue-on-error": True}, False, id="job-continue-on-error"),
+        pytest.param({"run": "gitleaks git", "continue-on-error": True}, {}, False, id="step-continue-on-error"),
+        pytest.param({"run": "gitleaks git || true"}, {}, False, id="or-true"),
+        pytest.param({"run": "gitleaks git", "if": "false"}, {}, False, id="if-false"),
+        pytest.param({"run": "gitleaks git"}, {}, True, id="plain-run"),
+    ],
+)
+def test_blocks_reads_every_suppression(step: dict, job: dict, blocks: bool) -> None:  # type: ignore[type-arg]
+    """Each spelling exercised directly. Two had no test: the Trivy default and the job-level suppression."""
+    assert _blocks(step, job) is blocks
+
+
+@pytest.mark.parametrize(
+    ("step", "tool", "runs"),
+    [
+        pytest.param(
+            {"name": "Secret scanner is pinned and consistent", "run": "uv run python scripts/check_gitleaks_pin.py"},
+            "gitleaks",
+            False,
+            id="pin-check-is-not-the-scan",
+        ),
+        pytest.param({"name": "gitleaks", "uses": "gitleaks/gitleaks-action@abc"}, "gitleaks", True, id="the-action"),
+        pytest.param({"run": "uv run bandit -c pyproject.toml -r libs/"}, "bandit", True, id="uv-run"),
+        pytest.param({"run": "uvx bandit==1.9.4 -r libs/"}, "bandit", True, id="uvx-pinned"),
+        pytest.param({"run": "# bandit -r libs/  (disabled)\necho skipped"}, "bandit", False, id="commented-out"),
+        pytest.param({"name": "Run trivy later", "run": "echo nothing"}, "trivy", False, id="named-but-not-run"),
+    ],
+)
+def test_a_step_counts_only_if_it_runs_the_tool(step: dict, tool: str, runs: bool) -> None:  # type: ignore[type-arg]
+    assert _runs(step, tool) is runs

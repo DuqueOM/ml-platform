@@ -39,3 +39,7 @@ coverage.xml
 # which the validation gate runs. The lock FILE is committed; the .terraform
 # directory it populates is a local cache.
 platform/terraform/**/.terraform/
+# Exact resolutions of the serving image's requirements, written for the scanner by
+# scripts/resolve_serving_requirements.py.
+.trivy-resolved/
+trivy-packages.json

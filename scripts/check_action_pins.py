@@ -83,14 +83,18 @@ _TAG = re.compile(r"\bv?\d+(?:\.\d+)*\b")
 _MUTABLE_DOWNLOAD = re.compile(
     r"https://[^\s\"']*?/(?:releases/latest/download|raw/(?:main|master)/|archive/refs/heads/(?:main|master))"
     r"[^\s\"']*"
+    # raw.githubusercontent.com/<owner>/<repo>/<ref>/... with any ref that is not
+    # a full commit SHA: a branch moves, and a tag can be re-pointed. Round
+    # sixteen fetched `…/main/install.sh` past this gate.
+    r"|https://raw\.githubusercontent\.com/[^/\s]+/[^/\s]+/(?![0-9a-f]{40}/)[^\s\"']+"
 )
 
-#: A release asset fetched in a `run:` block. Pinning its TAG is not enough:
-#: GitHub release assets are mutable — a maintainer, or anyone holding their
-#: token, can delete an asset and upload a different one under the same tag and
-#: the same name. The digest published with the release is what identifies the
-#: bytes, so every such download must be verified against one in the same step.
-_RELEASE_DOWNLOAD = re.compile(r"https://github\.com/[^\s\"']+/releases/download/")
+#: Every file downloaded in a `run:` block must be verified, not only GitHub
+#: release assets: pinning a TAG is not enough, because release assets are
+#: mutable — a maintainer, or anyone holding their token, can replace an asset
+#: under the same tag and name — and a download from any other host is no more
+#: fixed. The digest published with the release identifies the bytes, so every
+#: download is checked against one in the same step (see `_unverified_downloads`).
 
 #: What counts as verifying it. `sha256sum -c` and `shasum -a 256 -c` read an
 #: expected digest and exit non-zero on mismatch; anything that merely PRINTS a
@@ -101,21 +105,72 @@ failures: list[str] = []
 notes: list[str] = []
 
 
+#: A download in a `run:` line, and the file it writes.
+_DOWNLOAD = re.compile(r"\b(?:curl|wget)\b[^\n]*?https?://")
+_OUTPUT = re.compile(r"(?:\s-o\s+|\s--output[=\s]+|\s-O\s+|\s--output-document[=\s]+)(?P<name>[^\s|;&]+)")
+_URL = re.compile(r"https?://[^\s\"'|;&]+")
+#: A download piped straight into an interpreter: the bytes run before anything
+#: could check them, whatever host they came from.
+_PIPED_TO_SHELL = re.compile(r"\b(?:curl|wget)\b[^\n]*\|\s*(?:sudo\s+)?(?:ba|z|da)?sh\b")
+#: A shell construct that discards an exit status on the same line.
+_SWALLOWED = re.compile(r"\|\|\s*(?:true|:)\b")
+
+
+def _commands(run: str) -> list[str]:
+    """The shell lines a `run:` block executes: continuations joined, comments removed.
+
+    A commented-out `sha256sum -c` verified the download as far as a text
+    search was concerned (QA-4 round sixteen).
+    """
+    joined = re.sub(r"\\\n\s*", " ", run)
+    lines = []
+    for line in joined.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        lines.append(re.sub(r"\s+#\s.*$", "", stripped))
+    return lines
+
+
+def _download_targets(line: str) -> list[str]:
+    """The files a curl or wget line writes: `-o NAME`, or the URL's last segment."""
+    named = [match.group("name") for match in _OUTPUT.finditer(f" {line}")]
+    if named:
+        return named
+    return [url.rstrip("/").rsplit("/", 1)[-1] for url in _URL.findall(line)]
+
+
 def _unverified_downloads(workflow: Path) -> list[str]:
-    """`run:` steps that download a release asset without checking its digest.
+    """`run:` steps that download a file without verifying THAT file's digest, or pipe one into a shell.
 
     Read per STEP rather than per file: a checksum in one step does not verify
-    a download in another, and a file-wide search would let one verified
-    download vouch for every other.
+    a download in another. Within a step, the digest check must name the file
+    the download wrote and must not be followed by `|| true` — round sixteen
+    passed this gate with `sha256sum -c` of README.md after a download, with
+    `|| true` after the check, and with the check commented out.
     """
     document = yaml.safe_load(workflow.read_text(encoding="utf-8")) or {}
     found = []
     for job_name, job in (document.get("jobs") or {}).items():
         for index, step in enumerate((job or {}).get("steps") or []):
-            run = (step or {}).get("run") or ""
-            if _RELEASE_DOWNLOAD.search(run) and not _DIGEST_CHECK.search(run):
-                name = step.get("name") or f"step {index}"
-                found.append(f"{workflow.name}:{job_name}: '{name}'")
+            name = (step or {}).get("name") or f"step {index}"
+            where = f"{workflow.name}:{job_name}: '{name}'"
+            lines = _commands((step or {}).get("run") or "")
+            checks = [line for line in lines if _DIGEST_CHECK.search(line) and not _SWALLOWED.search(line)]
+            for line in lines:
+                if _PIPED_TO_SHELL.search(line):
+                    found.append(
+                        f"{where} pipes a download into a shell, which runs the bytes before anything checks them"
+                    )
+                    continue
+                if not _DOWNLOAD.search(line):
+                    continue
+                for target in _download_targets(line):
+                    if not any(re.search(rf"(?<![\w./-]){re.escape(target)}(?![\w.-])", check) for check in checks):
+                        found.append(
+                            f"{where} downloads {target!r} without verifying its digest: no `sha256sum -c` of "
+                            f"that file in the same step (one that names it, and is not followed by `|| true`)"
+                        )
     return found
 
 
@@ -169,12 +224,11 @@ def check() -> list[str]:
     verified = 0
     for workflow in sorted(WORKFLOWS.glob("*.yml")):
         text = workflow.read_text(encoding="utf-8")
-        verified += len(_RELEASE_DOWNLOAD.findall(text))
+        verified += sum(len(_DOWNLOAD.findall(line)) for line in _commands(text))
         for where in _unverified_downloads(workflow):
             found.append(
-                f"{where} downloads a release asset without verifying its digest in the same step. Release assets "
-                f"are mutable — the same tag and name can serve different bytes — so pin the version AND check the "
-                f"published sha256 with `sha256sum -c`"
+                f"{where}. Downloaded bytes are mutable — the same tag and name can serve different bytes — so "
+                f"pin the version AND check the published sha256 of the file with `sha256sum -c`"
             )
 
     if not found:
@@ -182,7 +236,7 @@ def check() -> list[str]:
         # indistinguishable from a glob that stopped matching workflows.
         notes.append(f"{pinned} third-party action reference(s), all pinned to a commit and labelled")
         notes.append(f"{downloads} moving download reference(s) in workflow run blocks")
-        notes.append(f"{verified} release-asset download(s), each verified against a digest in its own step")
+        notes.append(f"{verified} download(s), each verified against the digest of the file it wrote, in its own step")
     return found
 
 

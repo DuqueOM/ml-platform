@@ -163,14 +163,16 @@ repos:
         exclude: '^(templates/project|services)/'
 
   # --- types ---------------------------------------------------------------
-  # CI IS AUTHORITATIVE FOR THIS GATE. `.github/workflows/ci.yml` ("Types")
-  # runs:
+  # CI IS AUTHORITATIVE FOR THIS GATE. The `entry` below is the `run:` line of
+  # ci.yml's "Types" step, character for character, and `files:` covers every
+  # root it names. Change the workflow first, then mirror it here;
+  # tests/test_tool_versions.py fails until the two agree, and holds the
+  # Makefile and the documented copies to the same line.
   #
-  #     uv run mypy libs/ scripts/ projects/demand-forecast/src/
-  #
-  # and the `entry` below must stay character-identical to it. Change the
-  # workflow first, then mirror it here. `docs/governance/quality-gates.md`
-  # (P2) documents the same line, so there are three copies and one source.
+  # That test exists because this comment once quoted the invocation and said
+  # "character-identical" while CI had grown to six roots and this hook still
+  # checked three — orchestration/ was neither type-checked nor even a trigger
+  # (QA-4 round sixteen). A comment cannot hold two files in step.
   #
   # Why pre-commit adopts CI's invocation and not the reverse: the previous
   # hook checked `^libs/` only. Narrowing CI to match would drop `scripts/`,
@@ -194,7 +196,7 @@ repos:
   # running different type checkers against the same code. `uv run` takes the
   # locked version by construction and cannot disagree.
   #
-  # Cost: 0.32s warm — inside this file's FAST-and-LOCAL rule.
+  # Cost: 0.38s warm over all six roots — inside this file's FAST-and-LOCAL rule.
   - repo: local
     hooks:
       - id: mypy
@@ -203,10 +205,10 @@ repos:
           libs/ has the widest blast radius, and scripts/ holds the gates that
           enforce every other claim in this repository. A type error in either
           reaches every consumer, and finding it at push time is late.
-        entry: uv run mypy libs/ scripts/ projects/demand-forecast/src/
+        entry: uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/ projects/store-assistant/src/ orchestration/
         language: system
         pass_filenames: false
-        files: '^(libs|scripts|projects)/.*\.py$'
+        files: '^(libs|scripts|projects|orchestration)/.*\.py$'
 
   # --- secrets -------------------------------------------------------------
   # Scans staged content. The commit-history scan lives in CI: the working tree

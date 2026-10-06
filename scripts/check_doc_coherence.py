@@ -22,6 +22,7 @@ import hashlib
 import html
 import itertools
 import json
+import posixpath
 import re
 import shlex
 import subprocess
@@ -822,32 +823,48 @@ def check_language_and_privacy() -> None:
         # rather than letting a wrong label stand in for a real finding.
         "ML-MLOps-Production-Template",
     }
-    # Every form that names a repository: a web or scheme-less link, an SSH
-    # clone URL (`github.com:`), the REST API and raw content. QA-4 round
-    # fourteen published all four past this scan when only the first form was
-    # matched. Owners and repository names are case-insensitive on GitHub, so
-    # `duqueom/...` is the same account as `DuqueOM/...`.
-    repo_link = re.compile(
-        r"(?:github\.com[/:]|api\.github\.com/repos/|raw\.githubusercontent\.com/)([A-Za-z0-9_-]+)/([A-Za-z0-9_.-]+)",
-        re.IGNORECASE,
-    )
-    # A repository also names itself WITHOUT a host, in forms GitHub and its
-    # tools resolve: an autolink (`OWNER/repo#12`), an Actions reference
+    # Every form that names a repository under the private account. Owners and
+    # repository names are case-insensitive on GitHub, so `duqueom/...` is the
+    # same account as `DuqueOM/...`.
+    #
+    # Hosted: a web or scheme-less link, an SSH clone URL (`github.com:`), the
+    # REST API and raw content — QA-4 round fourteen published all four past a
+    # scan that matched only the first. Round sixteen then published the name
+    # through github.dev, vscode.dev, ghcr.io (which this repository's pipeline
+    # uses), img.shields.io, codecov.io, deepwiki, a root-relative link and a
+    # URL-encoded `%2F`: none needs to resolve as a link to disclose the name,
+    # and the account is the privacy question, not the host. So the account is
+    # matched behind ANY `/` or `:`, which covers every hosted form above at
+    # once. A separate per-host link pattern used to run beside this one; once
+    # this one read every host, that one could only ever find a subset of what
+    # this finds (round sixteen's mutation run showed it: narrowing it changed
+    # nothing), and two patterns for one question is one more to keep in step.
+    #
+    # Hostless: an autolink (`OWNER/repo#12`), an Actions reference
     # (`uses: OWNER/repo@sha`), copier's shorthand (`gh:OWNER/repo`), a gh CLI
     # argument (`gh repo clone OWNER/repo`, `gh api repos/OWNER/repo`), and a
-    # Pages site (`OWNER.github.io/repo`). QA-4 round fifteen published all six
-    # past the link pattern above, two of them forms this repository's own
-    # tooling uses. Not after a `/` (other than gh's `repos/`): there the
-    # account is a path segment — `/home/<user>/projects` is a directory, and
-    # a URL under another host is the link pattern's question, not this one's.
-    # Matched for the private account ONLY: a bare `owner/name`
-    # token for anyone else is a path as often as a repository, and it cannot
-    # disclose anything about this author either way.
+    # Pages site (`OWNER.github.io/repo`). QA-4 round fifteen published all six,
+    # two of them forms this repository's own tooling uses.
+    #
+    # Two places where the token is NOT a repository are excluded by what
+    # precedes it: a home directory (`/home/<user>/…`, `/Users/<user>/…`, where
+    # the user name and the account coincide) and a gist
+    # (`gist.github.com/<owner>/<id>`, whose second segment is a gist id — a
+    # false positive round sixteen found).
+    #
+    # Matched for the private account ONLY. Widening this scan from `*.md` to
+    # the whole tree once surfaced 21 links to third-party repositories — kind,
+    # kubescape, gitleaks, argo-rollouts, every pre-commit hook — and none of
+    # them is a leak: a repository under someone else's account cannot disclose
+    # anything about this author, and its visibility is not knowable from here.
+    # A bare `owner/name` token for anyone else is a path as often as a
+    # repository besides.
     account = re.escape(PRIVATE_ACCOUNT)
     bare_reference = re.compile(
-        rf"(?:(?<=repos/)|(?<![\w./-]))({account})/([A-Za-z0-9_.-]+)|(?<![\w.-])({account})\.github\.io/([A-Za-z0-9_.-]+)",
-        re.IGNORECASE,
+        rf"(?<![\w.-])({account})(?:/|%2F)([A-Za-z0-9_.-]+)|(?<![\w.-])({account})\.github\.io/([A-Za-z0-9_.-]+)",
+        flags=re.IGNORECASE,  # GitHub accounts are case-insensitive: `duqueom` is `DuqueOM`
     )
+    not_a_repository = re.compile(r"(?:/home/|/Users/|gist\.github\.com/)$", re.IGNORECASE)
     scanned = 0
 
     # Snapshotted BEFORE either scan runs. Taking it after
@@ -879,77 +896,29 @@ def check_language_and_privacy() -> None:
         if _is_infrastructure(path):
             continue
         scanned += 1
-        # `{owner}/{repo}` are literal placeholders the gh CLI substitutes itself;
-        # they appear verbatim in documented commands.
-        placeholders = {
-            "OWNER",
-            "REPO",
-            "ORG",
-            "USER",
-            "your-org",
-            "your-repo",
-            "<owner>",
-            "<repo>",
-            "{owner}",
-            "{repo}",
-            # Generic stand-ins used when documenting this very check, and by
-            # the gh CLI, which substitutes {owner}/{repo} itself.
-            "owner",
-            "repo",
-        }
-        # github.com/<reserved>/... are product URLs, not repository links.
-        reserved = {
-            "settings",
-            "features",
-            "orgs",
-            "apps",
-            "marketplace",
-            "security",
-            "enterprise",
-            "pricing",
-            "about",
-            "site",
-            "codespaces",
-            "sponsors",
-        }
+        # Literal stand-ins for a repository name in documented commands and in
+        # this check's own documentation (`DuqueOM/REPO`, `gh api repos/{owner}/{repo}`).
+        # Only the repository half needs them: the owner half is always the
+        # private account, which is what the pattern matches.
+        placeholders = {"REPO", "your-repo", "<repo>", "{repo}", "repo"}
         text = _read_lossy(path)
-        # (owner, repo, elided): `elided` when the name runs straight into an
+        # (repo, elided): `elided` when the name runs straight into an
         # ellipsis — a quotation cut short, as audit reports do. An elided name
         # passes only as the prefix of a PUBLIC repository; anything else still
         # fails, so truncating a private name does not hide it.
         references = [
-            (match.group(1), match.group(2), text[match.end() : match.end() + 1] == "\u2026")
-            for match in repo_link.finditer(text)
-        ] + [
-            (
-                match.group(1) or match.group(3),
-                match.group(2) or match.group(4),
-                text[match.end() : match.end() + 1] == "\u2026",
-            )
+            (match.group(2) or match.group(4), text[match.end() : match.end() + 1] == "\u2026")
             for match in bare_reference.finditer(text)
+            if not not_a_repository.search(text[max(0, match.start() - 20) : match.start()])
         ]
-        for owner, repo, elided in references:
+        for repo, elided in references:
             repo = repo.removesuffix(".git").rstrip(".")
             if not repo:
                 # `OWNER/...` in prose names no repository.
                 continue
             if elided and any(name.lower().startswith(repo.lower()) for name in public_repos):
                 continue
-            if owner in placeholders or repo in placeholders or owner.lower() in reserved:
-                continue
-            # The OWNER is what makes a link a privacy question. Widening this
-            # scan from `*.md` to the whole tree surfaced 21 links to
-            # third-party repositories — kind, kubescape, gitleaks,
-            # argo-rollouts, every pre-commit hook — and none of them is a
-            # leak. The check had been reading "not one of OUR public repos"
-            # as "private", which only looked correct because the file set it
-            # scanned happened to contain no third-party links.
-            #
-            # A repository under someone else's account cannot disclose
-            # anything about this author, and its visibility is not knowable
-            # from here. What can leak is a repository under THEIR account that
-            # is not on the public list.
-            if owner.lower() != PRIVATE_ACCOUNT.lower():
+            if repo in placeholders:
                 continue
             if repo.lower() not in {name.lower() for name in public_repos}:
                 fail("C6", f"{path.relative_to(REPO_ROOT)} links to non-public repository {repo!r}")
@@ -1098,18 +1067,21 @@ def _is_pinned(args: list[str]) -> bool:
     command does (QA-4 round fifteen). A local source never reaches here.
     """
     args, _ = _split_cwd(args)
+    # The LAST `--vcs-ref` is the one copier uses, as any CLI parser does: a
+    # pinned ref followed by `--vcs-ref HEAD` ran HEAD and passed this check,
+    # which returned on the first (QA-4 round sixteen).
+    value: str | None = None
     for index, arg in enumerate(args):
         if arg.startswith("--vcs-ref="):
             value = arg.split("=", 1)[1] or (args[index + 1] if index + 1 < len(args) else "")
         elif arg in {"--vcs-ref", "-r"}:
             value = args[index + 1] if index + 1 < len(args) else ""
-        else:
-            continue
-        # A placeholder — `<release-tag>`, which the tokeniser splits at `<`,
-        # or a shell variable — cannot be run as written: the reader must
-        # supply a version, so it documents a pin rather than omitting one.
-        return value == "<" or bool(_VERSION_REF.match(value) or _PLACEHOLDER_REF.match(value))
-    return False
+    if value is None:
+        return False
+    # A placeholder — `<release-tag>`, which the tokeniser splits at `<`, or a
+    # shell variable — cannot be run as written: the reader must supply a
+    # version, so it documents a pin rather than omitting one.
+    return value == "<" or bool(_VERSION_REF.match(value) or _PLACEHOLDER_REF.match(value))
 
 
 def _source_is_local(args: list[str]) -> bool:
@@ -1122,7 +1094,10 @@ def _source_is_local(args: list[str]) -> bool:
     if args[0] == "update":
         # Run inside an in-repo project, its answers file records this
         # repository's own template; anywhere else the source is unknown here.
-        return cwd.startswith("projects/")
+        # Normalised first: `cd projects/../services/x` starts with "projects/"
+        # and ends somewhere else entirely (QA-4 round sixteen).
+        normalised = posixpath.normpath(cwd) if cwd else ""
+        return normalised.startswith("projects/") and normalised != "projects"
     positional: list[str] = []
     skip_next = False
     for arg in args[1:]:
@@ -1160,7 +1135,9 @@ def check_copier_commands_are_pinned() -> None:
     """
     checked = 0
     upstream: list[str] = []
-    for path in sorted(REPO_ROOT.rglob("*.md")):
+    # `.markdown` too: GitHub renders it, and a command there is as pasteable
+    # (QA-4 round sixteen).
+    for path in sorted([*REPO_ROOT.rglob("*.md"), *REPO_ROOT.rglob("*.markdown")]):
         if not _is_scannable(path):
             continue
         for args in _runnable_copier_commands(_read(path)):

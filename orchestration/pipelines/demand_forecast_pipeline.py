@@ -50,10 +50,25 @@ from kfp import dsl
 #: step start-up makes each run depend on what the index served that minute,
 #: which is the opposite of the reproducibility the backtest's fixed seed is
 #: for — and it is the shortcut most KFP examples take.
-BASE_IMAGE = "ghcr.io/duqueom/ml-platform/demand-forecast:latest"
+#:
+#: Referenced by the same unresolvable placeholder the base Deployment carries,
+#: never by a tag: the training image is built in Phase 2, and whatever submits
+#: this pipeline must substitute its `@sha256:` digest. Until then a submission
+#: fails at image pull, loudly, instead of running whatever a tag pointed at.
+#: This file said `:latest` for fifteen audit rounds after the overlays stopped
+#: (QA-4 round sixteen), because the gate that closed the overlay finding read
+#: only manifests; `tests/test_pipeline_spec.py` now reads the compiled spec.
+BASE_IMAGE = "ghcr.io/duqueom/ml-platform/demand-forecast:set-by-deploy-pipeline"
+
+#: kfp itself is part of the image too. Left at its default, the compiler
+#: emits `pip install kfp==<version>` at the start of EVERY step — exactly the
+#: run-time install the comment above rules out, done by the SDK rather than
+#: by us, and invisible in this file. Round sixteen found it in the compiled
+#: spec (three steps, each pulling from PyPI at start-up).
+COMPONENT = {"base_image": BASE_IMAGE, "install_kfp_package": False}
 
 
-@dsl.component(base_image=BASE_IMAGE)
+@dsl.component(**COMPONENT)
 def ingest_month(
     source_uri: str,
     demand: dsl.Output[dsl.Dataset],
@@ -77,7 +92,7 @@ def ingest_month(
     report.log_metric("out_of_month", ingest_report.out_of_month)
 
 
-@dsl.component(base_image=BASE_IMAGE)
+@dsl.component(**COMPONENT)
 def validate_warehouse_table(
     demand: dsl.Input[dsl.Dataset],
     validation: dsl.Output[dsl.Metrics],
@@ -103,7 +118,7 @@ def validate_warehouse_table(
         raise RuntimeError(f"warehouse validation failed: {result}; density {density:.1%}")
 
 
-@dsl.component(base_image=BASE_IMAGE)
+@dsl.component(**COMPONENT)
 def backtest_model(
     demand: dsl.Input[dsl.Dataset],
     n_folds: int,
@@ -140,7 +155,7 @@ def backtest_model(
     return BacktestOutcome(report.skill, report.intervals_are_calibrated())
 
 
-@dsl.component(base_image=BASE_IMAGE)
+@dsl.component(**COMPONENT)
 def check_quality_gate(skill: float, coverage_ok: bool) -> None:
     """Fail the run when the model has not earned promotion.
 

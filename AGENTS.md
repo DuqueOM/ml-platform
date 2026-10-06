@@ -55,7 +55,7 @@ documents restate which facts; a hand edit fixes the copy you remembered.
 ## Independent audit
 
 ```text
-Last independent audit: 2026-10-02 (98a4359)
+Last independent audit: 2026-10-06 (aea1410)
 ```
 
 The commit in parentheses is the tree the auditor read, and it is what C7
@@ -430,7 +430,8 @@ so a reference can never silently resolve against this repository's index.
 uv sync                                            # workspace
 uv run pytest tests/                            # repository invariants
 uv run python scripts/check_doc_coherence.py       # documentation gate
-uv run ruff check . && uv run mypy libs/           # lint + types
+uv run ruff check .                                # lint
+uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/ projects/store-assistant/src/ orchestration/  # types, as CI runs them
 ```
 
 ## Documents

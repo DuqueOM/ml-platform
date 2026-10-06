@@ -14,6 +14,7 @@ demonstration and a claim.
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -91,10 +92,25 @@ def test_every_component_pins_the_same_built_image(spec: dict) -> None:  # type:
     assert len(images) == 1, f"components run on different images: {images}"
 
     for container in containers:
-        command = " ".join(container.get("command", []))
-        assert "pip install" not in command or "kfp" in command, (
-            "a component installs project dependencies at run time instead of using the image"
+        # Every word the step runs, not just the command: the compiler writes
+        # its install into `command`, a component author would write one into
+        # `args`. And kfp is NOT exempt — this test used to let `pip install`
+        # through when it named kfp, which is precisely the install the
+        # compiler emits by default, so it passed over a run-time PyPI fetch
+        # at the start of every step (QA-4 round sixteen).
+        executed = " ".join([*container.get("command", []), *container.get("args", [])])
+        assert not re.search(r"\bpip3?\b[^\n]*\binstall\b|\buv\s+pip\b", executed), (
+            "a component installs packages at run time instead of using the image; for kfp itself, pass "
+            "`install_kfp_package=False` and bake kfp into the image"
         )
+
+    (image,) = images
+    # A digest, or the unresolvable placeholder the base Deployment carries, so
+    # a submission that forgets to substitute fails at pull. Never a tag, which
+    # names whatever it points at today.
+    assert re.fullmatch(r"[^\s@]+@sha256:[0-9a-f]{64}", image) or image.endswith(":set-by-deploy-pipeline"), (
+        f"the components run {image!r}. Pin a digest, or leave the deploy-pipeline placeholder."
+    )
 
 
 def test_the_pipeline_does_not_reimplement_the_project(spec: dict) -> None:  # type: ignore[type-arg]

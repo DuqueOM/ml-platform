@@ -38,6 +38,11 @@ dev = [
     # only ever present as pytest-cov's dependency, and available is not
     # declared. 7.10 is where `patch = ["subprocess"]` arrived.
     "coverage~=7.16",
+    # CI ran `uvx bandit`, which resolves whatever PyPI serves at run time — the
+    # "a subverted scanner reports no findings" risk every other scanner here
+    # is pinned against (QA-4 round sixteen). Declared, so uv.lock pins it,
+    # Dependabot moves it, and `make verify` runs the same version CI does.
+    "bandit~=1.9",
     "mypy~=2.4",
     "ruff~=0.16",
     # Without stubs, every `import yaml` in scripts/ is an error under the
@@ -54,9 +59,12 @@ members = ["libs/*", "projects/*"]
 [tool.uv]
 # Security overrides: a dependency pinned EXACTLY to a vulnerable release by a
 # package that has not published a fix. Each entry names the CVEs it closes and
-# the pin it overrides, and `tests/test_dependency_overrides.py` fails the day
-# the pinning package admits the fixed version — so an override cannot outlive
-# its reason.
+# the pin it overrides, and `tests/test_dependency_overrides.py` fails once the
+# newest LOCKED version of the pinning package admits the fixed version — so
+# an override cannot outlive its reason by more than one lock update. The test
+# reads installed metadata: a release upstream that admits the fix changes
+# nothing here until Dependabot's bump of that package lands (QA-4 round
+# sixteen; this comment said "the day the pinning package admits" it).
 #
 # urllib3 >= 2.8.0 fixes CVE-2026-97687 (HIGH, traffic interception through an
 # HTTPS proxy's TLS configuration), CVE-2026-97689 (HIGH, unbounded memory) and
@@ -211,7 +219,15 @@ omit = [
     # QA-4 round seven measured the decomposition. The floor is unchanged at 90
     # and the honest figure clears it; what changes is that the figure now
     # answers the question the gate asks.
-    "*/tests/*",
+    #
+    # The distribution's suite only — `libs/<x>/tests/`, `projects/<x>/tests/`.
+    # This was `*/tests/*`, which also omitted a `tests/` directory INSIDE an
+    # import package (`src/serving_core/tests/engine.py`): importable code,
+    # never measured (QA-4 round sixteen). Coverage's `*` spans one path
+    # segment, so these cannot reach under `src/`.
+    # `tests/test_coverage_scope.py` holds both halves.
+    "*/libs/*/tests/*",
+    "*/projects/*/tests/*",
     # Probe files the gate tests write into the real tree for a moment — a
     # module citing ADR-999 for C2, a clock call for the isolation gate. When
     # any measured process exits, coverage adds every unexecuted file it finds

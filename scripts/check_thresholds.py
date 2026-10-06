@@ -71,17 +71,31 @@ class Threshold:
     path: str
     pattern: str
     higher_is_stricter: bool = True
-    #: The NAME this threshold was watched under at the baseline, and the factor
-    #: that converts the old value into the new unit — `("L1 line coverage
-    #: floor", 100)` for a floor that moved from a fraction (0.90) to a percent
-    #: (90). Needed only for a rename: a threshold whose name is unchanged is
-    #: found at the baseline by name wherever it lived, whatever file or pattern
-    #: it has now. See `compare`.
-    renamed_from: tuple[str, float] | None = None
+    #: The NAMES this threshold was watched under at the baseline, each with the
+    #: factor that converts the old value into the new unit —
+    #: `(("L1 line coverage floor", 100),)` for a floor that moved from a
+    #: fraction (0.90) to a percent (90). More than one when thresholds MERGE:
+    #: the merged number is compared with every predecessor. Factors come from
+    #: `RENAME_FACTORS` only. Needed only for a rename: a threshold whose name
+    #: is unchanged is found at the baseline by name. See `compare`.
+    renamed_from: tuple[tuple[str, float], ...] = ()
 
     def read(self, text: str) -> float | None:
-        match = re.search(self.pattern, text)
-        return float(match.group(1)) if match else None
+        """The number, from the ONE line that defines it. None when absent.
+
+        Anchored at the start of a line (after indentation), so a comment or a
+        docstring cannot stand in for the constant: `re.search` took the first
+        match, and "# Historically MIN_SKILL = 0.05" above `MIN_SKILL = 0.0`
+        read as 0.05 (QA-4 round sixteen). More than one defining line is
+        refused rather than resolved by position.
+
+        Raises:
+            ValueError: when more than one line matches.
+        """
+        matches = list(re.finditer(rf"^[ \t]*(?:{self.pattern})", text, re.MULTILINE))
+        if len(matches) > 1:
+            raise ValueError(f"{self.name}: {len(matches)} lines match {self.pattern!r}; a threshold is defined once")
+        return float(matches[0].group(1)) if matches else None
 
 
 #: Every number a gate fails on. A threshold absent from this list is one that
@@ -118,13 +132,13 @@ THRESHOLDS = (
         "libs combined coverage floor",
         _FLOORS,
         r"LIBS_COMBINED_FLOOR = (\d+)",
-        renamed_from=("libs coverage in CI", 1),
+        renamed_from=(("libs coverage in CI", 1),),
     ),
     Threshold(
         "scripts coverage floor (P12)",
         _FLOORS,
         r"SCRIPTS_COMBINED_FLOOR = (\d+)",
-        renamed_from=("scripts coverage in CI", 1),
+        renamed_from=(("scripts coverage in CI", 1),),
     ),
     Threshold("projects combined coverage floor (P17)", _FLOORS, r"PROJECTS_COMBINED_FLOOR = (\d+)"),
     Threshold("orchestration combined coverage floor (P17)", _FLOORS, r"ORCHESTRATION_COMBINED_FLOOR = (\d+)"),
@@ -136,7 +150,9 @@ THRESHOLDS = (
     ),
     Threshold("audit grace, in commits", "scripts/check_doc_coherence.py", r"AUDIT_GRACE_COMMITS\s*=\s*(\d+)", False),
     Threshold(
-        "retrieval promotion margin", "libs/llm-core/src/llm_core/retrieval_eval.py", r"margin: float = ([\d.]+)"
+        "retrieval promotion margin",
+        "libs/llm-core/src/llm_core/retrieval_eval.py",
+        r"def beats_baseline\(.*\bmargin: float = ([\d.]+)",
     ),
     Threshold("retrain skill floor", "orchestration/dags/demand_forecast_training.py", r"MIN_SKILL = ([\d.]+)"),
     Threshold("retrain coverage floor", "orchestration/dags/demand_forecast_training.py", r"MIN_COVERAGE = ([\d.]+)"),
@@ -177,13 +193,13 @@ THRESHOLDS = (
         "L1 line coverage floor, per library",
         _FLOORS,
         r"LINE_FLOOR = (\d+)",
-        renamed_from=("L1 line coverage floor", 100),
+        renamed_from=(("L1 line coverage floor", 100),),
     ),
     Threshold(
         "L2 branch coverage floor, per library",
         _FLOORS,
         r"BRANCH_FLOOR = (\d+)",
-        renamed_from=("L2 branch coverage floor", 100),
+        renamed_from=(("L2 branch coverage floor", 100),),
     ),
     Threshold(
         "parity pending ceiling, in days",
@@ -217,6 +233,12 @@ THRESHOLDS = (
 #: commit. Unset everywhere today; read rather than hardcoded so a PR lane can
 #: set it without touching this file.
 BASELINE_ENV = "THRESHOLD_BASELINE_REF"
+
+#: The unit conversions a rename may declare: none, and fraction-to-percent.
+#: Closed, because a free factor is a lever — 0.05 x 0.09 makes 0.005 read as
+#: "not lowered" (QA-4 round sixteen). A new conversion is a change to this set,
+#: reviewed as one.
+RENAME_FACTORS = frozenset({1, 100})
 
 
 def _git(*args: str) -> str:
@@ -390,32 +412,52 @@ def _value_at_baseline(threshold: Threshold) -> float | None:
 def compare() -> list[str]:
     """Return a message for every threshold that moved in the weakening direction.
 
-    Each current threshold is compared with its value at the baseline, found
-    in this order:
+    The BASELINE decides what a threshold is. For each current threshold:
 
-    1. Its current path and pattern, at the baseline — the ordinary case.
-    2. The baseline's own definition of the same NAME — a constant that moved
-       to another file, or whose pattern changed, keeps its history.
-    3. The baseline's definition of the name in `renamed_from`, scaled by its
-       factor — a relabelled threshold, declared as one.
+    1. If the baseline watched the same NAME, its definition rules: its
+       direction must be unchanged, its value at the baseline is the one to
+       beat, and its own path and pattern are read against the CURRENT tree as
+       well — so retargeting this entry's pattern at another constant leaves
+       the real one still compared.
+    2. Otherwise this threshold's own path and pattern at the baseline.
+    3. Otherwise each name in `renamed_from`, scaled by a factor from
+       `RENAME_FACTORS` — every predecessor of a merged threshold must hold.
+
+    QA-4 round sixteen beat the previous version four ways with the gate and
+    its tests green — a flipped direction, a retargeted pattern, a decoy
+    comment above the constant, a doctored rename factor — and it read an
+    unresolvable baseline as "none loosened". Each now fails.
 
     A name the baseline watched that nothing here claims, by name or by
-    `renamed_from`, FAILS: deleting a watch-list entry stopped watching the
-    number without a word, and relabelling one was indistinguishable from
-    adding a new threshold. A threshold with no baseline at all is new.
+    `renamed_from`, FAILS: dropping a watch-list entry stops watching the
+    number. A threshold with no baseline at all is new.
     """
-    weakened = []
-    baseline: list[Threshold] | None = None
+    ref = _baseline_ref("scripts/check_thresholds.py")
+    if not _git("rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"):
+        return [
+            f"the baseline {ref!r} does not resolve to a commit, so nothing can be compared with it. An "
+            f'unreadable baseline read as "none loosened" — every comparison skipped, the gate green (QA-4 '
+            f"round sixteen). Fix {BASELINE_ENV} or fetch the history."
+        ]
+    loaded = _baseline_definitions(ref)
+    if loaded is None:
+        return [
+            f"the watch list at {ref} could not be loaded, so moved, renamed and dropped thresholds cannot be "
+            f"compared. A gate that cannot read its baseline fails rather than passes."
+        ]
+    baseline: list[Threshold] = loaded
 
     def defined(name: str) -> Threshold | None:
-        nonlocal baseline
-        if baseline is None:
-            baseline = _baseline_definitions(_baseline_ref("scripts/check_thresholds.py")) or []
         return next((old for old in baseline if old.name == name), None)
 
+    weakened: list[str] = []
     for threshold in THRESHOLDS:
         current_text = (REPO_ROOT / threshold.path).read_text(encoding="utf-8")
-        current = threshold.read(current_text)
+        try:
+            current = threshold.read(current_text)
+        except ValueError as ambiguous:
+            weakened.append(str(ambiguous))
+            continue
         if current is None:
             weakened.append(
                 f"{threshold.name}: pattern no longer matches in {threshold.path} — "
@@ -424,37 +466,68 @@ def compare() -> list[str]:
             )
             continue
 
-        previous = _value_at_baseline(threshold)
-        source = threshold.path
-        if previous is None:
-            same_name = defined(threshold.name)
-            if same_name is not None:
-                previous, source = _value_at_baseline(same_name), f"{same_name.path} (moved)"
-            elif threshold.renamed_from is not None:
-                old_name, factor = threshold.renamed_from
-                renamed = defined(old_name)
-                if renamed is not None:
-                    value = _value_at_baseline(renamed)
-                    previous = value * factor if value is not None else None
-                    source = f"{renamed.path}, as {old_name!r}"
-        if previous is None:
-            continue
+        previous: list[tuple[float, str]] = []
+        current_values: list[tuple[float, str]] = [(current, threshold.path)]
+        same_name = defined(threshold.name)
+        if same_name is not None:
+            if same_name.higher_is_stricter != threshold.higher_is_stricter:
+                weakened.append(
+                    f"{threshold.name}: its direction changed from "
+                    f"{'floor' if same_name.higher_is_stricter else 'ceiling'} to "
+                    f"{'floor' if threshold.higher_is_stricter else 'ceiling'}. Which way is stricter is a "
+                    f"decision about the gate, not a refactor, and flipping it lets any value pass."
+                )
+                continue
+            # The baseline's definition at the baseline — or, when its pattern
+            # does not read its own file (one anchored in this very change),
+            # this definition at the baseline, so the number is still compared.
+            value = _value_at_baseline(same_name)
+            if value is None:
+                value = _value_at_baseline(threshold)
+            if value is not None:
+                source = same_name.path if same_name.path == threshold.path else f"{same_name.path} (moved)"
+                previous.append((value, source))
+            here = REPO_ROOT / same_name.path
+            if (same_name.path, same_name.pattern) != (threshold.path, threshold.pattern) and here.is_file():
+                try:
+                    still = same_name.read(here.read_text(encoding="utf-8"))
+                except ValueError as ambiguous:
+                    weakened.append(str(ambiguous))
+                    continue
+                if still is not None:
+                    current_values.append((still, f"{same_name.path}, by the baseline's own pattern"))
+        else:
+            own = _value_at_baseline(threshold)
+            if own is not None:
+                previous.append((own, threshold.path))
+            else:
+                for old_name, factor in threshold.renamed_from:
+                    if factor not in RENAME_FACTORS:
+                        weakened.append(
+                            f"{threshold.name}: renamed_from factor {factor} for {old_name!r} is not one of "
+                            f"{sorted(RENAME_FACTORS)} — a free factor scales the old value to anything."
+                        )
+                        continue
+                    renamed = defined(old_name)
+                    value = _value_at_baseline(renamed) if renamed is not None else None
+                    if renamed is not None and value is not None:
+                        previous.append((value * factor, f"{renamed.path}, as {old_name!r}"))
 
-        loosened = current < previous if threshold.higher_is_stricter else current > previous
-        if loosened:
-            direction = "lowered" if threshold.higher_is_stricter else "raised"
-            weakened.append(
-                f"{threshold.name}: {previous} -> {current} ({direction}) in {threshold.path}"
-                f"{'' if source == threshold.path else f', compared with {source}'}. "
-                "Loosening a gate is a STOP operation (AGENTS.md, P-10). Re-run with "
-                "--accept and a reason if it is deliberate."
-            )
+        for value, source in previous:
+            for now, where in current_values:
+                loosened = now < value if threshold.higher_is_stricter else now > value
+                if loosened:
+                    verb = "lowered" if threshold.higher_is_stricter else "raised"
+                    weakened.append(
+                        f"{threshold.name}: {value} -> {now} ({verb}) in {where}"
+                        f"{'' if source == threshold.path else f', compared with {source}'}. "
+                        "Loosening a gate is a STOP operation (AGENTS.md, P-10). Re-run with "
+                        "--accept and a reason if it is deliberate."
+                    )
 
     claimed = {threshold.name for threshold in THRESHOLDS} | {
-        threshold.renamed_from[0] for threshold in THRESHOLDS if threshold.renamed_from is not None
+        old_name for threshold in THRESHOLDS for old_name, _ in threshold.renamed_from
     }
-    if baseline is None:
-        baseline = _baseline_definitions(_baseline_ref("scripts/check_thresholds.py")) or []
     for old in baseline:
         if old.name not in claimed:
             weakened.append(

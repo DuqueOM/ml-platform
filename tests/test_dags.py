@@ -416,3 +416,14 @@ def test_the_dag_gates_on_a_five_fold_backtest() -> None:
 
     defaults = {name: param.default for name, param in inspect.signature(evaluate).parameters.items()}
     assert (defaults["n_folds"], defaults["horizon"], defaults["seed"]) == (5, 168, 42)
+
+
+def test_the_promotion_floors_hold_their_values(dagbag) -> None:  # type: ignore[no-untyped-def]
+    """QA-4 round sixteen: `MIN_SKILL = 0.0` passed 34 DAG tests, which read the floors rather than pin them.
+
+    The tests above derive their probes from the constants, so they cannot
+    notice the constants falling; `check_thresholds.py` watches the change,
+    and this pins the decision itself.
+    """
+    gate = _body(dagbag, "check_quality_gate")
+    assert (gate.__globals__["MIN_SKILL"], gate.__globals__["MIN_COVERAGE"]) == (0.05, 0.85)
