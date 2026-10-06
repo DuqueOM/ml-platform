@@ -269,6 +269,16 @@ jobs:
         # document asserting something false, which is itself a defect.
         run: uv run python scripts/check_implementation_status.py --check
 
+      - name: The README states what exists (P19)
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        # The README described the repository's first day for two months —
+        # "the projects are not built yet" over three projects in CI — because
+        # nothing read it. It follows docs/governance/readme-standard.md, shared
+        # with ml-service-template, and its status block is generated from the
+        # implementation status checked just above, so it can only say what
+        # that chain has proven.
+        run: uv run python scripts/check_readme.py
+
 
   tests:
     name: Tests and coverage

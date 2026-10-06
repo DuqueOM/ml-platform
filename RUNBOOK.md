@@ -315,8 +315,8 @@ alongside another `[C7]`-free failure, the suite reports it normally.
 
 ## The derived documents
 
-Three documents are generated from the repository and **must never be
-hand-edited**. Editing a tick into a status table does not make something true,
+Three documents, and two blocks of the README, are generated from the
+repository and **must never be hand-edited**. Editing a tick into a status table does not make something true,
 and the gate notices.
 
 | Document | Derived from | Regenerate | Check |
@@ -324,8 +324,11 @@ and the gate notices.
 | `docs/architecture/implementation-status.md` | the filesystem plus each component's verification command | `uv run python scripts/check_implementation_status.py --write` | `--check` |
 | `docs/architecture/technology-inventory.md` | detected **use** of each declared technology | `uv run python scripts/check_technology_inventory.py --write` | `--check` |
 | `docs/architecture/cloud-surface.md` | the ratio of cloud-specific to cloud-agnostic Terraform | `uv run python scripts/measure_cloud_surface.py --write` | `--check` |
+| `README.md` — the status block and the related-repositories table | the implementation status, the audit marker in `AGENTS.md`, the committed QA-4 reports, and [the README standard](docs/governance/readme-standard.md) | `uv run python scripts/check_readme.py --write` | no flag |
 
-`make sync` runs the first two together with the agentic re-render. The third
+`make sync` runs the first two and the README together with the agentic
+re-render — the README last, because its status is read from the first. Recording
+an audit changes the README too: its status names the latest round. The third
 is a separate call because it needs a `terraform` binary — it reports the split
 it measured (run here: 183 of 268 significant lines cloud-specific, 85 shared,
 so **68% adapter**) and fails against the 0.75 ceiling in the threshold list.
