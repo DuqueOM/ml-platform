@@ -35,7 +35,10 @@ spec:
           envFrom: [{ secretRef: { name: minio-credentials } }]
           resources:
             requests: { memory: "192Mi", cpu: "100m" }
-            limits:   { memory: "320Mi" }
+            # Measured at a 281 MiB peak (QA-4 round eighteen's remediation,
+            # scripts/local/measure_memory.py): 320 left 12% where the budget
+            # requires 25%. platform/local/budget.yaml records it.
+            limits:   { memory: "384Mi" }
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

@@ -77,6 +77,38 @@ jobs:
           folder-path: "docs, projects, platform, orchestration, agentic"
           file-path: "./README.md, ./CONTRIBUTING.md, ./AGENTS.md, ./CHANGELOG.md, ./QUICK_START.md, ./RUNBOOK.md, ./SECURITY.md, ./MIGRATION.md, ./VALIDATION_LOG.md"
 
+  readme-standard-drift:
+    name: README standard matches ml-service-template's main
+    # CI compares the shared README standard with ml-service-template at the
+    # commit ci.yml pins. A change made only in the template — its copy and its
+    # SHA-256 pin edited together — would pass there and never reach that pin.
+    # This compares with the template's main every week, so it cannot go
+    # unnoticed for longer. Not on pull requests: the template merges its half
+    # first, and a PR here must not go red for a change it has not made yet.
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    # A bound, not a budget: two sparse checkouts and one test file.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: DuqueOM/ml-service-template
+          ref: main
+          path: .sibling/ml-service-template
+          persist-credentials: false
+          sparse-checkout: |
+            docs/governance/readme-standard.md
+            scripts/readme_standard.py
+          sparse-checkout-cone-mode: false
+      - name: Compare the two halves byte for byte
+        run: |
+          for file in docs/governance/readme-standard.md scripts/readme_standard.py; do
+            cmp "$file" ".sibling/ml-service-template/$file" || { echo "::error::$file differs from ml-service-template main"; exit 1; }
+          done
+
   markdownlint:
     runs-on: ubuntu-latest
     # A bound, not a budget: measured under 1 min over the last five green runs. Without it a hung step holds

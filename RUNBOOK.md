@@ -466,6 +466,19 @@ replica over `emptyDir`, so a rolling update buys no availability while costing
 twice the budget. If you add a component, give it `Recreate` and a limit, and
 raise the budget deliberately rather than raising the ceiling.
 
+**A limit belongs to an image, so a new image is measured before it merges.**
+`platform/local/measured-memory.yaml` records each component's image and the
+peak working set it was measured at, and `tests/test_local_memory_budget.py`
+fails when a manifest names a different image or a limit leaves less than 25%
+over the peak. Grafana 13.2.2 was OOM-killed on every start at the limit chosen
+for Grafana 11, after a bump merged without the stack ever running it (QA-4
+round eighteen). So a bump — Dependabot's `local-stack-images` group included,
+which cannot auto-merge past that test — needs `make local-up`, then
+`uv run python scripts/local/measure_memory.py --write`, committed with it. The
+script refuses to record a component that is OOM-killed, crash-looping or
+without headroom; when `make local-up` times out, it names only the deployments
+that are down, with each pod's reason.
+
 `make local-verify` asserts these rather than assuming them; all three
 historical failures it encodes were found on the stack's first run.
 

@@ -10,14 +10,23 @@
 # component that exceeds its share dies with an attributable cause instead of
 # taking the host down with it.
 #
-# Re-measure before changing any number. Do it by SAMPLING, never with a single
-# reading:
+# Each pod's limit is held to what its image was MEASURED to use on a running
+# stack: platform/local/measured-memory.yaml, written by
+# `scripts/local/measure_memory.py --write`, keyed by image digest, and checked
+# by tests/test_local_preflight.py — an image bump does not pass until someone
+# has started it (QA-4 round eighteen: Grafana 13.2.2 was OOMKilled for two
+# weeks at a limit chosen for Grafana 11).
+#
+# Re-measure host memory before changing any number. Do it by SAMPLING, never
+# with a single reading:
 #   for i in $(seq 1 10); do free -m | awk 'NR==2{print $7}'; sleep 3; done
 #
-# Measured on the reference workstation 2026-08-06: 5920 MB available (min of
-# 4 samples, spread 6 MB). The totals below leave ~430 MB of slack inside the
-# allowance. An earlier revision left 12 MB, which is not headroom — it is a
-# budget that happened to fit once.
+# Measured on the reference workstation 2026-10-07: 7122 MB available (min of
+# 5 samples, spread 6 MB), so 3917 MB allowed; the 3200 MB below leave 717 MB
+# of slack. (2026-08-06 measured 5920 MB available; at that, today's budget
+# would not fit — preflight measures the machine it runs on, so it says so
+# there rather than this file assuming.) An earlier revision left 12 MB, which
+# is not headroom — it is a budget that happened to fit once.
 version: 1
 
 # Fraction of measured available memory the stack may claim. The remainder is
@@ -37,7 +46,7 @@ components:
     note: Postgres 17 with pgvector. Online feature store and vector store.
 
   - name: minio
-    limit_mb: 320
+    limit_mb: 384
     note: S3-compatible object storage backing the local Iceberg warehouse.
 
   - name: otel-collector
@@ -60,8 +69,11 @@ components:
       that they survive a week.
 
   - name: grafana
-    limit_mb: 200
-    note: Dashboards over both, so the correlation path is exercised locally.
+    limit_mb: 512
+    note: >
+      Dashboards over both, so the correlation path is exercised locally. Was
+      200 since Grafana 11; 13.2.2 (#72) idles at ~332 MB and was OOMKilled on
+      every start for two weeks before an L3 run saw it (QA-4 round eighteen).
 
   - name: workload
     limit_mb: 512

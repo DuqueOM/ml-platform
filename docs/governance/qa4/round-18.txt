@@ -1,0 +1,496 @@
+Committed copy of the QA-4 round eighteen report (the auditor's ~/qa4-r18-report.md).
+
+Verbatim, with one exception: the probe repository the auditor used to test C6 is
+redacted to OWNER/PRIVATE-REPO in each of its spellings (home-directory paths, a
+Markdown-escaped slash, inline HTML inside the account name, a Cyrillic letter in
+it), because the probe strings name a non-public repository by construction and
+C6, once it reads those forms, would rightly fail on them here. Plain text, like
+the earlier rounds' copies.
+
+-------------------------------------------------------------------------------
+
+# QA-4 round eighteen — independent audit of `ml-platform` at 746d6d6
+
+Auditor session: separate from the authoring session (ADR-005 rule B). Read-only. Nothing was committed or
+pushed. No PR, issue, setting, label or secret was touched, in either repository. Neither main working tree was
+touched. `scripts/audit_record.py`, `AGENTS.md` and `ops/audit.jsonl` were not touched.
+
+I touched the cluster only after `~/l3-run.log` held `EXIT=`. The only changes I made there were two probe pods
+and two policy mutations (`allow-dns`, `allow-serving-ingress`), each reverted by re-applying the committed
+manifests from my worktree. At the end I re-applied `platform/local/manifests/` and the local overlay, and
+confirmed that no probe pod remains and both selectors are back to their committed values.
+
+- **Tree under audit: `746d6d686d2fae1fa55dded89e5d40fdf0bf9108`** (origin/main, #125).
+  - Previous audit: `71528ad`. `git rev-list --count 71528ad..746d6d6` = 1. Catalogue: 217 entries. Both match
+    the prompt.
+- ml-service-template `9b6eb99f403fcc69c7cf8f583c30b7ecc0b985bd` (#266), read-only, as worktree
+  `~/template_MLOps`.
+- Worktrees, each after `uv sync --all-packages --all-extras --locked`:
+  - `~/qa4-r18`: the plain suite, then the L3 make targets and the sweep.
+  - `~/qa4-r18b`: `make verify`.
+  - `~/qa4-r18-probe`: probes, the harness and the classifier.
+  - `~/qa4-r18-nosib/ml-platform`: a short-lived no-sibling check.
+  All are removed at the end.
+- Tools: uv 0.11.19, Python 3.11/3.12/3.13, trivy 0.71.0 (CI's action runs 0.70.0), gitleaks 8.21.2 (pin
+  8.30.0), markdown-it-py 4.2.0, pyiceberg 0.12.0, kind context `kind-ml-platform-local` (node
+  v1.34.0, containerd 2.1.3), Docker Desktop running.
+- Logs, scripts and `r18.yaml`: `~/qa4-r18-logs/`.
+
+### Runs (clean trees at 746d6d6)
+
+| Run | Command | Result |
+| --- | --- | --- |
+| Author's L3 (read, not mine) | `~/l3-run.log` | **EXIT=1**: `local-up` rc=2, `local-serve` rc=0, `local-dashboards` rc=2, `local-verify` 2 failed |
+| 1 | `uv run pytest -o addopts='' -q -rs` (started after the author's EXIT) | **2493 passed, 9 skipped, 2 failed**, 1717 s (28:37). The 2 failures are the Grafana L3 tests |
+| 2 | `make verify` (parallel with 1) | **exit 0**, 2487 s (41:27); suite 2439 passed |
+| 3 (mine, L3) | `make local-up` / `local-serve` / `local-dashboards` / `local-verify`; `pytest tests/local -m local -rs` | rc 2 / 0 / 2 / 2; **38 passed, 2 failed** (both Grafana) |
+| CI | run 37559166844 on 746d6d6 | success |
+
+**Coverage**, `make verify` against CI on 746d6d6: identical to two decimals in 12 of 13 scopes:
+- libs 94.55, projects 86.46, demand-forecast 85.98/75.86, rag-assistant 96.34/90.00, store-assistant
+  85.25/57.14, orchestration 100.
+- scripts/ is 87.41 locally and 87.38 in CI.
+- Hypothesis, not verified (CI's per-file data is not available): my trees have the `template_MLOps` sibling,
+  which runs sibling-only paths (C2's template index, the README sibling test) that CI never takes.
+
+**Skips (9)**, from `-rs`:
+- Recorded contract deviations (4): P1 ×2, P6, P7.
+- No upstream checkout reachable (1): `test_upstream_parity`, wrongly, since one is beside the tree (P3 below).
+- No nyc-tlc data in the worktree (2).
+- `test_tracing`, OTLP not port-forwarded on 14317 (1).
+- No EDGAR filings (1).
+- **No local-stack test skipped**: the cluster was reachable.
+
+**Code scanning, open alerts per tool**: **Scorecard 12** (VulnerabilitiesID on 746d6d6: pyarrow PYSEC-2026-113,
+filelock -1374/-1375, diskcache -2447) and **Trivy 1** (CVE-2025-69872, diskcache, medium). Both match the prompt.
+
+---
+
+## Findings
+
+**Counts: 2 P0 · 0 P1 · 3 P2 · 7 P3**
+
+### P0
+
+```text
+[P0] The thresholds gate (P20) crashes against any baseline at or after 746d6d6, so the next push to main and every PR on top of it fails the build
+  scripts/check_thresholds.py:522-527 (_DEFINITIONS serialises [name, path, pattern, higher_is_stricter] — not `symbol`), :576
+  $ git status --short          # clean tree at 746d6d6
+  $ THRESHOLD_BASELINE_REF=746d6d6 uv run python scripts/check_thresholds.py ; echo rc=$?
+  ValueError: libs combined coverage floor: 394 lines match ''; a threshold is defined once
+  rc=1
+  $ (any uncommitted edit to scripts/check_thresholds.py, e.g. catalogue entry R15-TH2) uv run python scripts/check_thresholds.py
+  ValueError: libs combined coverage floor: 394 lines match ''; a threshold is defined once
+  $ THRESHOLD_BASELINE_REF=71528ad uv run python scripts/check_thresholds.py
+  [thresholds] OK — 31 watched, none loosened against 71528ad
+```
+
+#125 moved Python thresholds from `pattern` to `symbol`, read by value. The baseline loader still rebuilds each
+baseline threshold from four fields, so a baseline that uses `symbol` comes back with `pattern=""`. That pattern
+matches every line, and `read()` refuses it.
+
+- **Why CI on 746d6d6 is green.** Its baseline was 71528ad, which predates `symbol`.
+- **What happens next.** The next push to main compares against `HEAD~1` = 746d6d6, and a PR compares against
+  its merge-base. Both crash. The gate fails closed, so nothing is loosened silently, but CI's "Thresholds" step
+  and `make verify` go red for every change until this is fixed. The tempting response is to bypass a STOP gate.
+- **What it does to the mutation evidence.** Six catalogue entries that edit `check_thresholds.py` are counted
+  as killed by `test_the_working_tree_has_loosened_nothing` through this crash (blank `AssertionError` plus the
+  traceback), not through the property each removes:
+  - R14-thresholds-stale-local-main;
+  - R15-TH2, R15-TH3;
+  - R16-TH1;
+  - R17-THR3, R17-THR4.
+
+  So is my R18-PV1. Their kills say nothing about their targets until this is fixed.
+
+**Fix:** serialise the whole `Threshold` (`dataclasses.asdict`, including `symbol` and `renamed_from`) in
+`_DEFINITIONS` and rebuild it with `Threshold(**fields)`. Add a test that runs the gate with
+`THRESHOLD_BASELINE_REF=HEAD` on a clean tree, so the current definitions are loaded as a baseline. Re-run the six
+entries afterwards and classify their kills again.
+
+```text
+[P0] The local stack is broken: Grafana 13.2.2 is OOMKilled at its 200Mi limit, so `make local-up`, `make local-dashboards` and `make local-verify` fail, and 3 of the 4 L3 evidence commands in implementation-status fail as written
+  platform/local/manifests/40-metrics.yaml:155 (grafana/grafana:13.2.2@sha256:ac461fb3…), :165-166 (requests 128Mi, limits 200Mi)
+  README.md "What you get": "A local stack on kind … | `make local-up`, `make local-verify`"
+  $ kubectl --context kind-ml-platform-local -n ml-platform describe pod <grafana>
+  State: Terminated  Reason: OOMKilled  Exit Code: 137   Restart Count: 3   Limits: memory: 200Mi
+  $ make local-up ; echo rc   → (5m12s) timed out waiting for the condition on deployments/grafana … rc=2
+  $ make local-dashboards     → error: timed out waiting for the condition  rc=2
+  $ make local-verify         → FAILED test_every_declared_deployment_is_available ("deployed but not available: ['grafana']"), FAILED test_grafana_reports_healthy  rc=2
+  $ docker run --memory=200m grafana/grafana:13.2.2@sha256:ac461fb3… (75 s)   → 199.2MiB / 200MiB
+  $ docker run --memory=400m …                                                 → 331.9MiB / 400MiB (steady, no dashboards provisioned)
+  docs/architecture/implementation-status.md:115, :131, :132 — `make local-up && …`, `make local-up && …test_local_stack…`, `make local-dashboards && …` all fail; :165 (`make local-serve && …test_service_runs`) passes
+```
+
+Reproduced three times: the author's run, my plain suite, and my `tests/local` run. The Docker measurement is
+independent of the cluster.
+
+Grafana has been `13.2.2` since #72 (2026-09-21, "verified against the suite", which never runs the local
+stack), and `13.x` since #51. Rounds 15–17 could not run L3, so this has been broken, unobserved, for about two
+weeks. It is the cost round 15 predicted for local-image bumps merged with nothing executing them.
+
+Smaller defect in the same failure: `local-up`'s message names all six deployments as "timed out" when five are
+Available. The `kubectl wait --all` budget is consumed by Grafana, so the diagnostics point at the wrong
+components.
+
+**Fix:** raise Grafana's limit to at least 512Mi (measured idle need ~332Mi, plus dashboards), with the preflight
+budget updated to match, or pin a Grafana that fits. Add an L3 lane (kind on a hosted runner), or at least a CI
+check that each local image starts inside its declared limit, so an image bump cannot land without starting.
+Make `local-up` wait per deployment and name only the unavailable ones.
+
+### P2
+
+```text
+[P2] An expression-valued `continue-on-error` disarms all three blocking security controls with every test green
+  tests/test_security_controls.py:124-177 (_blocks: continue-on-error compared with True/"true" only; `if:` with "false"/"${{ false }}" only)
+  $ (ci.yml: `continue-on-error: ${{ true }}` added to "Bandit — …", "gitleaks", "Trivy filesystem scan — the gate")
+  $ uv run pytest -o addopts= -q tests/test_security_controls.py tests/test_verify_parity.py tests/test_tool_versions.py tests/test_action_pins.py
+  79 passed
+  $ check_action_pins.py → [actions] OK ;  ci_verify_yaml.py → [yaml] OK
+  $ _blocks(step, job) for spellings outside its vocabulary → blocks=True for each of:
+    `|| exit 0`, `; exit 0`, `if ! cmd; then :; fi`, `|| echo ignored`, `set +o errexit`, `set +e` inside a function,
+    checkov `--soft-fail-on`, checkov-action `soft_fail_on`, job `continue-on-error: ${{ always() }}`, `if: ${{ 0 }}`,
+    `if: github.repository == 'nobody/none'`
+  R18-BLK1 (gitleaks step, `${{ true }}`): SURVIVED
+```
+
+GitHub evaluates `${{ true }}` to true, so the step's failure is ignored. This is round 16's and 17's class again
+(a control disarmed with its tests green), through the YAML attribute rather than the command.
+
+The behavioural Bandit test (CI's exact arguments, run through the locked interpreter, against a planted B506)
+does what it claims for the command line. It cannot see step attributes.
+
+**Fix:** treat any non-literal `continue-on-error` or `if:` on a control's step or job as non-blocking unless it
+is an allowlisted expression. Add `|| exit 0`, `; exit 0`, `set +o errexit` and `--soft-fail-on` to the
+vocabulary. Better, run each control step's `run:` line through bash with `-e` against a planted finding, as the
+Bandit test does. Add R18-BLK1 to the catalogue.
+
+```text
+[P2] P19's parser and `unpinned()` still pass claim badges, hidden commands and unpinned installs a reader would see or run
+  scripts/readme_standard.py (parse(): images in heading lines never scanned; `_DEFINITION` same-line, top-level only; unpinned(): allowlist of spellings, default pass)
+  $ uv run python ~/qa4-r18-logs/readme_diff.py          # our parse() vs markdown-it-py, the repo's own reference
+  image inside the # title / ref definition in a blockquote / ref URL on next line / ref label whitespace → images ours=0 ref=1  <-- DIFFERS
+  $ uv run python ~/qa4-r18-logs/readme_check_probe.py   # on the real README, scripts/check_readme.py
+  claim badge inside the # title line          OK
+  ref badge, definition inside a blockquote    OK
+  ref badge, definition URL on next line       OK
+  ref badge, label whitespace differs          OK
+  commands moved into <pre> (unpinned)         OK
+  commands in a 4-space fence in a numbered item  OK
+  $ readme_standard.unpinned(<command>) → None (treated as pinned) for:
+    python3.12 -m pip install foo · pip3.13 install foo · /usr/bin/python3 -m pip install foo · uv tool install copier ·
+    uvx copier@latest · pip install 'copier>=0' · sudo bash · sh -c "$(curl …)" · conda/mamba/npm/go/cargo/brew install ·
+    docker run …:latest · git clone --branch main …  (the README's own first command: a moving ref)
+  R18-RS1 (`python3 -m pip` no longer recognised): SURVIVED
+  $ (no-sibling worktree, CI's situation) edit the standard's word budget AND STANDARD_SHA256 together
+  check_readme.py → OK;  tests: 3 failed — only same-repository tests (a hard-coded (250, 2000, 6, 5, 120) tuple, the pin test); the cross-repository comparison SKIPPED ("no sibling template checkout")
+```
+
+#125's parser is a large improvement: every round-17 probe now fails. But the comparison corpus does not contain
+these forms, and the corpus test would have caught each of them, since markdown-it-py sees the image.
+
+The standard's own rule 3 ("each version pinned") is checked by an allowlist that defaults to "pinned". The SHA
+pin works the way the pin test and the hard-coded tuple guard it: within one repository. CI has no sibling, so
+the "byte for byte" claim across repositories is enforced only on a machine where both are checked out side by
+side.
+
+**Fix:**
+- Read images from heading inline content too. Resolve reference definitions inside containers and across
+  lines, with CommonMark label normalisation. Treat `<pre>` blocks and fences indented under list items as code.
+- Add these cases to the markdown-it corpus.
+- Make `unpinned()` default to "unpinned" for any installer or runner it does not recognise. Normalise the
+  interpreter name (`python3.X`, paths). Require `==` or an exact `@version` (not `@latest`, not `>=`). Treat a
+  branch name as moving.
+- Give CI the sibling (a sparse checkout of the template's two files at a pinned commit) so the cross-repository
+  comparison runs there.
+
+```text
+[P2] C6 passes a private repository named one directory under a home "container" — the shape this repository's own documents use for local paths
+  scripts/check_doc_coherence.py:915-927, :951-953 (_HOME_CONTAINERS)
+  $ printf '%s\n' "<form>" > docs/runbooks/_qa4_c6_probe.md && uv run python scripts/check_doc_coherence.py --only C6
+  /home/OWNER/PRIVATE-REPO            FAIL [C6] … 'PRIVATE-REPO'
+  /home/OWNER/projects/PRIVATE-REPO   ok   [C6] 1424 files scanned …
+  /Users/OWNER/code/PRIVATE-REPO      ok
+  OWNER\/PRIVATE-REPO (Markdown-escaped slash, renders "/")   ok
+  OWNER/PRIVATE-REPO (renders "OWNER/…")            ok
+  OWNER/PRIVATE-REPO (Cyrillic О)                             ok
+  C:\Users\OWNER\source\repos\PRIVATE-REPO   FAIL … non-public repository 'source'   (false positive; the real name is not the one reported)
+  (round-17 forms all caught: &#47;, &#x2F;, U+200B, fullwidth, ∕, ⁄, soft hyphen, /home and /Users direct)
+```
+
+The container rule skips the container segment and never looks at the segment after it, which is where a
+repository name sits in `/home/<account>/projects/<repo>`. This repository's committed reports already contain
+paths of exactly that shape (`/home/duqueom/projects/main_projects/…`).
+
+**Fix:** after a home directory and any number of container segments, check the next segment as a repository
+name. Unescape Markdown backslash escapes and strip inline HTML tags before matching. Fold confusable characters
+in the account name (Unicode TR39 skeleton, or a small Latin/Cyrillic map).
+
+### P3
+
+```text
+[P3] check_thresholds.python_value does not see bindings made through a subscript, globals(), setattr, a star import or __post_init__; "a second binding of any kind is refused" is false (the behavioural tests catch every case)
+  scripts/check_thresholds.py:61-92 (_bindings), :130-189
+  $ uv run python ~/qa4-r18-logs/pv_attacks.py     # gate verdict, then the tests that guard each number
+  A1 globals()['MIN_SKILL'] = 0.0                        gate: OK   tests: 3 failed
+  A2 setattr(sys.modules[__name__], 'MIN_SKILL', 0.0)    gate: OK   tests: 3 failed
+  A3 star import rebinding MIN_SKILL                     gate: OK   tests: 3 failed
+  A4 BacktestDesign.__post_init__ sets n_folds=2         gate: OK   tests: 1 failed
+  A5 MINIMUM_REUSE["rag-assistant"] = 0 after the dict    gate: OK   tests: 1 failed (test_the_floor_matches_what_the_plan_requires)
+  A6 ML_PACKAGES["projects/demand-forecast"] = PackageFloor(1, 1)   gate: OK   tests: 1 failed (floors held to quality-gates.md)
+  A7 ML_PACKAGES.update(...) at module end               gate: OK   tests: 1 failed
+  $ THRESHOLD_BASELINE_REF=71528ad … → OK — 31 watched; all 30 baseline definitions read their own baseline file and are claimed
+```
+
+Defence in depth holds. Every value is pinned by a behavioural test. The gate's own claim is wider than what it
+does.
+
+**Fix:** treat a `Subscript`/`Attribute` store, `globals()[…]`, `setattr`, `ImportFrom *` and a
+`__post_init__`/`__init__` on the threshold's class as a second binding. Or import the module and read the value
+(`getattr`), as round 17 suggested.
+
+```text
+[P3] The `gates:` coverage test is satisfied by a label: deleting the only entries that break P2 and P3 leaves it green
+  tests/test_mutation_harness.py:68-79
+  $ (remove G-P2 and G-P3 from tests/mutations.yaml) uv run pytest -o addopts= -q tests/test_mutation_harness.py
+  438 passed
+  R16-MY1/R16-MY2/DEP3/DEP4 carry `gates: [P2]`/`[P3]` but edit .pre-commit-config.yaml; under R16-MY1:
+  $ uv run mypy libs/ scripts/ projects/*/src/ orchestration/  → Success: no issues found in 104 source files
+  $ (under DEP3) uv run ruff check . ; uv run ruff format --check .  → All checks passed! / 609 files already formatted
+```
+
+G-P2 (`strict = false` → `test_type_gate_enforces_its_config.py`) and G-P3 (rule removed → `test_lint_gate.py`)
+do break their gates. So does every other gate's entry I read: G-P1, G-P6, G-P9, G-P11, G-P13, G-P15, G-C0,
+R16-SEC3. The property holds today, by those entries.
+
+**Fix:** require at least one entry per gate whose `run:` invokes the gate's command or its named test from
+quality-gates.md, or label the hook-mirror entries with the hook, not the gate.
+
+```text
+[P3] Eight runnable copier commands in this repository's own documents still run whatever copier is on PATH; the lock test looks only for `uvx`/`pipx run` and admits `uvx copier@latest`
+  agentic/skills/scaffold-update/SKILL.md, agentic/workflows/scaffold-update.md (and their .devin renders), docs/runbooks/consuming-the-template.md (×4); tests/test_tool_versions.py:123-155 (regex `\b(?:uvx|pipx run)\s+copier(?![@=])\b`)
+  $ (C9's own _code_blocks over every scannable *.md, lines matching copier copy|update not via `uv run copier`)
+  agentic/skills/scaffold-update/SKILL.md: copier update --trust --vcs-ref=v0.24.0 --pretend
+  docs/runbooks/consuming-the-template.md: copier copy --trust  --vcs-ref=v0.31.0  --data service_slug=demand_forecast_serving …
+  (… 8 in this repository's own files, excluding services/ and the qa4 reports)
+```
+
+The work order says "every instruction runs `uv run copier`, held by a test".
+
+**Fix:** `uv run copier` in those files, and make the test match any `copier copy|update|recopy` in a code
+block not preceded by `uv run`.
+
+```text
+[P3] check_upstream_parity treats a sibling that is a git worktree as unreachable, so its online half silently skips
+  scripts/check_upstream_parity.py:186 (`if not (TEMPLATE_CHECKOUT / ".git").is_dir(): return None`)
+  $ uv run python -c "…print(p.TEMPLATE_CHECKOUT.exists(), p._upstream_files())"   → True None
+  $ git -C ~/template_MLOps ls-files | wc -l   → 1096
+  $ cat ~/template_MLOps/.git   → gitdir: /home/duqueom/projects/main_projects/template_MLOps/.git/worktrees/template_MLOps
+  make verify: "ok [parity] upstream not reachable at template_MLOps/ — ledger checked for consistency only"
+  (C2 and the README sibling test DO use the same sibling: "152 resolved against the template's index"; test_the_sibling… ran)
+```
+
+**Fix:** test `.git` with `exists()`, or ask `git -C <path> rev-parse --is-inside-work-tree`. Report "reachable
+but unreadable" separately from "absent".
+
+```text
+[P3] P10 still accepts a digest check run in the background or inside `if ! …; then …; fi`
+  scripts/check_action_pins.py (download/digest pairing)
+  $ (probe step in ci.yml) uv run python scripts/check_action_pins.py
+  check-before-dl, set +e, set +o errexit, set +eu, ( check ) || true, re-download after check, shasum -a 1  → FAIL (7 caught)
+  curl … -o t … ; echo "… t" | sha256sum -c - &  ; chmod +x t        → [actions] OK
+  curl … -o t … ; if ! echo "… t" | sha256sum -c -; then echo skip; fi → [actions] OK
+```
+
+This is latent: the one real download (kubescape) is checked correctly.
+
+**Fix:** reject a check followed by `&`, or one inside a condition whose failing branch does not exit non-zero.
+
+```text
+[P3] The work order says warm-start continuation from the artifact and from memory "agree exactly"; that holds only because this model never subsamples features
+  docs/governance/remediation-work-order.md (round seventeen table, "A loaded artifact could not continue a warm start")
+  projects/demand-forecast/src/demand_forecast/persist.py:213-224 (states the caveat correctly)
+  $ uv run python ~/qa4-r18-logs/warm_probe.py
+  max_features=1.0: continuation persist.load vs in-memory identical: True
+  max_features=0.5: continuation persist.load vs in-memory identical: False
+  plain joblib.load continuation (both): AttributeError     # the serving path does not restore the generator
+```
+
+**Fix:** carry the code's qualifier into the work order ("…agree exactly while `max_features=1.0`; with feature
+subsampling the continuation is reproducible, not identical").
+
+```text
+[P3] Two statements in the audit prompt are wrong
+  (prompt §0) "kind cluster `ml-platform-local` already runs the full local stack"
+  $ kubectl -n ml-platform get deploy   (before any command of mine)  → grafana 0/1 AVAILABLE; pod CrashLoopBackOff, OOMKilled
+  (the author's own L3 run ended EXIT=1 for that reason)
+  (prompt §2) the template beside the worktree makes "the sibling-comparison tests run instead of skipping"
+  → true for the README sibling test and C2; false for test_upstream_parity (skipped) and the online parity half (P3 above)
+```
+
+**Fix:** state the stack's measured condition in the next prompt.
+
+---
+
+## Verified working
+
+**L3, for the first time (cluster `kind-ml-platform-local`).**
+- **`tests/local`: 38 passed, 2 failed (Grafana), 0 skipped** (`l3-tests-local.log`). The NetworkPolicy and
+  service tests pass alone: 11 passed.
+- **NetworkPolicies, measured independently** (`np_probe.sh`; a PSS-restricted busybox probe pod;
+  `nslookup kubernetes.default.svc.cluster.local`):
+
+  | Policies in force | DNS |
+  | --- | --- |
+  | committed (default-deny + allow-dns) | RESOLVES |
+  | **allow-dns peer selector broken by me** (`k8s-app=kube-dns-WRONG`) | **DENIED**: ";; connection timed out; no servers could be reached", 5.4 s, while `kubectl exec … echo` still works |
+  | allow-dns deleted, default-deny alone | DENIED |
+  | both deleted (control) | RESOLVES |
+  | committed policies re-applied | RESOLVES |
+
+- **Prometheus scrapes the serving pod** through `allow-serving-ingress`: target `http://10.244.0.21:8000/metrics`
+  (the pod's IP) is `up`. With its monitoring namespace selector broken by me it goes `down` within 20 s
+  ("context deadline exceeded"). Restored, it is `up` again within 10 s.
+- **`make local-serve` runs the image just built.**
+  - The node's `ml-platform/demand-forecast:local` and Docker's share creation time `2026-10-07T18:08:08.209Z`
+    and top layer `sha256:1b3be949…`.
+  - The pod was recreated at 18:20:36Z by my run's `rollout restart`.
+  - Docker's `.Id` is the manifest-list digest, so it differs from containerd's image id without meaning a
+    different image.
+- **The service at L3:**
+  - `/health` 200; `/ready` 200 `{"model_loaded":true,"warmed_up":true}`.
+  - `/model/info` → `"model_type":"_SyntheticGoldenPathModel"`. The log reads: "MODEL_PATH=models/model.joblib
+    missing but ALLOW_MODELLESS_STARTUP=true; using synthetic CI-only model".
+  - `/predict` accepts only the classifier schema (`feature_a/b/c`, `feature_c` ∈ category_A..C) and returns
+    `{"prediction_score":0.5,"risk_level":"MEDIUM"}`. A forecast-shaped body is refused (422).
+  - So the pod serves no forecast and loads no artifact. That is ADR-008's open half, and it is **documented
+    accurately**: `platform/kubernetes/overlays/local/local-runtime.yaml:15-27` ("It does NOT prove a forecast is
+    served") and QUICK_START's ADR-008 paragraph.
+  - P18 (the artifact loads under the image's requirements) is a separate CI claim. It is not exercised by the
+    pod.
+- **R15-20**: MinIO runs from the node's cache (`docker.io/minio/minio RELEASE.2025-04-22T22-12-26Z 9d668e47f1fc6`,
+  `imagePullPolicy: IfNotPresent`). The description is accurate.
+- **Claims compared with measurement:**
+  - platform/local/README.md's NetworkPolicy paragraph and COMPLIANCE_MAPPING PR.PS/PR.IR (#105's measurement):
+    confirmed.
+  - implementation-status L3 rows: 1 of 4 commands passes as written (see the P0).
+
+**#125, security controls.** CI's Bandit line, run through the locked interpreter against a planted B506, exits
+non-zero. The flag vocabulary catches `--exit-zero`, `--exit-code=0` and `set +e` (R18-BLK2 killed); the gaps
+are in the P2 above. R17-BAN1 is killed.
+
+**#125, KFP image (R17-1).** The components name `…/demand-forecast-train`, held apart from the Deployment's
+image. R17-1 is described accurately: there is still only one Dockerfile.
+
+**#125, README (P19).**
+- `check_readme.py` → OK in both repositories.
+- `readme_standard.py` and `readme-standard.md` are byte-identical across them.
+- With the sibling present, the cross-repository test runs and passes.
+- Every round-17 evasion now fails.
+- The template's quick start (`pip install "copier>=9.0.0"`) matches how its CI installs copier (5 workflows),
+  which the standard's "bounded exactly as CI installs it" permits.
+- The template's wording guard now reads `docs/CAPABILITIES.md`.
+- Template governance tests: 46 passed, 1 skipped. The skip is its sibling check, which wants `../ml-platform`.
+
+**#125, scan (R16-1, R17-2).**
+- The Supply chain job reproduces: 7 sets resolved (base 41, gcp 60, aws 46, dev 99, train 101, eda 9, eda-heavy
+  66 on Python 3.12), gate exit 0 over 8 targets, coverage "uv.lock: all 275 packages" plus all 7 sets.
+- A git-sourced lock entry is now **expected**: Trivy listing it passes; dropping it from the inventory fails
+  ("examined 274 of 275; not examined: pyjwt 2.15.1"). R18-SCAN1 is killed.
+- R17-2 is accurate: a cold `htmlmin 0.1.12` install fails on Python 3.13 (`No module named 'cgi'`) and succeeds
+  on 3.12.
+- R16-1 is accurate in effect: pyarrow==18.0.0 in all 7 resolved sets, accepted to 2026-11-05. Strictly, dev and
+  train inherit it through `-r requirements.txt` rather than pinning it.
+
+**#125, lakehouse.** `delete_before` counts from the snapshot summary correctly:
+- under round 17's forced concurrent commit: 4 (pyiceberg retried);
+- a four-month, multi-file delete: 20;
+- a straddling file: 24 of 48, 24 remaining;
+- a cutoff of `00:00-06:00`: 30;
+- delete-all: 5.
+
+R18-LH1 (written-back rows not subtracted) is killed by the straddling test.
+
+**#125, others.**
+- Promotion: R17-W14a/b are killed by the off-grid sweep (381 disagreements reported).
+- `persist.load` restores the generator: continuation is identical at `max_features=1.0`; R18-PER1 is killed.
+- C6's round-17 forms are all caught; R18-C6a and R18-C6b are killed.
+- R16-2's notice is now correct (82 → 83 audit entries; 11 ADRs; Checkov and tfsec empty).
+
+**Regression sweep.**
+- `make verify` exit 0.
+- coherence OK (C7 1/10); readme OK; status OK; inventory OK; thresholds `--show` 31.
+- The Supply chain commands as above.
+- gitleaks 8.21.2: 214 commits, no leaks. Default rules with `--ignore-gitleaks-allow`: the two known fixtures
+  at `services/demand-forecast-serving/tests/test_memory_redaction.py:74,78`.
+
+## Mutations
+
+**Committed catalogue (217):** `mutation_harness.py` → **215/215 expected kills**. C10-case and
+W-ceiling-exclusive survive as declared. Each kill was re-run individually by `~/qa4-r18-logs/classify.py`,
+recording the failing test id and first error line:
+
+| Cause | Count | Entries |
+| --- | --- | --- |
+| Assertion | **199** | |
+| Gate verdict | **9** | P0-claude-skills-flat, R14-artifact-reader ×2, R14-thresholds-scripts-floor-lowered, CF8, CF10, W14-P18, R17-THR1, R17-THR2 |
+| Behavioural exception | **7** | DG3, DG4, LC1, LC3, R16-LH3, R16-LH4, R17-LH5; each the product's own refusal or the error under test |
+| Crash | **0** | |
+
+**Kills through a different cause than the target:** 6. Those are the `check_thresholds.py` entries listed in
+the P0, killed via the gate's crash on its own dirty file. Every other kill reviewed (frequency-ranked failing
+tests; the three keyword-flagged ones) lands in the test named for its property.
+
+**Auditor additions (`~/qa4-r18-logs/r18.yaml`):** **9 of 11 killed**.
+
+| id | mutation | result | cause |
+| --- | --- | --- | --- |
+| R18-BLK1 | gitleaks step `continue-on-error: ${{ true }}` | **SURVIVED** | `_blocks` reads literals only (P2) |
+| R18-BLK2 | `set +e` dropped from the suppression vocabulary | killed | assertion (`test_blocks_reads_every_suppression[set-plus-e]`) |
+| R18-RS1 | `python3 -m pip` no longer read as pip | **SURVIVED** | no test case for `python3 -m pip` (P2) |
+| R18-RS2 | uvx/pipx never checked | killed | assertion (`unpinned-uvx`) |
+| R18-RS3 | `git clone` without a ref accepted | killed | assertion (`unpinned-clone`) |
+| R18-PV1 | augmented assignment not a second binding | killed | **through the P0 crash**, not the property |
+| R18-LH1 | written-back rows not subtracted | killed | assertion (straddling-file test) |
+| R18-C6a | entities not decoded | killed | assertion (`html-entity-slash`) |
+| R18-C6b | everything after a home dir skipped | killed | assertion (`linux-home-checkout`) |
+| R18-SCAN1 | git/url/path sources not expected | killed | assertion (`test_every_non_workspace_source_is_expected`) |
+| R18-PER1 | load stops restoring the generator | killed | behavioural exception (`AttributeError` in the warm-start test) |
+
+Suggested:
+- Now: R18-BLK2, RS2, RS3, LH1, C6a, C6b, SCAN1, PER1.
+- After their fixes: R18-BLK1, RS1.
+- After the P0 fix: R18-PV1, re-classified.
+
+## Not verifiable here
+
+- **The serving image loading the real artifact in the cluster.** The local overlay deliberately runs the
+  synthetic model (ADR-008), so L3 cannot show it. P18 shows it in an environment, not in the pod.
+- **Grafana dashboards rendering in Grafana.** Grafana never became ready. `test_dashboards.py` validates panel
+  PromQL against Prometheus only (by design), and that passes.
+- **`test_tracing.py`'s live half**: it needs OTLP on 14317 forwarded. Not attempted; the other observability
+  checks in `test_local_stack.py` (span arrives in Jaeger) passed.
+- **CI's per-file coverage**: not published, so the 0.03-point scripts difference stays a hypothesis.
+- **gitleaks at the pinned 8.30.0** (ran 8.21.2) and **Trivy at CI's 0.70.0** (ran 0.71.0).
+- **The template's sibling test**: it looks for `../ml-platform`, and the arrangement the prompt specifies gives
+  it `../qa4-r18`.
+
+## Proposed audit-trail record
+
+```text
+--action independent-audit --target ml-platform --mode CONSULT
+--outcome "Round 18 against tree 746d6d686d2fae1fa55dded89e5d40fdf0bf9108 (ml-service-template 9b6eb99 read-only; first round with L3). 2 P0, 0 P1, 3 P2, 7 P3. P0: check_thresholds' baseline loader serialises name/path/pattern/direction but not `symbol`, so against any baseline at or after 746d6d6 every value-read threshold comes back with an empty pattern and the gate crashes (THRESHOLD_BASELINE_REF=746d6d6 → ValueError, rc=1) — the next push to main and every PR on it go red, and six catalogue kills (R14-stale, R15-TH2/TH3, R16-TH1, R17-THR3/THR4) come from that crash, not their properties; the local stack is broken — Grafana 13.2.2 is OOMKilled at its 200Mi limit (measured ~332Mi idle), so make local-up/local-dashboards/local-verify fail and 3 of 4 L3 evidence commands in implementation-status fail as written. P2: an expression-valued continue-on-error (${{ true }}) disarms Bandit, gitleaks and the Trivy gate with 79 tests green; P19's parser misses images in heading lines and container/multi-line reference definitions and commands in <pre> or list-indented fences, unpinned() defaults to pinned (python3.12 -m pip, uv tool install, @latest, >=0, git clone --branch main), and the cross-repository pin runs only where both are checked out; C6 passes /home/<account>/projects/<private-repo>. L3 otherwise holds: NetworkPolicies deny when I break allow-dns and restore when re-applied; Prometheus loses and regains the pod with the ingress selector; local-serve runs the image just built; the pod serves the synthetic classifier, as documented (ADR-008). make verify exit 0 (41:27); plain suite 2493 passed/9 skipped/2 failed (Grafana) (28:37); coverage identical to CI in 12 of 13 scopes (scripts 87.41 vs 87.38). 215/215 catalogue kills (199 assertion, 9 gate verdict, 7 behavioural exception, 0 crash; 6 via the P0 crash); 9/11 auditor mutations killed. gitleaks clean over 214 commits."
+--evidence "Worktrees ~/qa4-r18 (plain suite, L3 make targets, sweep), ~/qa4-r18b (make verify), ~/qa4-r18-probe (probes, harness, classifier), ~/template_MLOps (ml-service-template 9b6eb99, read-only), ~/qa4-r18-nosib (no-sibling check) at 746d6d686d2fae1fa55dded89e5d40fdf0bf9108 after uv sync --all-packages --all-extras --locked; uv 0.11.19, Python 3.11/3.12/3.13, trivy 0.71.0, gitleaks 8.21.2, markdown-it-py 4.2.0, pyiceberg 0.12.0, kind v1.34.0/containerd 2.1.3; read ~/l3-run.log after EXIT=; uv run pytest -o addopts='' -q -rs; make verify; CI run 37559166844 log; make local-up/local-serve/local-dashboards/local-verify; uv run pytest tests/local -m local -rs; np_probe.sh (busybox probe pod; allow-dns broken/deleted/default-deny deleted/restored); Prometheus targets with allow-serving-ingress broken and restored; crictl inspecti vs docker image inspect; /health /ready /model/info /predict via port-forward; docker run grafana 13.2.2 at 200m/400m; THRESHOLD_BASELINE_REF=746d6d6 and 71528ad check_thresholds; python_value attacks A1-A7; readme_standard differential vs markdown-it-py and check_readme probes; unpinned() spellings; no-sibling standard+digest edit; _blocks spellings and continue-on-error ${{ true }} on three steps (79 tests); Supply chain commands incl. git-sourced lock entry; htmlmin cold install on 3.13/3.12; delete_before probes; warm-start continuation probe; C6 x19, P10 x9; copier invocation scan; parity sibling probe; gates: label probe (G-P2/G-P3 removed); mutation_harness.py (217) with per-entry classification incl. failing test ids, and 11 auditor entries; gitleaks git --redact (repo config; default rules with --ignore-gitleaks-allow); gh api code-scanning per tool. Report: ~/qa4-r18-report.md"
+```
+
+## Closing verdict
+
+#125's targeted fixes hold where measured. The dependency scan, the lakehouse counts, the KFP image separation
+and the promotion agreement are confirmed. For the first time at L3, the NetworkPolicies are shown enforced, by
+my own broken and restored policies.
+
+Two things the round promised are broken:
+- **The thresholds gate it rewrote cannot read its own definitions as a baseline**, and will fail every change
+  that follows it.
+- **The local stack the README offers does not come up**, because a Grafana bump nobody started at L3 needs more
+  memory than its limit.

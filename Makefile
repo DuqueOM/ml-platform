@@ -92,8 +92,13 @@ local-up: local-preflight ## Create the local cluster and bring up the full stac
 	  || kind create cluster --config $(LOCAL)/kind-cluster.yaml
 	kubectl --context $(CTX) apply -f $(LOCAL)/manifests/
 	@echo "waiting for the stack to become ready…"
-	kubectl --context $(CTX) -n ml-platform wait --for=condition=available \
-	  --timeout=300s deployment --all
+	# On a timeout `kubectl wait --all` reports every deployment it had not yet
+	# confirmed, so a single failing one is named alongside five healthy ones
+	# (QA-4 round eighteen). explain_unavailable.py names only the unavailable
+	# ones, with each pod's reason.
+	@kubectl --context $(CTX) -n ml-platform wait --for=condition=available \
+	  --timeout=300s deployment --all >/dev/null \
+	  || { uv run python scripts/local/explain_unavailable.py; exit 1; }
 	@$(MAKE) --no-print-directory local-endpoints
 
 .PHONY: local-endpoints

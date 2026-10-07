@@ -54,6 +54,11 @@ _NOT_LOCAL = {
     # feed that scan. SECURITY.md gives the commands to reproduce both locally.
     "uv run python scripts/resolve_serving_requirements.py",
     "uv run python scripts/check_scan_coverage.py trivy-packages.json",
+    # A subset of the suite `verify` runs whole, pointed at ml-service-template
+    # checked out by the step before it, at the commit ci.yml pins. Locally the
+    # same test runs inside the suite whenever the template is checked out
+    # beside this repository or README_STANDARD_SIBLING names a checkout.
+    "uv run pytest -o addopts= -q -p no:randomly tests/test_readme_standard.py -k sibling",
 }
 
 

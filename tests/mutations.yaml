@@ -1278,8 +1278,6 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_tool_versions.py
   expect: killed
-  gates:
-  - P3
 - id: DEP4
   origin: dependency round — the ruff hooks reach generated code again
   file: .pre-commit-config.yaml
@@ -1288,8 +1286,6 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_tool_versions.py
   expect: killed
-  gates:
-  - P3
 - id: LH1
   origin: dependency round — time travel ignored, caught on the filesystem catalogue
   file: projects/demand-forecast/src/demand_forecast/lakehouse.py
@@ -1309,8 +1305,8 @@ mutations:
 - id: R16-SEC2
   origin: QA-4 round sixteen, auditor — the job-level suppression rule removed
   file: tests/test_security_controls.py
-  old: '    if job is not None and job.get("continue-on-error") in (True, "true"):'
-  new: '    if False:'
+  old: "    for owner in (step, job or {}):\n        value = owner.get(\"continue-on-error\", False)"
+  new: "    for owner in (step,):\n        value = owner.get(\"continue-on-error\", False)"
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_security_controls.py
   expect: killed
@@ -1355,8 +1351,8 @@ mutations:
 - id: R16-P10b
   origin: QA-4 round sixteen — a swallowed digest check counts again
   file: scripts/check_action_pins.py
-  old: '                if _DIGEST_CHECK.search(line) and not _SWALLOWED.search(line)'
-  new: '                if _DIGEST_CHECK.search(line)'
+  old: '    if _SWALLOWED.search(after) or _BACKGROUND.search(after):'
+  new: '    if _BACKGROUND.search(after):'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_action_pins.py
   expect: killed
@@ -1518,8 +1514,6 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_tool_versions.py
   expect: killed
-  gates:
-  - P2
 - id: R16-MY2
   origin: QA-4 round sixteen — the type hook checks fewer roots than CI
   file: .pre-commit-config.yaml
@@ -1528,8 +1522,6 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_tool_versions.py
   expect: killed
-  gates:
-  - P2
 - id: R16-CF4
   origin: QA-4 round sixteen, auditor — exemption ignores every subdirectory, not only tests/
   file: scripts/check_coverage_floors.py
@@ -1913,8 +1905,8 @@ mutations:
 - id: R17-BAN2
   origin: QA-4 round seventeen — _blocks forgets the tools' own exit-zeroing flags
   file: tests/test_security_controls.py
-  old: '    if _SUPPRESSING_FLAGS.search(body):'
-  new: '    if False:'
+  old: '    if _SUPPRESSING_FLAGS.search(body) or _SWALLOWED_OR.search(body):'
+  new: '    if _SWALLOWED_OR.search(body):'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_security_controls.py
   expect: killed
@@ -1951,8 +1943,8 @@ mutations:
   - P19
   origin: QA-4 round seventeen — the quick start's versions are never read
   file: scripts/readme_standard.py
-  old: '            reason = unpinned(command)'
-  new: '            reason = None'
+  old: '        for reason in unpinned_commands(run, repository):'
+  new: '        for reason in []:'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
   expect: killed
@@ -1991,8 +1983,8 @@ mutations:
   - P4
   origin: QA-4 round seventeen — C6 reads the source, not what renders
   file: scripts/check_doc_coherence.py
-  old: '        text = _as_rendered(_read_lossy(path))'
-  new: '        text = _read_lossy(path)'
+  old: '        for text in (_as_rendered(raw), _as_rendered(_as_markdown_renders(raw))):'
+  new: '        for text in (raw,):'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c6_reads
   expect: killed
@@ -2001,8 +1993,8 @@ mutations:
   - P4
   origin: QA-4 round seventeen — every home-directory path is excluded again
   file: scripts/check_doc_coherence.py
-  old: '            if home_directory.search(before_match) and segment.lower() in _HOME_CONTAINERS:'
-  new: '            if home_directory.search(before_match):'
+  old: "                    if segment.lower() in _HOME_CONTAINERS:\n                        continue  # the path ends at a container: no checkout named"
+  new: "                    if True:\n                        continue  # the path ends at a container: no checkout named"
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c6_reads
   expect: killed
@@ -2057,4 +2049,528 @@ mutations:
   new: '    check(round(skill, 3), round(coverage, 3))'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_promotion_agreement.py
+  expect: killed
+- id: R18-RS1
+  gates:
+  - P19
+  origin: QA-4 round 18, auditor — `python3 -m pip` no longer read as pip (re-anchored to the deny-by-default reader)
+  file: scripts/readme_standard.py
+  old: '    if re.fullmatch(r"python(?:\d+(?:\.\d+)*)?(?:\.exe)?|py", base):'
+  new: '    if re.fullmatch(r"python|py", base):'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R18-RS2
+  gates:
+  - P19
+  origin: QA-4 round 18, auditor — uvx/pipx runners never checked for a pin (re-anchored)
+  file: scripts/readme_standard.py
+  old: '    if head in ("uvx", "pipx"):'
+  new: '    if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R18-RS3
+  gates:
+  - P19
+  origin: QA-4 round 18, auditor — `git clone` without a ref accepted (re-anchored)
+  file: scripts/readme_standard.py
+  old: '        return "clones without naming the ref it means"'
+  new: '        return None'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R18-RD1
+  gates:
+  - P19
+  origin: QA-4 round 18 remediation — images in heading text never read (a claim badge in the title line)
+  file: scripts/readme_standard.py
+  old: '        runs = [block.lines] if block.kind != "table" else [[row] for row in block.lines]'
+  new: '        runs = [] if block.kind == "heading" else [block.lines] if block.kind != "table" else [[row] for row in block.lines]'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R18-RD2
+  gates:
+  - P19
+  origin: QA-4 round 18 remediation — a reference definition's URL on the next line not read
+  file: scripts/readme_standard.py
+  old: "    if index < len(text) and text[index] == \"\\n\":\n        index += 1"
+  new: "    if False:\n        index += 1"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R18-RD3
+  gates:
+  - P19
+  origin: QA-4 round 18 remediation — reference labels matched without CommonMark normalisation
+  file: scripts/readme_standard.py
+  old: '    return " ".join(label.split()).casefold()'
+  new: '    return label'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R18-RD4
+  gates:
+  - P19
+  origin: QA-4 round 18 remediation — a blockquote no longer continues, so definitions inside it are lost
+  file: scripts/readme_standard.py
+  old: "        if kind == \"blockquote\":\n            if self.indent < 4 and self._at(self.next_nonspace) == \">\":"
+  new: "        if kind == \"blockquote\":\n            if False:"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R18-RD5
+  gates:
+  - P19
+  origin: QA-4 round 18 remediation — `<pre>` contents not read as code
+  file: scripts/readme_standard.py
+  old: '    for found in _HTML_PRE.finditer(rendered):'
+  new: '    for found in []:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R18-RD6
+  gates:
+  - P19
+  origin: QA-4 round 18 remediation — `srcset` images not read
+  file: scripts/readme_standard.py
+  old: '            elif name == "srcset":'
+  new: '            elif False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R18-RD7
+  gates:
+  - P19
+  origin: QA-4 round 18 remediation — a list item's content offset ignored, so a fence under it is prose
+  file: scripts/readme_standard.py
+  old: "            if self.indent >= block.offset:\n                self.offset += block.offset\n                return _MATCHED"
+  new: "            if self.indent >= block.offset:\n                return _FAILED"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R18-RD8
+  gates:
+  - P19
+  origin: QA-4 round 18 remediation — reference definitions left in paragraphs when they close
+  file: scripts/readme_standard.py
+  old: "        if block.kind == \"paragraph\":\n            block.lines = self._take_definitions(block.lines)"
+  new: "        if block.kind == \"paragraph\":\n            pass"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R18-RD9
+  gates:
+  - P19
+  origin: QA-4 round 18 remediation — an image inside an image's text counted as a rendered image
+  file: scripts/readme_standard.py
+  old: '                images = [image for image in images if not start < image[1] < index]'
+  new: '                pass'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R18-RS4
+  gates:
+  - P19
+  origin: QA-4 round 18 remediation — a command no rule reads passes (the allowlist's default)
+  file: scripts/readme_standard.py
+  old: '    return f"runs `{head}` from whatever is on PATH: no earlier quick-start command installed it pinned"'
+  new: '    return None'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R18-RS5
+  gates:
+  - P19
+  origin: QA-4 round 18 remediation — a range passes whether or not CI installs it
+  file: scripts/readme_standard.py
+  old: '    if requirement_key(spec) in repository.ci_requirements:'
+  new: '    if True:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R18-RS6
+  gates:
+  - P19
+  origin: QA-4 round 18 remediation — a branch passes for any repository, not only this one
+  file: scripts/readme_standard.py
+  old: '    if ref == repository.default_branch and _same_repository(url, repository.clone_url):'
+  new: '    if ref == repository.default_branch:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R18-RS7
+  gates:
+  - P19
+  origin: QA-4 round 18 remediation — `@latest` accepted as a version
+  file: scripts/readme_standard.py
+  old: '        return _EXACT_VERSION.fullmatch(version) is not None'
+  new: '        return True'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R18-RS8
+  gates:
+  - P19
+  origin: QA-4 round 18 remediation — `--vcs-ref HEAD` accepted for a remote template
+  file: scripts/readme_standard.py
+  old: '    if ref == "HEAD" and subcommand == "copy" and local:'
+  new: '    if ref == "HEAD":'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R18-RS9
+  gates:
+  - P19
+  origin: QA-4 round 18 remediation — system package managers and downloaders no longer named
+  file: scripts/readme_standard.py
+  old: '    if head in _SYSTEM:'
+  new: '    if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R18-RS10
+  gates:
+  - P19
+  origin: QA-4 round 18 remediation — a script reached through `..` counted as this repository's
+  file: scripts/check_readme.py
+  old: '    if relative.is_absolute() or ".." in relative.parts:'
+  new: '    if relative.is_absolute():'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R18-RS11
+  gates:
+  - P19
+  origin: QA-4 round 18 remediation — the ranges CI installs no longer read from its workflows
+  file: scripts/readme_standard.py
+  old: '                found.update(requirement_key(spec) for spec in positional)'
+  new: '                pass'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R18-BLK1
+  gates:
+  - P5
+  origin: QA-4 round 18, auditor — an expression-valued continue-on-error disarms every blocking control
+  file: .github/workflows/ci.yml
+  old: '      - name: gitleaks
+
+    '
+  new: "      - name: gitleaks\n        continue-on-error: ${{ true }}\n"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_security_controls.py
+  expect: killed
+- id: R18-BLK2
+  origin: QA-4 round 18, auditor — `set +e` no longer recognised as a suppression (re-anchored to the widened pattern)
+  file: tests/test_security_controls.py
+  old: '    r"|\bset\s+(?:[-+]\w*\s+)*\+\w*e\w*\b|\bset\s+\+o\s+errexit\b",'
+  new: '    r"|\bset_NEVER\b",'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_security_controls.py
+  expect: killed
+- id: R18-BLK3
+  origin: QA-4 round 18 remediation — any `if:` expression accepted on a blocking control
+  file: tests/test_security_controls.py
+  old: "        if condition not in ALLOWED_CONDITIONS:\n            return False"
+  new: "        if False:\n            return False"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_security_controls.py
+  expect: killed
+- id: R18-BLK4
+  origin: QA-4 round 18 remediation — `|| :` and `|| echo` no longer read as swallowing the status
+  file: tests/test_security_controls.py
+  old: '    if _SUPPRESSING_FLAGS.search(body) or _SWALLOWED_OR.search(body):'
+  new: '    if _SUPPRESSING_FLAGS.search(body):'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_security_controls.py
+  expect: killed
+- id: R18-BLK5
+  origin: QA-4 round 18 remediation — a status consumed by `if !` without a failing branch accepted
+  file: tests/test_security_controls.py
+  old: '    if _CONSUMED.search(body) and not re.search(r"\bexit\s+[1-9]", body):'
+  new: '    if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_security_controls.py
+  expect: killed
+- id: R18-BLK6
+  origin: QA-4 round 18 remediation — checkov's soft_fail_on no longer read as non-blocking
+  file: tests/test_security_controls.py
+  old: '    if with_block.get("soft_fail") in (True, "true") or "soft_fail_on" in with_block:'
+  new: '    if with_block.get("soft_fail") in (True, "true"):'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_security_controls.py
+  expect: killed
+- id: R18-C6a
+  origin: QA-4 round 18, auditor — entities no longer decoded before matching (re-anchored)
+  file: scripts/check_doc_coherence.py
+  old: '    folded = unicodedata.normalize("NFKC", html.unescape(text)).translate(_CONFUSABLES)'
+  new: '    folded = unicodedata.normalize("NFKC", text).translate(_CONFUSABLES)'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c6_reads or c6_does_not_fail"
+  expect: killed
+- id: R18-C6b
+  gates:
+  - P4
+  origin: 'QA-4 round 18, auditor — a home path''s containers skipped one at most (re-anchored: the auditor''s ''every segment skipped'' is R17-C6b; this breaks the walk round eighteen asked for)'
+  file: scripts/check_doc_coherence.py
+  old: '                    while segment.lower() in _HOME_CONTAINERS:'
+  new: '                    if segment.lower() in _HOME_CONTAINERS:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c6_reads or c6_does_not_fail"
+  expect: killed
+- id: R18-C6c
+  gates:
+  - P4
+  origin: QA-4 round 18 remediation — Markdown escapes and inline tags no longer read as rendered
+  file: scripts/check_doc_coherence.py
+  old: '    return _INLINE_TAG.sub("", _MARKDOWN_ESCAPE.sub(r"\1", text))'
+  new: '    return text'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c6_reads or c6_does_not_fail"
+  expect: killed
+- id: R18-C6d
+  gates:
+  - P4
+  origin: QA-4 round 18 remediation — Cyrillic and Greek lookalikes no longer folded
+  file: scripts/check_doc_coherence.py
+  old: '    folded = unicodedata.normalize("NFKC", html.unescape(text)).translate(_CONFUSABLES)'
+  new: '    folded = unicodedata.normalize("NFKC", html.unescape(text))'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c6_reads or c6_does_not_fail"
+  expect: killed
+- id: R18-C6e
+  gates:
+  - P4
+  origin: QA-4 round 18 remediation — the template's checkout directory read as a repository name
+  file: scripts/check_doc_coherence.py
+  old: '                    segment = _CHECKOUT_NAMES.get(segment, segment)'
+  new: '                    pass'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c6_reads or c6_does_not_fail"
+  expect: killed
+- id: R18-GATE1
+  origin: QA-4 round 18, auditor — the only entry that breaks mypy itself removed; hook-mirror labels must not cover for it
+  file: tests/mutations.yaml
+  old: "- id: G-P2\n  gates:\n  - P2\n"
+  new: "- id: G-P2\n  gates: []\n"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_mutation_harness.py -k broken_by
+  expect: killed
+- id: R18-PV1
+  gates:
+  - P20
+  origin: QA-4 round 18, auditor — augmented assignments and loops no longer count as a second binding
+  file: scripts/check_thresholds.py
+  old: '        elif isinstance(node, ast.AugAssign | ast.For | ast.AsyncFor):'
+  new: '        elif False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
+  expect: killed
+- id: R18-LH1
+  origin: QA-4 round 18, auditor — rows written back by a straddling delete not subtracted
+  file: projects/demand-forecast/src/demand_forecast/lakehouse.py
+  old: '    return int(properties["deleted-records"]) - int(properties.get("added-records", 0))'
+  new: '    return int(properties["deleted-records"])'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_lakehouse.py
+  expect: killed
+- id: R18-SCAN1
+  origin: QA-4 round 18, auditor — git/url/path lock sources dropped from what the scan must examine
+  file: scripts/check_scan_coverage.py
+  old: WORKSPACE_SOURCES = frozenset({"editable", "virtual"})
+  new: WORKSPACE_SOURCES = frozenset({"editable", "virtual", "git", "url", "path", "directory"})
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_scan_coverage.py
+  expect: killed
+- id: R18-PER1
+  origin: QA-4 round 18, auditor — load stops restoring the warm-start generator
+  file: projects/demand-forecast/src/demand_forecast/persist.py
+  old: '        estimator=_restore_fit_time_random_state(payload["estimator"]),'
+  new: '        estimator=payload["estimator"],'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_persist.py
+  expect: killed
+- id: R18-THL1
+  gates:
+  - P20
+  origin: QA-4 round 18 remediation (P0) — a baseline field this gate does not know is skipped
+  file: scripts/check_thresholds.py
+  old: "    if unknown:\n        raise ValueError(f\"the baseline's Threshold declares {unknown}, which this gate does not understand\")"
+  new: "    if False:\n        raise ValueError(f\"the baseline's Threshold declares {unknown}, which this gate does not understand\")"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
+  expect: killed
+- id: R18-THL2
+  gates:
+  - P20
+  origin: QA-4 round 18 remediation (P0) — the loader serialises a fixed set of fields again, dropping `symbol`
+  file: scripts/check_thresholds.py
+  old: print(json.dumps([dataclasses.asdict(t) for t in baseline.THRESHOLDS]))
+  new: 'print(json.dumps([{k: v for k, v in dataclasses.asdict(t).items() if k != "symbol"} for t in baseline.THRESHOLDS]))'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
+  expect: killed
+- id: R18-PV2
+  gates:
+  - P20
+  origin: QA-4 round 18 remediation — a threshold changed without a second `NAME =` is accepted
+  file: scripts/check_thresholds.py
+  old: "        raise ValueError(f\"{symbol}: {name} is bound {len(bound)} times; a threshold is defined once\")\n    changed = _changed_elsewhere(tree, name)"
+  new: "        raise ValueError(f\"{symbol}: {name} is bound {len(bound)} times; a threshold is defined once\")\n    changed = None"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
+  expect: killed
+- id: R18-PV3
+  gates:
+  - P20
+  origin: QA-4 round 18 remediation — a star import no longer read as a rebinding
+  file: scripts/check_thresholds.py
+  old: '        if isinstance(node, ast.ImportFrom) and any(alias.name == "*" for alias in node.names):'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
+  expect: killed
+- id: R18-PV4
+  gates:
+  - P20
+  origin: QA-4 round 18 remediation — `globals()` and `exec` no longer read as rebinding
+  file: scripts/check_thresholds.py
+  old: '            if node.func.id in _NAMESPACE_CALLS:'
+  new: '            if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
+  expect: killed
+- id: R18-PV5
+  gates:
+  - P20
+  origin: QA-4 round 18 remediation — a mutating method on a threshold's container accepted
+  file: scripts/check_thresholds.py
+  old: '            if isinstance(receiver, ast.Name) and receiver.id == name and node.func.attr not in _READS:'
+  new: '            if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
+  expect: killed
+- id: R18-PV6
+  gates:
+  - P20
+  origin: QA-4 round 18 remediation — `__post_init__` on the threshold's class accepted
+  file: scripts/check_thresholds.py
+  old: '        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name in hooks:'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
+  expect: killed
+- id: R18-MEM1
+  origin: QA-4 round 18 remediation (P0) — Grafana's limit back below what 13.2.2 uses
+  file: platform/local/manifests/40-metrics.yaml
+  old: '            limits:   { memory: "512Mi" }'
+  new: '            limits:   { memory: "200Mi" }'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_local_memory_budget.py
+  expect: killed
+- id: R18-MEM2
+  origin: QA-4 round 18 remediation (P0) — a limit with no headroom over its measured peak recorded
+  file: scripts/local/measure_memory.py
+  old: '        elif peak is None or peak * HEADROOM > limits.get(name, 0):'
+  new: '        elif peak is None:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_local_memory_budget.py
+  expect: killed
+- id: R18-MEM3
+  origin: QA-4 round 18 remediation (P0) — an OOM-killed container measured as if healthy
+  file: scripts/local/measure_memory.py
+  old: '    unhealthy = {name: state for name, state in pods.items() if not state["ready"] or state["last_reason"] in _FAILURES}'
+  new: '    unhealthy = {name: state for name, state in pods.items() if False}'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_local_memory_budget.py
+  expect: killed
+- id: R18-MEM4
+  origin: QA-4 round 18 remediation (P0) — `make local-up` names every deployment, not the one that is down
+  file: scripts/local/explain_unavailable.py
+  old: "        if deployment.get(\"status\", {}).get(\"availableReplicas\", 0):\n            continue"
+  new: "        if False:\n            continue"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_local_memory_budget.py
+  expect: killed
+- id: R18-PAR1
+  origin: QA-4 round 18 remediation — a worktree sibling read as no checkout again
+  file: scripts/check_upstream_parity.py
+  old: '    if not (TEMPLATE_CHECKOUT / ".git").exists():'
+  new: '    if not (TEMPLATE_CHECKOUT / ".git").is_dir():'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_upstream_parity.py
+  expect: killed
+- id: R18-PAR2
+  origin: QA-4 round 18 remediation — an unreadable sibling read as no checkout
+  file: scripts/check_upstream_parity.py
+  old: "    if result.returncode != 0:\n        raise UpstreamUnreadableError("
+  new: "    if False:\n        raise UpstreamUnreadableError("
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_upstream_parity.py
+  expect: killed
+- id: R18-P10a
+  gates:
+  - P10
+  origin: QA-4 round 18 remediation — a backgrounded digest check accepted
+  file: scripts/check_action_pins.py
+  old: '    if _SWALLOWED.search(after) or _BACKGROUND.search(after):'
+  new: '    if _SWALLOWED.search(after):'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_action_pins.py
+  expect: killed
+- id: R18-P10b
+  gates:
+  - P10
+  origin: QA-4 round 18 remediation — a digest check consumed by `if !` without an exit accepted
+  file: scripts/check_action_pins.py
+  old: '    if _CONDITION.search(line[: match.start()]):'
+  new: '    if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_action_pins.py
+  expect: killed
+- id: R18-P10c
+  gates:
+  - P10
+  origin: QA-4 round 18 remediation — a digest check in a non-final `&&` list accepted
+  file: scripts/check_action_pins.py
+  old: '    if "&&" in after and position != len(lines) - 1:'
+  new: '    if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_action_pins.py
+  expect: killed
+- id: R18-CP1
+  origin: QA-4 round 18 remediation — the runbook's update runs whatever copier is on PATH again
+  file: docs/runbooks/consuming-the-template.md
+  old: uv run --project "$(git rev-parse --show-toplevel)" copier update --trust --vcs-ref=v0.31.0 --data service_name="Demand Forecast Serving" --pretend
+  new: copier update --trust --vcs-ref=v0.31.0 --data service_name="Demand Forecast Serving" --pretend
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_tool_versions.py
+  expect: killed
+- id: R18-CP2
+  origin: QA-4 round 18 remediation — the scaffold-update skill's apply step runs an unlocked copier
+  file: agentic/skills/scaffold-update/SKILL.md
+  old: uv run --project "$(git rev-parse --show-toplevel)" copier update --trust --defaults --vcs-ref=v0.24.0
+  new: uvx copier@latest update --trust --defaults --vcs-ref=v0.24.0
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_tool_versions.py
+  expect: killed
+- id: R18-SIB1
+  gates:
+  - P19
+  origin: QA-4 round 18 remediation — CI no longer names the sibling, so the comparison skips there
+  file: .github/workflows/ci.yml
+  old: '          README_STANDARD_SIBLING: ${{ github.workspace }}/.sibling/ml-service-template'
+  new: '          README_STANDARD_SIBLING_UNUSED: ${{ github.workspace }}/.sibling/ml-service-template'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "pinned_commit"
+  expect: killed
+- id: R18-HAR1
+  origin: QA-4 round 18 remediation — the harness leaves a mutation of the catalogue itself applied
+  file: scripts/mutation_harness.py
+  old: "        path.write_text(source, encoding=\"utf-8\")\n        _restore()"
+  new: '        _restore()'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_mutation_harness.py -k itself
   expect: killed
