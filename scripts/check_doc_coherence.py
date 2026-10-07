@@ -27,6 +27,7 @@ import re
 import shlex
 import subprocess
 import sys
+import unicodedata
 from collections.abc import Callable
 from datetime import date, datetime
 from pathlib import Path
@@ -864,7 +865,8 @@ def check_language_and_privacy() -> None:
         rf"(?<![\w.-])({account})(?:/|%2F)([A-Za-z0-9_.-]+)|(?<![\w.-])({account})\.github\.io/([A-Za-z0-9_.-]+)",
         flags=re.IGNORECASE,  # GitHub accounts are case-insensitive: `duqueom` is `DuqueOM`
     )
-    not_a_repository = re.compile(r"(?:/home/|/Users/|gist\.github\.com/)$", re.IGNORECASE)
+    not_a_repository = re.compile(r"gist\.github\.com/$", re.IGNORECASE)
+    home_directory = re.compile(r"(?:/home/|/Users/)$", re.IGNORECASE)
     scanned = 0
 
     # Snapshotted BEFORE either scan runs. Taking it after
@@ -901,16 +903,28 @@ def check_language_and_privacy() -> None:
         # Only the repository half needs them: the owner half is always the
         # private account, which is what the pattern matches.
         placeholders = {"REPO", "your-repo", "<repo>", "{repo}", "repo"}
-        text = _read_lossy(path)
+        text = _as_rendered(_read_lossy(path))
         # (repo, elided): `elided` when the name runs straight into an
         # ellipsis — a quotation cut short, as audit reports do. An elided name
         # passes only as the prefix of a PUBLIC repository; anything else still
         # fails, so truncating a private name does not hide it.
-        references = [
-            (match.group(2) or match.group(4), text[match.end() : match.end() + 1] == "\u2026")
-            for match in bare_reference.finditer(text)
-            if not not_a_repository.search(text[max(0, match.start() - 20) : match.start()])
-        ]
+        references = []
+        for match in bare_reference.finditer(text):
+            before_match = text[max(0, match.start() - 20) : match.start()]
+            if not_a_repository.search(before_match):
+                continue
+            segment = match.group(2) or match.group(4)
+            # In a home directory the account is the USER, and the segment
+            # after it is a directory — a repository checkout as often as not.
+            # The round-sixteen exclusion skipped the whole path, so
+            # `/Users/<account>/<private-repo>` passed (round seventeen). Only
+            # a conventional container directory is not a repository name.
+            if home_directory.search(before_match) and segment.lower() in _HOME_CONTAINERS:
+                continue
+            # NFKC folds the ellipsis character into three dots, which the name
+            # pattern then captures; either spelling marks a cut-short name.
+            elided = segment.endswith("...") or text[match.end() : match.end() + 1] == "\u2026"
+            references.append((segment, elided))
         for repo, elided in references:
             repo = repo.removesuffix(".git").rstrip(".")
             if not repo:
@@ -930,6 +944,25 @@ def check_language_and_privacy() -> None:
     # an "ok" above a "FAIL".
     if len(failures) == before:
         ok("C6", f"{scanned} files scanned for non-public repository links and denylisted names")
+
+
+#: Directories that hold checkouts rather than name one, as the first segment
+#: after the user in a home path. Anything else there is read as a repository.
+_HOME_CONTAINERS = frozenset(
+    {"projects", "src", "code", "repos", "repositories", "git", "github", "work", "workspace", "dev", "documents"}
+)
+
+#: Characters a renderer shows as a slash, or does not show at all. A private
+#: name split by a zero-width space, joined by `&#47;` or a fullwidth slash (U+FF0F)
+#: reads as `owner/repo` on the page while matching nothing in the source
+#: (QA-4 round seventeen).
+_SLASHES = str.maketrans({"\\": "/", "\u2215": "/", "\u2044": "/", "\u29f8": "/", "\uff0f": "/"})
+_INVISIBLE = re.compile("[\u00ad\u200b-\u200f\u2060-\u2064\ufeff]")
+
+
+def _as_rendered(text: str) -> str:
+    """Text as a reader sees it: entities decoded, compatibility forms folded, invisible characters gone."""
+    return _INVISIBLE.sub("", unicodedata.normalize("NFKC", html.unescape(text))).translate(_SLASHES)
 
 
 #: Any indentation: a fence inside a list item sits at the item's content

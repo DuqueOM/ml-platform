@@ -28,6 +28,7 @@ than leaving it in a diff nobody reads.
 from __future__ import annotations
 
 import argparse
+import ast
 import os
 import re
 import subprocess
@@ -54,6 +55,140 @@ _PROMOTION = "projects/demand-forecast/src/demand_forecast/promotion.py"
 SUBPROCESS_TIMEOUT_SECONDS = 120
 
 
+_SYMBOL = re.compile(r"^(?P<name>\w+)(?:\((?P<arg>\w+)\)|\[(?P<key>[^\]]+)\])?(?:\.(?P<field>\w+))?$")
+
+
+def _bindings(tree: ast.Module, name: str) -> list[ast.expr | None]:
+    """Every value the module binds to `name`, anywhere: `=`, annotated, tuple, augmented, walrus, loop, import.
+
+    An augmented assignment, a loop or an import binds something this cannot
+    evaluate, so it is recorded as None and refused by the caller.
+    """
+    found: list[ast.expr | None] = []
+
+    def assigned(target: ast.expr, value: ast.expr | None) -> None:
+        if isinstance(target, ast.Name) and target.id == name:
+            found.append(value)
+        elif isinstance(target, (ast.Tuple, ast.List)):
+            values = (
+                value.elts if isinstance(value, (ast.Tuple, ast.List)) and len(value.elts) == len(target.elts) else None
+            )
+            for index, element in enumerate(target.elts):
+                assigned(element, values[index] if values else None)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                assigned(target, node.value)
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            assigned(node.target, node.value)
+        elif isinstance(node, ast.AugAssign | ast.For | ast.AsyncFor):
+            assigned(node.target, None)
+        elif isinstance(node, ast.NamedExpr) and node.target.id == name:
+            found.append(None)
+        elif isinstance(node, ast.Import | ast.ImportFrom):
+            found += [None for alias in node.names if (alias.asname or alias.name.split(".")[0]) == name]
+    return found
+
+
+def _literal(node: ast.expr | None, what: str) -> float:
+    if node is None:
+        raise ValueError(f"{what} is bound by something other than a literal")
+    try:
+        value = ast.literal_eval(node)
+    except ValueError:
+        raise ValueError(f"{what} is not a literal number: {ast.unparse(node)}") from None
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise ValueError(f"{what} is not a number: {value!r}")
+    return float(value)
+
+
+def _field(tree: ast.Module, call: ast.expr | None, field: str, what: str) -> float:
+    """A dataclass-like field: the constructor's argument if given, the class default otherwise."""
+    if not isinstance(call, ast.Call) or not isinstance(call.func, ast.Name):
+        raise ValueError(f"{what} is not built by a constructor call this can read")
+    for keyword in call.keywords:
+        if keyword.arg == field:
+            return _literal(keyword.value, what)
+    if any(keyword.arg is None for keyword in call.keywords):
+        raise ValueError(f"{what} is built with **kwargs, which hides the value")
+    classes = [node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == call.func.id]
+    if len(classes) != 1:
+        raise ValueError(f"{what}: class {call.func.id} is not defined once in this module")
+    fields = [node for node in classes[0].body if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)]
+    names = [node.target.id for node in fields if isinstance(node.target, ast.Name)]
+    if field not in names:
+        raise ValueError(f"{what}: {call.func.id} declares no field {field}")
+    position = names.index(field)
+    if position < len(call.args):
+        return _literal(call.args[position], what)
+    if any(isinstance(arg, ast.Starred) for arg in call.args):
+        raise ValueError(f"{what} is built with *args, which hides the value")
+    return _literal(fields[position].value, what)
+
+
+def python_value(text: str, symbol: str) -> float | None:
+    """The number a Python module actually binds to `symbol`. None when the symbol is absent.
+
+    Exactly one binding is accepted: the module-level `NAME = <literal>` the
+    gate reads. Anything else that binds the name — a second assignment, a
+    tuple target, `+=`, a loop variable, an import — is refused, because the
+    value the program uses would then depend on order and control flow, which
+    is the gap a text pattern left open.
+    """
+    match = _SYMBOL.match(symbol)
+    if match is None:
+        raise ValueError(f"unreadable symbol {symbol!r}")
+    tree = ast.parse(text)
+    name, arg, key, field = match["name"], match["arg"], match["key"], match["field"]
+
+    if arg is not None:
+        functions = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name == name
+        ]
+        if not functions:
+            return None
+        if len(functions) > 1:
+            raise ValueError(f"{symbol}: {name} is defined {len(functions)} times")
+        signature = functions[0].args
+        positional = [*signature.posonlyargs, *signature.args]
+        defaults = (
+            dict(zip([a.arg for a in positional][-len(signature.defaults) :], signature.defaults, strict=True))
+            if signature.defaults
+            else {}
+        )
+        defaults |= {
+            a.arg: d for a, d in zip(signature.kwonlyargs, signature.kw_defaults, strict=True) if d is not None
+        }
+        if arg not in defaults:
+            raise ValueError(f"{symbol}: {name} has no default for {arg}")
+        return _literal(defaults[arg], symbol)
+
+    bound = _bindings(tree, name)
+    if not bound:
+        return None
+    if len(bound) > 1:
+        raise ValueError(f"{symbol}: {name} is bound {len(bound)} times; a threshold is defined once")
+    value = bound[0]
+    if key is not None:
+        if not isinstance(value, ast.Dict):
+            raise ValueError(f"{symbol}: {name} is not a dict literal")
+        wanted = ast.literal_eval(key)
+        entries = [
+            v for k, v in zip(value.keys, value.values, strict=True) if k is not None and ast.literal_eval(k) == wanted
+        ]
+        if any(k is None for k in value.keys):
+            raise ValueError(f"{symbol}: {name} unpacks another mapping, which hides the value")
+        if len(entries) != 1:
+            raise ValueError(f"{symbol}: {name} has {len(entries)} entries for {wanted!r}")
+        value = entries[0]
+    if field is not None:
+        return _field(tree, value, field, symbol)
+    return _literal(value, symbol)
+
+
 @dataclass(frozen=True)
 class Threshold:
     """One gated number, and where it lives.
@@ -70,7 +205,7 @@ class Threshold:
 
     name: str
     path: str
-    pattern: str
+    pattern: str = ""
     higher_is_stricter: bool = True
     #: The NAMES this threshold was watched under at the baseline, each with the
     #: factor that converts the old value into the new unit —
@@ -81,6 +216,10 @@ class Threshold:
     #: `RENAME_FACTORS` only. Needed only for a rename: a threshold whose name
     #: is unchanged is found at the baseline by name. See `compare`.
     renamed_from: tuple[tuple[str, float], ...] = ()
+    #: For a number defined in Python: the binding to evaluate, instead of a
+    #: line to match. `NAME`, `NAME.field`, `NAME[key]`, `NAME[key].field` or
+    #: `function(arg)`. Read as the interpreter binds it — see `python_value`.
+    symbol: str = ""
 
     def read(self, text: str) -> float | None:
         """The number, from the ONE line that defines it. None when absent.
@@ -91,9 +230,19 @@ class Threshold:
         read as 0.05 (QA-4 round sixteen). More than one defining line is
         refused rather than resolved by position.
 
+        A `symbol` is read as Python reads it instead, because a line of text is
+        not the value a gate uses: round seventeen lowered the fold count at the
+        constructor (`BacktestDesign(n_folds=3)`), rebound `MIN_SKILL=0.0` on a
+        second line the anchored pattern could not see, reassigned two floors
+        through a tuple, and widened a comparison tolerance — the gate green
+        each time.
+
         Raises:
-            ValueError: when more than one line matches.
+            ValueError: when more than one line matches, or the symbol is bound
+                more than once or to something that is not a literal number.
         """
+        if self.symbol:
+            return python_value(text, self.symbol)
         matches = list(re.finditer(rf"^[ \t]*(?:{self.pattern})", text, re.MULTILINE))
         if len(matches) > 1:
             raise ValueError(f"{self.name}: {len(matches)} lines match {self.pattern!r}; a threshold is defined once")
@@ -133,28 +282,33 @@ THRESHOLDS = (
     Threshold(
         "libs combined coverage floor",
         _FLOORS,
-        r"LIBS_COMBINED_FLOOR = (\d+)",
+        symbol="LIBS_COMBINED_FLOOR",
         renamed_from=(("libs coverage in CI", 1),),
     ),
     Threshold(
         "scripts coverage floor (P12)",
         _FLOORS,
-        r"SCRIPTS_COMBINED_FLOOR = (\d+)",
+        symbol="SCRIPTS_COMBINED_FLOOR",
         renamed_from=(("scripts coverage in CI", 1),),
     ),
-    Threshold("projects combined coverage floor (P17)", _FLOORS, r"PROJECTS_COMBINED_FLOOR = (\d+)"),
-    Threshold("orchestration combined coverage floor (P17)", _FLOORS, r"ORCHESTRATION_COMBINED_FLOOR = (\d+)"),
+    Threshold("projects combined coverage floor (P17)", _FLOORS, symbol="PROJECTS_COMBINED_FLOOR"),
+    Threshold("orchestration combined coverage floor (P17)", _FLOORS, symbol="ORCHESTRATION_COMBINED_FLOOR"),
     Threshold(
         "cloud-specific surface ceiling",
         "scripts/measure_cloud_surface.py",
-        r"MAX_ADAPTER_SHARE\s*=\s*([\d.]+)",
+        symbol="MAX_ADAPTER_SHARE",
         higher_is_stricter=False,
     ),
-    Threshold("audit grace, in commits", "scripts/check_doc_coherence.py", r"AUDIT_GRACE_COMMITS\s*=\s*(\d+)", False),
+    Threshold(
+        "audit grace, in commits",
+        "scripts/check_doc_coherence.py",
+        symbol="AUDIT_GRACE_COMMITS",
+        higher_is_stricter=False,
+    ),
     Threshold(
         "retrieval promotion margin",
         "libs/llm-core/src/llm_core/retrieval_eval.py",
-        r"def beats_baseline\(.*\bmargin: float = ([\d.]+)",
+        symbol="beats_baseline(margin)",
     ),
     # The promotion rule, defined once for both orchestrators (W-14). The DAG
     # and the pipeline each held their own copy — `MIN_SKILL`/`MIN_COVERAGE`
@@ -164,37 +318,43 @@ THRESHOLDS = (
     Threshold(
         "promotion skill floor",
         _PROMOTION,
-        r"MIN_SKILL = ([\d.]+)",
+        symbol="MIN_SKILL",
         renamed_from=(("retrain skill floor", 1), ("pipeline promotion skill floor", 1)),
     ),
     Threshold(
         "promotion coverage floor",
         _PROMOTION,
-        r"MIN_COVERAGE = ([\d.]+)",
+        symbol="MIN_COVERAGE",
         renamed_from=(("retrain coverage floor", 1),),
     ),
-    Threshold("promotion coverage ceiling", _PROMOTION, r"MAX_COVERAGE = ([\d.]+)", higher_is_stricter=False),
+    Threshold("promotion coverage ceiling", _PROMOTION, symbol="MAX_COVERAGE", higher_is_stricter=False),
     # A FLOOR, and the reason is specific to this model: fewer folds drop the
     # OLDEST first, and those are the folds it loses. The pipeline's 3-fold
     # default reported skill +23.0% where five folds give +12.4% (QA-4 R15-2).
-    Threshold("promotion backtest folds", _PROMOTION, r"n_folds: int = (\d+)"),
+    # The value the gate USES: the field as `DESIGN` is constructed, so a fold
+    # count passed to the constructor is read, not only the class default
+    # (round seventeen: `BacktestDesign(n_folds=3)`, gate green).
+    Threshold("promotion backtest folds", _PROMOTION, symbol="DESIGN.n_folds"),
+    # How close to a bound still counts as at it. Widening it to 0.1 promoted a
+    # model 0.1 below every floor with the gate green (round seventeen).
+    Threshold("promotion float tolerance", _PROMOTION, symbol="FLOAT_TOLERANCE", higher_is_stricter=False),
     Threshold(
         "calibration tolerance (backtest summary)",
         "projects/demand-forecast/src/demand_forecast/train.py",
-        r"def intervals_are_calibrated\(self, tolerance: float = ([\d.]+)\)",
+        symbol="intervals_are_calibrated(tolerance)",
         higher_is_stricter=False,
         renamed_from=(("calibration tolerance (pipeline gate)", 1),),
     ),
     Threshold(
         "ingest reject ceiling",
         "projects/demand-forecast/src/demand_forecast/ingest.py",
-        r"MAX_REJECT_RATE = ([\d.]+)",
-        False,
+        symbol="MAX_REJECT_RATE",
+        higher_is_stricter=False,
     ),
     # A FLOOR: how much justification a gate row must carry before its
     # threshold counts as reasoned. Lowering it admits rows whose "reason"
     # restates the threshold, which is the state row C3 was in.
-    Threshold("gate reason floor, in characters", "scripts/validate_quality_gates.py", r"MIN_REASON_CHARS = (\d+)"),
+    Threshold("gate reason floor, in characters", "scripts/validate_quality_gates.py", symbol="MIN_REASON_CHARS"),
     # A CEILING: how long a security suppression may run before it is
     # re-argued. Raising it is how "dated" decays into "permanent, with a
     # date on it" — the failure .security-baselines/README.md describes and
@@ -202,30 +362,30 @@ THRESHOLDS = (
     Threshold(
         "rag-assistant shared-library reuse floor",
         "scripts/check_library_reuse.py",
-        r'"rag-assistant":\s*(\d+)',
+        symbol='MINIMUM_REUSE["rag-assistant"]',
     ),
     Threshold(
         "L1 line coverage floor, per library",
         _FLOORS,
-        r"LINE_FLOOR = (\d+)",
+        symbol="LINE_FLOOR",
         renamed_from=(("L1 line coverage floor", 100),),
     ),
     Threshold(
         "L2 branch coverage floor, per library",
         _FLOORS,
-        r"BRANCH_FLOOR = (\d+)",
+        symbol="BRANCH_FLOOR",
         renamed_from=(("L2 branch coverage floor", 100),),
     ),
     Threshold(
         "parity pending ceiling, in days",
         "scripts/check_upstream_parity.py",
-        r"MAX_PENDING_DAYS = (\d+)",
+        symbol="MAX_PENDING_DAYS",
         higher_is_stricter=False,
     ),
     Threshold(
         "baseline acceptance ceiling, in days",
         "scripts/check_baselines_expiry.py",
-        r"MAX_EXPIRY_DAYS = (\d+)",
+        symbol="MAX_EXPIRY_DAYS",
         higher_is_stricter=False,
     ),
     # One line floor and one branch floor per ML package (P17), derived from
@@ -233,12 +393,9 @@ THRESHOLDS = (
     # `ML_PACKAGES` is watched the moment it has a floor, and a second list
     # would be a place to forget it.
     *(
-        Threshold(f"{package} {kind} coverage floor (P17)", _FLOORS, rf'"{re.escape(package)}": {pattern}')
+        Threshold(f"{package} {kind} coverage floor (P17)", _FLOORS, symbol=f'ML_PACKAGES["{package}"].{field}')
         for package in ML_PACKAGES
-        for kind, pattern in (
-            ("line", r"PackageFloor\(lines=(\d+)"),
-            ("branch", r"PackageFloor\(lines=\d+, branches=(\d+)"),
-        )
+        for kind, field in (("line", "lines"), ("branch", "branches"))
     ),
 )
 

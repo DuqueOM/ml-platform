@@ -132,6 +132,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "doc_coherence or c2"
   expect: killed
+  gates:
+  - P4
 - id: C2-migrated-md-exempt
   origin: QA-4 round 13, auditor
   file: scripts/check_doc_coherence.py
@@ -140,6 +142,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "doc_coherence or c2"
   expect: killed
+  gates:
+  - P4
 - id: C6-generated-links-skipped
   origin: QA-4 round 13, P2-5
   file: scripts/check_doc_coherence.py
@@ -148,6 +152,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c6"
   expect: killed
+  gates:
+  - P4
 - id: C9-report-channel-dropped
   origin: QA-4 round 13, P3-2
   file: scripts/check_doc_coherence.py
@@ -156,6 +162,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "inherited_defect"
   expect: killed
+  gates:
+  - P4
 - id: C10-never-fails
   origin: round 12 author
   file: scripts/check_doc_coherence.py
@@ -164,6 +172,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c10"
   expect: killed
+  gates:
+  - P4
 - id: C10-repeats-unnumbered
   origin: round 12 author
   file: scripts/check_doc_coherence.py
@@ -172,6 +182,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c10"
   expect: killed
+  gates:
+  - P4
 - id: C10-fenced-headings-count
   origin: QA-4 round 13, auditor
   file: scripts/check_doc_coherence.py
@@ -180,6 +192,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c10"
   expect: killed
+  gates:
+  - P4
 - id: C10-setext-ignored
   origin: QA-4 round 13, P3-1
   file: scripts/check_doc_coherence.py
@@ -190,6 +204,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c10"
   expect: killed
+  gates:
+  - P4
 - id: C10-reference-and-html-ignored
   origin: QA-4 round 13, P3-1
   file: scripts/check_doc_coherence.py
@@ -198,6 +214,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c10"
   expect: killed
+  gates:
+  - P4
 - id: C10-case
   origin: QA-4 round 13, auditor
   file: scripts/check_doc_coherence.py
@@ -207,6 +225,8 @@ mutations:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c10"
   expect: survives
   reason: 'stricter only: no link in the tree uses an upper-case fragment'
+  gates:
+  - P4
 - id: V7-empty-description-ok
   origin: QA-4 round 13, auditor
   file: scripts/validate_agentic_surface.py
@@ -327,6 +347,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c9_reads"
   expect: killed
+  gates:
+  - P4
 - id: artifact-joblib-exemption-restored
   origin: service update to template v0.30.x
   file: scripts/check_artifact_compatibility.py
@@ -337,6 +359,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_artifact_compatibility.py
   expect: killed
+  gates:
+  - P14
 - id: artifact-scikit-learn-exemption-restored
   origin: Dependabot scikit-learn 1.9.1 (#96)
   file: scripts/check_artifact_compatibility.py
@@ -347,6 +371,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_artifact_compatibility.py
   expect: killed
+  gates:
+  - P14
 - id: R14-artifact-reader-name-unnormalized
   origin: QA-4 round 14, auditor
   file: services/demand-forecast-serving/requirements.txt
@@ -355,6 +381,8 @@ mutations:
   run:
   - uv run python scripts/check_artifact_compatibility.py
   expect: killed
+  gates:
+  - P14
 - id: R14-artifact-reader-unpinned
   origin: QA-4 round 14, auditor
   file: services/demand-forecast-serving/requirements.txt
@@ -363,6 +391,8 @@ mutations:
   run:
   - uv run python scripts/check_artifact_compatibility.py
   expect: killed
+  gates:
+  - P14
 - id: R14-artifact-lock-name-unnormalized
   origin: QA-4 round 14 remediation
   file: scripts/check_artifact_compatibility.py
@@ -371,6 +401,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_artifact_compatibility.py
   expect: killed
+  gates:
+  - P14
 - id: R14-artifact-reader-name-literal
   origin: QA-4 round 14 remediation
   file: scripts/check_artifact_compatibility.py
@@ -379,6 +411,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_artifact_compatibility.py
   expect: killed
+  gates:
+  - P14
 - id: R14-artifact-unpinned-not-reported
   origin: QA-4 round 14 remediation
   file: scripts/check_artifact_compatibility.py
@@ -387,6 +421,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_artifact_compatibility.py
   expect: killed
+  gates:
+  - P14
 - id: R14-artifact-open-upper-bound-ok
   origin: QA-4 round 14 remediation
   file: scripts/check_artifact_compatibility.py
@@ -395,11 +431,13 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_artifact_compatibility.py
   expect: killed
+  gates:
+  - P14
 - id: R14-V7-reach-name-only
   origin: QA-4 round 14, auditor
   file: scripts/validate_agentic_surface.py
-  old: 'key = (fm.get("name"), fm.get("description"), source.group(1) if source else None)'
-  new: 'key = (fm.get("name"), None, None)'
+  old: key = (fm.get("name"), fm.get("description"), source.group(1) if source else None)
+  new: key = (fm.get("name"), None, None)
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_agentic_discovery.py
   expect: killed
@@ -411,6 +449,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c6_fails_every_form"
   expect: killed
+  gates:
+  - P4
 - id: R14-C6-owner-case-sensitive
   origin: QA-4 round 14 remediation
   file: scripts/check_doc_coherence.py
@@ -419,30 +459,38 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c6_fails_every_form"
   expect: killed
+  gates:
+  - P4
 - id: R14-C2-store-read-as-english
   origin: QA-4 round 14, auditor
   file: scripts/check_doc_coherence.py
-  old: '_ENGLISH_PREFIXES = frozenset({"non", "pre"})'
-  new: '_ENGLISH_PREFIXES = frozenset({"non", "pre", "store"})'
+  old: _ENGLISH_PREFIXES = frozenset({"non", "pre"})
+  new: _ENGLISH_PREFIXES = frozenset({"non", "pre", "store"})
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "dangling_namespaced"
   expect: killed
+  gates:
+  - P4
 - id: R14-C9-fence-needs-language
   origin: QA-4 round 14, auditor
   file: scripts/check_doc_coherence.py
-  old: '_FENCE_OPEN = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")'
-  new: '_FENCE_OPEN = re.compile(r"^\s*(`{3,}|~{3,})([a-z]+)$")'
+  old: _FENCE_OPEN = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
+  new: _FENCE_OPEN = re.compile(r"^\s*(`{3,}|~{3,})([a-z]+)$")
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c9_sees_every"
   expect: killed
+  gates:
+  - P4
 - id: R14-C9-http-guard-dropped
   origin: QA-4 round 14, auditor
   file: scripts/check_doc_coherence.py
-  old: '_REMOTE_SOURCE = re.compile(r"^(?:gh:|gl:|git@|git\+|[a-z][a-z0-9+.-]*://)", re.IGNORECASE)'
-  new: '_REMOTE_SOURCE = re.compile(r"^(?:[a-z][a-z0-9+.-]*://)", re.IGNORECASE)'
+  old: _REMOTE_SOURCE = re.compile(r"^(?:gh:|gl:|git@|git\+|[a-z][a-z0-9+.-]*://)", re.IGNORECASE)
+  new: _REMOTE_SOURCE = re.compile(r"^(?:[a-z][a-z0-9+.-]*://)", re.IGNORECASE)
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c9_sees_every"
   expect: killed
+  gates:
+  - P4
 - id: R14-C9-quoted-hash-is-a-comment
   origin: QA-4 round 14 remediation
   file: scripts/check_doc_coherence.py
@@ -451,6 +499,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c9_sees_every"
   expect: killed
+  gates:
+  - P4
 - id: R14-C9-indented-blocks-skipped
   origin: QA-4 round 14 remediation
   file: scripts/check_doc_coherence.py
@@ -459,27 +509,42 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "c9_sees_every"
   expect: killed
+  gates:
+  - P4
 - id: R14-thresholds-scripts-floor-lowered
   origin: QA-4 round 14, auditor — re-anchored when the floor moved out of ci.yml (W-5)
   file: scripts/check_coverage_floors.py
-  old: 'SCRIPTS_COMBINED_FLOOR = 86'
-  new: 'SCRIPTS_COMBINED_FLOOR = 74'
+  old: SCRIPTS_COMBINED_FLOOR = 86
+  new: SCRIPTS_COMBINED_FLOOR = 74
   run:
   - uv run python scripts/check_thresholds.py
   expect: killed
+  gates:
+  - P12
+  - P17
+  - L1
+  - L2
 - id: R14-coverage-namespace-discovery-off
   origin: QA-4 round 14, P2-4
   file: pyproject.toml
-  old: 'include_namespace_packages = true'
-  new: 'include_namespace_packages = false'
+  old: include_namespace_packages = true
+  new: include_namespace_packages = false
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_scope.py
   expect: killed
+  gates:
+  - P12
 - id: R14-precommit-global-exclude-restored
   origin: QA-4 round 14, P3-1
   file: .pre-commit-config.yaml
-  old: "default_language_version:\n"
-  new: "exclude: '^(\\.claude|\\.cursor|\\.codex|\\.devin)/'\ndefault_language_version:\n"
+  old: 'default_language_version:
+
+    '
+  new: 'exclude: ''^(\.claude|\.cursor|\.codex|\.devin)/''
+
+    default_language_version:
+
+    '
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k "secret_hooks"
   expect: killed
@@ -515,6 +580,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
   expect: killed
+  gates:
+  - P20
 - id: R14-V8-projects-only-reported
   origin: QA-4 round 14, auditor (re-anchored to the rewritten V8)
   file: scripts/validate_agentic_surface.py
@@ -542,8 +609,8 @@ mutations:
 - id: R14-V8-mode-suffix-kept
   origin: QA-4 round 14, P3-4
   file: scripts/validate_agentic_surface.py
-  old: '_MODE_SUFFIX = re.compile(r"\s*\(Mode:[^)]*\)\s*$")'
-  new: '_MODE_SUFFIX = re.compile(r"(?!)")'
+  old: _MODE_SUFFIX = re.compile(r"\s*\(Mode:[^)]*\)\s*$")
+  new: _MODE_SUFFIX = re.compile(r"(?!)")
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_agentic_discovery.py -k "v8"
   expect: killed
@@ -620,7 +687,7 @@ mutations:
   new: '    pass
 
     '
-  run: &id001
+  run:
   - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_persist.py
   expect: killed
 - id: DG2
@@ -628,21 +695,24 @@ mutations:
   file: projects/demand-forecast/src/demand_forecast/persist.py
   old: '    if actual != recorded:'
   new: '    if False:'
-  run: *id001
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_persist.py
   expect: killed
 - id: DG3
   origin: W-10 digest verification, author
   file: projects/demand-forecast/src/demand_forecast/persist.py
   old: '    if not sidecar.is_file():'
   new: '    if False:'
-  run: *id001
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_persist.py
   expect: killed
 - id: DG4
   origin: W-10 digest verification, author — the state before it
   file: projects/demand-forecast/src/demand_forecast/persist.py
   old: '        "sha256": digest,'
   new: '        "sha256": digest[:12],'
-  run: *id001
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_persist.py
   expect: killed
 - id: SF1
   origin: F-21 like-for-like skill, author
@@ -668,6 +738,11 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
   expect: killed
+  gates:
+  - P12
+  - P17
+  - L1
+  - L2
 - id: CF2
   origin: W-5 coverage floors, author — the rounding --cov-fail-under applied
   file: scripts/check_coverage_floors.py
@@ -676,6 +751,11 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
   expect: killed
+  gates:
+  - P12
+  - P17
+  - L1
+  - L2
 - id: CF3
   origin: W-5 coverage floors, author — re-anchored in round fifteen, when the exemption also reads the AST
   file: scripts/check_coverage_floors.py
@@ -684,6 +764,11 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
   expect: killed
+  gates:
+  - P12
+  - P17
+  - L1
+  - L2
 - id: CF4
   origin: W-5 coverage floors, author — how projects/ started
   file: scripts/check_coverage_floors.py
@@ -692,6 +777,11 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
   expect: killed
+  gates:
+  - P12
+  - P17
+  - L1
+  - L2
 - id: CF5
   origin: W-5 coverage floors, author
   file: scripts/check_coverage_floors.py
@@ -700,6 +790,11 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
   expect: killed
+  gates:
+  - P12
+  - P17
+  - L1
+  - L2
 - id: CF6
   origin: W-5 coverage floors, author
   file: scripts/check_coverage_floors.py
@@ -708,6 +803,11 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
   expect: killed
+  gates:
+  - P12
+  - P17
+  - L1
+  - L2
 - id: CF7
   origin: W-5 coverage floors, author
   file: scripts/check_coverage_floors.py
@@ -716,14 +816,24 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
   expect: killed
+  gates:
+  - P12
+  - P17
+  - L1
+  - L2
 - id: CF8
   origin: W-5 coverage floors, author
   file: scripts/check_coverage_floors.py
-  old: 'LINE_FLOOR = 90'
-  new: 'LINE_FLOOR = 80'
+  old: LINE_FLOOR = 90
+  new: LINE_FLOOR = 80
   run:
   - uv run python scripts/check_thresholds.py
   expect: killed
+  gates:
+  - P12
+  - P17
+  - L1
+  - L2
 - id: CF9
   origin: W-5 coverage floors, author — a scope dropped from the measured run
   file: .github/workflows/ci.yml
@@ -732,6 +842,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
   expect: killed
+  gates:
+  - P17
 - id: FD1
   origin: W-5, the early return no test reached
   file: libs/feature-defs/src/feature_defs/point_in_time.py
@@ -804,6 +916,11 @@ mutations:
   run:
   - uv run python scripts/check_thresholds.py
   expect: killed
+  gates:
+  - P12
+  - P17
+  - L1
+  - L2
 - id: COV1
   origin: W-5, a probe file recorded by coverage and gone before the report
   file: pyproject.toml
@@ -812,6 +929,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_scope.py
   expect: killed
+  gates:
+  - P12
 - id: R15-TH1
   origin: QA-4 round fifteen remediation
   file: scripts/check_thresholds.py
@@ -820,6 +939,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
   expect: killed
+  gates:
+  - P20
 - id: R15-TH2
   origin: QA-4 round fifteen remediation
   file: scripts/check_thresholds.py
@@ -828,6 +949,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
   expect: killed
+  gates:
+  - P20
 - id: R15-TH3
   origin: QA-4 round fifteen remediation
   file: scripts/check_thresholds.py
@@ -836,6 +959,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
   expect: killed
+  gates:
+  - P20
 - id: R15-CAL1
   origin: QA-4 round fifteen remediation
   file: projects/demand-forecast/src/demand_forecast/train.py
@@ -863,11 +988,13 @@ mutations:
 - id: R15-C6a
   origin: QA-4 round fifteen remediation
   file: scripts/check_doc_coherence.py
-  old: '            for match in bare_reference.finditer(text)'
-  new: '            for match in []'
+  old: '        for match in bare_reference.finditer(text):'
+  new: '        for match in []:'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c6_reads
   expect: killed
+  gates:
+  - P4
 - id: R15-C6b
   origin: QA-4 round fifteen remediation
   file: scripts/check_doc_coherence.py
@@ -876,6 +1003,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c6_reads
   expect: killed
+  gates:
+  - P4
 - id: R15-C9a
   origin: QA-4 round fifteen remediation
   file: scripts/check_doc_coherence.py
@@ -884,6 +1013,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c9_sees_an
   expect: killed
+  gates:
+  - P4
 - id: R15-C9b
   origin: QA-4 round fifteen remediation
   file: scripts/check_doc_coherence.py
@@ -892,6 +1023,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c9_sees_an
   expect: killed
+  gates:
+  - P4
 - id: R15-C9c
   origin: QA-4 round fifteen remediation
   file: scripts/check_doc_coherence.py
@@ -900,6 +1033,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c9_sees_an
   expect: killed
+  gates:
+  - P4
 - id: R15-C9d
   origin: QA-4 round fifteen remediation
   file: scripts/check_doc_coherence.py
@@ -908,6 +1043,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c9_sees_an
   expect: killed
+  gates:
+  - P4
 - id: R15-C10
   origin: QA-4 round fifteen remediation
   file: scripts/check_doc_coherence.py
@@ -916,6 +1053,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c10_slugs
   expect: killed
+  gates:
+  - P4
 - id: R15-C4
   origin: QA-4 round fifteen remediation
   file: scripts/check_doc_coherence.py
@@ -924,6 +1063,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c4_resolves
   expect: killed
+  gates:
+  - P4
 - id: R15-ART1
   origin: QA-4 round fifteen remediation
   file: scripts/check_artifact_compatibility.py
@@ -932,6 +1073,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_artifact_compatibility.py
   expect: killed
+  gates:
+  - P14
 - id: R15-ART2
   origin: QA-4 round fifteen remediation
   file: scripts/check_artifact_compatibility.py
@@ -940,6 +1083,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_artifact_compatibility.py
   expect: killed
+  gates:
+  - P14
 - id: R15-CF-AST
   origin: QA-4 round fifteen remediation
   file: scripts/check_coverage_floors.py
@@ -948,6 +1093,11 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
   expect: killed
+  gates:
+  - P12
+  - P17
+  - L1
+  - L2
 - id: R15-PAR
   origin: QA-4 round fifteen remediation
   file: scripts/check_upstream_parity.py
@@ -972,6 +1122,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_contract_deviations.py
   expect: killed
+  gates:
+  - P16
 - id: CD2
   origin: W-12 derived deviations — survived its first run, which found the CLI path untested
   file: scripts/check_contract_deviations.py
@@ -980,6 +1132,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_contract_deviations.py
   expect: killed
+  gates:
+  - P16
 - id: ENV1
   origin: W-12 environment-only detectors — survived its first run, which found the state untested
   file: scripts/check_technology_inventory.py
@@ -993,29 +1147,37 @@ mutations:
   file: scripts/check_action_pins.py
   old: '        for match in _MUTABLE_DOWNLOAD.finditer(workflow.read_text(encoding="utf-8")):'
   new: '        for match in []:'
-  run: &pd_run
+  run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_action_pins.py
   expect: killed
+  gates:
+  - P10
 - id: PD2
   origin: W-8 digest verification, author
   file: scripts/check_action_pins.py
-  old: '                    if not any(re.search(rf"(?<![\w./-]){re.escape(target)}(?![\w.-])", check) for check in checks):'
+  old: '                    if not any(names_it.search(check) for after, check in checks if after > position):'
   new: '                    if False:'
-  run: *pd_run
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_action_pins.py
   expect: killed
+  gates:
+  - P10
 - id: PD3
   origin: W-8 digest verification, author — the workflow itself
   file: .github/workflows/ci.yml
   old: '          echo "${KUBESCAPE_SHA256}  kubescape" | sha256sum -c -'
   new: '          true'
-  run: *pd_run
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_action_pins.py
   expect: killed
+  gates:
+  - P10
 - id: LC1
   origin: F-23 fail-closed catalogue, author
   file: projects/demand-forecast/src/demand_forecast/lakehouse.py
   old: '    if not choice:'
   new: '    if False:'
-  run: &lc1_id001
+  run:
   - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_catalog_selection.py
   expect: killed
 - id: LC2
@@ -1023,14 +1185,16 @@ mutations:
   file: projects/demand-forecast/src/demand_forecast/lakehouse.py
   old: 'def read_demand(catalog: Catalog, *, snapshot_id: int | None = None) -> pl.DataFrame:'
   new: 'def read_demand(catalog: Catalog | None = None, *, snapshot_id: int | None = None) -> pl.DataFrame:'
-  run: *lc1_id001
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_catalog_selection.py
   expect: killed
 - id: LC3
   origin: F-23 fail-closed catalogue, author
   file: projects/demand-forecast/src/demand_forecast/lakehouse.py
   old: '    if choice in _PLANNED:'
   new: '    if False:'
-  run: *lc1_id001
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_catalog_selection.py
   expect: killed
 - id: DAG-CAT1
   origin: F-23 in the DAG, rebased onto W-5's task-body tests — a read that ignores the configured catalogue
@@ -1048,6 +1212,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_artifact_portability.py
   expect: killed
+  gates:
+  - P14
 - id: AD1
   origin: R11-7 secrets named for adopters, author
   file: docs/ADOPTION.md
@@ -1099,8 +1265,8 @@ mutations:
 - id: DEP2
   origin: dependency round — the urllib3 security override removed
   file: pyproject.toml
-  old: 'override-dependencies = ["urllib3>=2.8.0"]'
-  new: 'override-dependencies = []'
+  old: override-dependencies = ["urllib3>=2.8.0"]
+  new: override-dependencies = []
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependency_overrides.py
   expect: killed
@@ -1112,6 +1278,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_tool_versions.py
   expect: killed
+  gates:
+  - P3
 - id: DEP4
   origin: dependency round — the ruff hooks reach generated code again
   file: .pre-commit-config.yaml
@@ -1120,6 +1288,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_tool_versions.py
   expect: killed
+  gates:
+  - P3
 - id: LH1
   origin: dependency round — time travel ignored, caught on the filesystem catalogue
   file: projects/demand-forecast/src/demand_forecast/lakehouse.py
@@ -1147,11 +1317,15 @@ mutations:
 - id: R16-SEC3
   origin: QA-4 round sixteen, auditor — the real gitleaks scan disarmed while a pin check vouched for it
   file: .github/workflows/ci.yml
-  old: "      - name: gitleaks\n"
+  old: '      - name: gitleaks
+
+    '
   new: "      - name: gitleaks\n        continue-on-error: true\n"
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_security_controls.py
   expect: killed
+  gates:
+  - P5
 - id: R16-BAN1
   origin: QA-4 round sixteen — Bandit loses orchestration/ again
   file: .github/workflows/ci.yml
@@ -1176,14 +1350,18 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_action_pins.py
   expect: killed
+  gates:
+  - P10
 - id: R16-P10b
   origin: QA-4 round sixteen — a swallowed digest check counts again
   file: scripts/check_action_pins.py
-  old: '            checks = [line for line in lines if _DIGEST_CHECK.search(line) and not _SWALLOWED.search(line)]'
-  new: '            checks = [line for line in lines if _DIGEST_CHECK.search(line)]'
+  old: '                if _DIGEST_CHECK.search(line) and not _SWALLOWED.search(line)'
+  new: '                if _DIGEST_CHECK.search(line)'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_action_pins.py
   expect: killed
+  gates:
+  - P10
 - id: R16-C6a
   origin: QA-4 round sixteen — the private account behind a host is invisible again
   file: scripts/check_doc_coherence.py
@@ -1192,6 +1370,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c6_reads
   expect: killed
+  gates:
+  - P4
 - id: R16-C9a
   origin: QA-4 round sixteen — `cd projects/../` counts as local again
   file: scripts/check_doc_coherence.py
@@ -1200,6 +1380,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c9_sees_an
   expect: killed
+  gates:
+  - P4
 - id: R16-KFP1
   origin: QA-4 round sixteen — every step pip-installs kfp from PyPI at start-up again
   file: orchestration/pipelines/demand_forecast_pipeline.py
@@ -1211,8 +1393,8 @@ mutations:
 - id: R16-KFP2
   origin: QA-4 round sixteen — the component image is a moving tag again
   file: orchestration/pipelines/demand_forecast_pipeline.py
-  old: 'BASE_IMAGE = "ghcr.io/duqueom/ml-platform/demand-forecast:set-by-deploy-pipeline"'
-  new: 'BASE_IMAGE = "ghcr.io/duqueom/ml-platform/demand-forecast:latest"'
+  old: BASE_IMAGE = "ghcr.io/duqueom/ml-platform/demand-forecast-train:set-by-deploy-pipeline"
+  new: BASE_IMAGE = "ghcr.io/duqueom/ml-platform/demand-forecast-train:latest"
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_pipeline_spec.py
   expect: killed
@@ -1224,6 +1406,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
   expect: killed
+  gates:
+  - P20
 - id: R16-TH2
   origin: QA-4 round sixteen, auditor — baseline definitions unreadable (fail-open path)
   file: scripts/check_thresholds.py
@@ -1232,6 +1416,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
   expect: killed
+  gates:
+  - P20
 - id: R16-LH1
   origin: QA-4 round sixteen, auditor — overwrite with no scope (deletes every month)
   file: projects/demand-forecast/src/demand_forecast/lakehouse.py
@@ -1288,6 +1474,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_action_pins.py tests/test_gate_scripts.py
   expect: killed
+  gates:
+  - P10
 - id: R16-C9c
   origin: QA-4 round sixteen, auditor — every `copier update` counts as local
   file: scripts/check_doc_coherence.py
@@ -1296,6 +1484,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py
   expect: killed
+  gates:
+  - P4
 - id: R16-LH3
   origin: QA-4 round sixteen — an aware cutoff reaches pyiceberg and is refused
   file: projects/demand-forecast/src/demand_forecast/lakehouse.py
@@ -1328,6 +1518,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_tool_versions.py
   expect: killed
+  gates:
+  - P2
 - id: R16-MY2
   origin: QA-4 round sixteen — the type hook checks fewer roots than CI
   file: .pre-commit-config.yaml
@@ -1336,6 +1528,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_tool_versions.py
   expect: killed
+  gates:
+  - P2
 - id: R16-CF4
   origin: QA-4 round sixteen, auditor — exemption ignores every subdirectory, not only tests/
   file: scripts/check_coverage_floors.py
@@ -1344,6 +1538,11 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_floors.py
   expect: killed
+  gates:
+  - P12
+  - P17
+  - L1
+  - L2
 - id: R16-CF5
   origin: QA-4 round sixteen — the omit list drops a tests/ directory inside a package again
   file: pyproject.toml
@@ -1352,6 +1551,9 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_coverage_scope.py -k omit_list_drops
   expect: killed
+  gates:
+  - P12
+  - L1
 - id: W14-PER1
   origin: W-14 / R15-1 — the artifact keeps the fit-time Generator numpy 1.26 refuses
   file: projects/demand-forecast/src/demand_forecast/persist.py
@@ -1360,6 +1562,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_persist.py
   expect: killed
+  gates:
+  - P18
 - id: W14-P18
   origin: W-14 / R15-1 — the same artifact, read by the gate that loads it under the image's requirements
   file: projects/demand-forecast/src/demand_forecast/persist.py
@@ -1368,6 +1572,8 @@ mutations:
   run:
   - uv run python scripts/check_serving_can_load_artifact.py
   expect: killed
+  gates:
+  - P18
 - id: W14-PRO1
   origin: W-14 — the coverage ceiling the DAG never had is lifted
   file: projects/demand-forecast/src/demand_forecast/promotion.py
@@ -1400,6 +1606,8 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_serving_can_load_artifact.py
   expect: killed
+  gates:
+  - P18
 - id: W14-P18c
   origin: W-14 / R15-1 — P18 compares predictions loosely enough to pass a different model
   file: scripts/check_serving_can_load_artifact.py
@@ -1408,43 +1616,445 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_serving_can_load_artifact.py
   expect: killed
+  gates:
+  - P18
 - id: P19-1
   origin: P19 — a hand-typed status block passes
-  file: scripts/check_readme.py
+  file: scripts/readme_standard.py
   old: '    elif block.strip() != generated.strip():'
   new: '    elif False:'
   run:
-  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
   expect: killed
+  gates:
+  - P19
 - id: P19-2
   origin: P19 — sections are not compared with the standard
-  file: scripts/check_readme.py
-  old: '    if found != SECTIONS:'
+  file: scripts/readme_standard.py
+  old: '    if found != bounds.sections:'
   new: '    if False:'
   run:
-  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
   expect: killed
+  gates:
+  - P19
 - id: P19-3
   origin: P19 — the related-repositories table may drift between the two READMEs
-  file: scripts/check_readme.py
+  file: scripts/readme_standard.py
+  old: '    elif carried is None or carried.strip() != canonical.strip():'
+  new: '    elif False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+  gates:
+  - P19
+- id: P19-4
+  origin: P19 — any badge passes, claims included
+  file: scripts/readme_standard.py
+  old: '        if not any(pattern.fullmatch(image.url) for pattern in allowed):'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+  gates:
+  - P19
+- id: P19-5
+  origin: P19 — the word budget is not enforced
+  file: scripts/readme_standard.py
+  old: '    if words > bounds.max_words:'
+  new: '    if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+  gates:
+  - P19
+- id: G-P1
+  gates:
+  - P1
+  origin: 'QA-4 round 17 — a gate no mutation broke: from-imports invisible to the dependency-direction test'
+  file: tests/test_dependency_direction.py
+  old: '        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:'
+  new: '        elif False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependency_direction.py
+  expect: killed
+- id: G-P2
+  gates:
+  - P2
+  origin: 'QA-4 round 17 — a gate no mutation broke: the type gate''s strict mode switched off'
+  file: pyproject.toml
+  old: strict = true
+  new: strict = false
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_type_gate_enforces_its_config.py
+  expect: killed
+- id: G-P3
+  gates:
+  - P3
+  origin: 'QA-4 round 17 — a gate no mutation broke: a rule family narrowed out of ruff''s selection'
+  file: pyproject.toml
+  old: select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "PT", "SIM", "RUF"]
+  new: select = ["E", "F", "I", "N", "UP", "A", "C4", "PT", "SIM", "RUF"]
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_lint_gate.py
+  expect: killed
+- id: G-P6
+  gates:
+  - P6
+  origin: 'QA-4 round 17 — a gate no mutation broke: the cloud-surface ceiling unreachable'
+  file: scripts/measure_cloud_surface.py
+  old: '        return self.adapter_share <= MAX_ADAPTER_SHARE'
+  new: '        return True'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_cloud_surface.py
+  expect: killed
+- id: G-P9
+  gates:
+  - P9
+  origin: 'QA-4 round 17 — a gate no mutation broke: a sync that may rewrite the lock before it is checked'
+  file: .github/workflows/ci.yml
+  old: "        run: uv sync --all-packages --all-extras --locked\n\n      - name: Lockfile is current\n        # Kept even though `--locked` above now enforces it, because the two\n        # fail differently: sync fails at setup with a resolver error, this\n        # names the invariant. Deleting it would leave the guarantee resting\n        # on a flag nobody reads as a check.\n        run: uv lock --check\n\n\n      - name: Tests with coverage"
+  new: "        run: uv sync --all-packages --all-extras\n\n      - name: Lockfile is current\n        # Kept even though `--locked` above now enforces it, because the two\n        # fail differently: sync fails at setup with a resolver error, this\n        # names the invariant. Deleting it would leave the guarantee resting\n        # on a flag nobody reads as a check.\n        run: uv lock --check\n\n\n      - name: Tests with coverage"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_security_controls.py -k lockfile
+  expect: killed
+- id: G-P11
+  gates:
+  - P11
+  origin: 'QA-4 round 17 — a gate no mutation broke: no file is read for a reimplemented library symbol'
+  file: scripts/check_library_reuse.py
+  old: '        if "tests" in relative.parts or "__pycache__" in path.parts:'
+  new: '        if True:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_library_reuse.py
+  expect: killed
+- id: G-P13
+  gates:
+  - P13
+  origin: 'QA-4 round 17 — a gate no mutation broke: a dataset pin that is not a digest'
+  file: docs/datasets/datasets.lock.json
+  old: '          "sha256": "c4d59da7bbc8abaeeeb1727947ee93d9891a71acb42854bd80db1571b2030510",'
+  new: '          "sha256": "TODO",'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dataset_lock.py
+  expect: killed
+- id: G-P15
+  gates:
+  - P15
+  origin: 'QA-4 round 17 — a gate no mutation broke: the render-safety gate parses no payload file'
+  file: scripts/check_template_render_safety.py
+  old: '        found.append(path)'
+  new: '        pass'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_template_render_safety.py
+  expect: killed
+- id: G-C0
+  gates:
+  - C0
+  origin: 'QA-4 round 17 — a gate no mutation broke: version mismatches are not reported'
+  file: scripts/check_version_consistency.py
+  old: '        if found != reference:'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_version_consistency.py
+  expect: killed
+- id: G-A3
+  gates:
+  - A3
+  origin: 'QA-4 round 17 — a gate no mutation broke: a price claim needs no pricing lookup'
+  file: libs/llm-core/src/llm_core/policy.py
+  old: '    if any(word in response_lower for word in rules.price_keywords):'
+  new: '    if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/store-assistant/tests/test_injection_containment.py
+  expect: killed
+- id: G-A5
+  gates:
+  - A5
+  origin: 'QA-4 round 17 — a gate no mutation broke: a mutating tool runs in a read-only phase'
+  file: libs/llm-core/src/llm_core/tools.py
+  old: '        if self.read_only_mode and not spec.read_only and not spec.dry_run_only:'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/store-assistant/tests/test_tools.py
+  expect: killed
+- id: R17-BAN1
+  origin: QA-4 round seventeen, auditor — Bandit's own --exit-zero, a suppression _blocks has no word for
+  file: .github/workflows/ci.yml
+  old: '        run: uv run bandit -c pyproject.toml -r libs/ scripts/ projects/ orchestration/ -ll -q'
+  new: '        run: uv run bandit -c pyproject.toml -r libs/ scripts/ projects/ orchestration/ -ll -q --exit-zero'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_security_controls.py
+  expect: killed
+- id: R17-W14a
+  origin: QA-4 round seventeen, auditor — the DAG rounds the metrics before the shared rule (off the agreement grid)
+  file: orchestration/dags/demand_forecast_training.py
+  old: '        check(metrics["skill"], metrics["coverage"])'
+  new: '        check(round(metrics["skill"], 3), round(metrics["coverage"], 3))'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_promotion_agreement.py tests/test_dags.py
+  expect: killed
+- id: R17-THR1
+  origin: QA-4 round seventeen, auditor — fold count lowered at the constructor, the watched default untouched
+  file: projects/demand-forecast/src/demand_forecast/promotion.py
+  old: DESIGN = BacktestDesign()
+  new: DESIGN = BacktestDesign(n_folds=3)
+  run:
+  - uv run python scripts/check_thresholds.py
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
+  expect: killed
+  gates:
+  - P20
+- id: R17-THR2
+  origin: QA-4 round seventeen, auditor — a second, unspaced assignment the anchored pattern cannot see
+  file: projects/demand-forecast/src/demand_forecast/promotion.py
+  old: 'MIN_SKILL = 0.05
+
+    '
+  new: 'MIN_SKILL = 0.05
+
+    MIN_SKILL=0.0
+
+    '
+  run:
+  - uv run python scripts/check_thresholds.py
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
+  expect: killed
+  gates:
+  - P20
+- id: R17-THR2b
+  origin: QA-4 round seventeen, auditor — same mutation, judged by the behavioural tests
+  file: projects/demand-forecast/src/demand_forecast/promotion.py
+  old: 'MIN_SKILL = 0.05
+
+    '
+  new: 'MIN_SKILL = 0.05
+
+    MIN_SKILL=0.0
+
+    '
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_promotion.py
+  expect: killed
+- id: R17-RD1
+  origin: QA-4 round seventeen, auditor — quick-start command budget never enforced
+  file: scripts/readme_standard.py
+  old: '        if len(run) > bounds.max_commands:'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+  gates:
+  - P19
+- id: R17-RD2
+  origin: QA-4 round seventeen, auditor — related-repositories table never compared
+  file: scripts/readme_standard.py
   old: '    elif carried is None or carried.strip() != canonical.strip():'
   new: '    elif carried is None:'
   run:
-  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
   expect: killed
-- id: P19-4
-  origin: P19 — any badge passes, claims included
-  file: scripts/check_readme.py
-  old: '        if not any(pattern.search(url) for pattern in (*ALLOWED_BADGES, *(gated for gated, _ in GATED_BADGES))):'
-  new: '        if False:'
+  gates:
+  - P19
+- id: R17-SC1
+  origin: QA-4 round seventeen, auditor — the coverage check finds nothing missing
+  file: scripts/check_scan_coverage.py
+  old: '        missing = sorted(packages - seen)'
+  new: '        missing: list[tuple[str, str]] = []'
   run:
-  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_scan_coverage.py
   expect: killed
-- id: P19-5
-  origin: P19 — the word budget is not enforced
-  file: scripts/check_readme.py
-  old: '    if words > MAX_WORDS:'
+- id: R17-SC2
+  origin: QA-4 round seventeen, auditor — only the base image variant is resolved
+  file: scripts/resolve_serving_requirements.py
+  old: '    for provider in CLOUD_PROVIDERS:'
+  new: '    for provider in ():'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_scan_coverage.py
+  expect: killed
+- id: R17-P18a
+  origin: QA-4 round seventeen, auditor — the workspace-leak guard disabled
+  file: scripts/check_serving_can_load_artifact.py
+  old: '    if result["leaked"]:'
   new: '    if False:'
   run:
-  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_serving_can_load_artifact.py
+  expect: killed
+  gates:
+  - P18
+- id: R17-P18b
+  origin: QA-4 round seventeen, auditor — predictions compared with a tolerance that accepts anything
+  file: scripts/check_serving_can_load_artifact.py
+  old: rtol=1e-9, atol=1e-9
+  new: rtol=1e9, atol=1e9
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_serving_can_load_artifact.py
+  expect: killed
+  gates:
+  - P18
+- id: R17-PER2
+  origin: QA-4 round seventeen, auditor — random state no longer stripped from the artifact
+  file: projects/demand-forecast/src/demand_forecast/persist.py
+  old: '        if isinstance(value, _RANDOM_STATE):'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_persist.py
+  expect: killed
+  gates:
+  - P18
+- id: R17-LH4
+  origin: QA-4 round seventeen, auditor — delete_before counts rows against the live table instead of the named snapshot
+  file: projects/demand-forecast/src/demand_forecast/lakehouse.py
+  old: '    return int(properties["deleted-records"]) - int(properties.get("added-records", 0))'
+  new: '    return int(properties["deleted-records"])'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_lakehouse.py
+  expect: killed
+- id: R17-BAN2
+  origin: QA-4 round seventeen — _blocks forgets the tools' own exit-zeroing flags
+  file: tests/test_security_controls.py
+  old: '    if _SUPPRESSING_FLAGS.search(body):'
+  new: '    if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_security_controls.py
+  expect: killed
+- id: R17-KFP1
+  origin: QA-4 round seventeen — the components name the serving image again
+  file: orchestration/pipelines/demand_forecast_pipeline.py
+  old: BASE_IMAGE = "ghcr.io/duqueom/ml-platform/demand-forecast-train:set-by-deploy-pipeline"
+  new: BASE_IMAGE = "ghcr.io/duqueom/ml-platform/demand-forecast:set-by-deploy-pipeline"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_pipeline_spec.py
+  expect: killed
+- id: R17-RD3
+  gates:
+  - P19
+  origin: QA-4 round seventeen — setext and HTML headings invisible to the README check
+  file: scripts/readme_standard.py
+  old: '    odd = [f"{h.text!r} ({h.spelling}, line {h.line})" for h in sections if h.spelling != "atx"]'
+  new: '    odd: list[str] = []'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R17-RD4
+  gates:
+  - P19
+  origin: QA-4 round seventeen — a badge anywhere but under the title passes
+  file: scripts/readme_standard.py
+  old: '        if image.line >= first_section and _BADGE_HOSTS.search(image.url):'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R17-RD5
+  gates:
+  - P19
+  origin: QA-4 round seventeen — the quick start's versions are never read
+  file: scripts/readme_standard.py
+  old: '            reason = unpinned(command)'
+  new: '            reason = None'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R17-RD6
+  gates:
+  - P19
+  origin: QA-4 round seventeen — the standard can diverge between the repositories
+  file: scripts/readme_standard.py
+  old: '    if digest != expected_digest:'
+  new: '    if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_readme_standard.py -k "not sibling"
+  expect: killed
+- id: R17-THR3
+  gates:
+  - P20
+  origin: QA-4 round seventeen — a second binding is resolved by position again
+  file: scripts/check_thresholds.py
+  old: '    if len(bound) > 1:'
+  new: '    if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
+  expect: killed
+- id: R17-THR4
+  gates:
+  - P20
+  origin: QA-4 round seventeen — the constructor's argument is ignored for the class default
+  file: scripts/check_thresholds.py
+  old: '        if keyword.arg == field:'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_thresholds.py
+  expect: killed
+- id: R17-C6a
+  gates:
+  - P4
+  origin: QA-4 round seventeen — C6 reads the source, not what renders
+  file: scripts/check_doc_coherence.py
+  old: '        text = _as_rendered(_read_lossy(path))'
+  new: '        text = _read_lossy(path)'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c6_reads
+  expect: killed
+- id: R17-C6b
+  gates:
+  - P4
+  origin: QA-4 round seventeen — every home-directory path is excluded again
+  file: scripts/check_doc_coherence.py
+  old: '            if home_directory.search(before_match) and segment.lower() in _HOME_CONTAINERS:'
+  new: '            if home_directory.search(before_match):'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_gate_scripts.py -k c6_reads
+  expect: killed
+- id: R17-P10a
+  gates:
+  - P10
+  origin: QA-4 round seventeen — a check before the download counts
+  file: scripts/check_action_pins.py
+  old: '                    if not any(names_it.search(check) for after, check in checks if after > position):'
+  new: '                    if not any(names_it.search(check) for after, check in checks):'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_action_pins.py
+  expect: killed
+- id: R17-P10b
+  gates:
+  - P10
+  origin: QA-4 round seventeen — set +e passes
+  file: scripts/check_action_pins.py
+  old: '            if downloads and any(_ERREXIT_OFF.match(line) for line in lines):'
+  new: '            if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_action_pins.py
+  expect: killed
+- id: R17-SC3
+  origin: QA-4 round seventeen — the service's dev, train and EDA sets are not resolved
+  file: scripts/resolve_serving_requirements.py
+  old: '    plan = {variant: [*files, tooling] for variant, files in variants().items()} | requirement_sets()'
+  new: '    plan = {variant: [*files, tooling] for variant, files in variants().items()}'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_scan_coverage.py
+  expect: killed
+- id: R17-SC4
+  origin: QA-4 round seventeen — a non-registry lock entry is expected of no scan
+  file: scripts/check_scan_coverage.py
+  old: '        if not (WORKSPACE_SOURCES & set(package.get("source", {})))'
+  new: '        if "registry" in package.get("source", {})'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_scan_coverage.py
+  expect: killed
+- id: R17-LH5
+  origin: QA-4 round seventeen — the warm-start generator is not restored on load
+  file: projects/demand-forecast/src/demand_forecast/persist.py
+  old: '        estimator=_restore_fit_time_random_state(payload["estimator"]),'
+  new: '        estimator=payload["estimator"],'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_persist.py
+  expect: killed
+- id: R17-W14b
+  origin: QA-4 round seventeen — the pipeline rounds its inputs before the rule
+  file: orchestration/pipelines/demand_forecast_pipeline.py
+  old: '    check(skill, coverage)'
+  new: '    check(round(skill, 3), round(coverage, 3))'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_promotion_agreement.py
   expect: killed

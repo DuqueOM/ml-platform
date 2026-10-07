@@ -562,3 +562,64 @@ def test_an_unresolvable_baseline_fails_rather_than_passing(tmp_path: Path, monk
 
     assert len(failures) == 1
     assert "does not resolve to a commit" in failures[0]
+
+
+# --- a Python threshold is read as Python binds it (QA-4 round seventeen) ----
+
+
+def _gate():  # type: ignore[no-untyped-def]
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("check_thresholds_under_test", SCRIPT)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # `@dataclass` looks its module up here
+    sys.path.insert(0, str(SCRIPT.parent))
+    spec.loader.exec_module(module)
+    return module
+
+
+gate = _gate()
+DATACLASS = "from dataclasses import dataclass\n\n@dataclass\nclass D:\n    n_folds: int = 5\n"
+TWO_FIELDS = "class D:\n    n_folds: int = 5\n    seed: int = 1\n"
+BRANCHES = "if True:\n    MIN_SKILL = 0.05\nelse:\n    MIN_SKILL = 0.0\n"
+PACKAGE = "class P:\n    lines: int = 0\n    branches: int = 0\n\n"
+
+
+@pytest.mark.parametrize(
+    ("source", "symbol", "value"),
+    [
+        pytest.param("MIN_SKILL = 0.05\n", "MIN_SKILL", 0.05, id="constant"),
+        pytest.param("MIN_SKILL: float = 0.05\n", "MIN_SKILL", 0.05, id="annotated"),
+        pytest.param("A, B = 0.85, 0.95\n", "B", 0.95, id="tuple-target"),
+        pytest.param(DATACLASS + "\nDESIGN = D(n_folds=3)\n", "DESIGN.n_folds", 3, id="constructor-keyword-wins"),
+        pytest.param(TWO_FIELDS + "\nDESIGN = D(7)\n", "DESIGN.n_folds", 7, id="positional"),
+        pytest.param("class D:\n    n_folds: int = 5\n\nDESIGN = D()\n", "DESIGN.n_folds", 5, id="class-default"),
+        pytest.param("def f(x, *, margin: float = 0.05):\n    return x\n", "f(margin)", 0.05, id="function-default"),
+        pytest.param('FLOORS = {"rag": 3, "x": 1}\n', 'FLOORS["rag"]', 3, id="dict-entry"),
+        pytest.param(PACKAGE + 'F = {"d": P(lines=83, branches=71)}\n', 'F["d"].branches', 71, id="dict-entry-field"),
+        pytest.param("OTHER = 1\n", "MIN_SKILL", None, id="absent"),
+    ],
+)
+def test_python_value_reads_the_binding_the_program_uses(source: str, symbol: str, value: float | None) -> None:
+    assert gate.python_value(source, symbol) == value
+
+
+@pytest.mark.parametrize(
+    ("source", "symbol", "refusal"),
+    [
+        pytest.param("MIN_SKILL = 0.05\nMIN_SKILL=0.0\n", "MIN_SKILL", "bound 2 times", id="rebound-without-spaces"),
+        pytest.param("MIN_SKILL = 0.05\nMIN_SKILL, X = 0.0, 1\n", "MIN_SKILL", "bound 2 times", id="rebound-by-tuple"),
+        pytest.param("MIN_SKILL = 0.05\nMIN_SKILL -= 0.05\n", "MIN_SKILL", "bound 2 times", id="augmented"),
+        pytest.param(BRANCHES, "MIN_SKILL", "bound 2 times", id="branches"),
+        pytest.param("from x import MIN_SKILL\n", "MIN_SKILL", "other than a literal", id="imported"),
+        pytest.param("MIN_SKILL = compute()\n", "MIN_SKILL", "not a literal", id="computed"),
+        pytest.param("class D:\n    n: int = 5\n\nDESIGN = D(**cfg)\n", "DESIGN.n", "kwargs", id="hidden-by-kwargs"),
+        pytest.param('F = {**base, "x": 1}\n', 'F["x"]', "unpacks", id="hidden-by-unpacking"),
+        pytest.param("def f(m=0.05): ...\ndef f(m=0.0): ...\n", "f(m)", "defined 2 times", id="redefined-function"),
+    ],
+)
+def test_python_value_refuses_what_it_cannot_pin(source: str, symbol: str, refusal: str) -> None:
+    with pytest.raises(ValueError, match=refusal):
+        gate.python_value(source, symbol)

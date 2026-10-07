@@ -116,6 +116,11 @@ _PIPED_TO_SHELL = re.compile(r"\b(?:curl|wget)\b[^\n]*\|\s*(?:sudo\s+)?(?:ba|z|d
 _SWALLOWED = re.compile(r"\|\|\s*(?:true|:)\b")
 
 
+#: `set +e`, alone or among other flags, and its long spelling: the shell stops
+#: treating a failed command as fatal, so a failed `sha256sum -c` is output.
+_ERREXIT_OFF = re.compile(r"^\s*set\s+(?:[-+]\w*\s+)*\+\w*e\w*\b|^\s*set\s+\+o\s+errexit\b")
+
+
 def _commands(run: str) -> list[str]:
     """The shell lines a `run:` block executes: continuations joined, comments removed.
 
@@ -148,6 +153,10 @@ def _unverified_downloads(workflow: Path) -> list[str]:
     the download wrote and must not be followed by `|| true` — round sixteen
     passed this gate with `sha256sum -c` of README.md after a download, with
     `|| true` after the check, and with the check commented out.
+
+    The check must also come AFTER the download — round seventeen verified the
+    file, then fetched it — and the step must not turn off the shell's own
+    failure with `set +e`, under which a failed check is just a line of output.
     """
     document = yaml.safe_load(workflow.read_text(encoding="utf-8")) or {}
     found = []
@@ -156,8 +165,15 @@ def _unverified_downloads(workflow: Path) -> list[str]:
             name = (step or {}).get("name") or f"step {index}"
             where = f"{workflow.name}:{job_name}: '{name}'"
             lines = _commands((step or {}).get("run") or "")
-            checks = [line for line in lines if _DIGEST_CHECK.search(line) and not _SWALLOWED.search(line)]
-            for line in lines:
+            checks = [
+                (position, line)
+                for position, line in enumerate(lines)
+                if _DIGEST_CHECK.search(line) and not _SWALLOWED.search(line)
+            ]
+            downloads = any(_DOWNLOAD.search(line) for line in lines)
+            if downloads and any(_ERREXIT_OFF.match(line) for line in lines):
+                found.append(f"{where} downloads under `set +e`, where a failed digest check does not stop the step")
+            for position, line in enumerate(lines):
                 if _PIPED_TO_SHELL.search(line):
                     found.append(
                         f"{where} pipes a download into a shell, which runs the bytes before anything checks them"
@@ -166,10 +182,12 @@ def _unverified_downloads(workflow: Path) -> list[str]:
                 if not _DOWNLOAD.search(line):
                     continue
                 for target in _download_targets(line):
-                    if not any(re.search(rf"(?<![\w./-]){re.escape(target)}(?![\w.-])", check) for check in checks):
+                    names_it = re.compile(rf"(?<![\w./-]){re.escape(target)}(?![\w.-])")
+                    if not any(names_it.search(check) for after, check in checks if after > position):
                         found.append(
                             f"{where} downloads {target!r} without verifying its digest: no `sha256sum -c` of "
-                            f"that file in the same step (one that names it, and is not followed by `|| true`)"
+                            f"that file AFTER the download in the same step (one that names it, and is not "
+                            f"followed by `|| true`)"
                         )
     return found
 

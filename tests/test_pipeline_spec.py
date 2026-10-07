@@ -107,12 +107,39 @@ def test_every_component_pins_the_same_built_image(spec: dict) -> None:  # type:
         )
 
     (image,) = images
-    # A digest, or the unresolvable placeholder the base Deployment carries, so
-    # a submission that forgets to substitute fails at pull. Never a tag, which
+    # A digest, or an unresolvable placeholder, so a submission that forgets to
+    # substitute fails at pull. Never a tag, which
     # names whatever it points at today.
     assert re.fullmatch(r"[^\s@]+@sha256:[0-9a-f]{64}", image) or image.endswith(":set-by-deploy-pipeline"), (
         f"the components run {image!r}. Pin a digest, or leave the deploy-pipeline placeholder."
     )
+
+
+def test_the_components_do_not_run_in_the_serving_image(spec: dict) -> None:  # type: ignore[type-arg]
+    """The serving image cannot run a component; naming it invites a deploy to substitute its digest.
+
+    QA-4 round seventeen: the components named `…/demand-forecast`, the serving
+    Deployment's repository path and placeholder. That image is built from
+    `services/demand-forecast-serving/requirements.txt` and holds no kfp, no
+    `demand_forecast` and no polars, so every step would fail to start — and
+    W-14's one promotion rule would be unimportable where the KFP gate runs.
+    Compared on the repository path, before any tag or digest.
+    """
+    deployment = yaml.safe_load(
+        (REPO_ROOT / "platform" / "kubernetes" / "base" / "deployment.yaml").read_text(encoding="utf-8")
+    )
+    serving = {container["image"] for container in deployment["spec"]["template"]["spec"]["containers"]}
+    images = {
+        executor["container"]["image"]
+        for executor in spec["deploymentSpec"]["executors"].values()
+        if "container" in executor
+    }
+
+    def repository(image: str) -> str:
+        return re.split(r"[:@]", image, maxsplit=1)[0]
+
+    shared = {repository(image) for image in images} & {repository(image) for image in serving}
+    assert not shared, f"the KFP components run the serving image {sorted(shared)}, which cannot import them"
 
 
 def test_the_pipeline_does_not_reimplement_the_project(spec: dict) -> None:  # type: ignore[type-arg]

@@ -13,9 +13,12 @@ A scanner that can skip half its input needs a check that it did not. This
 reads Trivy's JSON (`--list-all-pkgs`) and fails unless every package the
 repository installs appears in it:
 
-- every registry package in `uv.lock`, at its locked version;
-- every pin in the serving image's resolved requirements
-  (`scripts/resolve_serving_requirements.py`), one resolution per image.
+- every package in `uv.lock` this repository does not itself build — a
+  registry, git, URL or path source, at its locked version; only workspace
+  members (`editable`, `virtual`) are excluded, being this repository's code;
+- every pin in the serving image's resolved requirements, one resolution per
+  image variant, and in each other requirement set the service ships
+  (`scripts/resolve_serving_requirements.py`).
 
     uv run python scripts/check_scan_coverage.py trivy-packages.json
 """
@@ -38,13 +41,23 @@ def _normalise(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
+#: Lock sources that are this repository's own code, not a dependency to scan.
+WORKSPACE_SOURCES = frozenset({"editable", "virtual"})
+
+
 def locked() -> set[tuple[str, str]]:
-    """Every package uv.lock installs from a registry. Workspace members are this repository's own code."""
+    """Every package uv.lock installs that this repository does not build itself.
+
+    It read `registry` sources only, so a dependency from git, a URL or a path
+    was expected of no scan: Trivy examined one when QA-4 round seventeen added
+    it, but nothing would have noticed the day Trivy stopped. Only workspace
+    members are excluded now.
+    """
     lock = tomllib.loads((REPO_ROOT / "uv.lock").read_text(encoding="utf-8"))
     return {
         (_normalise(package["name"]), package["version"])
         for package in lock["package"]
-        if "registry" in package.get("source", {})
+        if not (WORKSPACE_SOURCES & set(package.get("source", {})))
     }
 
 

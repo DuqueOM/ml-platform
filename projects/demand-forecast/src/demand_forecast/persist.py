@@ -37,6 +37,7 @@ from ml_core.conformal import SplitConformalRegressor
 from ml_core.determinism import seed_everything
 from numpy.typing import NDArray
 from sklearn.ensemble import HistGradientBoostingRegressor
+from sklearn.utils import check_random_state
 
 from demand_forecast.features import FEATURE_COLUMNS, build_features
 from demand_forecast.train import ALPHA, CALIBRATION_HOURS, select_modellable_zones
@@ -188,9 +189,12 @@ def _without_fit_time_random_state(estimator: HistGradientBoostingRegressor) -> 
 
     scikit-learn keeps the `Generator` it subsampled features with during `fit`
     (`_feature_subsample_rng`) on the fitted object. Prediction never reads it,
-    and refitting creates a new one from `random_state`, which stays — so the
+    and a cold refit creates a new one from `random_state`, which stays — so the
     model predicts identically without it, and the artifact stops carrying the
-    one object that ties it to the writer's numpy major version. Measured
+    one object that ties it to the writer's numpy major version. A WARM-START
+    continuation reads it instead of recreating it, and raised `AttributeError`
+    on a loaded artifact (QA-4 round seventeen); :func:`load` restores it — see
+    `_restore_fit_time_random_state`. Measured
     before this change: removing that attribute made a real artifact load and
     predict under the serving image's numpy 1.26.
 
@@ -204,6 +208,29 @@ def _without_fit_time_random_state(estimator: HistGradientBoostingRegressor) -> 
         if isinstance(value, _RANDOM_STATE):
             delattr(copied, name)
     return copied
+
+
+def _restore_fit_time_random_state(estimator: HistGradientBoostingRegressor) -> HistGradientBoostingRegressor:
+    """Put back the generator `_without_fit_time_random_state` removed, derived as scikit-learn derives it.
+
+    `fit` draws two seeds from `check_random_state(random_state)` — the model's
+    `_random_seed`, then the feature-subsample seed — and builds the generator
+    from the second. This draws the same two, so a loaded model continues a
+    warm start from the generator its first fit STARTED with. That is not the
+    state the writer's generator had reached, so a continuation that subsamples
+    features is reproducible but not bit-identical to continuing the model the
+    writer still held; this project fits with `max_features=1.0`, which never
+    draws from it, so here the two continuations agree exactly
+    (`tests/test_persist.py`). The serving image only predicts, and reads the
+    artifact with `joblib.load` directly, so it never needs this.
+    """
+    if hasattr(estimator, "_feature_subsample_rng") or not hasattr(estimator, "n_iter_"):
+        return estimator
+    rng = check_random_state(estimator.random_state)
+    rng.randint(np.iinfo(np.uint32).max, dtype="u8")  # `_random_seed`, kept on the estimator already
+    feature_subsample_seed = rng.randint(np.iinfo(np.uint32).max, dtype="u8")
+    estimator._feature_subsample_rng = np.random.default_rng(feature_subsample_seed)
+    return estimator
 
 
 def _payload(model: ForecastModel) -> dict[str, Any]:
@@ -378,7 +405,7 @@ def load(path: Path) -> ForecastModel:
             "Re-fit rather than reading it: the fields do not mean the same thing."
         )
     return ForecastModel(
-        estimator=payload["estimator"],
+        estimator=_restore_fit_time_random_state(payload["estimator"]),
         conformal=SplitConformalRegressor.from_calibration(
             alpha=payload["conformal_alpha"],
             quantile=payload["conformal_quantile"],

@@ -13,6 +13,7 @@ Trivy depends on do not.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -108,6 +109,29 @@ def test_a_report_without_packages_proves_nothing(tmp_path: Path) -> None:
     assert any("lists no packages" in failure for failure in coverage.check(report, tmp_path))
 
 
+def test_every_non_workspace_source_is_expected(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """A git, URL or path dependency is still a dependency; only workspace members are this repository's code."""
+    (tmp_path / "uv.lock").write_text(
+        "\n".join(
+            f'[[package]]\nname = "{name}"\nversion = "1.0"\nsource = {{ {source} }}\n'
+            for name, source in (
+                ("from-registry", 'registry = "https://pypi.org/simple"'),
+                ("from-git", 'git = "https://example.org/x.git?rev=abc#abc"'),
+                ("from-url", 'url = "https://example.org/x-1.0.tar.gz"'),
+                ("from-path", 'path = "vendor/x"'),
+                ("member", 'editable = "libs/member"'),
+                ("root", 'virtual = "."'),
+            )
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(coverage, "REPO_ROOT", tmp_path)
+
+    names = {name for name, _ in coverage.locked()}
+
+    assert names == {"from-registry", "from-git", "from-url", "from-path"}
+
+
 def test_workspace_members_are_not_expected_from_the_scanner() -> None:
     """This repository's own packages are its code, not dependencies a vulnerability database knows."""
     names = {name for name, _ in coverage.locked()}
@@ -167,16 +191,34 @@ def test_each_variant_is_resolved_for_the_image_python_into_a_file_trivy_reads( 
     assert resolve.main(["--out", str(tmp_path)]) == 0
 
     python = image_environment()["python_version"]
-    assert len(calls) == len(resolve.variants())
-    for command in calls:
+    planned = [*resolve.variants(), *resolve.requirement_sets()]
+    assert len(calls) == len(planned)
+    for variant, command in zip(planned, calls, strict=True):
         assert command[:4] == ["uv", "pip", "compile", "--quiet"]
-        assert command[command.index("--python-version") + 1] == python
+        expected = resolve.PYTHON_FOR[variant][0] if variant in resolve.PYTHON_FOR else python
+        assert command[command.index("--python-version") + 1] == expected
         assert command[command.index("--python-platform") + 1] == "x86_64-manylinux_2_28"
+    # Every image variant carries the Dockerfile's unpinned pip/setuptools/wheel upgrade.
+    tooling = str(tmp_path / "image-tooling.in")
+    image_commands = calls[: len(resolve.variants())]
+    assert all(tooling in command for command in image_commands)
+    assert (tmp_path / "image-tooling.in").read_text(encoding="utf-8").split() == list(resolve.IMAGE_TOOLING)
     # Trivy recognises the file by its NAME; any other name is skipped silently.
     assert sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*.txt")) == sorted(
-        f"serving-{variant}/requirements.txt" for variant in resolve.variants()
+        f"serving-{variant}/requirements.txt" for variant in planned
     )
     assert "2 pinned packages" in capsys.readouterr().out
+
+
+def test_every_requirement_set_the_service_ships_is_resolved() -> None:
+    """QA-4 round seventeen: dev, train and EDA pinned pyarrow 18.0.0 and none was scanned."""
+    from check_artifact_compatibility import READER
+
+    service = READER.parent
+    shipped = {path for path in service.rglob("requirements*.txt") if ".venv" not in path.parts}
+    planned = {path for files in (*resolve.variants().values(), *resolve.requirement_sets().values()) for path in files}
+    assert shipped <= planned, f"requirement files no resolution covers: {sorted(map(str, shipped - planned))}"
+    assert {"dev", "train", "eda"} <= set(resolve.requirement_sets())
 
 
 def test_a_resolution_that_fails_fails_the_step(tmp_path: Path, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
@@ -196,3 +238,12 @@ def test_a_missing_requirements_file_fails_before_resolving(tmp_path: Path, monk
 
     assert resolve.main(["--out", str(tmp_path)]) == 1
     assert "do not exist" in capsys.readouterr().out
+
+
+def test_every_python_override_names_a_real_set_and_says_why() -> None:
+    """An override is an exception to "scanned as the image runs it", so each carries its reason and its set."""
+    sets = resolve.requirement_sets()
+    for variant, (python, reason) in resolve.PYTHON_FOR.items():
+        assert variant in sets, f"{variant} overrides the Python of a requirement set that no longer exists"
+        assert re.fullmatch(r"3\.\d+", python)
+        assert "R17-2" in reason or len(reason) > 40, f"{variant}'s override does not say why"
