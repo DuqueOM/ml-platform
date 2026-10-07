@@ -26,7 +26,7 @@ at L1 (contract) · 11 at L2 (component). Evidence that needs a cluster exists f
 | `doc-intelligence` | ⬜ planned (Phase 5) | — |
 | `agent-ops` | ⬜ planned (Phase 6) | — |
 
-Last independent audit: **QA-4 round 17**, 2026-10-06, at `71528ad` — [report](docs/governance/qa4/round-17.txt).
+Last independent audit: **QA-4 round 18**, 2026-10-07, at `746d6d6` — [report](docs/governance/qa4/round-18.txt).
 <!-- END README STATUS -->
 
 ## What it is

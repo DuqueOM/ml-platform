@@ -1487,6 +1487,17 @@ _HOSTLESS_FORMS = {
     "macos-home-checkout": f"/Users/{_ACCOUNT}/{_HIDDEN}",
     "windows-home-checkout": f"C:\\Users\\{_ACCOUNT}\\{_HIDDEN}",
     "linux-home-checkout": f"/home/{_ACCOUNT.lower()}/{_HIDDEN}/README.md",
+    # QA-4 round eighteen: a container, then the checkout — the shape this
+    # repository's own reports use for local paths — and the spellings that
+    # render as the account while matching nothing.
+    "container-then-checkout": f"/home/{_ACCOUNT}/projects/{_HIDDEN}",
+    "macos-container-then-checkout": f"/Users/{_ACCOUNT}/code/{_HIDDEN}",
+    "nested-containers": f"/home/{_ACCOUNT.lower()}/projects/main_projects/{_HIDDEN}/README.md",
+    "visual-studio-repos": f"C:\\Users\\{_ACCOUNT}\\source\\repos\\{_HIDDEN}",
+    "markdown-escaped-slash": f"{_ACCOUNT}\\/{_HIDDEN}",
+    "empty-inline-tag": f"{_ACCOUNT[:5]}<b></b>{_ACCOUNT[5:]}/{_HIDDEN}",
+    "cyrillic-o": f"{_ACCOUNT.replace('O', chr(0x41E))}/{_HIDDEN}",
+    "greek-capital-m": f"{_ACCOUNT.replace('M', chr(0x39C))}/{_HIDDEN}",
 }
 
 
@@ -1497,6 +1508,10 @@ def test_c6_reads_a_repository_named_without_a_host(form: str) -> None:
         result = _run(GATES["doc-coherence"], "--only", "C6")
     assert result.returncode == 1, f"{form} passed C6:\n{result.stdout}"
     assert "docs/runbooks/_gate_probe.md links to non-public repository" in result.stdout
+    if form != "elided-private":
+        # The name reported is the repository's, not a directory that holds it
+        # (round eighteen reported `source` for a Visual Studio path).
+        assert f"'{_HIDDEN}'" in result.stdout, result.stdout
 
 
 @pytest.mark.parametrize(
@@ -1506,12 +1521,14 @@ def test_c6_reads_a_repository_named_without_a_host(form: str) -> None:
         f"quoted: copier copy gh:{_ACCOUNT}/ml-se…",
         f"`{_ACCOUNT.lower()}/...` is the same account",
         "uses: actions/checkout@v4 and owner/repo#12 under another account",
-        f"the answers file held a local path (`/home/{_ACCOUNT.lower()}/projects/template`)",
-        f"on macOS it was `/Users/{_ACCOUNT}/projects/template`",
+        f"the answers file held a local path (`/home/{_ACCOUNT.lower()}/projects/ml-service-template`)",
+        f"on macOS it was `/Users/{_ACCOUNT}/projects/ml-platform`",
         f"a snippet at https://gist.github.com/{_ACCOUNT}/abc123def456",
-        f"on Windows it was `C:\\Users\\{_ACCOUNT}\\projects\\template`",
+        f"on Windows it was `C:\\Users\\{_ACCOUNT}\\source\\repos\\ml-platform`",
         f"elided after NFKC: copier copy gh:{_ACCOUNT}/ml-se...",
         f"the image is ghcr.io/{_ACCOUNT.lower()}/ml-platform/demand-forecast",
+        f"the sibling is `/home/{_ACCOUNT.lower()}/projects/main_projects/template_MLOps/scripts`",
+        f"under `/home/{_ACCOUNT}/projects/` nothing is named",
     ],
     ids=[
         "public",
@@ -1524,6 +1541,8 @@ def test_c6_reads_a_repository_named_without_a_host(form: str) -> None:
         "windows-home",
         "elided-public-three-dots",
         "public-image",
+        "template-checkout-directory",
+        "path-ends-at-a-container",
     ],
 )
 def test_c6_does_not_fail_what_is_public_or_not_a_reference(text: str) -> None:

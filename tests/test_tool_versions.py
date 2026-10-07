@@ -10,8 +10,11 @@ is the defect class this repository keeps finding; this pins one to the other.
 from __future__ import annotations
 
 import re
+import sys
 import tomllib
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -142,9 +145,15 @@ def test_the_project_generator_runs_a_locked_copier() -> None:
         check=True,
     ).stdout.split("\0")
     tracked = [path for path in tracked if path]
-    historical = ("services/", "docs/governance/qa4/", "CHANGELOG.md", "docs/governance/remediation-work-order.md")
-    # The C9 fixtures quote unpinned forms on purpose, as inputs the gate must read.
-    fixtures = ("tests/test_gate_scripts.py", "tests/test_tool_versions.py")
+    historical = (
+        "services/",
+        "docs/governance/qa4/",
+        "docs/governance/QA-4-independent-audit.md",  # rounds one, two and six, dated
+        "CHANGELOG.md",
+        "docs/governance/remediation-work-order.md",
+    )
+    # The C9 and P19 fixtures quote unpinned forms on purpose, as inputs the gates must refuse.
+    fixtures = ("tests/test_gate_scripts.py", "tests/test_tool_versions.py", "tests/test_readme_standard.py")
     unpinned = [
         f"{path}:{number}"
         for path in tracked
@@ -153,3 +162,60 @@ def test_the_project_generator_runs_a_locked_copier() -> None:
         if re.search(r"\b(?:uvx|pipx run)\s+copier(?![@=])\b", line) and not line.lstrip().startswith("#")
     ]
     assert not unpinned, f"unpinned copier invocations (use `uv run copier`): {unpinned}"
+
+    # Round eighteen: that pattern looked for `uvx`/`pipx run` only, so eight bare
+    # `copier update|copy` commands in the runbook and the scaffold-update skill —
+    # whatever copier is on PATH — passed, and so did `uvx copier@latest`. Where a
+    # line RUNS — a Markdown code block C9 reads, a shell script, the Makefile, a
+    # workflow, a pre-commit hook — every rendering copier command must go
+    # through the lock. (Python runs copier as an argument list, which this
+    # pattern does not match, and its docstrings and regexes are not commands.)
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    from check_doc_coherence import _code_blocks
+
+    def runs(path: str) -> bool:
+        return (
+            path.endswith((".md", ".sh"))
+            or path in ("Makefile", ".pre-commit-config.yaml")
+            or (path.startswith(".github/workflows/"))
+        )
+
+    unpinned = []
+    for path in tracked:
+        if path.startswith(historical) or path in fixtures or not runs(path):
+            continue
+        text = (REPO_ROOT / path).read_text(encoding="utf-8")
+        runnable = "\n".join(_code_blocks(text)) if path.endswith(".md") else text
+        for line in runnable.splitlines():
+            if line.lstrip().startswith("#"):
+                continue
+            for invocation in _COPIER_RUN.finditer(line):
+                if line[: invocation.start()].endswith("`"):
+                    continue  # quoted inline in prose: a mention, not a command
+                if not _VIA_THE_LOCK.search(line[: invocation.start()]):
+                    unpinned.append(f"{path}: {line.strip()}")
+    assert not unpinned, f"copier invocations that do not run the locked copier (use `uv run copier`): {unpinned}"
+
+
+#: A copier command that renders: `copy`, `update` or `recopy`, however copier is named.
+_COPIER_RUN = re.compile(r"\bcopier(?:@\S+|==\S+)?\s+(?:copy|update|recopy)\b")
+#: What must precede it: `uv run`, optionally pointed at this repository's project.
+_VIA_THE_LOCK = re.compile(r"\buv run(?: --project(?:=|\s+)(?:\"[^\"]*\"|\S+))?\s+$")
+
+
+@pytest.mark.parametrize(
+    ("line", "locked"),
+    [
+        ("uv run copier copy --vcs-ref HEAD . out", True),
+        ('uv run --project "$(git rev-parse --show-toplevel)" copier update --vcs-ref=v1.0.0', True),
+        ("copier update --trust --vcs-ref=v0.24.0", False),
+        ("uvx copier@latest copy gh:o/t out", False),
+        ("uvx copier@9.18.2 copy gh:o/t out", False),
+        ("pipx run copier copy gh:o/t out", False),
+        ("cd svc && copier update --vcs-ref=v1", False),
+    ],
+)
+def test_a_copier_invocation_is_locked_only_through_uv_run(line: str, locked: bool) -> None:
+    invocation = _COPIER_RUN.search(line)
+    assert invocation is not None
+    assert bool(_VIA_THE_LOCK.search(line[: invocation.start()])) is locked

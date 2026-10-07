@@ -903,29 +903,45 @@ def check_language_and_privacy() -> None:
         # Only the repository half needs them: the owner half is always the
         # private account, which is what the pattern matches.
         placeholders = {"REPO", "your-repo", "<repo>", "{repo}", "repo"}
-        text = _as_rendered(_read_lossy(path))
+        raw = _read_lossy(path)
         # (repo, elided): `elided` when the name runs straight into an
         # ellipsis — a quotation cut short, as audit reports do. An elided name
         # passes only as the prefix of a PUBLIC repository; anything else still
         # fails, so truncating a private name does not hide it.
-        references = []
-        for match in bare_reference.finditer(text):
-            before_match = text[max(0, match.start() - 20) : match.start()]
-            if not_a_repository.search(before_match):
-                continue
-            segment = match.group(2) or match.group(4)
-            # In a home directory the account is the USER, and the segment
-            # after it is a directory — a repository checkout as often as not.
-            # The round-sixteen exclusion skipped the whole path, so
-            # `/Users/<account>/<private-repo>` passed (round seventeen). Only
-            # a conventional container directory is not a repository name.
-            if home_directory.search(before_match) and segment.lower() in _HOME_CONTAINERS:
-                continue
-            # NFKC folds the ellipsis character into three dots, which the name
-            # pattern then captures; either spelling marks a cut-short name.
-            elided = segment.endswith("...") or text[match.end() : match.end() + 1] == "\u2026"
-            references.append((segment, elided))
-        for repo, elided in references:
+        #
+        # Read twice — as written, and as Markdown renders it — and the
+        # references of both kept. Round eighteen joined the name with a
+        # Markdown escape (`OWNER\/repo`, which renders `OWNER/repo` while the
+        # first reading sees a Windows separator) and split it with an empty
+        # inline tag (`Duque<b></b>OM/repo`). Taking both readings can only add
+        # references, never hide one the other found.
+        references = set()
+        for text in (_as_rendered(raw), _as_rendered(_as_markdown_renders(raw))):
+            for match in bare_reference.finditer(text):
+                before_match = text[max(0, match.start() - 20) : match.start()]
+                if not_a_repository.search(before_match):
+                    continue
+                segment, end = match.group(2) or match.group(4), match.end()
+                # In a home directory the account is the USER, and what follows
+                # is a path: container directories, then a checkout. The
+                # round-seventeen fix skipped one container and stopped, so
+                # `/home/<account>/projects/<private-repo>` passed — the shape
+                # this repository's own reports use (round eighteen). So skip
+                # every container and read the first segment that is not one.
+                if home_directory.search(before_match):
+                    while segment.lower() in _HOME_CONTAINERS:
+                        following = _PATH_SEGMENT.match(text, end)
+                        if following is None:
+                            break
+                        segment, end = following.group(1), following.end()
+                    if segment.lower() in _HOME_CONTAINERS:
+                        continue  # the path ends at a container: no checkout named
+                    segment = _CHECKOUT_NAMES.get(segment, segment)
+                # NFKC folds the ellipsis character into three dots, which the name
+                # pattern then captures; either spelling marks a cut-short name.
+                elided = segment.endswith("...") or text[end : end + 1] == "\u2026"
+                references.add((segment, elided))
+        for repo, elided in sorted(references):
             repo = repo.removesuffix(".git").rstrip(".")
             if not repo:
                 # `OWNER/...` in prose names no repository.
@@ -946,11 +962,23 @@ def check_language_and_privacy() -> None:
         ok("C6", f"{scanned} files scanned for non-public repository links and denylisted names")
 
 
-#: Directories that hold checkouts rather than name one, as the first segment
-#: after the user in a home path. Anything else there is read as a repository.
+#: Directories that hold checkouts rather than name one, in a home path. Every
+#: one of them is skipped, at any depth; the first segment that is not one is
+#: read as a repository. `main_projects` and `source` are this author's own
+#: layout and Visual Studio's (`C:\\Users\\<account>\\source\\repos`), named
+#: because round eighteen found both in real paths.
 _HOME_CONTAINERS = frozenset(
-    {"projects", "src", "code", "repos", "repositories", "git", "github", "work", "workspace", "dev", "documents"}
-)
+    {
+        "projects", "main_projects", "src", "source", "code", "repos", "repositories", "git", "github", "work",
+        "workspace", "dev", "documents",
+    }
+)  # fmt: skip
+_PATH_SEGMENT = re.compile(r"(?:/|%2F)([A-Za-z0-9_.-]+)", re.IGNORECASE)
+
+#: A checkout whose directory is not named after its repository. The template's
+#: sibling checkout is `template_MLOps/` (TEMPLATE_CHECKOUT, below), which is
+#: ml-service-template — a public repository under another directory name.
+_CHECKOUT_NAMES = {"template_MLOps": "ml-service-template"}
 
 #: Characters a renderer shows as a slash, or does not show at all. A private
 #: name split by a zero-width space, joined by `&#47;` or a fullwidth slash (U+FF0F)
@@ -960,9 +988,28 @@ _SLASHES = str.maketrans({"\\": "/", "\u2215": "/", "\u2044": "/", "\u29f8": "/"
 _INVISIBLE = re.compile("[\u00ad\u200b-\u200f\u2060-\u2064\ufeff]")
 
 
+#: Cyrillic and Greek letters that render as Latin ones (Unicode TR39's
+#: confusables, the subset that maps to a single ASCII letter). Round eighteen
+#: wrote the account with a Cyrillic capital O (U+041E), which reads as the account and
+#: matched nothing.
+_CONFUSABLES = str.maketrans(
+    "АВЕКМНОРСТУХаеорсуухіјѕԁԛԝӏΑΒΕΖΗΙΚΜΝΟΡΤΥΧοικνρτυχ",
+    "ABEKMHOPCTYXaeopcyyxijsdqwlABEZHIKMNOPTYXoikvptux",
+)
+_MARKDOWN_ESCAPE = re.compile(r"\\([!-/:-@\[-`{-~])")
+_INLINE_TAG = re.compile(r"</?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?/?>")
+
+
 def _as_rendered(text: str) -> str:
-    """Text as a reader sees it: entities decoded, compatibility forms folded, invisible characters gone."""
-    return _INVISIBLE.sub("", unicodedata.normalize("NFKC", html.unescape(text))).translate(_SLASHES)
+    """Text as a reader sees it: entities decoded, compatibility forms and lookalike letters folded,
+    invisible characters gone, and every character shown as a slash made one."""
+    folded = unicodedata.normalize("NFKC", html.unescape(text)).translate(_CONFUSABLES)
+    return _INVISIBLE.sub("", folded).translate(_SLASHES)
+
+
+def _as_markdown_renders(text: str) -> str:
+    """``text`` with Markdown's backslash escapes resolved and inline HTML tags removed, as the page shows it."""
+    return _INLINE_TAG.sub("", _MARKDOWN_ESCAPE.sub(r"\1", text))
 
 
 #: Any indentation: a fence inside a list item sits at the item's content

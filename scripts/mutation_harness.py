@@ -105,6 +105,11 @@ def run_one(mutation: dict[str, Any]) -> tuple[str, str]:
                 return "KILLED", tail[-1] if tail else f"exit {result.returncode}"
         return "SURVIVED", "every command passed"
     finally:
+        # The mutated file is written back from what was read, not only through
+        # git: the restore spares the catalogue so uncommitted entries survive,
+        # and a mutation OF the catalogue (round eighteen's R18-GATE1) was then
+        # left applied after the run.
+        path.write_text(source, encoding="utf-8")
         _restore()
 
 

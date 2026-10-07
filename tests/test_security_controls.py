@@ -115,10 +115,32 @@ _NON_BLOCKING_BY_DEFAULT = {"aquasecurity/trivy-action": "exit-code"}
 #: it. The behavioural test below runs CI's Bandit line against a planted
 #: finding, so a spelling missing from this list still goes red there.
 _SUPPRESSING_FLAGS = re.compile(
-    r"(?:^|\s)(?:--exit-zero|--exit-code[=\s]+[\"']?0[\"']?(?=\s|$)|--soft-fail|--no-fail)(?=\s|$)"
-    r"|^\s*set\s+\+e\b",
+    r"(?:^|\s)(?:--exit-zero|--exit-code[=\s]+[\"']?0[\"']?(?=\s|$)|--soft-fail(?:-on)?|--no-fail)(?=[\s=]|$)"
+    # `set +e`, `set +eu`, `set -x +e`, `set +o errexit` — at line start or
+    # inside a function or a `;` chain (QA-4 round eighteen).
+    r"|\bset\s+(?:[-+]\w*\s+)*\+\w*e\w*\b|\bset\s+\+o\s+errexit\b",
     re.MULTILINE,
 )
+
+#: `||` followed by anything that does not itself fail: `|| true`, `|| :`,
+#: `|| exit 0`, `|| echo ignored`. A `||` whose branch exits non-zero or runs
+#: `false` keeps the failure, so it is not a suppression.
+_SWALLOWED_OR = re.compile(r"\|\|(?![^\n]*(?:\bexit\s+[1-9]|\bfalse\b|\breturn\s+[1-9]))")
+
+#: The tool run as an `if` condition, or negated: its status is consumed, and
+#: unless the branch exits non-zero the step succeeds whatever it found.
+_CONSUMED = re.compile(r"^\s*(?:if|while|until)\s+!?|(?:^|[;&|]\s*)!\s", re.MULTILINE)
+
+#: The only `if:` conditions a blocking control's step may carry, each with its
+#: reason. Any other expression decides whether the control runs at all —
+#: `${{ 0 }}`, `github.repository == 'nobody/none'` — and round eighteen
+#: disarmed controls through expressions with every test green, so an unknown
+#: one is read as "may not run".
+ALLOWED_CONDITIONS = {
+    "": "no condition: runs whenever its job does",
+    "${{ !cancelled() }}": "runs after an earlier step failed, so its own red is reported too",
+    "${{ !cancelled() && steps.sync.outcome == 'success' }}": "runs whenever the environment synced",
+}
 
 
 def _blocks(step: dict, job: dict | None = None) -> bool:  # type: ignore[type-arg]
@@ -142,19 +164,25 @@ def _blocks(step: dict, job: dict | None = None) -> bool:  # type: ignore[type-a
     The list is open-ended by nature — a tool suppresses its exit status in its
     own vocabulary. Treat a new spelling as expected rather than surprising.
     """
-    if step.get("continue-on-error") in (True, "true"):
-        return False
-    if job is not None and job.get("continue-on-error") in (True, "true"):
-        return False
+    # Not only `true`: `${{ true }}` and any other expression GitHub evaluates
+    # at run time. Round eighteen put `continue-on-error: ${{ true }}` on the
+    # Bandit, gitleaks and Trivy-gate steps and 79 tests stayed green. A
+    # control's failure must never be conditional, so ANY value other than an
+    # absent key or a literal false means it can be ignored.
+    for owner in (step, job or {}):
+        value = owner.get("continue-on-error", False)
+        if value not in (False, "false"):
+            return False
 
     # `if: false`, and any literal falsehood. A step that never runs cannot
     # fail, and reads in the log as skipped rather than as absent.
-    condition = str(step.get("if", "")).strip().lower()
-    if condition in {"false", "${{ false }}"}:
-        return False
+    for owner in (step, job or {}):
+        condition = " ".join(str(owner.get("if", "")).split())
+        if condition not in ALLOWED_CONDITIONS:
+            return False
 
     with_block = step.get("with") or {}
-    if with_block.get("soft_fail") in (True, "true"):
+    if with_block.get("soft_fail") in (True, "true") or "soft_fail_on" in with_block:
         return False
     if str(with_block.get("exit-code", "")).strip() == "0":
         return False
@@ -172,9 +200,11 @@ def _blocks(step: dict, job: dict | None = None) -> bool:  # type: ignore[type-a
     # `|| true` and `; true` swallow the exit status inside the shell, where no
     # YAML key records it; the tool's own flags do it on its command line.
     body = "\n".join(line for line in str(step.get("run", "")).splitlines() if not line.lstrip().startswith("#"))
-    if _SUPPRESSING_FLAGS.search(body):
+    if _SUPPRESSING_FLAGS.search(body) or _SWALLOWED_OR.search(body):
         return False
-    return not re.search(r"\|\|\s*(true|:)\b|;\s*true\s*$", body, re.MULTILINE)
+    if _CONSUMED.search(body) and not re.search(r"\bexit\s+[1-9]", body):
+        return False
+    return not re.search(r";\s*true\s*$", body, re.MULTILINE)
 
 
 def test_the_table_is_parseable_and_not_empty() -> None:
@@ -427,6 +457,37 @@ def test_every_advisory_step_still_runs_its_tool() -> None:
         pytest.param({"run": "trivy fs --exit-code 1 ."}, {}, True, id="trivy-cli-exit-code-1"),
         pytest.param({"run": "trivy fs --exit-code 10 ."}, {}, True, id="trivy-cli-exit-code-10"),
         pytest.param({"run": "# --exit-zero was here\nuv run bandit -r libs/"}, {}, True, id="flag-in-a-comment"),
+        # QA-4 round eighteen: each disarmed a control with every test green.
+        pytest.param({"run": "gitleaks git", "continue-on-error": "${{ true }}"}, {}, False, id="coe-expression"),
+        pytest.param({"run": "gitleaks git"}, {"continue-on-error": "${{ always() }}"}, False, id="job-coe-expression"),
+        pytest.param({"run": "gitleaks git", "if": "${{ 0 }}"}, {}, False, id="if-zero"),
+        pytest.param(
+            {"run": "gitleaks git", "if": "github.repository == 'nobody/none'"}, {}, False, id="if-impossible"
+        ),
+        pytest.param({"run": "gitleaks git"}, {"if": "false"}, False, id="job-if-false"),
+        pytest.param({"run": "gitleaks git || exit 0"}, {}, False, id="or-exit-zero"),
+        pytest.param({"run": "gitleaks git || echo ignored"}, {}, False, id="or-echo"),
+        pytest.param({"run": "if ! gitleaks git; then :; fi"}, {}, False, id="if-not-then-colon"),
+        pytest.param(
+            {"run": "scan() { set +o errexit; gitleaks git; }\nscan"}, {}, False, id="errexit-off-in-function"
+        ),
+        pytest.param({"run": "checkov -d . --soft-fail-on CKV_AWS_1"}, {}, False, id="checkov-soft-fail-on"),
+        pytest.param(
+            {"uses": "bridgecrewio/checkov-action@x", "with": {"soft_fail_on": "CKV_1"}},
+            {},
+            False,
+            id="soft-fail-on-key",
+        ),
+        # ...and what still blocks.
+        pytest.param({"run": "gitleaks git || { echo found; exit 1; }"}, {}, True, id="or-exits-non-zero"),
+        pytest.param({"run": "if ! gitleaks git; then echo found; exit 1; fi"}, {}, True, id="if-not-then-exit-1"),
+        pytest.param(
+            {"run": "gitleaks git", "if": "${{ !cancelled() && steps.sync.outcome == 'success' }}"},
+            {},
+            True,
+            id="allowed-condition",
+        ),
+        pytest.param({"run": "gitleaks git", "continue-on-error": False}, {}, True, id="coe-literal-false"),
     ],
 )
 def test_blocks_reads_every_suppression(step: dict, job: dict, blocks: bool) -> None:  # type: ignore[type-arg]
@@ -452,3 +513,10 @@ def test_blocks_reads_every_suppression(step: dict, job: dict, blocks: bool) -> 
 )
 def test_a_step_counts_only_if_it_runs_the_tool(step: dict, tool: str, runs: bool) -> None:  # type: ignore[type-arg]
     assert _runs(step, tool) is runs
+
+
+def test_every_allowed_condition_is_still_used() -> None:
+    """A condition kept on the allowlist after no control uses it is an exemption waiting for a new use."""
+    used = {" ".join(str(step.get("if", "")).split()) for _, step, _job in _steps()}
+    stale = sorted(set(ALLOWED_CONDITIONS) - used - {""})
+    assert not stale, f"allowed conditions no step carries any more: {stale}"

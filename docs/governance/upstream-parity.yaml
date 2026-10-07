@@ -168,6 +168,17 @@ artifacts:
       Adopted, adapted to a repository that has never released: it ties VERSION and the CHANGELOG together and states
       what may not be cut, rather than describing a cadence nothing has exercised yet. Also stood marked `pending`
       while present, for the same missing check.
+  - path: docs/CAPABILITIES.md
+    status: rejected
+    reason: >-
+      Rejected. Upstream moved its README's capability prose into this file when it adopted the README standard
+      both repositories share (ml-service-template #265). Here the standard is met without one: the README's
+      `What you get` table names, for each capability, the document or gate that shows it, and the status block is
+      generated from docs/architecture/implementation-status.md and the technology inventory, both derived from the
+      tree and checked in CI. A hand-written catalogue beside them would be a third copy of those facts, and the only
+      one nothing checks. Undecided from #265's merge until round eighteen, whose auditor's sibling was a git worktree
+      that this gate read as absent. Reverses to adopted if a capability needs more than a README row and the document
+      it links.
   - path: docs/TUTORIAL.md
     status: rejected
     reason: >-

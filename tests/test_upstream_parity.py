@@ -259,6 +259,41 @@ def test_the_online_half_degrades_honestly_without_the_checkout(monkeypatch: pyt
     assert any("not reachable" in note for note in parity.notes), "the skipped comparison must be stated, not hidden"
 
 
+def test_a_worktree_checkout_is_read_not_called_unreachable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """In a worktree `.git` is a file. Round eighteen's sibling was one, and the online half skipped it."""
+    import subprocess
+
+    import check_upstream_parity as parity
+
+    main, worktree = tmp_path / "main", tmp_path / "template_MLOps"
+    git = ["git", "-c", "user.email=t@example.com", "-c", "user.name=t", "-c", "commit.gpgsign=false"]
+    subprocess.run([*git, "init", "-q", str(main)], check=True)
+    (main / "Makefile").write_text("all:\n", encoding="utf-8")
+    subprocess.run([*git, "-C", str(main), "add", "Makefile"], check=True)
+    subprocess.run([*git, "-C", str(main), "commit", "-q", "-m", "x"], check=True)
+    subprocess.run([*git, "-C", str(main), "worktree", "add", "-q", str(worktree)], check=True)
+    assert (worktree / ".git").is_file(), "the fixture is not a worktree"
+    monkeypatch.setattr(parity, "TEMPLATE_CHECKOUT", worktree)
+
+    assert parity._upstream_files() == {"Makefile"}
+
+
+def test_a_checkout_git_cannot_read_fails_instead_of_skipping(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import check_upstream_parity as parity
+
+    broken = tmp_path / "template_MLOps"
+    broken.mkdir()
+    (broken / ".git").write_text("gitdir: /nowhere\n", encoding="utf-8")
+    monkeypatch.setattr(parity, "TEMPLATE_CHECKOUT", broken)
+    parity.failures.clear()
+    parity.notes.clear()
+
+    parity.check_against_upstream(_entries())
+
+    assert any("checked out but unreadable" in failure for failure in parity.failures), parity.failures
+    assert not any("not reachable" in note for note in parity.notes)
+
+
 def test_the_ledger_and_the_plan_describe_the_same_work() -> None:
     """Two lists of what to adopt, maintained apart, is how one becomes fiction.
 

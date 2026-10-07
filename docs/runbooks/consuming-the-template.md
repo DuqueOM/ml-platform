@@ -40,7 +40,7 @@ reads, so once it is gone the service cannot recover on its own.
 ## Generate a service
 
 ```bash
-copier copy --trust \
+uv run copier copy --trust \
   --vcs-ref=v0.31.0 \
   --data service_slug=demand_forecast_serving \
   --data service_name="Demand Forecast Serving" \
@@ -66,12 +66,15 @@ grep _commit services/demand-forecast-serving/.copier-answers.yml
 
 ## Update a service
 
-Never bare. Always to a named release, from inside the service directory:
+Never bare. Always to a named release, from inside the service directory, with
+the repository's locked copier: the service has a `pyproject.toml` of its own,
+so a plain `uv run` there would resolve the service's project, not this one.
+`--project` names the lock while copier runs in the service:
 
 ```bash
 cd services/demand-forecast-serving
-copier update --trust --vcs-ref=v0.31.0 --data service_name="Demand Forecast Serving" --pretend   # read the diff first
-copier update --trust --vcs-ref=v0.31.0 --data service_name="Demand Forecast Serving"
+uv run --project "$(git rev-parse --show-toplevel)" copier update --trust --vcs-ref=v0.31.0 --data service_name="Demand Forecast Serving" --pretend   # read the diff first
+uv run --project "$(git rev-parse --show-toplevel)" copier update --trust --vcs-ref=v0.31.0 --data service_name="Demand Forecast Serving"
 ```
 
 `--pretend` is not politeness. `update` performs a three-way merge into your
@@ -87,7 +90,7 @@ dry run. The service carries nothing customised, so regenerating it is what
 directory, `diff -rq` it against the committed service, and copy it over:
 
 ```bash
-copier copy --trust --defaults --vcs-ref=v0.31.0 \
+uv run copier copy --trust --defaults --vcs-ref=v0.31.0 \
   --data service_slug=demand_forecast_serving \
   --data service_name="Demand Forecast Serving" \
   --data gh_org=DuqueOM --data gh_repo=ml-platform --data profile=local \
