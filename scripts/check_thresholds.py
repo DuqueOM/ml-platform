@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import dataclasses
 import os
 import re
 import subprocess
@@ -91,6 +92,82 @@ def _bindings(tree: ast.Module, name: str) -> list[ast.expr | None]:
     return found
 
 
+#: Methods that read a container without changing it. Any other method called
+#: on a threshold's name may change the value the program uses.
+_READS = frozenset(
+    {"get", "keys", "values", "items", "copy", "count", "index", "__contains__", "__getitem__", "__len__"}
+)
+#: Builtins that reach a module's namespace or run code this cannot read.
+_NAMESPACE_CALLS = frozenset({"globals", "vars", "locals", "exec", "eval", "__import__"})
+
+
+def _root(node: ast.expr) -> ast.expr:
+    """The name a chain of subscripts and attributes starts from: `A` in `A["k"].x[0]`."""
+    while isinstance(node, ast.Subscript | ast.Attribute):
+        node = node.value
+    return node
+
+
+def _changed_elsewhere(tree: ast.Module, name: str) -> str | None:
+    """How the module changes `name` other than by binding it, or None.
+
+    QA-4 round eighteen: `globals()["MIN_SKILL"] = 0.0`, `setattr(sys.modules[__name__], …)`,
+    a star import, `MINIMUM_REUSE["rag-assistant"] = 0` and `ML_PACKAGES.update(…)` each changed
+    the value the program uses while the one `NAME = <literal>` the gate read stayed put.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and any(alias.name == "*" for alias in node.names):
+            return f"`from {node.module} import *` can rebind it"
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id in _NAMESPACE_CALLS:
+                return f"`{node.func.id}()` reaches the module namespace, which can rebind it"
+            if node.func.id in ("setattr", "delattr") and len(node.args) >= 2:
+                attribute = node.args[1]
+                if not isinstance(attribute, ast.Constant) or attribute.value == name:
+                    return f"`{node.func.id}(…)` can rebind it"
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            receiver = _root(node.func.value)
+            if isinstance(receiver, ast.Name) and receiver.id == name and node.func.attr not in _READS:
+                return f"`{name}…{node.func.attr}()` can change it after it is bound"
+        targets: list[ast.expr] = []
+        if isinstance(node, ast.Assign):
+            targets = list(node.targets)
+        elif isinstance(node, ast.AugAssign | ast.AnnAssign):
+            targets = [node.target]
+        elif isinstance(node, ast.Delete):
+            targets = list(node.targets)
+        for target in targets:
+            for element in target.elts if isinstance(target, ast.Tuple | ast.List) else [target]:
+                if isinstance(element, ast.Attribute) and element.attr == name:
+                    return f"`{ast.unparse(element)}` rebinds it through a module object"
+                if isinstance(element, ast.Subscript | ast.Attribute):
+                    root = _root(element)
+                    if isinstance(root, ast.Name) and root.id == name:
+                        return f"`{ast.unparse(element)}` changes it after it is bound"
+                if isinstance(node, ast.Delete) and isinstance(element, ast.Name) and element.id == name:
+                    return "`del` unbinds it"
+    return None
+
+
+def _plain_class(tree: ast.Module, name: str, what: str) -> ast.ClassDef:
+    """The class a field is read from, when its instances hold exactly what the constructor was given."""
+    classes = [node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == name]
+    if len(classes) != 1:
+        raise ValueError(f"{what}: class {name} is not defined once in this module")
+    (cls,) = classes
+    if cls.bases or cls.keywords:
+        raise ValueError(f"{what}: {name} inherits behaviour this cannot read")
+    for decorator in cls.decorator_list:
+        called = decorator.func if isinstance(decorator, ast.Call) else decorator
+        if ast.unparse(called) not in ("dataclass", "dataclasses.dataclass"):
+            raise ValueError(f"{what}: {name} is decorated with {ast.unparse(decorator)}, which this cannot read")
+    hooks = {"__init__", "__post_init__", "__new__", "__setattr__", "__init_subclass__", "__getattribute__"}
+    for node in cls.body:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and node.name in hooks:
+            raise ValueError(f"{what}: {name}.{node.name} can change a field after the constructor sets it")
+    return cls
+
+
 def _literal(node: ast.expr | None, what: str) -> float:
     if node is None:
         raise ValueError(f"{what} is bound by something other than a literal")
@@ -112,10 +189,8 @@ def _field(tree: ast.Module, call: ast.expr | None, field: str, what: str) -> fl
             return _literal(keyword.value, what)
     if any(keyword.arg is None for keyword in call.keywords):
         raise ValueError(f"{what} is built with **kwargs, which hides the value")
-    classes = [node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == call.func.id]
-    if len(classes) != 1:
-        raise ValueError(f"{what}: class {call.func.id} is not defined once in this module")
-    fields = [node for node in classes[0].body if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)]
+    cls = _plain_class(tree, call.func.id, what)
+    fields = [node for node in cls.body if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)]
     names = [node.target.id for node in fields if isinstance(node.target, ast.Name)]
     if field not in names:
         raise ValueError(f"{what}: {call.func.id} declares no field {field}")
@@ -134,7 +209,10 @@ def python_value(text: str, symbol: str) -> float | None:
     gate reads. Anything else that binds the name — a second assignment, a
     tuple target, `+=`, a loop variable, an import — is refused, because the
     value the program uses would then depend on order and control flow, which
-    is the gap a text pattern left open.
+    is the gap a text pattern left open. So is anything that changes it without
+    binding it: a store through a subscript or an attribute, a mutating method,
+    `globals()`, `setattr`, a star import, and a constructor hook on the class a
+    field is read from (round eighteen).
     """
     match = _SYMBOL.match(symbol)
     if match is None:
@@ -164,6 +242,9 @@ def python_value(text: str, symbol: str) -> float | None:
         }
         if arg not in defaults:
             raise ValueError(f"{symbol}: {name} has no default for {arg}")
+        changed = _changed_elsewhere(tree, name)  # `name.__defaults__ = …`, `setattr(name, …)`
+        if changed:
+            raise ValueError(f"{symbol}: {changed}; a threshold is defined once")
         return _literal(defaults[arg], symbol)
 
     bound = _bindings(tree, name)
@@ -171,6 +252,9 @@ def python_value(text: str, symbol: str) -> float | None:
         return None
     if len(bound) > 1:
         raise ValueError(f"{symbol}: {name} is bound {len(bound)} times; a threshold is defined once")
+    changed = _changed_elsewhere(tree, name)
+    if changed:
+        raise ValueError(f"{symbol}: {changed}; a threshold is defined once")
     value = bound[0]
     if key is not None:
         if not isinstance(value, ast.Dict):
@@ -519,12 +603,51 @@ def _at_head(path: str) -> str | None:
 #: commit's `check_thresholds` and prints its watch list. Its own imports
 #: (the floors table, today) resolve against the same copy, so the list is
 #: exactly what that commit watched.
+#: Every field of every baseline threshold, not a chosen few. It serialised four
+#: — name, path, pattern, direction — and #125 added `symbol`: a baseline that
+#: read its numbers by value came back with an empty pattern, which matches
+#: every line, and the gate crashed against any baseline from that commit on
+#: (QA-4 round eighteen, P0). `dataclasses.asdict` carries whatever the
+#: baseline's `Threshold` declares, and `_rebuild` refuses a field it does not
+#: know rather than dropping it.
 _DEFINITIONS = """
-import json, sys
+import dataclasses, json, sys
 sys.path.insert(0, sys.argv[1])
 import check_thresholds as baseline
-print(json.dumps([[t.name, t.path, t.pattern, t.higher_is_stricter] for t in baseline.THRESHOLDS]))
+print(json.dumps([dataclasses.asdict(t) for t in baseline.THRESHOLDS]))
 """
+
+
+def _rebuild(fields: dict[str, object]) -> Threshold:
+    """A baseline threshold as a current `Threshold`, from every field the baseline serialised.
+
+    A field this code does not know is a meaning it cannot honour, so it is an
+    error, not something to skip; a field the baseline predates takes the
+    current default — `symbol` is empty before #125, which is what it meant then.
+    """
+    known = {field.name for field in dataclasses.fields(Threshold)}
+    unknown = sorted(set(fields) - known)
+    if unknown:
+        raise ValueError(f"the baseline's Threshold declares {unknown}, which this gate does not understand")
+    values = dict(fields)
+    values["renamed_from"] = _predecessors(values.get("renamed_from"))
+    return Threshold(**values)  # type: ignore[arg-type]
+
+
+def _predecessors(raw: object) -> tuple[tuple[str, float], ...]:
+    """`renamed_from` in any shape a baseline used: none, one `(name, factor)` pair (pre-round-16), or several."""
+    if raw is None:
+        return ()
+    if not isinstance(raw, list | tuple):
+        raise ValueError(f"unreadable renamed_from at the baseline: {raw!r}")
+    if len(raw) == 2 and isinstance(raw[0], str) and isinstance(raw[1], int | float):
+        return ((raw[0], float(raw[1])),)
+    pairs = []
+    for pair in raw:
+        if not (isinstance(pair, list | tuple) and len(pair) == 2 and isinstance(pair[0], str)):
+            raise ValueError(f"unreadable renamed_from entry at the baseline: {pair!r}")
+        pairs.append((pair[0], float(pair[1])))
+    return tuple(pairs)
 
 
 def _baseline_definitions(ref: str) -> list[Threshold] | None:
@@ -573,7 +696,7 @@ def _baseline_definitions(ref: str) -> list[Threshold] | None:
         return None
     import json
 
-    return [Threshold(name, path, pattern, stricter) for name, path, pattern, stricter in json.loads(listed.stdout)]
+    return [_rebuild(fields) for fields in json.loads(listed.stdout)]
 
 
 def _value_at_baseline(threshold: Threshold) -> float | None:
@@ -660,14 +783,15 @@ def compare() -> list[str]:
                 source = same_name.path if same_name.path == threshold.path else f"{same_name.path} (moved)"
                 previous.append((value, source))
             here = REPO_ROOT / same_name.path
-            if (same_name.path, same_name.pattern) != (threshold.path, threshold.pattern) and here.is_file():
+            where_baseline = (same_name.path, same_name.pattern, same_name.symbol)
+            if where_baseline != (threshold.path, threshold.pattern, threshold.symbol) and here.is_file():
                 try:
                     still = same_name.read(here.read_text(encoding="utf-8"))
                 except ValueError as ambiguous:
                     weakened.append(str(ambiguous))
                     continue
                 if still is not None:
-                    current_values.append((still, f"{same_name.path}, by the baseline's own pattern"))
+                    current_values.append((still, f"{same_name.path}, by the baseline's own definition"))
         else:
             own = _value_at_baseline(threshold)
             if own is not None:

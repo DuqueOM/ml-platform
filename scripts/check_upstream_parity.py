@@ -181,9 +181,21 @@ def _detached_environment() -> dict[str, str]:
     return {key: value for key, value in os.environ.items() if key not in _GIT_ENVIRONMENT}
 
 
+class UpstreamUnreadableError(RuntimeError):
+    """A checkout is there and git cannot list it — which is not the same as no checkout."""
+
+
 def _upstream_files() -> set[str] | None:
-    """Tracked files upstream, or None when the checkout is not reachable."""
-    if not (TEMPLATE_CHECKOUT / ".git").is_dir():
+    """Tracked files upstream, or None when there is no checkout.
+
+    `.git` is a directory in a clone and a FILE in a worktree or a submodule.
+    Testing for a directory read a worktree checkout as absent, so the online
+    half reported "not reachable" beside a sibling that C2 and the README
+    test were reading at that moment (QA-4 round eighteen). A checkout that is
+    there but cannot be listed raises instead: reporting it as absent would
+    turn a broken comparison into a skipped one.
+    """
+    if not (TEMPLATE_CHECKOUT / ".git").exists():
         return None
     result = subprocess.run(
         ["git", "-C", str(TEMPLATE_CHECKOUT), "ls-files"],
@@ -193,6 +205,10 @@ def _upstream_files() -> set[str] | None:
         env=_detached_environment(),
         timeout=SUBPROCESS_TIMEOUT_SECONDS,
     )
+    if result.returncode != 0:
+        raise UpstreamUnreadableError(
+            f"{TEMPLATE_CHECKOUT} has a .git, and `git ls-files` fails there: {result.stderr.strip()}"
+        )
     return {
         line
         for line in result.stdout.splitlines()
@@ -284,7 +300,11 @@ def check_offline(entries: list[dict], today: date | None = None) -> None:  # ty
 
 def check_against_upstream(entries: list[dict]) -> None:  # type: ignore[type-arg]
     """The half that keeps the ledger from going stale, when upstream is reachable."""
-    upstream = _upstream_files()
+    try:
+        upstream = _upstream_files()
+    except UpstreamUnreadableError as unreadable:
+        fail(f"upstream is checked out but unreadable — {unreadable}")
+        return
     if upstream is None:
         ok(f"upstream not reachable at {TEMPLATE_CHECKOUT.name}/ — ledger checked for consistency only")
         return
@@ -324,7 +344,11 @@ def main() -> int:
     entries = _ledger()
 
     if args.report:
-        upstream = _upstream_files()
+        try:
+            upstream = _upstream_files()
+        except UpstreamUnreadableError as unreadable:
+            print(f"[parity] upstream checked out but unreadable: {unreadable}")
+            return 1
         if upstream is None:
             print(f"[parity] upstream not reachable at {TEMPLATE_CHECKOUT}")
             return 0

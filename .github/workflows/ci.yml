@@ -279,6 +279,35 @@ jobs:
         # that chain has proven.
         run: uv run python scripts/check_readme.py
 
+      # The standard and its checker are shared byte for byte with
+      # ml-service-template, pinned by SHA-256 in both. Until QA-4 round
+      # eighteen the comparison ran only where both repositories were checked
+      # out side by side, never here, so the pin held each repository only to
+      # itself. Its two files, at the commit this pins: bump the pin in the PR
+      # that changes them here, after the template's matching PR merges. The
+      # weekly job in docs-quality.yml compares with the template's main, so a
+      # change made there alone is noticed too.
+      - name: Check out ml-service-template's half of the shared README standard
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: DuqueOM/ml-service-template
+          ref: 6e3a2f6625ecc718324dd0f530abe6511d9a2d4e # main after ml-service-template#267
+          path: .sibling/ml-service-template
+          persist-credentials: false
+          sparse-checkout: |
+            docs/governance/readme-standard.md
+            scripts/readme_standard.py
+          sparse-checkout-cone-mode: false
+
+      - name: The README standard is the same in both repositories (P19)
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        # With README_STANDARD_SIBLING set, a missing checkout fails the test
+        # instead of skipping it.
+        env:
+          README_STANDARD_SIBLING: ${{ github.workspace }}/.sibling/ml-service-template
+        run: uv run pytest -o addopts= -q -p no:randomly tests/test_readme_standard.py -k sibling
+
 
   tests:
     name: Tests and coverage

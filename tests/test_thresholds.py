@@ -500,7 +500,7 @@ def test_retargeting_the_pattern_at_another_constant_fails(tmp_path: Path, monke
         (("line floor", "gate.py", r"OTHER = ([\d.]+)"), {}),
     )
 
-    assert any("line floor: 0.9 -> 0.1 (lowered)" in f and "baseline's own pattern" in f for f in failures), failures
+    assert any("line floor: 0.9 -> 0.1 (lowered)" in f and "baseline's own definition" in f for f in failures), failures
 
 
 @pytest.mark.parametrize(
@@ -600,6 +600,16 @@ PACKAGE = "class P:\n    lines: int = 0\n    branches: int = 0\n\n"
         pytest.param('FLOORS = {"rag": 3, "x": 1}\n', 'FLOORS["rag"]', 3, id="dict-entry"),
         pytest.param(PACKAGE + 'F = {"d": P(lines=83, branches=71)}\n', 'F["d"].branches', 71, id="dict-entry-field"),
         pytest.param("OTHER = 1\n", "MIN_SKILL", None, id="absent"),
+        # Reading a container is not changing it.
+        pytest.param(
+            'F = {"rag": 3}\nfor k, v in F.items():\n    print(F.get(k))\n', 'F["rag"]', 3, id="read-only-use"
+        ),
+        pytest.param(
+            DATACLASS.replace("@dataclass", "@dataclass(frozen=True)") + "\nDESIGN = D()\n",
+            "DESIGN.n_folds",
+            5,
+            id="frozen-dataclass",
+        ),
     ],
 )
 def test_python_value_reads_the_binding_the_program_uses(source: str, symbol: str, value: float | None) -> None:
@@ -618,8 +628,103 @@ def test_python_value_reads_the_binding_the_program_uses(source: str, symbol: st
         pytest.param("class D:\n    n: int = 5\n\nDESIGN = D(**cfg)\n", "DESIGN.n", "kwargs", id="hidden-by-kwargs"),
         pytest.param('F = {**base, "x": 1}\n', 'F["x"]', "unpacks", id="hidden-by-unpacking"),
         pytest.param("def f(m=0.05): ...\ndef f(m=0.0): ...\n", "f(m)", "defined 2 times", id="redefined-function"),
+        # Round eighteen: each changes the value the program uses without a second `NAME =`.
+        pytest.param("MIN_SKILL = 0.05\nglobals()['MIN_SKILL'] = 0.0\n", "MIN_SKILL", "globals", id="globals"),
+        pytest.param(
+            "import sys\nMIN_SKILL = 0.05\nsetattr(sys.modules[__name__], 'MIN_SKILL', 0.0)\n",
+            "MIN_SKILL",
+            "setattr",
+            id="setattr",
+        ),
+        pytest.param("MIN_SKILL = 0.05\nsetattr(m, name, 0.0)\n", "MIN_SKILL", "setattr", id="setattr-dynamic"),
+        pytest.param(
+            "import sys\nMIN_SKILL = 0.05\nsys.modules[__name__].MIN_SKILL = 0.0\n",
+            "MIN_SKILL",
+            "module object",
+            id="module-attribute",
+        ),
+        pytest.param("MIN_SKILL = 0.05\nfrom overrides import *\n", "MIN_SKILL", "import \\*", id="star-import"),
+        pytest.param("MIN_SKILL = 0.05\nexec(code)\n", "MIN_SKILL", "exec", id="exec"),
+        pytest.param("MIN_SKILL = 0.05\ndel MIN_SKILL\n", "MIN_SKILL", "unbinds", id="deleted"),
+        pytest.param(
+            'FLOORS = {"rag": 3}\nFLOORS["rag"] = 0\n', 'FLOORS["rag"]', "changes it after", id="subscript-store"
+        ),
+        pytest.param(
+            'FLOORS = {"rag": 3}\nFLOORS["rag"] -= 3\n', 'FLOORS["rag"]', "changes it after", id="subscript-aug"
+        ),
+        pytest.param('FLOORS = {"rag": 3}\nFLOORS.update(rag=0)\n', 'FLOORS["rag"]', "update", id="mutating-method"),
+        pytest.param(
+            'FLOORS = {"rag": 3}\nFLOORS.setdefault("x", 0)\n', 'FLOORS["rag"]', "setdefault", id="setdefault"
+        ),
+        pytest.param(
+            PACKAGE + 'F = {"d": P(lines=83, branches=71)}\nF["d"].branches = 1\n',
+            'F["d"].branches',
+            "changes it after",
+            id="field-store",
+        ),
+        pytest.param(
+            DATACLASS
+            + "    def __post_init__(self):\n        object.__setattr__(self, 'n_folds', 2)\n\nDESIGN = D()\n",
+            "DESIGN.n_folds",
+            "__post_init__",
+            id="post-init",
+        ),
+        pytest.param(
+            "class D(Base):\n    n_folds: int = 5\n\nDESIGN = D()\n", "DESIGN.n_folds", "inherits", id="inherited-hooks"
+        ),
+        pytest.param(
+            "@other\nclass D:\n    n_folds: int = 5\n\nDESIGN = D()\n", "DESIGN.n_folds", "decorated", id="decorated"
+        ),
+        pytest.param(
+            "def f(m=0.05): ...\nf.__defaults__ = (0.0,)\n", "f(m)", "changes it after", id="function-defaults-rebound"
+        ),
     ],
 )
 def test_python_value_refuses_what_it_cannot_pin(source: str, symbol: str, refusal: str) -> None:
     with pytest.raises(ValueError, match=refusal):
         gate.python_value(source, symbol)
+
+
+# --- the baseline is read with every field it declares (QA-4 round eighteen, P0) ----
+
+
+def test_the_gate_reads_its_own_definitions_as_a_baseline() -> None:
+    """The next commit's baseline is this one; it crashed when `symbol` was dropped and an empty pattern matched all."""
+    result = _run_with_baseline("HEAD")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "watched, none loosened against HEAD" in result.stdout
+
+
+def _run_with_baseline(ref: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(SCRIPT)],
+        capture_output=True,
+        text=True,
+        cwd=REPO_ROOT,
+        timeout=120,
+        env={**os.environ, "THRESHOLD_BASELINE_REF": ref},
+    )
+
+
+def test_every_field_of_a_threshold_survives_the_round_trip() -> None:
+    import dataclasses
+
+    for threshold in gate.THRESHOLDS:
+        assert gate._rebuild(dataclasses.asdict(threshold)) == threshold, threshold.name
+
+
+def test_a_baseline_field_this_gate_does_not_know_is_refused() -> None:
+    with pytest.raises(ValueError, match="does not understand"):
+        gate._rebuild({"name": "x", "path": "y", "pattern": "", "symbol": "X", "weight": 2})
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        pytest.param(None, (), id="none-before-renames"),
+        pytest.param(["old name", 100], (("old name", 100.0),), id="one-pair-before-round-sixteen"),
+        pytest.param([["a", 1], ["b", 100]], (("a", 1.0), ("b", 100.0)), id="several"),
+    ],
+)
+def test_every_historical_renamed_from_shape_is_read(raw: object, expected: tuple) -> None:  # type: ignore[type-arg]
+    assert gate._predecessors(raw) == expected

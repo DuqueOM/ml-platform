@@ -40,6 +40,12 @@ STANDARD = REPO_ROOT / "docs" / "governance" / "readme-standard.md"
 STATUS_DOC = REPO_ROOT / "docs" / "architecture" / "implementation-status.md"
 AGENTS = REPO_ROOT / "AGENTS.md"
 AUDITS = REPO_ROOT / "docs" / "governance" / "qa4"
+WORKFLOWS = REPO_ROOT / ".github" / "workflows"
+
+#: Where the quick start clones this repository from, and the branch whose
+#: README a reader is reading — the one CI verifies at every merge.
+CLONE_URL = "https://github.com/DuqueOM/ml-platform.git"
+DEFAULT_BRANCH = "main"
 
 #: Badges that show a NUMBER, allowed only because a gate in this repository
 #: already compares that number with its source — each paired with that gate.
@@ -123,9 +129,30 @@ def status() -> str:
 # --- the checks: the shared half -------------------------------------------
 
 
+def _holds(path: str) -> bool:
+    """Whether ``path`` names a file in this checkout, relative to its root and without `..`."""
+    relative = Path(path)
+    if relative.is_absolute() or ".." in relative.parts:
+        return False
+    target = (REPO_ROOT / relative).resolve()
+    return target.is_relative_to(REPO_ROOT) and target.is_file()
+
+
+def repository() -> readme_standard.Repository:
+    """What the quick-start rules need to know about this repository, read from it."""
+    workflows = sorted(WORKFLOWS.glob("*.yml")) + sorted(WORKFLOWS.glob("*.yaml"))
+    return readme_standard.Repository(
+        clone_url=CLONE_URL,
+        default_branch=DEFAULT_BRANCH,
+        ci_requirements=readme_standard.requirements_installed_by(p.read_text(encoding="utf-8") for p in workflows),
+        holds=_holds,
+    )
+
+
 def check(readme: str, standard: str, generated: str) -> list[str]:
     """One message per departure from the standard. Empty means the README conforms."""
-    return readme_standard.check(readme, standard, generated, tuple(pattern for pattern, _ in GATED_BADGES))
+    badges = tuple(pattern for pattern, _ in GATED_BADGES)
+    return readme_standard.check(readme, standard, generated, badges, repository=repository())
 
 
 def write(readme: str, generated: str, standard: str) -> str:

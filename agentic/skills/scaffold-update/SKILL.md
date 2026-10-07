@@ -78,7 +78,7 @@ If either check fails → STOP with a clear message.
 Show what would change without applying:
 
 ```bash
-copier update --trust --vcs-ref=v0.24.0 --pretend
+uv run --project "$(git rev-parse --show-toplevel)" copier update --trust --vcs-ref=v0.24.0 --pretend
 ```
 
 Categorize the diff:
@@ -100,7 +100,7 @@ Wait for explicit approval before proceeding.
 ### Step 4 — Apply update (CONSULT → approved)
 
 ```bash
-copier update --trust --defaults --vcs-ref=v0.24.0
+uv run --project "$(git rev-parse --show-toplevel)" copier update --trust --defaults --vcs-ref=v0.24.0
 ```
 
 Copier will:

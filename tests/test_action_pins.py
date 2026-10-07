@@ -400,11 +400,45 @@ def _step(*lines: str) -> str:
             "under `set +e`",
             id="set-plus-o-errexit",
         ),
+        # QA-4 round eighteen: both passed P10.
+        pytest.param(
+            [_PINNED, 'echo "abc123  tool" | sha256sum -c - &', "chmod +x tool"],
+            "without verifying its digest",
+            id="check-backgrounded",
+        ),
+        pytest.param(
+            [_PINNED, 'if ! echo "abc123  tool" | sha256sum -c -; then echo skip; fi'],
+            "without verifying its digest",
+            id="check-in-a-condition-that-does-not-exit",
+        ),
+        pytest.param(
+            [_PINNED, 'echo "abc123  tool" | sha256sum -c - || echo "mismatch, continuing"'],
+            "without verifying its digest",
+            id="check-swallowed-by-echo",
+        ),
+        pytest.param(
+            [_PINNED, 'echo "abc123  tool" | sha256sum -c - && echo verified', "chmod +x tool"],
+            "without verifying its digest",
+            id="check-in-an-and-list-before-more-commands",
+        ),
     ],
 )
 def test_p10_sees_every_way_a_download_escaped_it(tmp_path: Path, monkeypatch, lines: list[str], expected: str) -> None:  # type: ignore[no-untyped-def]
     failures = _all_failures(tmp_path, monkeypatch, _step(*lines))
     assert any(expected in failure for failure in failures), failures
+
+
+@pytest.mark.parametrize(
+    "check",
+    [
+        pytest.param('if ! echo "abc123  tool" | sha256sum -c -; then exit 1; fi', id="condition-that-exits"),
+        pytest.param('echo "abc123  tool" | sha256sum -c - || exit 1', id="or-exit"),
+        pytest.param('echo "abc123  tool" | sha256sum -c - 2>&1', id="redirection-is-not-background"),
+        pytest.param('echo "abc123  tool" | sha256sum -c - && echo verified', id="and-list-as-the-last-command"),
+    ],
+)
+def test_p10_accepts_a_check_whose_failure_fails_the_step(tmp_path: Path, monkeypatch, check: str) -> None:  # type: ignore[no-untyped-def]
+    assert _all_failures(tmp_path, monkeypatch, _step(_PINNED, check)) == []
 
 
 def test_p10_accepts_a_download_verified_by_name(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]

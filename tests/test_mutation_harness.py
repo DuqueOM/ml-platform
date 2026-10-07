@@ -53,16 +53,58 @@ def test_every_mutation_names_what_must_catch_it(mutation: dict) -> None:
                 assert (REPO_ROOT / token).exists(), f"{mutation['id']} runs {token}, which does not exist"
 
 
-def _implemented_gates() -> set[str]:
-    """Every gate row in quality-gates.md that names a command and is not marked pending (⏳)."""
+def _gate_commands() -> dict[str, str]:
+    """Every gate row in quality-gates.md that names a command and is not marked pending (⏳), with its command."""
     import re
 
     text = (REPO_ROOT / "docs" / "governance" / "quality-gates.md").read_text(encoding="utf-8")
     return {
-        match.group(1)
-        for match in re.finditer(r"^\| ([A-Z]\d+)( ⏳| ⚠️)? \| [^|]+ \| `[^`]+`", text, re.MULTILINE)
+        match.group(1): match.group(3)
+        for match in re.finditer(r"^\| ([A-Z]\d+)( ⏳| ⚠️)? \| [^|]+ \| `([^`]+)`", text, re.MULTILINE)
         if not match.group(2)
     }
+
+
+def _implemented_gates() -> set[str]:
+    return set(_gate_commands())
+
+
+#: Gates whose command is a tool rather than a script here: the test files that
+#: run that tool as CI runs it, or that hold CI's step running it to blocking.
+#: Reviewed by hand, each with what it does.
+TOOL_GATE_HOLDERS = {
+    "P2": ("tests/test_type_gate_enforces_its_config.py",),  # runs mypy with CI's config over a planted error
+    "P3": ("tests/test_lint_gate.py",),  # runs CI's own `ruff check` line over a planted finding
+    "P5": ("tests/test_security_controls.py",),  # holds CI's gitleaks step to blocking, in every spelling
+    "P9": ("tests/test_security_controls.py",),  # holds `uv lock --check` to a lock nothing repaired first
+}
+
+
+def _test_files(runs: str) -> list[Path]:
+    import re
+
+    return [REPO_ROOT / name for name in re.findall(r"[\w./-]*tests/[\w/]+\.py", runs) if (REPO_ROOT / name).is_file()]
+
+
+def _runs_the_gate(mutation: dict, command: str, gate: str) -> bool:  # type: ignore[type-arg]
+    """Whether what the entry runs is the gate itself: its command, its script, or a test that executes either."""
+    import re
+
+    runs = " ".join(mutation["run"])
+    script = re.search(r"scripts/([\w/]+)\.py", command)
+    if script:
+        module = script.group(1).rsplit("/", 1)[-1]
+        return module in runs or any(re.search(rf"\b{module}\b", path.read_text()) for path in _test_files(runs))
+    test = re.search(r"tests/[\w/]+\.py", command)
+    if test:
+        return test.group(0) in runs
+    selector = re.search(r"-k (\w+)", command)
+    if selector:
+        name = selector.group(1)
+        return any(
+            name in path.name or re.search(rf"def test\w*{name}", path.read_text()) for path in _test_files(runs)
+        )
+    return any(holder in runs for holder in TOOL_GATE_HOLDERS.get(gate, ()))
 
 
 def test_every_implemented_gate_is_broken_by_at_least_one_mutation() -> None:
@@ -72,11 +114,32 @@ def test_every_implemented_gate_is_broken_by_at_least_one_mutation() -> None:
     P13, P15, C0 — that no entry ever broke, under a README claiming every
     gate was watched failing. Each entry names the gates it breaks in `gates`,
     and an implemented gate with none fails here.
+
+    Round eighteen: a label was enough. Four entries that edit the pre-commit
+    hooks carried P2 and P3, and deleting the only entries that break mypy and
+    ruff left this green. So an entry counts for a gate only when what it runs
+    IS that gate — the gate's command, its script, or a test that executes it.
     """
-    gates = _implemented_gates()
-    assert len(gates) >= 15, f"only {len(gates)} gate rows parsed — the pattern stopped matching"
-    covered = {gate for mutation in CATALOGUE for gate in mutation.get("gates", [])}
-    assert not sorted(gates - covered), f"implemented gates no mutation breaks: {sorted(gates - covered)}"
+    commands = _gate_commands()
+    assert len(commands) >= 15, f"only {len(commands)} gate rows parsed — the pattern stopped matching"
+    covered = {
+        gate
+        for mutation in CATALOGUE
+        for gate in mutation.get("gates", [])
+        if gate in commands and _runs_the_gate(mutation, commands[gate], gate)
+    }
+    assert not sorted(set(commands) - covered), (
+        f"implemented gates no mutation breaks through the gate itself: {sorted(set(commands) - covered)}"
+    )
+
+
+def test_every_tool_gate_holder_runs_the_tool() -> None:
+    """A holder named above must still mention the tool it is said to run, so a rename cannot leave a label."""
+    commands = _gate_commands()
+    for gate, holders in TOOL_GATE_HOLDERS.items():
+        tool = commands[gate].removeprefix("uv run ").split()[0]
+        for holder in holders:
+            assert tool in (REPO_ROOT / holder).read_text(), f"{holder} no longer mentions `{tool}`, the {gate} tool"
 
 
 def test_every_gate_a_mutation_names_exists() -> None:
@@ -154,6 +217,33 @@ def test_an_uncommitted_catalogue_entry_can_be_run_and_survives_the_restore(sand
     catalogue.write_text(added)
     assert mutation_harness.main(["added"]) == 0
     assert catalogue.read_text() == added, "the restore reverted the auditor's uncommitted entries"
+
+
+def test_a_mutation_of_the_catalogue_itself_is_restored(sandbox: Path) -> None:
+    """The restore spares the catalogue, so a mutation OF it was left applied (round eighteen, R18-GATE1)."""
+    catalogue = sandbox / "tests" / "mutations.yaml"
+    import yaml
+
+    # A tab: the entry's own `old` is written with it escaped, so the literal
+    # occurs once in the file — in the comment line this mutation edits.
+    marker = "# marker:\toriginal"
+    data = yaml.safe_load(catalogue.read_text())
+    data["mutations"].append(
+        {
+            "id": "self",
+            "file": "tests/mutations.yaml",
+            "old": marker,
+            "new": "# marker: mutated",
+            "run": [f'{sys.executable} -c "import sys; sys.exit(1)"'],
+            "expect": "killed",
+        }
+    )
+    before = marker + "\n" + yaml.safe_dump(data)
+    assert before.count(marker) == 1
+    catalogue.write_text(before)
+
+    assert mutation_harness.main(["self"]) == 0
+    assert catalogue.read_text() == before, "the catalogue was left mutated"
 
 
 def test_any_other_uncommitted_change_is_refused(sandbox: Path, capsys: pytest.CaptureFixture[str]) -> None:

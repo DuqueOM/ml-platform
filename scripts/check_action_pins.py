@@ -112,8 +112,15 @@ _URL = re.compile(r"https?://[^\s\"'|;&]+")
 #: A download piped straight into an interpreter: the bytes run before anything
 #: could check them, whatever host they came from.
 _PIPED_TO_SHELL = re.compile(r"\b(?:curl|wget)\b[^\n]*\|\s*(?:sudo\s+)?(?:ba|z|da)?sh\b")
-#: A shell construct that discards an exit status on the same line.
-_SWALLOWED = re.compile(r"\|\|\s*(?:true|:)\b")
+#: `||` whose branch does not itself fail: `|| true`, `|| :`, `|| echo skipped`.
+_SWALLOWED = re.compile(r"\|\|(?![^\n]*(?:\bexit\s+[1-9]|\bfalse\b))")
+#: A single `&`: the command runs in the background and the step never waits
+#: for its status. Not `&&`, and not the `&` of a redirection (`2>&1`, `&>`).
+_BACKGROUND = re.compile(r"(?<![&|>])&(?![&>])")
+#: The check run as a condition, or negated: its status is consumed by the
+#: construct, and errexit does not apply to it.
+_CONDITION = re.compile(r"^\s*(?:if|elif|while|until)\b|(?:^|[;&|]|\bthen|\bdo|\belse)\s*!\s")
+_FAILS = re.compile(r"\bexit\s+[1-9]|\bfalse\b|\breturn\s+[1-9]")
 
 
 #: `set +e`, alone or among other flags, and its long spelling: the shell stops
@@ -135,6 +142,34 @@ def _commands(run: str) -> list[str]:
             continue
         lines.append(re.sub(r"\s+#\s.*$", "", stripped))
     return lines
+
+
+def _status_consumed(lines: list[str], position: int) -> bool:
+    """Whether a digest check's failure can pass unnoticed: swallowed, backgrounded, or consumed by a condition.
+
+    Round eighteen passed P10 with `sha256sum -c - &` (backgrounded: the step
+    never waits for it) and `if ! sha256sum -c -; then echo skip; fi` (the
+    status is the condition's, so errexit never sees it). A condition counts
+    only when its failing branch exits non-zero; a check followed by `&&` only
+    when it is the step's last command, since errexit ignores a failure in an
+    `&&` list everywhere else.
+    """
+    line = lines[position]
+    match = _DIGEST_CHECK.search(line)
+    assert match is not None
+    after = line[match.end() :]
+    if _SWALLOWED.search(after) or _BACKGROUND.search(after):
+        return True
+    if "&&" in after and position != len(lines) - 1:
+        return True
+    if _CONDITION.search(line[: match.start()]):
+        span = []
+        for following in lines[position:]:
+            span.append(following)
+            if re.search(r"\b(?:fi|done)\b", following):
+                break
+        return not any(_FAILS.search(text) for text in span)
+    return False
 
 
 def _download_targets(line: str) -> list[str]:
@@ -168,7 +203,7 @@ def _unverified_downloads(workflow: Path) -> list[str]:
             checks = [
                 (position, line)
                 for position, line in enumerate(lines)
-                if _DIGEST_CHECK.search(line) and not _SWALLOWED.search(line)
+                if _DIGEST_CHECK.search(line) and not _status_consumed(lines, position)
             ]
             downloads = any(_DOWNLOAD.search(line) for line in lines)
             if downloads and any(_ERREXIT_OFF.match(line) for line in lines):
@@ -186,8 +221,9 @@ def _unverified_downloads(workflow: Path) -> list[str]:
                     if not any(names_it.search(check) for after, check in checks if after > position):
                         found.append(
                             f"{where} downloads {target!r} without verifying its digest: no `sha256sum -c` of "
-                            f"that file AFTER the download in the same step (one that names it, and is not "
-                            f"followed by `|| true`)"
+                            f"that file AFTER the download in the same step (one that names it, and whose failure "
+                            f"fails the step: not swallowed by `||`, backgrounded with `&`, or consumed by a "
+                            f"condition that does not exit)"
                         )
     return found
 

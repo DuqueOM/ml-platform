@@ -29,7 +29,7 @@ required for `copier update`.
 ## 2. Dry-run Diff
 
 ```bash
-copier update --trust --vcs-ref=v0.24.0 --pretend
+uv run --project "$(git rev-parse --show-toplevel)" copier update --trust --vcs-ref=v0.24.0 --pretend
 ```
 
 Review the diff. Categorize:
@@ -46,7 +46,7 @@ propose a resolution. Wait for approval.
 ## 4. Apply Update
 
 ```bash
-copier update --trust --defaults --vcs-ref=v0.24.0
+uv run --project "$(git rev-parse --show-toplevel)" copier update --trust --defaults --vcs-ref=v0.24.0
 ```
 
 Copier re-renders all template files and runs post-gen tasks:

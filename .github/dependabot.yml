@@ -86,7 +86,11 @@ updates:
   # Postgres, MinIO, the OTel collector, Jaeger, Prometheus and Grafana are
   # pinned by tag in platform/local/manifests/. An unpinned or stale image is
   # a supply-chain surface, and the local stack is where an upgrade should
-  # break first — at zero cost — rather than in a cloud window.
+  # break first — at zero cost — rather than in a cloud window. Each limit is
+  # held to the image it was measured with (platform/local/measured-memory.yaml),
+  # so a bump stays red — and does not auto-merge — until someone runs
+  # `make local-up` and `uv run python scripts/local/measure_memory.py --write`
+  # on its branch. Grafana 13 merged unmeasured and was OOM-killed on every start.
   - package-ecosystem: docker
     directory: /platform/local/manifests
     schedule:

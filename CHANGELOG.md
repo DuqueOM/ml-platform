@@ -18,6 +18,38 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Fixed — QA-4 round eighteen: what nothing ran, and what a gate passed by default
+
+- **The thresholds gate crashed against its own commit.** Its baseline loader
+  serialised four fields of `Threshold` and dropped `symbol`, so against any
+  baseline at or after `746d6d6` every value-read threshold had an empty
+  pattern — the next push to main would have gone red, and six catalogue
+  kills came from the crash, not their properties. The loader carries every
+  field, refuses one it does not know, and is tested against its own
+  definitions and four historical baselines.
+- **Grafana was OOM-killed on every start of the local stack.** 13.2.2 needs
+  ~395 MiB; its limit was 200Mi, chosen for Grafana 11, and the bump merged
+  without the stack ever running it. Each limit is now held to the image it
+  was measured with (`platform/local/measured-memory.yaml`, written by
+  `scripts/local/measure_memory.py` on a running stack), so an image bump
+  stays red until someone measures it; `make local-up` names only what is down.
+- **`continue-on-error: ${{ true }}` disarmed Bandit, gitleaks and the Trivy
+  gate** with every test green. Any value but a literal false, any `if:` not
+  listed with its reason, `|| :`, `if !` without an exit and `soft_fail_on`
+  now read as non-blocking.
+- **The README parser read lines.** It is CommonMark's block algorithm with
+  GitHub's tables, held to markdown-it-py and, where they differ, to GitHub's
+  renderer; quick-start commands are denied unless a rule reads them and finds
+  what they run pinned; CI compares the standard with ml-service-template's
+  at a pinned commit. Shared with ml-service-template (#267).
+- **C6 passed a private repository under a home directory's `projects/`**, an
+  escaped slash, an empty inline tag and a Cyrillic letter in the account.
+- **Smaller gaps closed:** `python_value` refuses changes made without a second
+  binding; a gate counts as covered only by an entry that runs it; every
+  documented copier command runs the locked copier; the parity gate reads a
+  worktree sibling; P10 refuses a digest check whose failure cannot fail the
+  step; the mutation harness restores a mutation of its own catalogue.
+
 ### Fixed — QA-4 round seventeen: gates that read the text instead of the thing
 
 - **A scanner's own flag disarmed it with every test green.** Bandit's
