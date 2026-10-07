@@ -24,6 +24,7 @@ the document.
 from __future__ import annotations
 
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -103,6 +104,22 @@ ADVISORY_STEPS = {
 #: them. Absent means the default, and the default is "report and pass".
 _NON_BLOCKING_BY_DEFAULT = {"aquasecurity/trivy-action": "exit-code"}
 
+#: A tool's OWN flags that zero its exit status, in a `run:` body. The sixth
+#: spelling: QA-4 round seventeen appended Bandit's `--exit-zero` to the CI line
+#: and the Makefile's, and 250 tests stayed green — this function knew every
+#: suppression GitHub and the actions spell, and none the tools spell. Listed
+#: by tool family rather than by tool, because the vocabulary is shared:
+#: Bandit, ruff and pylint say `--exit-zero`; Trivy, gitleaks and osv-scanner
+#: say `--exit-code 0`; Checkov's CLI says `--soft-fail`; several say
+#: `--no-fail`. `set +e` turns off the shell's own failure for every line after
+#: it. The behavioural test below runs CI's Bandit line against a planted
+#: finding, so a spelling missing from this list still goes red there.
+_SUPPRESSING_FLAGS = re.compile(
+    r"(?:^|\s)(?:--exit-zero|--exit-code[=\s]+[\"']?0[\"']?(?=\s|$)|--soft-fail|--no-fail)(?=\s|$)"
+    r"|^\s*set\s+\+e\b",
+    re.MULTILINE,
+)
+
 
 def _blocks(step: dict, job: dict | None = None) -> bool:  # type: ignore[type-arg]
     """A step blocks unless something, anywhere, tells it not to.
@@ -153,8 +170,10 @@ def _blocks(step: dict, job: dict | None = None) -> bool:  # type: ignore[type-a
             return False
 
     # `|| true` and `; true` swallow the exit status inside the shell, where no
-    # YAML key records it.
-    body = str(step.get("run", ""))
+    # YAML key records it; the tool's own flags do it on its command line.
+    body = "\n".join(line for line in str(step.get("run", "")).splitlines() if not line.lstrip().startswith("#"))
+    if _SUPPRESSING_FLAGS.search(body):
+        return False
     return not re.search(r"\|\|\s*(true|:)\b|;\s*true\s*$", body, re.MULTILINE)
 
 
@@ -325,6 +344,61 @@ def test_bandit_scans_every_root_the_type_gate_checks() -> None:
     assert roots <= scanned, f"first-party roots bandit does not scan: {sorted(roots - scanned)}"
 
 
+def test_the_makefile_does_not_suppress_what_ci_blocks_on() -> None:
+    """`make verify` is the pre-push contract; a suppressing flag there disarms the local gate silently.
+
+    `tests/test_verify_parity.py` compares the Makefile with CI command by
+    command, so it notices only when the two DISAGREE. Round seventeen added
+    `--exit-zero` to both and nothing was red.
+    """
+    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+    recipe = makefile[makefile.index("\nverify:") : makefile.index("\n.PHONY: sync")]
+    suppressed = [line.strip() for line in recipe.splitlines() if _SUPPRESSING_FLAGS.search(line.lstrip("\t"))]
+    assert not suppressed, f"`make verify` runs commands that cannot fail: {suppressed}"
+
+
+def test_cis_bandit_command_fails_on_a_planted_finding(tmp_path: Path) -> None:
+    """Behavioural, so a suppressing spelling nobody has listed still goes red here.
+
+    CI's exact Bandit line is run against a tree holding one MEDIUM finding
+    (`yaml.load` without a safe loader, in a module under the first root CI
+    scans). It must exit non-zero; `--exit-zero`, a raised severity floor, a
+    narrowed root list or a config that skips the test all make it exit 0.
+    """
+    import shlex
+    import subprocess
+
+    workflow = WORKFLOW_FILE.read_text(encoding="utf-8")
+    line = re.search(r"^\s*run: (uv run bandit [^\n]+)$", workflow, re.MULTILINE)
+    assert line is not None, "no `run: uv run bandit …` line in ci.yml"
+    command = shlex.split(line.group(1))
+    roots = [arg for arg in command[command.index("-r") + 1 :] if not arg.startswith("-")]
+    assert roots, "the Bandit line names no root"
+
+    (tmp_path / "pyproject.toml").write_text((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    for root in roots:
+        (tmp_path / root).mkdir(parents=True, exist_ok=True)
+    (tmp_path / roots[0] / "planted.py").write_text(
+        "import yaml\n\n\ndef read(stream):\n    return yaml.load(stream)\n", encoding="utf-8"
+    )
+
+    # `uv run` resolves the project from the working directory, and in this
+    # scratch tree that is the copied pyproject.toml: uv would try to build a
+    # fresh environment there and fail for a reason that has nothing to do with
+    # Bandit — a red that proves nothing. The locked Bandit is the one in this
+    # interpreter's environment, so the CI arguments run through it.
+    assert command[:2] == ["uv", "run"], f"CI no longer runs Bandit through `uv run`: {command[:2]}"
+    command = [sys.executable, "-m", *command[2:]]
+
+    done = subprocess.run(command, cwd=tmp_path, capture_output=True, text=True, timeout=300, check=False)
+    output = done.stdout + done.stderr
+
+    assert "B506" in output, f"Bandit did not report the planted finding, so this run proves nothing:\n{output[-2000:]}"
+    assert done.returncode != 0, (
+        f"CI's Bandit command exited {done.returncode} on a planted yaml.load finding; the control cannot fail."
+    )
+
+
 def test_every_advisory_step_still_runs_its_tool() -> None:
     """A renamed or removed step leaves an exemption that exempts nothing — or the next step given that name."""
     names = {str(step.get("name")) for _, step, _job in _steps()}
@@ -343,6 +417,16 @@ def test_every_advisory_step_still_runs_its_tool() -> None:
         pytest.param({"run": "gitleaks git || true"}, {}, False, id="or-true"),
         pytest.param({"run": "gitleaks git", "if": "false"}, {}, False, id="if-false"),
         pytest.param({"run": "gitleaks git"}, {}, True, id="plain-run"),
+        # The tools' own vocabulary (QA-4 round seventeen).
+        pytest.param({"run": "uv run bandit -r libs/ -ll -q --exit-zero"}, {}, False, id="bandit-exit-zero"),
+        pytest.param({"run": "trivy fs --exit-code 0 ."}, {}, False, id="trivy-cli-exit-code-0"),
+        pytest.param({"run": "trivy fs --exit-code=0 ."}, {}, False, id="trivy-cli-exit-code-equals-0"),
+        pytest.param({"run": "gitleaks git --exit-code '0'"}, {}, False, id="gitleaks-quoted-exit-code-0"),
+        pytest.param({"run": "checkov -d platform --soft-fail"}, {}, False, id="checkov-soft-fail"),
+        pytest.param({"run": "set +e\ngitleaks git"}, {}, False, id="set-plus-e"),
+        pytest.param({"run": "trivy fs --exit-code 1 ."}, {}, True, id="trivy-cli-exit-code-1"),
+        pytest.param({"run": "trivy fs --exit-code 10 ."}, {}, True, id="trivy-cli-exit-code-10"),
+        pytest.param({"run": "# --exit-zero was here\nuv run bandit -r libs/"}, {}, True, id="flag-in-a-comment"),
     ],
 )
 def test_blocks_reads_every_suppression(step: dict, job: dict, blocks: bool) -> None:  # type: ignore[type-arg]

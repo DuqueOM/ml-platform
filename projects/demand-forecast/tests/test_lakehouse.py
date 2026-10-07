@@ -294,3 +294,67 @@ def test_a_write_reports_its_own_snapshot_when_another_writer_follows_it(  # typ
         f"reported {ours.snapshot_id}, committed {ids[-2]}; the other writer's is {ids[-1]}"
     )
     assert 999 not in read_demand(catalog, snapshot_id=ours.snapshot_id)["trip_count"].to_list()
+
+
+def test_delete_before_counts_only_what_it_deleted_when_another_writer_commits_first(  # type: ignore[no-untyped-def]
+    catalog, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """QA-4 round seventeen: a writer between our load and our commit made the count "delete -3 rows".
+
+    pyiceberg retries the delete on top of the other writer's snapshot, so a
+    count taken against the head we loaded mixes their rows into ours.
+    """
+    from demand_forecast import lakehouse
+    from demand_forecast.lakehouse import delete_before, write_demand
+
+    _three_months(catalog)
+    real_ensure = lakehouse.ensure_table
+    interleaved: list[int] = []
+
+    def load_then_let_another_writer_in(given):  # type: ignore[no-untyped-def]
+        table = real_ensure(given)
+        if not interleaved:
+            interleaved.append(1)
+            write_demand(
+                pl.concat([_demand_at(z, datetime(2024, 3, 9), 9) for z in (7, 8, 9)]),
+                catalog,
+            )
+        return table
+
+    monkeypatch.setattr(lakehouse, "ensure_table", load_then_let_another_writer_in)
+    result = delete_before(datetime(2024, 2, 1), catalog)
+    monkeypatch.undo()
+
+    assert interleaved, "the second writer never ran; the test proves nothing"
+    assert result is not None
+    assert result.rows == 1, f"one row preceded the cutoff; the delete reported {result.rows}"
+
+
+def test_a_delete_is_one_snapshot_whose_summary_counts_a_straddling_file(catalog) -> None:  # type: ignore[no-untyped-def]
+    """The count reads the delete's own snapshot summary, which holds only if pyiceberg commits ONE snapshot.
+
+    January's file straddles the cutoff, so the delete rewrites it: three
+    records dropped, one written back — two removed.
+    """
+    from demand_forecast.lakehouse import delete_before, ensure_table, snapshots, write_demand
+
+    write_demand(
+        pl.concat(
+            [
+                _demand_at(1, datetime(2024, 1, 3), 1),
+                _demand_at(2, datetime(2024, 1, 20), 2),
+                _demand_at(4, datetime(2024, 1, 25), 4),
+                _demand_at(3, datetime(2024, 2, 5), 3),
+            ]
+        ),
+        catalog,
+    )
+    before = [snapshot_id for snapshot_id, _ in snapshots(catalog)]
+
+    result = delete_before(datetime(2024, 1, 22), catalog)
+
+    after = [snapshot_id for snapshot_id, _ in snapshots(catalog)]
+    assert result is not None
+    assert after[:-1] == before, "the delete committed more than one snapshot; the summary count would undercount"
+    assert ensure_table(catalog).snapshot_by_id(result.snapshot_id).parent_snapshot_id == before[-1]
+    assert result.rows == 2

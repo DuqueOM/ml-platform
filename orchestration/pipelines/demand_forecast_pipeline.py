@@ -51,14 +51,23 @@ from kfp import dsl
 #: which is the opposite of the reproducibility the backtest's fixed seed is
 #: for — and it is the shortcut most KFP examples take.
 #:
-#: Referenced by the same unresolvable placeholder the base Deployment carries,
-#: never by a tag: the training image is built in Phase 2, and whatever submits
-#: this pipeline must substitute its `@sha256:` digest. Until then a submission
-#: fails at image pull, loudly, instead of running whatever a tag pointed at.
-#: This file said `:latest` for fifteen audit rounds after the overlays stopped
-#: (QA-4 round sixteen), because the gate that closed the overlay finding read
-#: only manifests; `tests/test_pipeline_spec.py` now reads the compiled spec.
-BASE_IMAGE = "ghcr.io/duqueom/ml-platform/demand-forecast:set-by-deploy-pipeline"
+#: Referenced by an unresolvable placeholder, never by a tag: whatever submits
+#: this pipeline must substitute an `@sha256:` digest, and until it does a
+#: submission fails at image pull, loudly, instead of running whatever a tag
+#: pointed at. This file said `:latest` for fifteen audit rounds after the
+#: overlays stopped (QA-4 round sixteen); `tests/test_pipeline_spec.py` now
+#: reads the compiled spec.
+#:
+#: **Its own repository path, not the serving image's.** It named
+#: `…/demand-forecast`, the path and placeholder the serving Deployment uses,
+#: and the serving image holds none of what a component imports: not kfp (the
+#: executor, since the compiler no longer installs it), not `demand_forecast`
+#: — so not W-14's one promotion rule — not polars or pyiceberg. A deploy that
+#: substituted the serving digest, as a shared placeholder invites, would give
+#: every step an image it cannot start in (QA-4 round seventeen, measured with
+#: real pip installs of every image variant). The training image does not exist
+#: yet; it is built in Phase 2 (R17-1), and the test holds the two names apart.
+BASE_IMAGE = "ghcr.io/duqueom/ml-platform/demand-forecast-train:set-by-deploy-pipeline"
 
 #: kfp itself is part of the image too. Left at its default, the compiler
 #: emits `pip install kfp==<version>` at the start of EVERY step — exactly the

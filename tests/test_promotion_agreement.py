@@ -77,3 +77,61 @@ def test_the_dag_and_the_pipeline_reach_one_verdict(
     kfp = _promotes(pipeline_gate, skill=skill, coverage=coverage)
 
     assert dag == kfp == expected, f"skill={skill} coverage={coverage}: DAG={dag} KFP={kfp} rule={expected}"
+
+
+def _near_every_bound(seed: int, count: int) -> list[tuple[float, float]]:
+    """Seeded pairs, most within a hair of a bound: where a rounding or a copied comparison diverges first.
+
+    The grid above sits on round numbers, and QA-4 round seventeen rounded the
+    DAG's inputs to three decimals with all 53 cases green: 0.0496 rounds to
+    0.050 and promotes, while the rule refuses it. Offsets down to 1e-6 either
+    side of each bound find that; uniform draws over the whole range cover the
+    rest of the plane.
+    """
+    import random
+
+    from demand_forecast import promotion
+
+    generator = random.Random(seed)
+    skills = [promotion.MIN_SKILL]
+    coverages = [promotion.MIN_COVERAGE, promotion.MAX_COVERAGE]
+    pairs = []
+    for _ in range(count):
+        if generator.random() < 0.7:
+            offset = generator.choice([-1, 1]) * 10 ** generator.uniform(-6, -2)
+            if generator.random() < 0.5:
+                pairs.append((generator.choice(skills) + offset, generator.uniform(0.80, 1.0)))
+            else:
+                pairs.append((generator.uniform(-0.5, 0.5), generator.choice(coverages) + offset))
+        else:
+            pairs.append((generator.uniform(-0.5, 0.5), generator.uniform(0.80, 1.0)))
+    return pairs
+
+
+def test_the_two_gates_agree_off_the_grid(dag_gate: Any, pipeline_gate: Any) -> None:
+    from demand_forecast import promotion
+
+    disagreements = []
+    for skill, coverage in _near_every_bound(seed=17, count=3000):
+        expected = promotion.verdict(skill, coverage).promote
+        dag = _promotes(lambda **m: dag_gate(m), skill=skill, coverage=coverage)
+        kfp = _promotes(pipeline_gate, skill=skill, coverage=coverage)
+        if not dag == kfp == expected:
+            disagreements.append(f"skill={skill:.7f} coverage={coverage:.7f}: DAG={dag} KFP={kfp} rule={expected}")
+    assert not disagreements, f"{len(disagreements)} disagreements, first: {disagreements[:5]}"
+
+
+def test_both_gates_hand_the_rule_exactly_the_numbers_they_were_given(
+    dag_gate: Any, pipeline_gate: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A spy on the one rule: no transformation between a gate's input and the rule's, in either orchestrator."""
+    from demand_forecast import promotion
+
+    seen: list[tuple[float, float]] = []
+    monkeypatch.setattr(promotion, "check", lambda skill, coverage: seen.append((skill, coverage)))
+
+    inputs = (0.0496123456789, 0.8496123456789)
+    dag_gate({"skill": inputs[0], "coverage": inputs[1]})
+    pipeline_gate(skill=inputs[0], coverage=inputs[1])
+
+    assert seen == [inputs, inputs], f"the rule saw {seen}, the gates were given {inputs} twice"

@@ -1479,6 +1479,14 @@ _HOSTLESS_FORMS = {
     "deepwiki": f"https://deepwiki.com/{_ACCOUNT}/{_HIDDEN}",
     "root-relative": f"[design](/{_ACCOUNT}/{_HIDDEN}/blob/main/x.md)",
     "url-encoded": f"https://github.com/{_ACCOUNT}%2F{_HIDDEN}",
+    # QA-4 round seventeen: each renders as `owner/repo` and matched nothing.
+    "html-entity-slash": f"github.com/{_ACCOUNT}&#47;{_HIDDEN}",
+    "zero-width-space": f"{_ACCOUNT}\u200b/{_HIDDEN}",
+    "fullwidth-slash": f"{_ACCOUNT}\uff0f{_HIDDEN}",
+    "division-slash": f"{_ACCOUNT}\u2215{_HIDDEN}",
+    "macos-home-checkout": f"/Users/{_ACCOUNT}/{_HIDDEN}",
+    "windows-home-checkout": f"C:\\Users\\{_ACCOUNT}\\{_HIDDEN}",
+    "linux-home-checkout": f"/home/{_ACCOUNT.lower()}/{_HIDDEN}/README.md",
 }
 
 
@@ -1501,6 +1509,8 @@ def test_c6_reads_a_repository_named_without_a_host(form: str) -> None:
         f"the answers file held a local path (`/home/{_ACCOUNT.lower()}/projects/template`)",
         f"on macOS it was `/Users/{_ACCOUNT}/projects/template`",
         f"a snippet at https://gist.github.com/{_ACCOUNT}/abc123def456",
+        f"on Windows it was `C:\\Users\\{_ACCOUNT}\\projects\\template`",
+        f"elided after NFKC: copier copy gh:{_ACCOUNT}/ml-se...",
         f"the image is ghcr.io/{_ACCOUNT.lower()}/ml-platform/demand-forecast",
     ],
     ids=[
@@ -1511,6 +1521,8 @@ def test_c6_reads_a_repository_named_without_a_host(form: str) -> None:
         "filesystem-path",
         "macos-home",
         "gist-id",
+        "windows-home",
+        "elided-public-three-dots",
         "public-image",
     ],
 )

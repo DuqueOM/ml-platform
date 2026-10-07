@@ -9,14 +9,19 @@ directory every future project comes from.
 So this renders it for real and asserts the output is usable. A generator that
 emits a project failing CI has moved the problem, not solved it.
 
-Requires copier. Skipped, loudly, when it is unavailable.
+Runs the LOCKED copier (the `dev` extra), from this interpreter's environment.
+It used to run copier through uvx and skip when neither was on PATH — so CI tested
+the generator with whatever version PyPI served that minute, the version an
+adopter got was a different roll of the same dice, and a machine without uvx
+skipped the one test of the directory every project comes from (QA-4 round
+seventeen).
 """
 
 from __future__ import annotations
 
 import ast
-import shutil
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
@@ -26,8 +31,6 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE_ROOT = REPO_ROOT / "templates" / "project"
 
-_HAVE_COPIER = shutil.which("copier") is not None or shutil.which("uvx") is not None
-pytestmark = pytest.mark.skipif(not _HAVE_COPIER, reason="copier unavailable")
 
 ANSWERS = {
     "project_slug": "probe_project",
@@ -41,7 +44,7 @@ ANSWERS = {
 
 def _render(destination: Path, **overrides: str) -> Path:
     answers = {**ANSWERS, **overrides}
-    command = ["uvx", "copier", "copy", "--vcs-ref", "HEAD", "--trust", "--defaults"]
+    command = [sys.executable, "-m", "copier", "copy", "--vcs-ref", "HEAD", "--trust", "--defaults"]
     for key, value in answers.items():
         command += ["-d", f"{key}={value}"]
     command += [str(REPO_ROOT), str(destination)]

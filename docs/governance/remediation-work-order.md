@@ -547,6 +547,12 @@ a round with a human in it.
 > fold count is watched as a floor, and `tests/test_promotion_agreement.py` runs 34 metric pairs — the auditor's
 > four disagreements among them — through both orchestrators' gates and asserts one verdict. The DAG is stricter
 > on over-coverage than it was: a model at coverage 0.97, which it promoted, is now refused.
+>
+> **Qualified by QA-4 round seventeen:** done *in-process*. Both orchestrators call one rule and reach one
+> verdict where their tests run them — the workspace environment. The KFP components run in an image that does
+> not exist yet, and until this round's remediation they named the SERVING image, which holds neither kfp nor `demand_forecast`;
+> they now name their own (`…/demand-forecast-train`), held apart from the serving image by a test. Building
+> that image, and proving the rule importable in it, is R17-1.
 
 **Mode**: CONSULT · **Source**: found while writing W-5's tests for both gates ·
 **Size**: ~1h once decided
@@ -1182,7 +1188,11 @@ tool and treats Scorecard's VulnerabilitiesID as a finding source.
 The resolution the P1 fix added made the image's dependencies visible, and the
 first thing visible was `pyarrow ~= 18.0.0` from
 `services/demand-forecast-serving/requirements.txt` — inside CVE-2026-25087's
-range, fixed in 23.0.1. The workspace runs 25.0.1; only the image is affected.
+range, fixed in 23.0.1. The workspace runs 25.0.1; only the generated service
+is affected — its image, and, as QA-4 round seventeen found once every
+requirement set was scanned, its `requirements-dev.txt`, `requirements-train.txt`
+and `eda/requirements*.txt`, which pin the same range (this text first said
+"only the image").
 `services/` is generated (ADR-003), and ml-service-template pins `~= 18.0.0`
 at its HEAD, so the fix cannot be taken here without forking.
 
@@ -1218,6 +1228,71 @@ the user who runs DVC — so the attacker the advisory needs already has that
 user's files. Below the gate's HIGH threshold, so it does not block, and no
 release fixes it. Revisit when diskcache publishes a fix (Dependabot proposes
 it) or a scanner rates it HIGH, at which point the gate fails and decides it.
+
+## Round seventeen — what stays open, and why each one waits
+
+QA-4 round seventeen audited `f89a910` — #124's head, which landed during the
+audit as `71528ad` with an identical tree — and reported 0 P0, 0 P1, 4 P2 and
+9 P3; the report is committed as [`qa4/round-17.txt`](qa4/round-17.txt). Its
+verdict: #122 and #123 hold where measured — the dependency scan reads what it
+claims and matches a real pip install, the artifact loads in the image's
+environment on real data, every round-sixteen attack on the thresholds gate
+fails — and the README standard did not: its gate read layout, not the rules,
+and five README sentences were false.
+
+What closed, in *fix(gates): QA-4 round seventeen remediation*, with
+ml-service-template's matching half:
+
+| ID | Finding | Closed by |
+| --- | --- | --- |
+| P2 | Bandit's own `--exit-zero`, in CI and the Makefile, disarmed it with 250 tests green | `_blocks` reads the tools' own exit-zeroing flags and `set +e`; the Makefile's verify recipe is held to the same; CI's Bandit line is RUN against a planted finding and must exit non-zero, so an unlisted spelling still fails |
+| P2 | The KFP components named the serving image, which cannot run them | Their own image path, held apart from the Deployment's by a test; W-14 qualified as in-process; building the image is R17-1 |
+| P2 | P19 passed setext, indented and HTML headings, unlinked and in-section badges, chained or unfenced commands; never read a version; nothing held the standard identical across the repositories | `scripts/readme_standard.py`, byte-identical in both repositories: a CommonMark-faithful reading (held to markdown-it-py on an adversarial corpus), limits read from the standard, quick-start commands split on `&&`, `;` and pipes and checked for pins, the standard pinned by SHA-256 in both, and a sibling comparison when both are checked out. Copier is locked (`dev` extra) and every instruction runs `uv run copier`, held by a test |
+| P2 | Five README statements were false | Corrected; the claim that the catalogue breaks every gate is now true — entries name their `gates`, the seven gates none broke have one, and a test fails an implemented gate with none. The thresholds gate, which had no row, is P20 |
+| P3 | `check_thresholds` read text, not the bound value | Python thresholds read by value: the single binding of a constant, a field as its constructor sets it, a function default, a dict entry; a second binding of any kind is refused. The promotion comparison tolerance is a watched constant |
+| P3 | The promotion agreement test checked a grid | A seeded sweep of 3,000 pairs near every bound, and a spy that both gates hand the rule exactly their inputs |
+| P3 | `delete_before` miscounted under a concurrent commit | The count comes from the delete's own snapshot summary; a forced interleaving and a straddling-file case are tested, and so is the one-snapshot-per-delete assumption |
+| P3 | A loaded artifact could not continue a warm start | `load` restores the generator as scikit-learn derives it; continuation from the artifact and from memory agree exactly |
+| P3 | R16-2's notice corrected one claim with another false one | Corrected (Checkov and tfsec baselines are empty) and the stale ADR count added, without typed counts |
+| P3 | The scan omitted the image's pip/setuptools/wheel, the service's dev/train/EDA sets, and non-registry lock entries | All resolved and expected; R16-1's text widened to the four files that pin pyarrow 18 |
+| P3 | Scorecard's filelock alert | A false positive: osv-scanner transitively resolves `requirements-dev.txt` to filelock 3.19.1; a real resolution gets 4.0.12, and the scan now reads that resolution |
+| P3 | C6 missed `&#47;`, a zero-width space, a fullwidth slash, and home-directory paths | Text is read as rendered (entities decoded, NFKC, invisible characters dropped, look-alike slashes and backslashes folded); in a home path only a container directory is skipped |
+| P3 | P10 accepted a check before the download, and `set +e` | The check must follow the download; a downloading step under `set +e` fails |
+| P3 | ml-service-template's wording guard read README.md only | It reads `docs/CAPABILITIES.md` too (ml-service-template, same session) |
+
+All thirteen of the auditor's mutations are in the catalogue, re-anchored
+where this round moved their code; the five that survived the audit
+(R17-BAN1, R17-W14a, R17-THR1, R17-THR2, R17-LH4) are killed.
+
+### R17-1 — The KFP components' image does not exist
+
+**Mode**: CONSULT · **Phase**: 2 · **Size**: ~1 day
+
+The components name `ghcr.io/duqueom/ml-platform/demand-forecast-train` behind
+an unresolvable placeholder, and nothing builds it: no Dockerfile in this
+repository installs kfp, `demand_forecast`, polars and pyiceberg together.
+Until it exists, W-14's "one verdict" holds where the tests run the gates, not
+where KFP would. **Closes when** a Dockerfile builds that image from the lock,
+CI builds it, and a P18-style gate imports `kfp`, `demand_forecast.promotion`,
+polars and pyiceberg in it and runs the quality-gate component's function.
+Deciding where it is built and pushed is the CONSULT half; it is the first
+image this repository would build itself rather than generate.
+
+### R17-2 — The service's heavy EDA set cannot be installed on the image's Python
+
+**Mode**: CONSULT · cross-repository · **Size**: ~30min upstream
+
+`services/demand-forecast-serving/eda/requirements-heavy.txt` pins
+`ydata-profiling~=4.6`, which pulls in `htmlmin 0.1.12`, whose build imports
+`cgi` — removed in Python 3.13, the Python the Dockerfile's `FROM` names. On a
+clean machine the set does not install there at all; it resolved in this
+repository's first runs only from a warm uv cache, and CI's cold runner failed
+on it (round seventeen's remediation, found by its own CI). It installs on
+3.12 and 3.11, so the scan resolves it on 3.12
+(`scripts/resolve_serving_requirements.py`, `PYTHON_FOR`) rather than skipping
+it. **Closes when** ml-service-template moves the heavy EDA set to a profiling
+release that does not need `htmlmin`, or states the Python it supports, and
+this service is updated; then the override leaves `PYTHON_FOR`.
 
 ## Not for an agent
 

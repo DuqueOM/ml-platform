@@ -22,13 +22,18 @@ evidence there is.
 >   that did not hold, and "What would move a verdict" item 2): it blocks on
 >   HIGH and CRITICAL, and a coverage check fails a scan that skipped part of
 >   `uv.lock` (round sixteen, P1).
-> - `.security-baselines/` "holds zero entries" (ID.RA): it holds accepted
->   findings for Trivy, Checkov and tfsec, each with an owner and an expiry.
+> - `.security-baselines/` "holds zero entries" (ID.RA): on 2026-10-07 it holds
+>   Trivy's accepted findings, each with an owner and an expiry; the Checkov
+>   and tfsec baselines are empty. (This line first said all three held
+>   entries — QA-4 round seventeen found that false and it is corrected here.)
 > - Branch protection "requires two of four CI jobs" (the closing caveats): PR.AA
 >   in this same document records all four as required.
 > - C7 "red at 37 commits" (GV.OV, the opening section, the re-derive list) and
->   "55 audit entries" (ID.IM, the re-derive list): sixteen QA-4 rounds have
->   since been recorded, and `ops/audit.jsonl` holds 82 entries.
+>   "55 audit entries" (ID.IM, the re-derive list): QA-4 rounds have been
+>   recorded since, each in `docs/governance/qa4/` and in `ops/audit.jsonl`,
+>   whose `--verify` gives the current count.
+> - "9 ADRs" (the re-derive list): `docs/decisions/` holds more since; its index
+>   is the count.
 >
 > Each of these understates the controls rather than overstating them, so no
 > verdict here is more favourable than the tree supports. That is a reason to

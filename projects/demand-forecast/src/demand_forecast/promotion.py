@@ -90,9 +90,15 @@ def backtest(demand: pl.DataFrame) -> BacktestReport:
     return evaluate(demand, **asdict(DESIGN))
 
 
+#: How close to a bound still counts as AT it — binary fractions only, never a
+#: margin. Watched as a ceiling by `scripts/check_thresholds.py`: widening it is
+#: lowering every floor at once (QA-4 round seventeen).
+FLOAT_TOLERANCE = 1e-12
+
+
 def _at_least(value: float, bound: float) -> bool:
     """`value >= bound`, inclusive despite binary fractions: 0.85 is not 0.8499999999999999's victim."""
-    return value >= bound or math.isclose(value, bound, rel_tol=0.0, abs_tol=1e-12)
+    return value >= bound or math.isclose(value, bound, rel_tol=0.0, abs_tol=FLOAT_TOLERANCE)
 
 
 def verdict(skill: float, coverage: float) -> PromotionVerdict:

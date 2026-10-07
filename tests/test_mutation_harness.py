@@ -53,6 +53,42 @@ def test_every_mutation_names_what_must_catch_it(mutation: dict) -> None:
                 assert (REPO_ROOT / token).exists(), f"{mutation['id']} runs {token}, which does not exist"
 
 
+def _implemented_gates() -> set[str]:
+    """Every gate row in quality-gates.md that names a command and is not marked pending (⏳)."""
+    import re
+
+    text = (REPO_ROOT / "docs" / "governance" / "quality-gates.md").read_text(encoding="utf-8")
+    return {
+        match.group(1)
+        for match in re.finditer(r"^\| ([A-Z]\d+)( ⏳| ⚠️)? \| [^|]+ \| `[^`]+`", text, re.MULTILINE)
+        if not match.group(2)
+    }
+
+
+def test_every_implemented_gate_is_broken_by_at_least_one_mutation() -> None:
+    """The README says the catalogue breaks each gate on purpose; this makes that a property, not a sentence.
+
+    QA-4 round seventeen counted seven implemented gates — P1, P2, P6, P11,
+    P13, P15, C0 — that no entry ever broke, under a README claiming every
+    gate was watched failing. Each entry names the gates it breaks in `gates`,
+    and an implemented gate with none fails here.
+    """
+    gates = _implemented_gates()
+    assert len(gates) >= 15, f"only {len(gates)} gate rows parsed — the pattern stopped matching"
+    covered = {gate for mutation in CATALOGUE for gate in mutation.get("gates", [])}
+    assert not sorted(gates - covered), f"implemented gates no mutation breaks: {sorted(gates - covered)}"
+
+
+def test_every_gate_a_mutation_names_exists() -> None:
+    gates = _implemented_gates()
+    unknown = {
+        mutation["id"]: sorted(set(mutation.get("gates", [])) - gates)
+        for mutation in CATALOGUE
+        if set(mutation.get("gates", [])) - gates
+    }
+    assert not unknown, f"mutations naming gates that are not implemented rows: {unknown}"
+
+
 # --- the harness itself, in a throwaway repository (QA-4 round fourteen, P3-2) ---
 
 
