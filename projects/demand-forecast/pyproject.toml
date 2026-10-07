@@ -60,5 +60,5 @@ pipelines = [
 ]
 observability = [
     "opentelemetry-exporter-otlp-proto-grpc~=1.30",
-    "opentelemetry-sdk~=1.30",
+    "opentelemetry-sdk~=1.45",
 ]
