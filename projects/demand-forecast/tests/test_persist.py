@@ -331,3 +331,38 @@ def test_removing_it_changes_no_prediction_and_leaves_the_model_in_memory_alone(
 
     np.testing.assert_array_equal(loaded.predict(features), model.estimator.predict(features))
     assert _random_state_in(model.estimator) != [], "the in-memory estimator lost its fit-time state"
+
+
+def test_a_loaded_artifact_can_continue_a_warm_start(model: ForecastModel, tmp_path: Path) -> None:
+    """QA-4 round seventeen: continuing a loaded model raised AttributeError — the generator had been stripped.
+
+    `load` restores it from `random_state` the way scikit-learn derives it, and
+    because this model never subsamples features, continuing the loaded model
+    and continuing the one the writer still holds agree exactly.
+    """
+    import copy
+
+    from demand_forecast.persist import load
+    from sklearn.base import clone
+
+    artifact = tmp_path / "model.joblib"
+    save(model, artifact)
+    loaded = load(artifact).estimator
+
+    features = np.random.default_rng(5).normal(size=(200, len(model.feature_columns)))
+    target = np.random.default_rng(6).normal(size=200)
+    held = copy.deepcopy(model.estimator)
+    for estimator in (loaded, held):
+        estimator.set_params(warm_start=True, max_iter=estimator.n_iter_ + 5, early_stopping=False)
+        estimator.fit(features, target)
+
+    np.testing.assert_array_equal(loaded.predict(features), held.predict(features))
+    assert clone(loaded).get_params() == clone(held).get_params()
+
+
+def test_the_restored_generator_is_derived_as_scikit_learn_derives_it(model: ForecastModel, tmp_path: Path) -> None:
+    """The first of the two draws is the `_random_seed` scikit-learn kept; a different derivation would differ."""
+    from sklearn.utils import check_random_state
+
+    rng = check_random_state(model.estimator.random_state)
+    assert rng.randint(np.iinfo(np.uint32).max, dtype="u8") == model.estimator._random_seed

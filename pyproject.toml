@@ -43,6 +43,12 @@ dev = [
     # is pinned against (QA-4 round sixteen). Declared, so uv.lock pins it,
     # Dependabot moves it, and `make verify` runs the same version CI does.
     "bandit~=1.9",
+    # The project generator. Every instruction and the generator's own test ran
+    # `uvx copier`, which takes whatever PyPI serves that minute — the README's
+    # quick start included, under a standard that requires a pinned version
+    # (QA-4 round seventeen). Locked here, it is the version CI tests the
+    # generator with, Dependabot moves it, and Trivy scans it.
+    "copier~=9.18",
     "mypy~=2.4",
     "ruff~=0.16",
     # Without stubs, every `import yaml` in scripts/ is an error under the

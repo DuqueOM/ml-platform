@@ -118,3 +118,38 @@ def test_every_documented_type_check_is_the_one_ci_runs() -> None:
         assert found, f"{name} no longer shows the type check; drop it from this list if that is intended"
         drifted += [f"{name}: {command!r}" for command in found if command != expected]
     assert not drifted, f"documented type checks that are not CI's ({expected!r}): {drifted}"
+
+
+def test_the_project_generator_runs_a_locked_copier() -> None:
+    """Copier is locked, and nothing tells a reader to run another one.
+
+    Every instruction and the generator's own test ran `uvx copier`, which
+    takes whatever PyPI serves at that minute — the README's quick start
+    included, under a standard that requires a pinned version (QA-4 round
+    seventeen). It is a `dev` dependency now; `uv run copier` runs the locked
+    one. Generated code, dated audit records and history are excluded: they
+    record what was true when written.
+    """
+    assert _locked("copier"), "copier is not in uv.lock"
+    import subprocess
+
+    # NUL-separated: the generator's own paths contain spaces (`{@ project_slug @}`).
+    tracked = subprocess.run(
+        ["git", "ls-files", "-z", "*.md", "*.py", "*.yml", "*.yaml", "*.sh", "Makefile"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split("\0")
+    tracked = [path for path in tracked if path]
+    historical = ("services/", "docs/governance/qa4/", "CHANGELOG.md", "docs/governance/remediation-work-order.md")
+    # The C9 fixtures quote unpinned forms on purpose, as inputs the gate must read.
+    fixtures = ("tests/test_gate_scripts.py", "tests/test_tool_versions.py")
+    unpinned = [
+        f"{path}:{number}"
+        for path in tracked
+        if not path.startswith(historical) and path not in fixtures
+        for number, line in enumerate((REPO_ROOT / path).read_text(encoding="utf-8").splitlines(), start=1)
+        if re.search(r"\b(?:uvx|pipx run)\s+copier(?![@=])\b", line) and not line.lstrip().startswith("#")
+    ]
+    assert not unpinned, f"unpinned copier invocations (use `uv run copier`): {unpinned}"

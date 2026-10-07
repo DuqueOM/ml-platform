@@ -36,7 +36,7 @@ That file is the whole reason an update is possible: it lets a later run replay
 your answers and merge generator improvements without discarding your changes.
 
 ```bash
-cd projects/my-project && uvx copier update --vcs-ref HEAD --trust
+cd projects/my-project && uv run copier update --vcs-ref HEAD --trust
 ```
 
 **`--vcs-ref` is not optional, and the reason is a measured incident rather

@@ -18,6 +18,48 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Fixed — QA-4 round seventeen: gates that read the text instead of the thing
+
+- **A scanner's own flag disarmed it with every test green.** Bandit's
+  `--exit-zero`, added to CI and the Makefile, passed 250 tests:
+  `test_security_controls.py` knew every suppression GitHub and the actions
+  spell, and none the tools spell. It reads `--exit-zero`, `--exit-code 0`,
+  `--soft-fail`, `--no-fail` and `set +e` now, holds `make verify` to the same,
+  and runs CI's Bandit line against a planted finding, so a spelling nobody
+  listed still goes red.
+- **The KFP components named the serving image**, which holds neither kfp nor
+  `demand_forecast`. They name their own training image; a test keeps the two
+  apart. W-14 is qualified as done in-process — the image is R17-1.
+- **The README check read lines, not Markdown.** Setext, indented and HTML
+  headings, unlinked or misplaced claim badges, and twelve chained commands all
+  passed, and its limits were constants the standard could drift from. The
+  shared logic is now `scripts/readme_standard.py`, byte-identical in
+  ml-service-template: a CommonMark-faithful reading held to markdown-it-py,
+  limits read from the standard, quick-start commands counted per `&&`, `;` and
+  pipe and checked for pinned versions, and the standard pinned by SHA-256 in
+  both repositories. Copier is now locked, and every instruction runs
+  `uv run copier`.
+- **Five README sentences were false** and are corrected. The one claiming the
+  mutation catalogue breaks every gate is now true by construction: entries
+  name their `gates`, seven gates that no entry broke have one, a test fails an
+  implemented gate with none, and the thresholds gate has its own row (P20).
+- **Thresholds are read by value.** A fold count passed to a constructor, a
+  second `MIN_SKILL=0.0`, a tuple reassignment and a widened tolerance each
+  loosened a promotion number with the gate green; a Python threshold is now
+  read as the interpreter binds it, and a second binding is refused.
+- **Smaller fixes, each tested:** the promotion agreement test sweeps 3,000
+  pairs near every bound and spies on the rule's inputs; `delete_before` counts
+  from its own snapshot's summary under a concurrent writer; a loaded artifact
+  can continue a warm start; C6 reads text as it renders (entities, zero-width
+  characters, look-alike slashes, home paths); P10 requires the digest check
+  after the download and refuses `set +e`; the dependency scan covers the
+  image's pip/setuptools/wheel, the service's dev, train and EDA sets — all
+  pinning the pyarrow R16-1 accepts — and non-registry lock entries; the
+  COMPLIANCE_MAPPING notice is corrected. The service's heavy EDA set does not
+  install on Python 3.13 at all (htmlmin needs `cgi`), so it is scanned on 3.12
+  and recorded upstream as R17-2.
+- 40 mutations added, all thirteen of the auditor's among them; each is killed.
+
 ### Changed — the README states what exists, under a standard shared with ml-service-template
 
 - **The README described the repository's first day for two months.** It was

@@ -346,8 +346,27 @@ def delete_before(cutoff: datetime, catalog: Catalog) -> WriteResult | None:
     snapshot_id = _committed_head(table, head)
     if snapshot_id is None:
         return None
-    # Counted at the two named snapshots, not at "the table now": a scan of
-    # the live table after the delete would include a concurrent writer's rows.
-    before = len(table.scan(snapshot_id=head).to_arrow())
-    after = len(table.scan(snapshot_id=snapshot_id).to_arrow())
-    return WriteResult(snapshot_id=snapshot_id, rows=before - after, mode="delete")
+    return WriteResult(snapshot_id=snapshot_id, rows=_rows_removed(table, snapshot_id), mode="delete")
+
+
+def _rows_removed(table: Table, snapshot_id: int) -> int:
+    """Rows the delete's own snapshot removed, from the summary Iceberg wrote for it.
+
+    Not "rows at the head we loaded minus rows now". pyiceberg retries a commit
+    that lost a race ON TOP of the other writer's snapshot, so between the head
+    this function loaded and the snapshot it committed sit the other writer's
+    rows — QA-4 round seventeen forced that interleaving and got "delete -3
+    rows" where 4 were deleted. The snapshot's summary counts only what this
+    commit did: `deleted-records` from the files it dropped or rewrote, less
+    `added-records` it wrote back when a file straddled the cutoff.
+
+    pyiceberg 0.12 commits a delete as ONE snapshot, measured for whole-file
+    and partial deletes; `tests/test_lakehouse.py` holds that, so a release
+    that splits it fails a test instead of undercounting here.
+    """
+    snapshot = table.snapshot_by_id(snapshot_id)
+    summary = snapshot.summary if snapshot is not None else None
+    if summary is None or "deleted-records" not in summary.additional_properties:
+        raise RuntimeError(f"snapshot {snapshot_id} records no deleted-records; the delete cannot be counted")
+    properties = summary.additional_properties
+    return int(properties["deleted-records"]) - int(properties.get("added-records", 0))

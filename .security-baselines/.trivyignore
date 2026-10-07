@@ -39,8 +39,9 @@
 # --- accepted -----------------------------------------------------------------
 
 # pyarrow 18.0.0 in the SERVING IMAGE (resolved from services/demand-forecast-serving/requirements.txt,
-# `pyarrow ~= 18.0.0`). Fixed in 23.0.1; the workspace already runs 25.0.1, so this entry matters only to
-# the image. It cannot be taken here: services/ is generated from ml-service-template and editing it is a
+# `pyarrow ~= 18.0.0`) — and in the service's requirements-dev.txt, requirements-train.txt and
+# eda/requirements*.txt, which pin the same range (QA-4 round seventeen; R16-1 first said "only the image").
+# Fixed in 23.0.1; the workspace already runs 25.0.1, so this entry matters only to the generated service. It cannot be taken here: services/ is generated from ml-service-template and editing it is a
 # fork (ADR-003), and the template pins ~= 18.0.0 up to its HEAD. Closes when the template moves pyarrow to
 # >= 23.0.1 and this service is updated to that release (R16-1). Thirty days, not the quarter the README
 # allows: the fix is one line upstream, and the acceptance should not outlive the time it takes.

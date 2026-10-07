@@ -384,6 +384,22 @@ def _step(*lines: str) -> str:
             "without verifying its digest",
             id="check-commented-out",
         ),
+        # QA-4 round seventeen: both passed P10.
+        pytest.param(
+            ['echo "abc123  tool" | sha256sum -c -', _PINNED],
+            "without verifying its digest",
+            id="check-before-the-download",
+        ),
+        pytest.param(
+            ["set +e", _PINNED, 'echo "abc123  tool" | sha256sum -c -'],
+            "under `set +e`",
+            id="set-plus-e",
+        ),
+        pytest.param(
+            ["set +o errexit", _PINNED, 'echo "abc123  tool" | sha256sum -c -'],
+            "under `set +e`",
+            id="set-plus-o-errexit",
+        ),
     ],
 )
 def test_p10_sees_every_way_a_download_escaped_it(tmp_path: Path, monkeypatch, lines: list[str], expected: str) -> None:  # type: ignore[no-untyped-def]

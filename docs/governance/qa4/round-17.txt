@@ -1,0 +1,575 @@
+Committed copy of the QA-4 round seventeen report (the auditor's ~/qa4-r17-report.md).
+
+Verbatim, with one exception: the probe repository the auditor used to test C6 is
+redacted to OWNER/PRIVATE-REPO in its obfuscated forms (an HTML entity, a zero-width
+space, a fullwidth slash, and two home-directory paths), because the probe strings
+name a non-public repository by construction and C6, once it reads those forms, would
+rightly fail on them here. Plain text, like the earlier rounds' copies.
+
+-------------------------------------------------------------------------------
+
+# QA-4 round seventeen — independent audit of `ml-platform` at f89a910
+
+Auditor session: separate from the authoring session (ADR-005 rule B). Read-only. Nothing was committed or
+pushed. No PR, issue, setting, label or secret was touched, in either repository. Neither main working tree was
+touched. `scripts/audit_record.py`, `AGENTS.md` and `ops/audit.jsonl` were not touched. The nyc-tlc data files in
+the ml-platform main tree were read by absolute path. Nothing there was written.
+
+- **Tree under audit: `f89a9101ad4bf8c8399204384e0330ac9a9de90d`**, "docs: one README standard for both templates,
+  and a gate that holds this README to it".
+  - **When the audit began (≈21:27Z) it was on no remote branch and no pull request existed**: `gh pr view 124`
+    reported "Could not resolve to a PullRequest with the number of 124", and `git ls-remote origin` showed no
+    branch containing it. So I audited the local commit `f89a910`, the scope the prompt names. Its parent is
+    origin/main `b105d8bde6ed9c91685020f460e6da67c3bdae94` (#123).
+  - **During the audit**, PR #124 was opened (21:35:08Z, head `f89a910`) and squash-merged (22:05:37Z) as
+    **`71528ad3e05ea3db9e33934e58e95361e13f61eb`**. `git diff f89a910 71528ad` is empty: **the tree audited is the
+    tree that landed.** Per AGENTS.md's squash-merge rule, the marker should name `71528ad`, with `f89a910`
+    recorded in `ops/audit.jsonl` as the tree read.
+  - CI comparisons use run 37538356050 (CI on `71528ad`, success) and run 37497147650 (CI on `b105d8b`).
+- Previous audit: `aea1410`. Since then: three non-merge commits, #122 `56b475a`, #123 `b105d8b` and #124
+  (`f89a910` as audited, `71528ad` as landed).
+- ml-service-template: `52e0f00359f7f366072e1d673ea9f9b9b56cd7cc` (#265, merged 2026-10-06T21:11:55Z), worktree
+  `~/qa4-r17-tpl`, read-only and limited to the README standard.
+- Worktrees, each after `uv sync --all-packages --all-extras --locked`:
+  - `~/qa4-r17`: the plain suite.
+  - `~/qa4-r17b`: `make verify`.
+  - `~/qa4-r17-probe`: probes, the harness and the classifier.
+  - `~/qa4-r17-tpl`: the template.
+  All four are removed at the end.
+- Tools: uv 0.11.19, Python 3.11 (workspace), Python 3.13.13 (image environments), trivy 0.71.0 (CI's action
+  runs 0.70.0), osv-scanner 2.6.0 (release binary, SHA256SUMS verified), gitleaks 8.21.2 (repo pins 8.30.0),
+  bandit 1.9.4 (from uv.lock), pyiceberg 0.12.0, pyarrow 25.0.1. The Docker Desktop engine was not running.
+- Logs, scripts and the auditor catalogue `r17.yaml`: `~/qa4-r17-logs/`.
+
+### Runs (clean trees at f89a910)
+
+| Run | Tree | Command | Result |
+| --- | --- | --- | --- |
+| 1 | r17 | `uv run pytest -o addopts='' -q -rs` | **2266 passed, 64 skipped, 0 failed**, 1618 s (26:58), in parallel with run 2 and probes |
+| 2 | r17b | `make verify` | **exit 0**, 2232 s (37:12). Every gate OK, including `[serving-load]` and `[readme]`. Suite 2266 passed |
+| CI | GitHub run 37538356050 (CI on 71528ad, the same tree) and 37497147650 (b105d8b, the parent) | same floors step | success, both |
+
+Coverage, `make verify` against **CI on 71528ad (the same tree)**: **identical in all 13 scopes to two
+decimals** (`diff` of the floor reports is empty). libs 94.55, scripts 87.36, projects 86.59, demand-forecast
+85.96/76.79, rag-assistant 96.34/90.00, store-assistant 85.25/57.14, orchestration 100. That is two
+observations, local and CI.
+
+Against CI on b105d8b, the parent, only scripts/ differs (87.10). That is #124's `scripts/check_readme.py` (95%
+covered): without it, the local figure is 87.07%. The 0.03 left over is the rest of #124's diff, since the
+same-tree comparison above agrees exactly.
+
+The round-15/16 flakes did not recur. Runs 1 and 2 ran in parallel for about 27 minutes, with probes running in a
+third tree. That is one observation.
+
+Skips (64), grouped from `-rs`:
+- No local stack or cluster (55): `tests/local/test_dashboards.py` ×18, `test_lakehouse.py` (MinIO half) ×13,
+  `test_local_stack.py` ×11, `test_service_runs.py` ×7, `test_network_policies.py` ×4, `test_tracing.py` ×1,
+  `test_gitops_manifests.py` ×1.
+- No downloaded data (3): nyc-tlc not fetched into the worktree ×2, EDGAR filings ×1.
+- No sibling template checkout (2): parity online half ×1, bare-environment contrast ×1.
+- Recorded contract deviations (4): P1 ×2, P6, P7.
+
+Code-scanning alerts open on main (b105d8b), **per tool**:
+- **Scorecard 12**, including VulnerabilitiesID: "4 existing vulnerabilities" — PYSEC-2026-113 (pyarrow),
+  -1374 and -1375 (filelock), -2447 (diskcache).
+- **Trivy 1**: CVE-2025-69872, diskcache, medium, `uv.lock`.
+
+---
+
+## Findings
+
+**Counts: 0 P0 · 0 P1 · 4 P2 · 9 P3**
+
+### P2
+
+```text
+[P2] The Bandit control can be disarmed in one commit with every relevant test green: `--exit-zero` is a suppression _blocks has no word for
+  .github/workflows/ci.yml:159; Makefile:41; tests/test_security_controls.py:107-150 (_blocks)
+  $ sed -i 's|-ll -q$|-ll -q --exit-zero|' .github/workflows/ci.yml Makefile      # the Bandit lines only, probe tree
+  $ uv run pytest -o addopts= -q tests/test_gate_scripts.py tests/test_tool_versions.py tests/test_verify_parity.py tests/test_status_layers.py tests/test_security_controls.py tests/test_coverage_floors.py
+  250 passed in 1141.01s
+  $ (yaml.load planted in orchestration/dags) uv run bandit -c pyproject.toml -r libs/ scripts/ projects/ orchestration/ -ll -q --exit-zero; echo rc=$?
+  rc=0          # without --exit-zero: rc=1
+  R17-BAN1 (CI line only, judged by test_security_controls.py): SURVIVED
+```
+
+#122 matched controls to the steps that RUN them, and those attacks now fail:
+- a decoy step;
+- `bash -c "… || true"`;
+- `.venv/bin/bandit … || true`;
+- a wrapper script.
+
+What `_blocks` still cannot see is a scanner's **own** flag that zeroes its exit status. Bandit's `--exit-zero`
+is the case here. The same class exists for any tool with such a flag: `trivy --exit-code 0` in a `run:` step,
+`kubescape --severity-threshold`, `gitleaks --exit-code 0`.
+
+Only `test_verify_parity.py` notices, and only when CI and the Makefile disagree. Edit both and nothing is red.
+This is round 16's P2 class (a control disarmed with its tests green), reached through the one vocabulary the
+fix did not model.
+
+**Fix:** keep a per-tool list of exit-suppressing flags in `_blocks`: `--exit-zero` and `-e/--exit-zero` for
+Bandit, `--exit-code 0` for Trivy and gitleaks, `|| true` already present. Better, add a behavioural check: run
+the CI command against a planted finding and require a non-zero exit. Add R17-BAN1 to the catalogue.
+
+```text
+[P2] The KFP components name the SERVING image, which cannot run any of them: no kfp (now that install_kfp_package=False), no demand_forecast, no polars
+  orchestration/pipelines/demand_forecast_pipeline.py:46-68 (BASE_IMAGE = "ghcr.io/duqueom/ml-platform/demand-forecast:set-by-deploy-pipeline"; "kfp itself is part of the image too")
+  platform/kubernetes/base/deployment.yaml:48 (the same image name and placeholder, built from services/demand-forecast-serving/Dockerfile)
+  $ ~/qa4-r17-logs/pipres/run.sh   # real pip installs on Python 3.13 exactly as the Dockerfile runs them: base, base+gcp, base+aws
+  $ venv-<v>/bin/python -c "import kfp" / "import demand_forecast" / "import polars" / "import pyiceberg" / "import great_expectations"
+  base: ModuleNotFoundError ×5      gcp: ModuleNotFoundError ×5      (aws identical)
+  $ git ls-files | grep -i dockerfile
+  services/demand-forecast-serving/Dockerfile          # the only Dockerfile; it installs requirements.txt (+ cloud) and nothing else
+```
+
+- **The defect.** With `install_kfp_package=False` (#122), the KFP executor itself must already be in the image.
+  Every component also imports `demand_forecast` (including `promotion`, W-14's one rule), polars and pyiceberg.
+  The image the pipeline names is the serving image, by the same repository path and placeholder as the
+  Deployment. That image contains none of them. The comment calls it "the training image… built in Phase 2", but
+  nothing distinguishes it from the serving image: a deploy that substitutes the serving digest, as the
+  placeholder invites, gives every KFP step an image in which it cannot start.
+- **Effect on W-14.** "Both orchestrators reach one verdict" is verified only in-process, in the workspace venv
+  (`test_promotion_agreement.py` calls `python_func` directly). In the environment the KFP gate would actually
+  run in, it cannot import the rule at all. The W-14 status line says "done" without qualifying that.
+
+**Fix:** give the pipeline its own image name (`…/demand-forecast-train`, placeholder until built), distinct from
+the serving image. Assert in `test_pipeline_spec.py` that the component image differs from the serving
+Deployment's. Qualify W-14's "done" as "in-process; the component image does not exist (Phase 2)". When it is
+built, add a P18-style check that imports `kfp`, `demand_forecast.promotion` and polars in it.
+
+```text
+[P2] P19 can be satisfied without following the standard it enforces, and nothing enforces "byte for byte" across the two repositories
+  scripts/check_readme.py (ml-platform; same logic at ml-service-template 52e0f00); docs/governance/readme-standard.md:3-6, rules 3 and 4
+  $ uv run python ~/qa4-r17-logs/readme_probe.py      # each mutation applied to README.md, check run, README restored
+  control: extra '## Roadmap' section                 FAILED: level-2 sections differ … ['Roadmap']
+  setext h2 'Roadmap\n-------' added                  OK
+  indented '   ## Roadmap' (still an h2)              OK
+  <h2>Roadmap</h2> HTML heading                       OK
+  control: linked coverage badge in the title area    FAILED: badge … states a claim
+  unlinked claim badge ![cov](…coverage-99%25…)       OK
+  linked claim badge placed inside ## Status          OK
+  allowed-prefix claim badge 'Python-100% tested'     OK
+  12 quick-start commands in an indented block        OK
+  one fenced line: pip install ml-platform && curl … | sh && 10 more   OK
+  (the template's checker: setext, <h2>, unlinked badge, badge inside Status → all OK as well)
+  $ sed -i 's/At most 250$/At most 900/; …2,000 words…→9,000…' docs/governance/readme-standard.md   # probe tree
+  standards now differ;  check_readme.py → OK;  tests/test_readme_standard.py → 23 passed;  check_doc_coherence.py → OK
+  $ grep -c '^name = "copier"' uv.lock
+  0           # the README's own quick start runs `uvx copier copy …` — an unpinned tool — and clones HEAD
+```
+
+The standard says it is "Shared, byte for byte" and requires quick-start commands "each version pinned". The
+checker counts only ATX `## ` lines, sees only badges that are linked and placed before the first section, counts
+commands only inside a fence and one per line, and never reads a version.
+
+The checker's limits (`MAX_LINES`, `MAX_WORDS`, `MAX_BADGES`) are constants in each script, not read from the
+standard, so the standard's text can change with every gate green. That is what the cross-repository edit above
+shows.
+
+The README's own quick start fails rule 3: copier is not in `uv.lock`, so `uvx copier` takes whatever PyPI
+serves.
+
+What does work:
+- The status block is generated and checked: a stale block fails.
+- The related-repositories table is compared (R17-RD2 killed).
+- The command budget, as counted, is enforced (R17-RD1 killed).
+- The template's one gated badge (anti-pattern count) fails its named test when the number is changed: `1 failed`.
+
+**Fix:**
+- Parse the README with a CommonMark parser (`markdown-it-py` is already common) and count h2 nodes, image nodes
+  anywhere, and code-block lines split on `&&`, `;` and `|`.
+- Read the budget numbers from the standard's text.
+- Add a test, in both repositories, that compares `readme-standard.md`'s sha256 with a constant recorded in the
+  other repository's last tag, or fetches the sibling when present.
+- Pin copier in the quick start (`uvx copier@9.18.2 …`, or add it to the dev group) and say which ref the clone
+  is.
+
+```text
+[P2] Five statements in ml-platform's new README are false against the tree
+  README.md (f89a910)
+  $ for p in projects/*/; do echo "$p model-card=$(ls $p | grep -ic model-card) evals=$([ -d $p/evals ] && echo y || echo n)"; done
+  projects/demand-forecast/: model-card=1 evals=y
+  projects/rag-assistant/: model-card=0 evals=n          # README: "each with its README, evaluation gates and model card"
+  projects/store-assistant/: model-card=1 evals=y
+  $ sed -n 81p SECURITY.md | grep -o '\*\*Not images\*\*.*'
+  **Not images**: nothing here builds or publishes one, so there is none to scan — this row said "and image" until QA-4 W-12
+                                                         # README: "Trivy over the whole lock and the serving image"
+  $ head -4 docs/governance/QA-4-independent-audit.md
+  # QA-4 — Independent audit of `ml-platform`  **Date**: 2026-08-06 · **Commit**: `f580c4f` … **Procedure**: `docs/governance/qa-procedures.md` QA-4
+                                                         # README links this as "The [procedure]"
+  $ for k in dependency_direction type_gate measure_cloud_surface library_reuse dataset_lock render_safety version_consistency; do grep -c $k tests/mutations.yaml; done
+  0 0 0 0 0 0 0                                          # README: "A mutation catalogue … breaks each gate on purpose"
+                                                         # implemented gates with no entry: P1, P2, P6, P11, P13, P15, C0
+  docs/ADOPTION.md: "Generate a vertical and it satisfies six of the seven contract requirements immediately"
+                                                         # README: "A project generator that produces a vertical meeting the project contract"
+```
+
+The status block is generated; the prose these lines sit in is not, and the standard's rule 1 ("present tense is
+for what exists") is checked by nothing.
+
+Two of the five repeat errors this repository already corrected elsewhere:
+- "and the serving image" is the wording SECURITY.md retracted at W-12.
+- rag-assistant's missing model card and gates are recorded deviations P6 and P7, skipped in the suite under
+  those names.
+
+**Fix:** "…each with its README; demand-forecast and store-assistant carry evaluation gates and a model card
+(rag-assistant's are recorded deviations P6/P7)". "Trivy over the whole lock and the serving image's resolved
+requirements". Link the procedure to `docs/governance/qa-procedures.md#qa-4--independent-audit`. "breaks the gates
+listed in it", or add entries for P1, P2, P6, P11, P13, P15 and C0. "a vertical meeting six of the seven contract
+requirements (the seventh, its thresholds, is the adopter's)".
+
+### P3
+
+```text
+[P3] check_thresholds reads a line of text, not the value the gate uses: four ways to loosen a promotion number leave it green (behavioural tests catch all four)
+  scripts/check_thresholds.py:85-100 (read), :159-186 (promotion entries); projects/demand-forecast/src/demand_forecast/promotion.py:47-73
+  $ ~/qa4-r17-logs/thr17.sh      # gate verdict, then the promotion/threshold/DAG/pipeline tests
+  B1 DESIGN = BacktestDesign(n_folds=3)                 gate: OK — 30 watched …   tests: 1 failed (test_the_backtest_is_the_design_and_nothing_else)
+  B2 MIN_SKILL = 0.05 then MIN_SKILL=0.0 (no spaces)    gate: OK                   tests: 5 failed
+  B3 MIN_COVERAGE, MAX_COVERAGE = 0.5, 1.0              gate: OK                   tests: 11 failed
+  B4 _at_least abs_tol 1e-12 → 0.1                      gate: OK                   tests: 14 failed
+  B5 n_folds declared twice                             gate: FAILED "2 lines match"
+  B6 MIN_SKILL: float = 0.0 (pattern stops matching)    gate: FAILED "pattern no longer matches"
+  B7 THRESHOLD_BASELINE_REF=f6defbd (root, no scripts/) gate: FAILED "watch list … could not be loaded"
+  R17-THR1, R17-THR2 (judged by the gate and test_thresholds.py only): SURVIVED;  R17-THR2b (by test_promotion.py): KILLED
+```
+
+All seven of round 16's attacks fail. The baseline-direction, anchoring, one-match, factor and unreadable-baseline
+fixes hold. The remaining blind spot is structural: the gate reads `NAME = n` as text, while Python honours the
+last binding, a constructor argument or a comparison tolerance. Mitigated: `test_promotion.py` catches every
+value-level loosening tried.
+
+**Fix:** for module-level constants, import the module at the baseline and at HEAD in subprocesses and compare
+`getattr(module, NAME)`, or `DESIGN.n_folds` for the fold count. Keep the text pattern for location.
+
+```text
+[P3] tests/test_promotion_agreement.py checks a grid, so the two gates can disagree off it with the test green
+  tests/test_promotion_agreement.py:33-41 (CASES)
+  $ sed -i 's/check(metrics\["skill"\], metrics\["coverage"\])/check(round(metrics["skill"], 3), round(metrics["coverage"], 3))/' orchestration/dags/demand_forecast_training.py
+  $ uv run pytest -o addopts= -q tests/test_promotion_agreement.py tests/test_dags.py
+  53 passed
+  0.0496 0.9   KFP/rule: False   DAG(rounded 3dp): True
+  0.05 0.8496  KFP/rule: False   DAG(rounded 3dp): True
+  (2-decimal rounding IS caught — grid point 0.049 rounds to 0.05: 3 failed)
+```
+
+**Fix:** add a seeded random sweep (or Hypothesis) of a few thousand pairs in [−0.5, 0.5] × [0.8, 1.0] with values
+just inside and outside each bound. Assert that both gates pass the rule's exact inputs to `check`, for example by
+spying on `promotion.check`. Add R17-W14a to the catalogue.
+
+```text
+[P3] delete_before reports the wrong row count when another writer commits between its load and its delete, and nothing asserts the count
+  projects/demand-forecast/src/demand_forecast/lakehouse.py:340-354 (`head` read at load; `before` counted at `head`)
+  $ uv run python ~/qa4-r17-logs/interleave.py      # file:// SQL catalogue, pyiceberg 0.12.0; a second writer commits after ensure_table()
+  Commit failed due to a concurrent update, retrying (1/4) in 109 ms
+  delete_before with concurrent writer: delete -3 rows -> snapshot 7620125593101690678 (4 rows were before the cutoff)
+  R17-LH4 (`before` from the live table + 1): SURVIVED — test_lakehouse.py passes
+```
+
+pyiceberg 0.12 retries a conflicting commit on top of the other writer's. The delete's parent is then not `head`,
+and "rows" mixes the other writer's 7 rows into the count. The docstring claims counting "at the two named
+snapshots, not at 'the table now'" for exactly this reason.
+
+`write_demand` under the same interleaving is **correct** for both modes: it returns its own commit, which is the
+head (see Verified). No production code calls `delete_before`, so its `None` return is safe today.
+
+**Fix:** count at the new snapshot's `parent_snapshot_id` (`table.snapshot_by_id(snapshot_id).parent_snapshot_id`),
+not at the pre-load `head`. Assert `result.rows` in `test_delete_before_removes_strictly_earlier_rows`.
+
+```text
+[P3] Dropping `_feature_subsample_rng` breaks warm-start continuation of a loaded artifact; the docstring says refitting recreates it
+  projects/demand-forecast/src/demand_forecast/persist.py:187-206 ("refitting creates a new one from `random_state`")
+  $ uv run python ~/qa4-r17-logs/rng_probe.py
+  predict identical: True / repr equal: True / re-pickle round trip predicts identically: True / refit (cold) OK
+  warm-start continue, artifact RAISED AttributeError 'HistGradientBoostingRegressor' object has no attribute '_feature_subsample_rng'
+  warm-start continue, in-memory OK
+```
+
+Nothing warm-starts today, so the readers this artifact serves (predict) are unaffected. R15-1 is closed on the
+property that matters (see Verified).
+
+**Fix:** say "a cold refit recreates it; warm-start continuation of a loaded artifact does not, and raises". If
+continuation is ever needed, restore a Generator from `random_state` on load.
+
+```text
+[P3] R16-2's dated notice in COMPLIANCE_MAPPING corrects one statement with another false one, and misses a stale count
+  docs/COMPLIANCE_MAPPING.md:25-26 ("it holds accepted findings for Trivy, Checkov and tfsec, each with an owner and an expiry"), :322 ("9 ADRs")
+  $ grep -v '^\s*#' .security-baselines/checkov.yml .security-baselines/tfsec.yml | grep -v '^\s*$'
+  .security-baselines/checkov.yml:skip-check: []
+  .security-baselines/tfsec.yml:exclude: []
+  $ uv run python scripts/check_baselines_expiry.py --as-of 2026-11-05 → "3 baseline file(s), 1 entr(ies) examined"
+  $ ls docs/decisions/ADR-*.md | wc -l
+  11
+```
+
+The notice's other corrections check out: `ops/audit.jsonl` holds 82 entries, and sixteen rounds are recorded.
+
+**Fix:** "it holds one accepted finding (Trivy, CVE-2026-25087, R16-1); the Checkov and tfsec baselines are empty".
+Add the ADR count (9 → 11) to the notice's list, or fix line 322.
+
+```text
+[P3] The dependency gate's "every package this repository installs" omits three classes; Scorecard's filelock alert is a false positive from one of them
+  scripts/check_scan_coverage.py:1-20, :41-48; scripts/resolve_serving_requirements.py:39-47; services/demand-forecast-serving/Dockerfile:78
+  $ diff of real sequential pip installs (Python 3.13, as the Dockerfile runs them) against the uv resolutions the gate scans
+  base/gcp/aws: identical except pip 26.2.1, setuptools 84.0.0, wheel 0.48.0 (the Dockerfile's `pip install --upgrade pip setuptools wheel`) — unscanned (clean today)
+  $ ~/qa4-r17-logs/bin/osv-scanner_linux_amd64 scan source -r tree-b105        # Scorecard's engine, on b105d8b
+  services/demand-forecast-serving/requirements-dev.txt filelock 3.19.1 ['PYSEC-2026-1374', 'PYSEC-2026-1375']
+  $ … scan source --no-resolve -r tree-b105                                      # filelock disappears: it is osv's own transitive resolution
+  $ uv pip compile --python-version 3.13 requirements-dev.txt | grep filelock
+  filelock==4.0.12                                                               # what an install actually gets today: not affected
+  $ trivy fs on uv-resolved requirements-dev / requirements-train / eda/requirements → pyarrow 18.0.0 CVE-2026-25087 HIGH in each
+  (eda/requirements-heavy.txt does not resolve on Python 3.13: htmlmin 0.1.12 fails to build)
+  $ (lock entry with source = git/url/path/directory/editable) → Trivy lists it AND reports its CVEs (gate exit 1); check_scan_coverage.py excludes it from "expected" (269 of 270)
+```
+
+- **The filelock alert is a false positive.** Scorecard's filelock entries come from osv-scanner transitively
+  resolving `requirements-dev.txt`, a file that never names filelock, to filelock 3.19.1. A real resolution gets
+  4.0.12.
+- **The real exposure in those unscanned files is pyarrow 18.0.0.** It is the same CVE as R16-1, which says
+  "only the image is affected". The service's train, dev and eda requirement sets pin `pyarrow ~= 18.0.0` too, and
+  the Dockerfile tells users to "Train with `pip install -r requirements-train.txt`".
+- **Non-registry lock entries are latent only.** Trivy checks them today; the coverage check would not notice if
+  it stopped.
+
+**Fix:**
+- Resolve and scan every `requirements*.txt` under `services/` (train, dev, eda), not only the image variants.
+- Add `pip`, `setuptools` and `wheel` to each image variant's resolution.
+- Expect every lock entry except workspace members (`editable`/`virtual` sources) in the coverage check.
+- Widen R16-1's text to the four files.
+
+```text
+[P3] C6's single pattern misses rendered-equivalent and obfuscated forms, and excludes /Users and C:\Users paths
+  scripts/check_doc_coherence.py (C6 bare-account pattern)
+  $ printf '%s\n' "<form>" > docs/runbooks/_qa4_c6_probe.md && uv run python scripts/check_doc_coherence.py --only C6
+  control, github.dev, ghcr, root-relative, %2F, %2f, @scope, npmjs     FAIL [C6] … 'PRIVATE-REPO'   (all round-16 forms caught)
+  github.com/OWNER&#47;PRIVATE-REPO    ok   (GitHub renders &#47; as "/")
+  OWNER<U+200B>/PRIVATE-REPO           ok
+  OWNER／PRIVATE-REPO (fullwidth)       ok
+  /Users/OWNER/PRIVATE-REPO            ok
+  C:\Users\OWNER\PRIVATE-REPO          ok
+  gist.github.com/OWNER/abc123             ok   (round 16's false positive is fixed)
+```
+
+**Fix:** decode HTML entities and strip zero-width characters before matching. Treat `／` and `\` as separators.
+Exclude only the user-directory segment itself, not a repository-shaped segment after it.
+
+```text
+[P3] P10 accepts verifying the file before downloading it, and `set +e`
+  scripts/check_action_pins.py (download/digest pairing)
+  $ (probe step inserted in ci.yml; uv run python scripts/check_action_pins.py)
+  raw-branch, pipe-sh, wrong-file, or-true, commented, wget-other-host, bash <(curl …)   FAIL   (round 16's six and two new, all caught)
+  echo "deadbeef  t" | sha256sum -c - ; curl -sSLf -o t …/releases/download/v1/t        [actions] OK
+  set +e / curl … -o t / echo "… t" | sha256sum -c - / chmod +x t                       [actions] OK
+```
+
+This is latent: the one real download (kubescape) verifies after downloading, under `set -euo pipefail`.
+
+**Fix:** require the `sha256sum -c` to follow the download in the step. Fail a step containing `set +e`, or
+require `set -e` before the check.
+
+```text
+[P3] ml-service-template #265: the README's wording guard covers README.md only, while the detail it guarded moved to docs/CAPABILITIES.md
+  ml-service-template templates/tests/governance/test_readme_verification_status.py:42-80 (reads README.md only)
+  $ (an unqualified `| Unqualified probe row | Production-ready |` row added to docs/CAPABILITIES.md)
+  $ uv run --no-project --with pytest --with pyyaml pytest -q templates/tests/governance/
+  2 failed, 429 passed, 9 skipped     # the 2 failures are check_template_render_safety ratchet tests that fail identically on the clean tree in this ad-hoc environment
+  $ (the same row in README.md) → test_readme_verification_status.py: 1 failed
+```
+
+The repointed `test_phase0_disclosure.py` and `test_adoption_boundary_contract.py` hold every guarantee they gave.
+The four disclosure surfaces are still read. Stripping the hero disclosure fails 2 tests. `_section`'s
+2,500-character window does not reach a later section's markers. No test reads `docs/CAPABILITIES.md`, and no
+unqualified cell exists in either file today (0 before #265, 0 after).
+
+**Fix:** have `test_readme_verification_status.py` (and any present-tense or disclosure check) read
+`docs/CAPABILITIES.md` as well, now that it carries the README's former detail.
+
+**Scope note, not a finding.** The prompt called #124 "the commit on origin/main". At the start of the audit it
+was not: no PR existed and no remote branch held it. It became true during the audit, with an identical tree
+(above). The prompt's other statements checked out: 177 catalogue entries; the Scorecard and Trivy alert lists;
+pyarrow, diskcache and filelock as named; filelock 3.32.2 in `uv.lock` with the fix in 3.20.3.
+
+---
+
+## Verified working
+
+**#122, dependency scan.**
+- The Supply chain job reproduces locally. The resolver writes 38/57/43 pins for base/gcp/aws. The gate runs over
+  4 files (`uv.lock` and three resolutions) and exits 0. `check_scan_coverage.py` reports "uv.lock: all 270
+  packages examined" plus all 38/43/57.
+- The gate still fails on the round-16 control: registry pyjwt 2.13.0 → `Total: 6 (HIGH: 5, CRITICAL: 1)`,
+  exit 1.
+- Trivy vuln-checks lock entries of every source type tried (git, url, path, directory, editable): 6 CVEs each,
+  exit 1. A package cannot be listed without being checked, in this version.
+- R17-SC1 (coverage check finds nothing missing) and R17-SC2 (only the base variant resolved) are both killed.
+- **uv's resolution equals a real pip install**: sequential `pip install -r requirements.txt` then
+  `-r requirements-<cloud>.txt` on Python 3.13, compared with `uv pip compile --python-platform
+  x86_64-manylinux_2_28`. Every package and version is identical for all three variants, apart from the
+  pip/setuptools/wheel upgrade (P3). Caveat: the host glibc is 2.39, the image's bookworm 2.36. The versions
+  matched, so no wheel tag decided anything.
+- R16-1's acceptance holds:
+  - `check_baselines_expiry.py --as-of 2026-11-05` → OK; `--as-of 2026-11-06` → FAILED "'CVE-2026-25087' expired
+    on 2026-11-05".
+  - `tests/test_baselines_expiry.py` with the clock faked **in the test process and in its subprocess** (a
+    `sitecustomize` starting `time_machine`): 2026-11-05 → 21 passed; 2026-11-06 → 2 failed
+    (`test_the_current_baselines_pass`, `test_the_probe_left_no_suppression_behind`).
+  - Faking only the test process (21 passed) does not test it, because the test shells out.
+
+**#123, W-14 and R15-1.**
+- Both orchestrators import `demand_forecast.promotion`. The pipeline takes no backtest parameters.
+  `test_promotion_agreement.py` runs 34 pairs, matching the work order's count. The behavioural tests kill every
+  value-level loosening tried (B1–B4).
+- **R15-1 closed on the property that matters.**
+  - A model fitted on the lock-verified TLC 2024-01/02 files (sha256 prefixes `c4d59da7…` and `c76c43c1…`) loads
+    and predicts in the **pip-built** gcp-variant environment (numpy 1.26.4): `[0.0698 0.0698]`.
+  - P18 passes in 16.8 s: "loaded and predicted identically … Python 3.13.13, numpy 1.26.4, scikit-learn 1.9.1,
+    joblib 1.6.0".
+  - With the Generator stripping disabled, P18 fails with the PCG64 error.
+  - R17-P18a (leak guard off), R17-P18b (tolerance 1e9) and R17-PER2 (stripping off) are all killed.
+  - The seam packages are identical across base, gcp and aws, so P18's base-only environment represents every
+    variant today.
+- Dropping the Generator is invisible to predict, `repr`, a second pickle round trip and a cold refit. The one
+  exception is in the P3 above.
+
+**#122, check_thresholds.** All seven of round 16's attacks fail (rerun). One match per definition, the
+baseline's direction, factors restricted to {1, 100}, and failure on an unreadable baseline (B5–B7) are all
+verified.
+
+**#122, lakehouse.**
+- `write_demand` takes its id from the commit response. With another writer forced in **after the table was
+  loaded and before the commit**, pyiceberg 0.12 retried, and for both append and overwrite the returned id is
+  this commit's and is the head.
+- Round 16's refresh-race interleaving is covered by the repository's own test.
+- `delete_before` converts aware cutoffs and returns `None` on a no-op (tested). R16-LH2 and R16-LH3 are killed.
+
+**#122, round-16 re-attacks that hold.**
+- C6 catches every round-16 form, and the gist false positive is gone.
+- C9 catches `cd projects/../`, the last `--vcs-ref`, `.markdown`, `-r`, `--vcs-ref=` then a space, `cd /srv/…`,
+  and `cd` then `cd`.
+- P10 catches all six round-16 evasions plus `wget` and `bash <(curl …)`.
+- The mypy hook equals CI's line, and editing it fails `test_tool_versions.py`.
+- Serving-core: a module under `src/serving_core/tests/` is now refused, and the distribution's own `tests/` is
+  exempt.
+- The coverage omit (`*/libs/*/tests/*`) under coverage's own `GlobMatcher`: the nested path is False, the
+  distribution path True.
+- Bandit scans `orchestration/` from `uv.lock`'s 1.9.4.
+- `_runs` catches a decoy step plus `bash -c`, a path invocation, or a wrapper script.
+
+**#124 / #265, README.**
+- `check_readme.py` → OK in both repositories.
+- The README links all resolve.
+- The quick start works:
+  - `uv run pytest projects/demand-forecast -q` → 148 passed, 16 skipped.
+  - The copier generator, given its four required answers, produces a vertical (README, contracts, docs, evals,
+    model-card, pyproject, src, tests).
+  - It is interactive as written. Non-interactively it stops at "Question 'project_slug' is required".
+- The two `readme-standard.md` files are byte-identical today (`cmp` silent).
+- The template's gated badge fails its named test when changed.
+
+**Open items, described accurately.**
+- **R16-1**: accurate, except its scope (the P3 above).
+- **R16-2**: inaccurate in one line and incomplete (the P3 above).
+- **R16-3**: diskcache is reached only through `dvc-data` (`uv tree --invert`; it is the only lock dependent).
+  Trivy's alert 68 is medium and below the gate.
+- **R15-5**: CI on b105d8b still logs "Token required" once.
+- **R15-6**: `app/fastapi_app.py:269` still calls `joblib.load` directly.
+- **R15-20**: the Docker Hub minio manifest returns HTTP 401.
+- **ADR-008's numpy straddle**: P14 still exempts numpy ("written by 2.4.6, 2.5.1, read by ~=1.26.0").
+
+**Regression sweep.**
+- `make verify` exit 0, with all gates listed above.
+- `check_doc_coherence.py` → OK. C7: "3/10 commits not contained in aea1410".
+- `check_readme.py` → OK.
+- `check_implementation_status.py --check` → OK.
+- `check_technology_inventory.py --check` → OK.
+- `check_thresholds.py --show` → 30 watched.
+- The Supply chain commands → gate exit 0, coverage OK.
+- gitleaks 8.21.2 → 212 commits scanned, no leaks. With default rules and `--ignore-gitleaks-allow`: the two
+  known `gitleaks:allow` fixtures in `services/demand-forecast-serving/tests/test_memory_redaction.py:74,78`.
+
+## Mutations
+
+**Committed catalogue** (177 entries at f89a910; the prompt's count is correct):
+`uv run python scripts/mutation_harness.py` → **175/175 expected kills**, with C10-case and W-ceiling-exclusive
+surviving as declared. HARNESS_EXIT=0.
+
+Kill causes, each entry re-run individually and classified from the first `E` line or the gate's output:
+
+| Cause | Count | Entries |
+| --- | --- | --- |
+| Assertion | **163** | |
+| Gate verdict | **7** | P0-claude-skills-flat, R14-artifact-reader ×2, R14-thresholds-scripts-floor-lowered, CF8, CF10, W14-P18 |
+| Behavioural exception | **5** | DG3, DG4 (the product's own refusal), LC1, LC3 (the catalogue refusal), R16-LH3 (pyiceberg's "Zone offset" error, the behaviour under test) |
+| Import, collection or syntax crash | **0** | |
+
+**Auditor additions** (`~/qa4-r17-logs/r17.yaml`, via `--catalogue`): **8 of 13 killed**, all by assertion.
+
+| id | mutation | result | cause |
+| --- | --- | --- | --- |
+| R17-BAN1 | Bandit `--exit-zero` in ci.yml | **SURVIVED** | `_blocks` has no word for it (P2) |
+| R17-W14a | DAG rounds metrics to 3 dp before `check` | **SURVIVED** | off the agreement grid (P3) |
+| R17-THR1 | `DESIGN = BacktestDesign(n_folds=3)`, judged by the gate | **SURVIVED** | gate reads the default (P3). Caught by test_promotion.py |
+| R17-THR2 | second `MIN_SKILL=0.0`, judged by the gate | **SURVIVED** | gate reads text (P3) |
+| R17-THR2b | same, judged by test_promotion.py | killed | assertion |
+| R17-RD1 | quick-start budget off | killed | assertion |
+| R17-RD2 | related table not compared | killed | assertion |
+| R17-SC1 | coverage check finds nothing missing | killed | assertion |
+| R17-SC2 | only the base variant resolved | killed | assertion |
+| R17-P18a | leak guard off | killed | assertion |
+| R17-P18b | prediction tolerance 1e9 | killed | assertion |
+| R17-PER2 | random state not stripped | killed | assertion |
+| R17-LH4 | `delete_before` counts from the live table + 1 | **SURVIVED** | row count never asserted (P3) |
+
+Suggested for the committed catalogue:
+- Now: R17-THR2b, RD1, RD2, SC1, SC2, P18a, P18b, PER2.
+- Once their fixes land: R17-BAN1, W14a, THR1, THR2 (re-judged by a value-level gate), LH4.
+
+Probes that were not harness mutations, all reverted (`git status` clean after each):
+- Supply chain: lock sources ×5, pyjwt control.
+- pip vs uv resolutions ×3.
+- osv-scanner with and without resolution.
+- Trivy on the dev/train/eda resolutions and the pip/setuptools/wheel set.
+- Faked clock ×2.
+- Thresholds B1–B7.
+- Agreement rounding at 2 and 3 dp.
+- KFP image imports ×10.
+- P18 and the Generator probe.
+- README ×13 (ml-platform), ×4 (template), standard divergence.
+- Template disclosure strip, CAPABILITIES plant, gated badge.
+- Lakehouse interleavings ×3.
+- `_runs`/`_blocks` ×5.
+- C6 ×19, C9 ×10, P10 ×10.
+- Serving-core ×2, omit globs, mypy hook.
+
+## Not verifiable here
+
+- **L3 (#105 NetworkPolicies, `make local-serve`).** Not run, and **L3 is not ticked**. The Docker Desktop engine
+  is not running: `docker.exe info` → "open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file
+  specified", and `kind get clusters` fails on `docker ps`. Starting it is outside this session's remit, and a
+  clean pull would fail on minio (R15-20) regardless. 55 local and cluster tests skipped.
+- **The KFP component image**: it does not exist, so the in-image import claim cannot be executed. I showed
+  instead that the image of that name cannot run the components (P2).
+- **S3 FileIO, credentials and object-store semantics** for the lakehouse: only `file://` was executed.
+- **The serving image itself**: not built. The image's pip installs were reproduced on the host Python 3.13
+  (glibc 2.39), not on bookworm.
+- **gitleaks at the pinned 8.30.0**: run with 8.21.2. **Trivy at CI's 0.70.0**: run with 0.71.0.
+- **Sibling-dependent checks** (parity online, C2's generated citations): not run, because the sibling template
+  is not checked out beside the worktree.
+
+## Proposed audit-trail record
+
+```text
+--action independent-audit --target ml-platform --mode CONSULT
+--outcome "Round 17 against tree f89a9101ad4bf8c8399204384e0330ac9a9de90d (#124 head; landed during the audit as 71528ad3e05ea3db9e33934e58e95361e13f61eb with an identical tree — the marker names 71528ad; ml-service-template 52e0f00 read-only). 0 P0, 0 P1, 4 P2, 9 P3. P2: Bandit's own --exit-zero in CI and the Makefile disarms the blocking control with all 250 relevant tests green (_blocks models no tool-native exit flag); the KFP components name the serving image, which has no kfp (install_kfp_package=False), demand_forecast or polars, so W-14's one verdict holds in-process only; P19 passes setext/indented/HTML h2, unlinked or in-section claim badges and chained or unfenced quick-start commands, never checks 'version pinned' (the README runs unpinned uvx copier), and nothing holds the standard byte-identical across the repositories (diverged, every gate green); five README statements are false (rag-assistant model card and evals, Trivy 'and the serving image', the QA-4 'procedure' link, 'breaks each gate' with P1/P2/P6/P11/P13/P15/C0 uncatalogued, the generator 'meeting the contract'). #122's scan reproduces: 270 lock packages plus three image variants, uv resolution identical to a real pip install; Scorecard's filelock alert is osv's own transitive resolution of requirements-dev.txt (real: filelock 4.0.12), a false positive. R15-1 closed on real data in a pip-built image environment; P18 fails when stripping is off. R16-1 expiry verified with a faked clock in test and subprocess. All seven round-16 threshold attacks fail. make verify exit 0 (37:12), plain suite 2266 passed/64 skipped (26:58), in parallel, no flake; coverage identical to CI on 71528ad in all 13 scopes (scripts 87.36). 175/175 catalogue kills (163 assertion, 7 gate verdict, 5 behavioural exception, 0 crash); 8/13 auditor mutations killed. L3 not verified: Docker engine not running. gitleaks clean over 212 commits."
+--evidence "Worktrees ~/qa4-r17 (plain suite), ~/qa4-r17b (make verify), ~/qa4-r17-probe (probes, harness) at f89a9101ad4bf8c8399204384e0330ac9a9de90d after uv sync --all-packages --all-extras --locked; ~/qa4-r17-tpl at ml-service-template 52e0f00 (read-only); uv 0.11.19, Python 3.11/3.13.13, trivy 0.71.0, osv-scanner 2.6.0 (SHA256SUMS verified), gitleaks 8.21.2, bandit 1.9.4, pyiceberg 0.12.0, pyarrow 25.0.1; uv run pytest -o addopts='' -q -rs; make verify; CI runs 37538356050 (71528ad) and 37497147650 (b105d8b) logs; git diff f89a910 71528ad (empty); Supply chain commands (resolve, gate, --list-all-pkgs, check_scan_coverage) incl. five non-registry lock sources; sequential pip installs per image variant vs uv pip compile; osv-scanner scan source with and without --no-resolve on b105d8b; gh api code-scanning alerts per tool; check_baselines_expiry --as-of and tests under a time_machine sitecustomize; check_thresholds attacks B1-B7; promotion agreement rounding probes; KFP-image import probes; P18 with and without Generator stripping, real-data artifact in pip-built env, rng_probe; check_readme probes (13 + 4 template) and standard divergence; template disclosure and CAPABILITIES probes; lakehouse interleavings; _runs/_blocks and --exit-zero (250 tests); C6 x19 / C9 x10 / P10 x10 / serving-core / omit / mypy-hook probes; mutation_harness.py (177) with per-entry classification and 13 auditor entries; gitleaks git --redact (repo config; default rules with --ignore-gitleaks-allow). Report: ~/qa4-r17-report.md"
+```
+
+## Closing verdict
+
+#122 and #123 are trustworthy where they were measured. The dependency scan reads what it claims and reproduces
+against a real pip install. The artifact loads in the image's environment on real data. Every round-16 attack on
+the threshold gate fails.
+
+The new README and its gate are not trustworthy as written. P19 enforces the standard's shape but not its rules.
+The two repositories are held "byte for byte" by nothing. The README's prose repeats claims the repository had
+already corrected elsewhere, under a gate whose subject is exactly the README.

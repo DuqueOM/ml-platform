@@ -20,7 +20,7 @@ gets everything else by living in the monorepo.
 ## Duplicate one
 
 ```bash
-uvx copier copy --vcs-ref HEAD --trust . projects/my-project
+uv run copier copy --vcs-ref HEAD --trust . projects/my-project
 ```
 
 Answer the prompts — `project_slug`, `project_kebab`, `project_name`,
@@ -85,7 +85,7 @@ the generator.
 The generator improves. Pull those improvements into an existing vertical:
 
 ```bash
-cd projects/my-project && uvx copier update --vcs-ref HEAD --trust
+cd projects/my-project && uv run copier update --vcs-ref HEAD --trust
 ```
 
 `--vcs-ref` is not optional. A bare `copier update` resolves to the

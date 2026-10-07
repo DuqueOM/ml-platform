@@ -15,7 +15,7 @@ Never by hand — a hand-made project diverges from the fifth one onwards, with
 nothing reporting it.
 
 ```bash
-uvx copier copy --trust . projects/<name>
+uv run copier copy --vcs-ref HEAD --trust . projects/<name>
 ```
 
 The generator emits contracts, evals with rationale-bearing thresholds, a model
