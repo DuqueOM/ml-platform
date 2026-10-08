@@ -109,7 +109,9 @@ the data back.
   often skipped.
 - **`tests/test_dataset_lock.py`** — the CI gate, 8 tests.
 - **`.dvc/` with an S3-protocol remote** — MinIO locally, cloud object storage
-  later, one code path. Analytics disabled: this repository does not phone home
+  later, one code path. *(Amended 2026-10-08: the local object store is now RustFS,
+  R15-20; the remote is `local-object-store`, and `make local-up` creates its
+  bucket. The decision — one S3 protocol, only the endpoint moves — is unchanged.)* Analytics disabled: this repository does not phone home
   without a recorded decision.
 
 ### What the CI gate does and does not prove

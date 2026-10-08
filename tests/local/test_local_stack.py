@@ -2,7 +2,7 @@
 
 `kubectl wait --for=condition=available` proves a container started and its
 probe answered. It does not prove Postgres accepts a connection, that pgvector
-is installed, that MinIO will take a bucket, or that a span sent to the
+is installed, that the object store holds the buckets its consumers write to, or that a span sent to the
 collector reaches Jaeger. Those are the properties Phase 1b exists to
 establish before any cloud resource is created, and each one has failed in
 practice while the pod stayed green.
@@ -22,6 +22,7 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 import pytest
 
@@ -81,7 +82,7 @@ def test_every_declared_deployment_is_available() -> None:
         item["metadata"]["name"]: item.get("status", {}).get("availableReplicas", 0)
         for item in json.loads(result.stdout)["items"]
     }
-    expected = {"postgres", "minio", "otel-collector", "jaeger", "prometheus", "grafana"}
+    expected = {"postgres", "object-store", "otel-collector", "jaeger", "prometheus", "grafana"}
 
     missing = expected - set(deployments)
     assert not missing, f"declared but not deployed: {sorted(missing)}"
@@ -198,9 +199,25 @@ def test_postgres_accepts_connections_and_has_pgvector() -> None:
     assert "vector" in result.stdout, f"pgvector not available: {result.stdout!r}"
 
 
-def test_minio_is_reachable_and_healthy() -> None:
-    assert _port_open(19000), "minio API port not reachable on the host"
-    assert _http_ok("http://localhost:19000/minio/health/live")
+def test_the_object_store_is_healthy_and_holds_the_buckets_its_consumers_address() -> None:
+    """Ready is not provisioned: the lakehouse and DVC write to buckets nothing used to create (R15-20)."""
+    import sys
+
+    assert _port_open(19000), "object store API port not reachable on the host"
+    assert _http_ok("http://localhost:19000/health/ready")
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "local"))
+    import provision_object_store as provision
+    from pyarrow import fs
+
+    store = fs.S3FileSystem(
+        endpoint_override=provision.ENDPOINT,
+        access_key=provision.ACCESS_KEY,
+        secret_key=provision.SECRET_KEY,
+        region="us-east-1",
+    )
+    missing = [name for name in provision.buckets() if store.get_file_info(name).type == fs.FileType.NotFound]
+    assert not missing, f"buckets `make local-up` should have created: {missing}"
 
 
 def test_prometheus_is_scraping_targets() -> None:

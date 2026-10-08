@@ -42,8 +42,8 @@
   "forwardPorts": [15432, 19000, 19001, 16686, 19090, 13000, 18080],
   "portsAttributes": {
     "15432": { "label": "postgres (feature store, vector store)" },
-    "19000": { "label": "minio api (local Iceberg warehouse)" },
-    "19001": { "label": "minio console" },
+    "19000": { "label": "object store S3 API (local Iceberg warehouse)" },
+    "19001": { "label": "object store console" },
     "16686": { "label": "jaeger ui (traces)" },
     "19090": { "label": "prometheus" },
     "13000": { "label": "grafana" },

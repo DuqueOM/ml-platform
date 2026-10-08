@@ -1123,6 +1123,21 @@ sidecar, and make the test stub assert it (auditor mutation R15-DAG6).
 
 ### R15-20 — The local stack's object store cannot be pulled
 
+> **Status: done** — decided 2026-10-08: replace it. The store is RustFS 1.0.1 (Apache-2.0), pinned by digest.
+> Candidates were tested by running the lakehouse's integration tests against each: RustFS passed all 15 unchanged;
+> SeaweedFS refused the key without an identity file; VersityGW's POSIX gateway answered HeadObject with a 400.
+> The component is `object-store`, not "minio", and the lakehouse reads `OBJECT_STORE_*` rather than
+> `AWS_*`, so a real cloud key in the same shell is never sent to it. `make local-up` removes the retired MinIO
+> objects.
+>
+> Fixing it found two more defects. The store ran over `emptyDir`, so a pod restart — the memory-limit change
+> in round eighteen was enough — emptied it while the catalogue still named its files. And nothing created the
+> buckets the lakehouse and DVC write to, so they existed only while someone had made them by hand. The store
+> is now on a persistent volume, and `scripts/local/provision_object_store.py` creates both buckets on every
+> `make local-up`, reading their names from the lakehouse module and `.dvc/config`. The limit is 320Mi, against
+> peaks of 153–222 MiB measured with the integration tests writing. That measurement also showed `--write`
+> replacing a busier run's peak with a quieter one, so recorded peaks now ratchet per image.
+
 **Mode**: CONSULT · **Found by**: round fifteen's remediation, pinning digests ·
 **Size**: ~2h
 

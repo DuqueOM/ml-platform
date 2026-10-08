@@ -5,13 +5,14 @@
 # SHA-256 in docs/datasets/datasets.lock.json instead, and pipeline tables live
 # in Iceberg. Three mechanisms, one criterion each, no overlap.
 #
-# The remote speaks S3 so MinIO locally and cloud object storage share one code
-# path, exactly as libs/../lakehouse.py already does — only the endpoint moves.
-# localhost:19000 is the kind cluster's MinIO API (platform/local/kind-cluster.yaml).
+# The remote speaks S3 so the local object store and cloud object storage share
+# one code path, exactly as lakehouse.py already does — only the endpoint moves.
+# localhost:19000 is the kind cluster's object store (RustFS; platform/local/
+# kind-cluster.yaml), and `make local-up` creates this remote's bucket.
 #
 # CREDENTIALS ARE NOT IN THIS FILE and must never be. This file is committed;
 # .dvc/config.local is gitignored and is where a machine-specific override
-# belongs. For the local stack, export the values MinIO is started with:
+# belongs. For the local stack, export the values the object store is started with:
 #
 #     export AWS_ACCESS_KEY_ID=mlplatform
 #     export AWS_SECRET_ACCESS_KEY=local-only-not-a-secret
@@ -21,7 +22,7 @@
 # S3-protocol rather than a bespoke transport.
 [core]
     analytics = false
-    remote = local-minio
-['remote "local-minio"']
+    remote = local-object-store
+['remote "local-object-store"']
     url = s3://ml-platform-data/dvc
     endpointurl = http://localhost:19000

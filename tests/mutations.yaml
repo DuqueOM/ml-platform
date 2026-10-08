@@ -2574,3 +2574,35 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_mutation_harness.py -k itself
   expect: killed
+- id: R15-20a
+  origin: R15-20 remediation — the object store back on emptyDir, emptied by any pod restart
+  file: platform/local/manifests/20-object-store.yaml
+  old: '      volumes: [{ name: data, persistentVolumeClaim: { claimName: object-store-data } }]'
+  new: '      volumes: [{ name: data, emptyDir: {} }]'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_local_object_store.py
+  expect: killed
+- id: R15-20b
+  origin: R15-20 remediation — provisioning skips a missing bucket
+  file: scripts/local/provision_object_store.py
+  old: '        if store.get_file_info(name).type == fs.FileType.NotFound:'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_local_object_store.py
+  expect: killed
+- id: R15-20c
+  origin: R15-20 remediation — make local-up no longer creates the buckets its consumers address
+  file: Makefile
+  old: "\t@uv run python scripts/local/provision_object_store.py"
+  new: "\t@true"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_local_object_store.py
+  expect: killed
+- id: R18-MEM5
+  origin: R15-20 remediation — a quieter measurement lowers a busier run's recorded peak
+  file: scripts/local/measure_memory.py
+  old: '    return max(measured, int(previous.get("peak_mib", 0)))'
+  new: '    return measured'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_local_memory_budget.py
+  expect: killed

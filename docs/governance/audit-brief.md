@@ -103,11 +103,12 @@ file; the auditor should verify C6 actually greps what it claims to.
 `docs/architecture/technical-plan.md` is the live document. Summarised:
 
 - **Phase 0 — Governance.** ADRs, agentic surface, gates, derived docs.
-- **Phase 1 — Data and ML foundations.** Local lakehouse (Iceberg over MinIO),
+- **Phase 1 — Data and ML foundations.** Local lakehouse (Iceberg over an S3 store),
   data contracts, point-in-time correctness, conformal prediction, the
   `demand-forecast` project on NYC TLC data.
 - **Phase 1b — Local validation stack.** kind cluster with Postgres+pgvector,
-  MinIO, OTel, Jaeger, Prometheus, Grafana. Nothing touches a cloud.
+  an S3-compatible object store (RustFS; MinIO until R15-20), OTel, Jaeger,
+  Prometheus, Grafana. Nothing touches a cloud.
 - **Phase 2+ — Serving, multi-cloud, LLM/agent projects.** Not started.
 
 Deployment sits behind Phase 1 completion *and* behind the old template's

@@ -63,9 +63,9 @@ verify: ## Run every repository gate (superset of CI's; see RUNBOOK for what it 
 	uv run python scripts/check_technology_inventory.py --check
 	uv run python scripts/check_implementation_status.py --check
 	uv run python scripts/check_readme.py
-	# The suite, measured exactly as CI measures it: one run, then every
-	# coverage floor. A single run, so the floors cost the tracing overhead
-	# rather than a second pass of the suite.
+	@# The suite, measured exactly as CI measures it: one run, then every
+	@# coverage floor. A single run, so the floors cost the tracing overhead
+	@# rather than a second pass of the suite.
 	uv run coverage erase
 	uv run coverage run --branch --source=libs,projects,orchestration,scripts -m pytest -q
 	uv run coverage combine
@@ -90,23 +90,30 @@ local-up: local-preflight ## Create the local cluster and bring up the full stac
 	@kind get clusters 2>/dev/null | grep -qx "$(CLUSTER)" \
 	  && echo "cluster $(CLUSTER) already exists" \
 	  || kind create cluster --config $(LOCAL)/kind-cluster.yaml
+	@# The stack's MinIO, retired by R15-20 for an image that can be pulled. `apply`
+	@# never deletes, and its Service holds the NodePort the object store takes.
+	@kubectl --context $(CTX) -n ml-platform delete --ignore-not-found \
+	  deployment/minio service/minio secret/minio-credentials
 	kubectl --context $(CTX) apply -f $(LOCAL)/manifests/
 	@echo "waiting for the stack to become ready…"
-	# On a timeout `kubectl wait --all` reports every deployment it had not yet
-	# confirmed, so a single failing one is named alongside five healthy ones
-	# (QA-4 round eighteen). explain_unavailable.py names only the unavailable
-	# ones, with each pod's reason.
+	@# On a timeout `kubectl wait --all` reports every deployment it had not yet
+	@# confirmed, so a single failing one is named alongside five healthy ones
+	@# (QA-4 round eighteen). explain_unavailable.py names only the unavailable
+	@# ones, with each pod's reason.
 	@kubectl --context $(CTX) -n ml-platform wait --for=condition=available \
 	  --timeout=300s deployment --all >/dev/null \
 	  || { uv run python scripts/local/explain_unavailable.py; exit 1; }
+	@# The buckets the lakehouse and DVC address. Nothing created them, so they
+	@# existed only while someone had made them by hand (R15-20's remediation).
+	@uv run python scripts/local/provision_object_store.py
 	@$(MAKE) --no-print-directory local-endpoints
 
 .PHONY: local-endpoints
 local-endpoints: ## Print the local stack's URLs
 	@echo ""
 	@echo "  postgres   localhost:15432   (db/user: mlplatform)"
-	@echo "  minio api  http://localhost:19000"
-	@echo "  minio ui   http://localhost:19001"
+	@echo "  s3 api     http://localhost:19000   (object store: RustFS)"
+	@echo "  s3 console http://localhost:19001"
 	@echo "  jaeger     http://localhost:16686"
 	@echo "  prometheus http://localhost:19090"
 	@echo "  grafana    http://localhost:13000"
@@ -125,13 +132,13 @@ local-serve: ## Build the service image, load it into kind, roll the Deployment 
 	docker build -t $(SERVICE_IMAGE) services/demand-forecast-serving
 	kind load docker-image $(SERVICE_IMAGE) --name $(CLUSTER)
 	kubectl --context $(CTX) apply -k platform/kubernetes/overlays/local
-	# The tag is fixed, so a rebuilt image changes nothing `apply` can see: the
-	# Deployment is identical, no rollout happens, and the running pod keeps the
-	# OLD binary while this target reports success. Measured 2026-09-30: after a
-	# rebuild from ml-service-template v0.30.2 the pod still ran the image loaded
-	# a week earlier, and every L3 measurement taken after it measured that.
-	# Restarting the rollout is what makes a rebuild reach the cluster, and
-	# tests/local/test_service_runs.py checks that it did.
+	@# The tag is fixed, so a rebuilt image changes nothing `apply` can see: the
+	@# Deployment is identical, no rollout happens, and the running pod keeps the
+	@# OLD binary while this target reports success. Measured 2026-09-30: after a
+	@# rebuild from ml-service-template v0.30.2 the pod still ran the image loaded
+	@# a week earlier, and every L3 measurement taken after it measured that.
+	@# Restarting the rollout is what makes a rebuild reach the cluster, and
+	@# tests/local/test_service_runs.py checks that it did.
 	kubectl --context $(CTX) -n $(SERVICE_NS) rollout restart deployment/demand-forecast
 	kubectl --context $(CTX) -n $(SERVICE_NS) rollout status deployment/demand-forecast --timeout=300s
 	@echo "waiting for a Ready pod — the first claim in this repository that is not about YAML…"

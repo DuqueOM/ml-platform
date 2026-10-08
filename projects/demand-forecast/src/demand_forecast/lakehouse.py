@@ -13,8 +13,8 @@ schema across years. A format that requires rewriting history on a column
 addition makes that change expensive enough to be avoided, and avoided schema
 changes become undocumented preprocessing.
 
-Locally the warehouse is MinIO over the same S3 API the cloud path uses, so
-only the endpoint differs (ADR-004). Nothing here knows which it is talking to.
+Locally the warehouse is the stack's object store over the same S3 API the
+cloud path uses, so only the endpoint differs (ADR-004). Nothing here knows which it is talking to.
 """
 
 from __future__ import annotations
@@ -78,8 +78,13 @@ class WriteResult:
         return f"{self.mode} {self.rows:,} rows -> snapshot {self.snapshot_id}"
 
 
+#: The local stack's warehouse bucket. `scripts/local/provision_object_store.py`
+#: creates it on `make local-up`, reading it from here.
+LOCAL_WAREHOUSE = "s3://lakehouse/"
+
+
 def local_catalog(warehouse_uri: str | None = None, catalog_db: str | None = None) -> SqlCatalog:
-    """A catalogue backed by MinIO, using the same S3 API as the cloud path.
+    """A catalogue backed by the local stack's object store, over the same S3 API as the cloud path.
 
     The SQL catalogue is a local-only choice: in cloud this is Glue or BigLake.
     The TABLE format is identical either way, which is the point — schema,
@@ -93,13 +98,15 @@ def local_catalog(warehouse_uri: str | None = None, catalog_db: str | None = Non
         "local",
         **{
             "uri": catalog_db or os.environ.get("ICEBERG_CATALOG_URI", "sqlite:///data/iceberg/catalog.db"),
-            "warehouse": warehouse_uri or os.environ.get("ICEBERG_WAREHOUSE", "s3://lakehouse/"),
-            "s3.endpoint": os.environ.get("MINIO_ENDPOINT", "http://localhost:19000"),
+            "warehouse": warehouse_uri or os.environ.get("ICEBERG_WAREHOUSE", LOCAL_WAREHOUSE),
+            "s3.endpoint": os.environ.get("OBJECT_STORE_ENDPOINT", "http://localhost:19000"),
             # Local-only credentials, matching platform/local/manifests. The
             # cloud path resolves these from a secret manager via External
             # Secrets — never from a literal (rule 06-security-governance).
-            "s3.access-key-id": os.environ.get("MINIO_ROOT_USER", "mlplatform"),
-            "s3.secret-access-key": os.environ.get("MINIO_ROOT_PASSWORD", "local-only-not-a-secret"),
+            # Not AWS_ACCESS_KEY_ID: a real cloud key exported in the same
+            # shell would be sent to the local store.
+            "s3.access-key-id": os.environ.get("OBJECT_STORE_ACCESS_KEY", "mlplatform"),
+            "s3.secret-access-key": os.environ.get("OBJECT_STORE_SECRET_KEY", "local-only-not-a-secret"),
         },
     )
 
@@ -117,7 +124,7 @@ def catalog_from_environment() -> Catalog:
 
     **Why this exists (QA-4 F-23).** Every public function here used to take
     `catalog: Catalog | None = None` and fall back to :func:`local_catalog` —
-    a MinIO on localhost with a literal credential. The Airflow DAG called
+    an object store on localhost with a literal credential. The Airflow DAG called
     `write_demand(...)` and `read_demand()` with no catalogue at all, so
     wherever it ran it wrote to and read from a laptop's object store, and in a
     cloud deployment the first symptom would have been a connection error that
@@ -225,7 +232,7 @@ def write_demand(demand: pl.DataFrame, catalog: Catalog, *, overwrite: bool = Fa
 
     Args:
         demand: Output of :func:`demand_forecast.ingest.to_hourly_demand`.
-        catalog: Defaults to the local MinIO-backed catalogue.
+        catalog: Required — callers outside tests pass :func:`catalog_from_environment`.
         overwrite: Replace the months present in ``demand`` instead of
             appending to them. Use for a backfill of a month already present;
             appending there would double every count silently. Months NOT
@@ -326,7 +333,7 @@ def delete_before(cutoff: datetime, catalog: Catalog) -> WriteResult | None:
             give aware instants, and the column is a naive timestamp, so
             passing one straight to pyiceberg raised ("Zone offset provided,
             but not expected") — round sixteen.
-        catalog: Defaults to the local MinIO-backed catalogue.
+        catalog: Required — callers outside tests pass :func:`catalog_from_environment`.
 
     Returns:
         A :class:`WriteResult` naming the snapshot the delete produced, or
