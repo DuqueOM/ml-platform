@@ -1,17 +1,15 @@
-# Codecov configuration.
+# Codecov configuration — reporting, not gating.
 #
-# Exists because docs/governance/quality-gates.md declares L1 (>=90% lines) and
-# L2 (>=80% branches) as GATES, and CI never measured coverage — a published
-# claim with nothing able to fail on it, which is exactly what rule K forbids.
+# The coverage GATES are scripts/check_coverage_floors.py (L1, L2, P12, P17):
+# measured once per CI run, offline, reproducible with `make verify`, and
+# blocking. Codecov adds what those cannot: coverage of each pull request's own
+# new lines, and the history. So every status here is informational, and none
+# restates a floor — the per-path targets this file used to carry (libs/ 90,
+# scripts/ 60) had drifted from the floors that actually block (scripts/ is 86),
+# a second copy of a number with nothing holding it to the first.
 #
-# Two deliberate choices:
-#
-# 1. `patch` is stricter than `project`. A repository can hold its overall
-#    percentage while every new line arrives untested; the patch target is what
-#    stops coverage decaying one PR at a time.
-# 2. `informational: false` on the library target. A gate that only comments is
-#    a gate that gets ignored — and libs/ is where an untested path reaches
-#    every consumer.
+# Uploads authenticate by OIDC (ci.yml); codecov-health.yml checks weekly that
+# reports land, because for months none did and nothing noticed (R15-5).
 coverage:
   precision: 1
   round: down
@@ -20,35 +18,17 @@ coverage:
   status:
     project:
       default:
+        # A fall in the whole repository's coverage, shown on the pull request.
         target: auto
-        # A drop this small is noise from a refactor, not a regression.
         threshold: 1%
-        informational: false
-      libs:
-        # The threshold quality-gates.md L1 declares. It applies HERE because
-        # libs/ has the widest blast radius: an untested path reaches every
-        # project that imports it.
-        target: 90%
-        threshold: 0%
-        paths: ["libs/"]
-        informational: false
-      scripts:
-        # The gate scripts enforce every other claim in the repository and were
-        # 0% covered until tests/test_gate_scripts.py. Lower target than libs/
-        # because they are invoked end-to-end rather than unit-tested, and that
-        # is the appropriate shape for them.
-        target: 60%
-        threshold: 0%
-        paths: ["scripts/"]
-        informational: false
-
+        informational: true
     patch:
       default:
-        # New code must be tested. Holding the project percentage while every
-        # new line arrives uncovered is how a suite stops meaning anything.
+        # New lines arriving untested is how a suite stops meaning anything;
+        # shown on the pull request so the reviewer sees it.
         target: 85%
         threshold: 0%
-        informational: false
+        informational: true
 
 comment:
   layout: "reach, diff, flags, files"

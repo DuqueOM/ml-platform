@@ -14,8 +14,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pytest
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS = REPO_ROOT / ".github" / "workflows"
 ADOPTION = REPO_ROOT / "docs" / "ADOPTION.md"
@@ -65,6 +63,12 @@ def test_an_undocumented_secret_is_reported(tmp_path: Path) -> None:
     assert _undocumented(secrets, "only `CODECOV_TOKEN` is named here") == ["NEW_UPLOAD_TOKEN"]
 
 
-@pytest.mark.parametrize("named", ["CODECOV_TOKEN"])
-def test_a_documented_secret_passes(named: str) -> None:
-    assert not _undocumented({named}, ADOPTION.read_text(encoding="utf-8"))
+def test_a_documented_secret_passes() -> None:
+    """The converse, so the rule cannot pass by reporting every secret.
+
+    It used `CODECOV_TOKEN` against the real guide until R15-5 moved the upload
+    to OIDC: no workflow reads a secret of its own now, so the real tree has
+    none to name, and the rule is held by AD1 in tests/mutations.yaml, which
+    adds an undocumented one back.
+    """
+    assert not _undocumented({"UPLOAD_TOKEN"}, "set the `UPLOAD_TOKEN` secret in the repository settings")
