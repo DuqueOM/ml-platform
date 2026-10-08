@@ -552,7 +552,7 @@ jobs:
         # no credentials, so it runs while the cloud work is deliberately
         # paused. soft_fail on the FIRST run only — an unread wall of findings
         # is a gate people switch off, and the triage is a separate commit.
-        uses: bridgecrewio/checkov-action@cc0e17d456ef1713bbfd963ebac19dc776775cb2 # v12.3128.0
+        uses: bridgecrewio/checkov-action@7b1bd992e2c40a3404e3511944aeb8d014703d9a # v12.3129.0
         with:
           directory: platform/
           framework: terraform,kubernetes
