@@ -239,3 +239,65 @@ def test_mutating_tools_names_a_tool_that_declares_nothing() -> None:
     reg.register("undeclared", lambda **k: _ok())
     reg.register("declared", lambda **k: _ok(), read_only=True)
     assert reg.mutating_tools() == ["undeclared"]
+
+
+# --- fail closed when the data is missing or malformed (W-15) ---------------
+
+
+@pytest.fixture
+def without_fixtures(tmp_path: Any) -> Any:
+    """The tienda registry pointed at an empty fixtures directory — a deployment missing its data."""
+    import dataclasses
+
+    return build_registry(dataclasses.replace(load_usecase(USECASE_ROOT), fixtures_dir=tmp_path))
+
+
+@pytest.mark.parametrize(
+    ("tool", "args"),
+    [
+        ("inventory_lookup", {"product_id": "SKU-COCA-600"}),
+        ("alias_lookup", {"text": "coca"}),
+        ("pricing_lookup", {"product_id": "SKU-COCA-600"}),
+        ("order_status", {"order_id": "ORDER-001"}),
+    ],
+)
+def test_a_lookup_without_its_data_refuses_rather_than_answering_empty(
+    without_fixtures: Any, tool: str, args: dict
+) -> None:
+    """A missing fixture must read as 'cannot answer', never as 'not in stock' or 'no such order'."""
+    obs = without_fixtures.run(ToolCall(tool=tool, args=args))
+
+    assert obs.ok is False
+    assert obs.error == "fixture_not_found"
+
+
+def test_order_status_finds_a_known_order(registry: Any) -> None:
+    obs = registry.run(ToolCall(tool="order_status", args={"order_id": "ORDER-001"}))
+
+    assert obs.ok is True
+    assert obs.data["order_id"] == "ORDER-001"
+    assert obs.error is None
+
+
+def test_order_status_misses_an_unknown_order(registry: Any) -> None:
+    obs = registry.run(ToolCall(tool="order_status", args={"order_id": "ORDER-NOPE"}))
+
+    assert obs.ok is False
+    assert obs.data == {}
+    assert obs.error == "not_found"
+
+
+@pytest.mark.parametrize(
+    "item",
+    [
+        pytest.param({"product_id": "SKU-COCA-600", "quantity": "2"}, id="quantity-as-text"),
+        pytest.param({"product_id": 600, "quantity": 2}, id="product-id-as-number"),
+        pytest.param({"quantity": 2}, id="no-product-id"),
+    ],
+)
+def test_an_order_with_a_malformed_item_is_refused(registry: Any, item: dict) -> None:
+    """The model writes these arguments; a quantity of "2" must not become an order line."""
+    obs = registry.run(ToolCall(tool="order_create", args={"items": [item], "customer_phone": "+52155512345678"}))
+
+    assert obs.ok is False
+    assert obs.error == "invalid_item_structure"
