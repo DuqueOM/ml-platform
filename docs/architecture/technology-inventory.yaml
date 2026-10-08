@@ -96,6 +96,7 @@ categories:
       - {id: apache-iceberg, tier: core, detect: ["pattern:pyiceberg|projects/demand-forecast"], note: "Monthly partitioning + time travel, verified against real MinIO: reading snapshot 1 returns January only (77,539 rows) while the table holds both months (151,920)."}
       - {id: biglake, tier: core, detect: ["pattern:biglake|platform/terraform"]}
       - {id: s3-tables, tier: core, detect: ["pattern:s3tables|platform/terraform"]}
+      - {id: rustfs, tier: core, detect: ["environment:rustfs|platform/local"], note: "The local S3-compatible object store behind the Iceberg warehouse and DVC remote; replaced MinIO, whose image stopped resolving anonymously (R15-20). Cloud uses the provider's object storage — only the endpoint changes."}
       - {id: delta-lake, tier: rejected, note: "Iceberg chosen for vendor-neutral multi-cloud support (ADR-004)."}
   - name: Data engineering
     items:

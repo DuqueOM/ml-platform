@@ -25,7 +25,7 @@ been validated — it has been remembered.
 | Component | Local choice | Why not the cloud one |
 | --- | --- | --- |
 | Postgres + pgvector | `pgvector/pgvector:pg17` | Same engine, same extension. SQL and schema are validated identically; only the endpoint changes |
-| Object storage | MinIO | Same S3 API the Iceberg warehouse uses in cloud |
+| Object storage | RustFS (replaced MinIO, whose image stopped resolving anonymously — R15-20) | Same S3 API the Iceberg warehouse uses in cloud. Over a persistent volume, with the lakehouse's and DVC's buckets created by `make local-up` |
 | Trace collection | OpenTelemetry Collector | Identical to cloud — this is the piece that must not differ |
 | Trace storage | Jaeger all-in-one, in-memory | The property being validated is that a trace spans the whole path. Jaeger shows that at a fraction of Tempo's memory |
 | Metrics | Prometheus, 2h retention | Locally the property is that metrics are emitted and scraped, not that they survive a week |
@@ -62,7 +62,7 @@ Every one of these is asserted by `make local-verify`, not assumed:
 - Postgres accepts connections **and pgvector is actually installed** — the
   readiness probe runs `pg_isready`, which says nothing about the extension the
   online store and the RAG project both depend on.
-- MinIO answers its health endpoint.
+- The object store answers its health endpoint and holds the buckets the lakehouse and DVC write to.
 - Prometheus has **healthy active targets** — a broken relabel config runs
   happily and collects nothing, which looks identical from outside.
 - A span sent to the collector **arrives in Jaeger**. Each hop can be green
@@ -87,7 +87,7 @@ claimed on the strength of a green local run.
 
 | Property | Why not local | Where it is proven |
 | --- | --- | --- |
-| Managed-service behaviour | Cloud SQL, S3 and their equivalents differ from Postgres and MinIO in consistency, quotas and failure modes | Phase 2 |
+| Managed-service behaviour | Cloud SQL, S3 and their equivalents differ from Postgres and RustFS in consistency, quotas and failure modes | Phase 2 |
 | Workload identity federation | There is no cloud IAM to federate against. Local uses a password; production must use no static credential at all | Phase 2 |
 | Real latency | No network between components, no cross-zone hop, no cold start | Phase 2 load test |
 | Real cost | The only signal that catches an expensive design is a bill | Phase 2 cost review |
@@ -176,7 +176,7 @@ export LAKEHOUSE_CATALOG=local
 ```
 
 Unset is a refusal, not a default. The public functions used to fall back to
-this stack's MinIO — a literal credential on localhost — and the training DAG
+this stack's object store (MinIO then) — a literal credential on localhost — and the training DAG
 relied on that fallback, so wherever it ran it would have written here. `glue`
 and `biglake` are named and refused until their adapters exist (QA-4 F-23).
 
@@ -185,7 +185,7 @@ and `biglake` are named and refused until their adapters exist (QA-4 F-23).
 | Service | URL |
 | --- | --- |
 | Postgres | `localhost:15432` (db/user `mlplatform`) |
-| MinIO API / console | `localhost:19000` / `localhost:19001` |
+| Object store (S3) API / console | `localhost:19000` / `localhost:19001` |
 | Jaeger | `localhost:16686` |
 | Prometheus | `localhost:19090` |
 | Grafana | `localhost:13000` |

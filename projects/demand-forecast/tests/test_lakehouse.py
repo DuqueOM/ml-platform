@@ -5,12 +5,14 @@ Every test runs against TWO backends of the same `local_catalog()`:
 - **filesystem** — the SQL catalogue with a `file://` warehouse under
   `tmp_path`. Real pyiceberg, real pyarrow, real Parquet and real snapshots;
   only the object store is a directory. It runs in every suite, CI included.
-- **minio** — the local stack's S3 endpoint. An integration test by rule
-  03-testing's trigger (the code crosses a boundary it does not own), skipped
-  when the stack is absent. A mocked S3 would test the mock, so there is none.
+- **object-store** — the local stack's S3 endpoint (RustFS). An integration
+  test by rule 03-testing's trigger (the code crosses a boundary it does not
+  own), skipped when the stack is absent. A mocked S3 would test the mock, so
+  there is none. Its bucket is created by `make local-up`.
 
-The filesystem half exists because the MinIO half ran nowhere: CI deselects
-`integration`, and the stack's image can no longer be pulled (R15-20). So a
+The filesystem half exists because the S3 half ran nowhere: CI deselects
+`integration`, and the stack's MinIO image could no longer be pulled (R15-20,
+since replaced). So a
 pyiceberg 0.11 -> 0.12 and pyarrow 21 -> 25 upgrade had no test that wrote a
 table — this module's seven properties were verified by nothing on any build.
 """
@@ -24,7 +26,7 @@ import polars as pl
 import pytest
 
 
-def _minio_up() -> bool:
+def _object_store_up() -> bool:
     try:
         with socket.create_connection(("127.0.0.1", 19000), timeout=2):
             return True
@@ -65,19 +67,19 @@ def _demand(zone: int, hour: int, count: int) -> pl.DataFrame:
     params=[
         pytest.param("filesystem"),
         pytest.param(
-            "minio",
+            "object-store",
             marks=[
                 pytest.mark.integration,
-                pytest.mark.skipif(not _minio_up(), reason="local stack not running — run `make local-up`"),
+                pytest.mark.skipif(not _object_store_up(), reason="local stack not running — run `make local-up`"),
             ],
         ),
     ]
 )
 def catalog(request, tmp_path):  # type: ignore[no-untyped-def]
     """A catalogue isolated per test, so one test cannot see another's writes."""
-    from demand_forecast.lakehouse import local_catalog
+    from demand_forecast.lakehouse import LOCAL_WAREHOUSE, local_catalog
 
-    warehouse = f"file://{tmp_path}/warehouse" if request.param == "filesystem" else "s3://lakehouse/"
+    warehouse = f"file://{tmp_path}/warehouse" if request.param == "filesystem" else LOCAL_WAREHOUSE
     return local_catalog(warehouse_uri=warehouse, catalog_db=f"sqlite:///{tmp_path}/catalog.db")
 
 

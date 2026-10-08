@@ -1,12 +1,12 @@
 """Which warehouse a process writes to is declared, never defaulted.
 
 QA-4 F-23. Every public lakehouse function took `catalog: Catalog | None = None`
-and fell back to `local_catalog()` — MinIO on localhost with a literal
+and fell back to `local_catalog()` — an object store on localhost with a literal
 credential. The Airflow DAG passed no catalogue at all, so wherever it ran it
 wrote to a laptop's object store; in a cloud deployment the first symptom
 would have been a connection error that reads as the network being down.
 
-Separate from test_lakehouse.py on purpose: those need a running MinIO and are
+Separate from test_lakehouse.py on purpose: those need a running object store and are
 skipped without one, and the choice of catalogue must be tested everywhere.
 """
 

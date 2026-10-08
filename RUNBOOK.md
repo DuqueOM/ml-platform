@@ -444,7 +444,8 @@ never edited or deleted.
 ## The local stack
 
 `platform/local/` is a single-node kind cluster carrying Postgres with
-pgvector, MinIO, an OTel collector, Jaeger, Prometheus and Grafana.
+pgvector, an S3-compatible object store (RustFS), an OTel collector, Jaeger,
+Prometheus and Grafana.
 [`QUICK_START.md`](QUICK_START.md#part-two--a-pod-answering-a-request) has the
 first run; [`platform/local/README.md`](platform/local/README.md) has the
 component-by-component reasoning and — more usefully — the explicit table of

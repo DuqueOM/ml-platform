@@ -329,7 +329,7 @@ def test_no_real_credential_is_committed() -> None:
 
 def test_the_credential_check_can_actually_fail() -> None:
     """A guard never seen to reject anything is not a guard."""
-    values = {"POSTGRES_PASSWORD": "hunter2", "MINIO_ROOT_USER": "mlplatform"}
+    values = {"POSTGRES_PASSWORD": "hunter2", "OBJECT_STORE_ACCESS_KEY": "mlplatform"}
     flagged = [key for key, value in values.items() if _SECRET_KEY.search(key) and _LOCAL_ONLY not in value]
 
     assert flagged == ["POSTGRES_PASSWORD"], "the pattern misses a real password or flags a username"

@@ -13,7 +13,7 @@
 # Each pod's limit is held to what its image was MEASURED to use on a running
 # stack: platform/local/measured-memory.yaml, written by
 # `scripts/local/measure_memory.py --write`, keyed by image digest, and checked
-# by tests/test_local_preflight.py — an image bump does not pass until someone
+# by tests/test_local_memory_budget.py — an image bump does not pass until someone
 # has started it (QA-4 round eighteen: Grafana 13.2.2 was OOMKilled for two
 # weeks at a limit chosen for Grafana 11).
 #
@@ -45,9 +45,9 @@ components:
     limit_mb: 320
     note: Postgres 17 with pgvector. Online feature store and vector store.
 
-  - name: minio
-    limit_mb: 384
-    note: S3-compatible object storage backing the local Iceberg warehouse.
+  - name: object-store
+    limit_mb: 320
+    note: S3-compatible object storage (RustFS) backing the local Iceberg warehouse and DVC's remote.
 
   - name: otel-collector
     limit_mb: 160
@@ -86,8 +86,8 @@ components:
 # error that names the port but not the cause.
 host_ports:
   - { port: 15432, service: postgres }
-  - { port: 19000, service: minio-api }
-  - { port: 19001, service: minio-console }
+  - { port: 19000, service: object-store-api }
+  - { port: 19001, service: object-store-console }
   - { port: 16686, service: jaeger }
   - { port: 19090, service: prometheus }
   - { port: 13000, service: grafana }

@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**53 of 121 committed technologies implemented (43%)** — plus 15 studied and 10 rejected, which are decisions rather than gaps.
+**53 of 122 committed technologies implemented (43%)** — plus 15 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 | :-: | --- |
@@ -110,13 +110,14 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `argo-rollouts` | core | |
 | 🚫 | `flux` | rejected | ArgoCD chosen; two reconcilers fight. |
 
-## Lakehouse — 1 built, 2 pending
+## Lakehouse — 1 built, 1 available, 2 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
 | ✅ | `apache-iceberg` | core | |
 | ⬜ | `biglake` | core | |
 | ⬜ | `s3-tables` | core | |
+| 🧩 | `rustfs` | core | The local S3-compatible object store behind the Iceberg warehouse and DVC remote; replaced MinIO, whose image stopped resolving anonymously (R15-20). Cloud uses the provider's object storage — only the endpoint changes. |
 | 🚫 | `delta-lake` | rejected | Iceberg chosen for vendor-neutral multi-cloud support (ADR-004). |
 
 ## Data engineering — 2 built, 5 pending

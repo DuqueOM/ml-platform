@@ -24,10 +24,10 @@ nodes:
       - containerPort: 30432   # postgres
         hostPort: 15432
         protocol: TCP
-      - containerPort: 30900   # minio api
+      - containerPort: 30900   # object store S3 API
         hostPort: 19000
         protocol: TCP
-      - containerPort: 30901   # minio console
+      - containerPort: 30901   # object store console
         hostPort: 19001
         protocol: TCP
       - containerPort: 30686   # jaeger ui

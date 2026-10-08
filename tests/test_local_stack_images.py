@@ -25,12 +25,9 @@ _PINNED = re.compile(r"^[^@\s]+:[^@\s]+@sha256:[0-9a-f]{64}$")
 #: Images that cannot be pinned today, each with the finding that explains why.
 #: An entry fails the moment it is pinned or leaves the manifests, so it cannot
 #: outlive its reason.
-UNPINNABLE = {
-    "minio/minio:RELEASE.2025-04-22T22-12-26Z": (
-        "R15-20: the tag no longer resolves anonymously anywhere — Docker Hub answers 401 for every "
-        "minio/minio tag and Quay requires authentication — so there is no digest to pin and a clean "
-        "machine cannot pull it. Replacing the store is a CONSULT decision recorded in the work order."
-    ),
+UNPINNABLE: dict[str, str] = {
+    # Empty since R15-20: MinIO, whose tag stopped resolving anonymously, was
+    # replaced by an object store whose image can be pulled and pinned.
 }
 
 
