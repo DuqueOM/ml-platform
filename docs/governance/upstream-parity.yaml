@@ -302,6 +302,16 @@ artifacts:
     status: rejected
     reason: >-
       A shadow lane for the template's self-healing experiment. Out of scope here (ADR-000).
+  - path: .github/workflows/eda-heavy-smoke.yml
+    status: rejected
+    reason: >-
+      Rejected, because what it installs here is the same bytes upstream installs. The lane installs the service's
+      heavy EDA set on the image's Python and builds a report; this repository's copy of that set is generated
+      verbatim from a released template version (ADR-003), regenerated and diffed at each update
+      (docs/runbooks/consuming-the-template.md), so upstream's lane at that release already ran these exact files.
+      What this repository adds is the resolution of every set on the image's Python 3.13
+      (scripts/resolve_serving_requirements.py, no overrides since v0.32.0), so a set whose dependencies conflict there still
+      fails Supply chain. Reverses to adopted the day this service carries an EDA set of its own.
   - path: .github/workflows/golden-path-extended.yml
     status: rejected
     reason: >-

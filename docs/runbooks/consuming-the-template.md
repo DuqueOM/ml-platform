@@ -41,7 +41,7 @@ reads, so once it is gone the service cannot recover on its own.
 
 ```bash
 uv run copier copy --trust \
-  --vcs-ref=v0.31.0 \
+  --vcs-ref=v0.32.0 \
   --data service_slug=demand_forecast_serving \
   --data service_name="Demand Forecast Serving" \
   --data gh_org=DuqueOM --data gh_repo=ml-platform \
@@ -73,8 +73,8 @@ so a plain `uv run` there would resolve the service's project, not this one.
 
 ```bash
 cd services/demand-forecast-serving
-uv run --project "$(git rev-parse --show-toplevel)" copier update --trust --vcs-ref=v0.31.0 --data service_name="Demand Forecast Serving" --pretend   # read the diff first
-uv run --project "$(git rev-parse --show-toplevel)" copier update --trust --vcs-ref=v0.31.0 --data service_name="Demand Forecast Serving"
+uv run --project "$(git rev-parse --show-toplevel)" copier update --trust --vcs-ref=v0.32.0 --data service_name="Demand Forecast Serving" --pretend   # read the diff first
+uv run --project "$(git rev-parse --show-toplevel)" copier update --trust --vcs-ref=v0.32.0 --data service_name="Demand Forecast Serving"
 ```
 
 `--pretend` is not politeness. `update` performs a three-way merge into your
@@ -90,7 +90,7 @@ dry run. The service carries nothing customised, so regenerating it is what
 directory, `diff -rq` it against the committed service, and copy it over:
 
 ```bash
-uv run copier copy --trust --defaults --vcs-ref=v0.31.0 \
+uv run copier copy --trust --defaults --vcs-ref=v0.32.0 \
   --data service_slug=demand_forecast_serving \
   --data service_name="Demand Forecast Serving" \
   --data gh_org=DuqueOM --data gh_repo=ml-platform --data profile=local \

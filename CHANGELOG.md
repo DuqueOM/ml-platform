@@ -18,6 +18,17 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Security — the generated service moves to ml-service-template v0.32.0 (R16-1, R17-2)
+
+- **pyarrow 25 in the serving image and every service requirement set**, out
+  of CVE-2026-25087's range; the accepted exception, due to expire on
+  2026-11-05, is deleted. Fixed upstream in the same session (#268), released
+  as v0.32.0 (#276), and the service regenerated at that release.
+- **The heavy EDA set installs and imports on the image's Python 3.13.** It
+  resolved here only on 3.12, by an override that is now gone; upstream it
+  also could not be imported anywhere, for want of a setuptools it never
+  declared. A lane there now installs it and builds a report.
+
 ### Fixed — QA-4 round eighteen: what nothing ran, and what a gate passed by default
 
 - **The thresholds gate crashed against its own commit.** Its baseline loader
