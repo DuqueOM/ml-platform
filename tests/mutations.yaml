@@ -2543,8 +2543,8 @@ mutations:
 - id: R18-CP1
   origin: QA-4 round 18 remediation — the runbook's update runs whatever copier is on PATH again
   file: docs/runbooks/consuming-the-template.md
-  old: uv run --project "$(git rev-parse --show-toplevel)" copier update --trust --vcs-ref=v0.31.0 --data service_name="Demand Forecast Serving" --pretend
-  new: copier update --trust --vcs-ref=v0.31.0 --data service_name="Demand Forecast Serving" --pretend
+  old: uv run --project "$(git rev-parse --show-toplevel)" copier update --trust --vcs-ref=v0.32.0 --data service_name="Demand Forecast Serving" --pretend
+  new: copier update --trust --vcs-ref=v0.32.0 --data service_name="Demand Forecast Serving" --pretend
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_tool_versions.py
   expect: killed

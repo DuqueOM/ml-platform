@@ -51,13 +51,12 @@ IMAGE_TOOLING = ("pip", "setuptools", "wheel")
 #: Requirement sets that cannot be installed on the image's Python at all, each
 #: with the Python they ARE installable on and why. Resolved there, so they are
 #: still scanned, rather than skipped. A set listed here that resolves on the
-#: image's Python again should leave the list — R17-2 tracks the one below.
-PYTHON_FOR = {
-    "eda-heavy": (
-        "3.12",
-        "htmlmin 0.1.12, which ydata-profiling pulls in, imports `cgi` in its build; Python 3.13 removed `cgi`, "
-        "so this set does not install on the image's Python (upstream, R17-2)",
-    ),
+#: image's Python again leaves the list, as R17-2's did.
+PYTHON_FOR: dict[str, tuple[str, str]] = {
+    # Empty since ml-service-template v0.32.0: the heavy EDA set resolved on 3.12
+    # here while htmlmin, which ydata-profiling 4.12 pulled in, could not build on
+    # the image's 3.13 (R17-2). Upstream moved the set to versions that install on
+    # 3.13 and a lane there installs it, so every set is resolved as the image runs it.
 }
 
 

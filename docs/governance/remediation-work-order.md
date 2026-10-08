@@ -1183,6 +1183,11 @@ tool and treats Scorecard's VulnerabilitiesID as a finding source.
 
 ### R16-1 — The serving image ships pyarrow 18.0.0 (CVE-2026-25087)
 
+> **Status: done** — ml-service-template v0.32.0 (#268, released by #276) pins `pyarrow ~= 25.0.1` in all three
+> files, verified on the image's Python 3.13 beside `numpy ~= 1.26.0` with an exact parquet round trip. The service
+> is regenerated at v0.32.0 (a v0.31.0 regeneration first showed no local change to lose), the
+> `.trivyignore` entry is deleted, and every set resolves to pyarrow 25.0.1. Closed 28 days before its expiry.
+
 **Mode**: CONSULT · cross-repository · **Expires**: 2026-11-05 · **Size**: ~30min upstream, ~30min here
 
 The resolution the P1 fix added made the image's dependencies visible, and the
@@ -1279,6 +1284,13 @@ Deciding where it is built and pushed is the CONSULT half; it is the first
 image this repository would build itself rather than generate.
 
 ### R17-2 — The service's heavy EDA set cannot be installed on the image's Python
+
+> **Status: done** — ml-service-template v0.32.0 moved the set to ydata-profiling `~= 4.17` (the first release
+> without htmlmin that supports 3.13), `matplotlib ~= 3.10` (4.13+ caps it at 3.10.0) and `setuptools ~= 80.10`.
+> The last was a second defect found while fixing the first: ydata-profiling imports `pkg_resources` without
+> declaring setuptools, so the set could not be IMPORTED on any Python whose venv lacks it — 3.12 included. A new
+> upstream lane installs the set on the Dockerfile's Python and builds a report. Here `PYTHON_FOR` is empty: every
+> set resolves on 3.13.
 
 **Mode**: CONSULT · cross-repository · **Size**: ~30min upstream
 
