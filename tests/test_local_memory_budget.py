@@ -155,6 +155,23 @@ def test_a_node_restart_is_not_a_failure(monkeypatch: pytest.MonkeyPatch, tmp_pa
     }
 
 
+def test_a_quieter_run_does_not_lower_what_a_busier_one_measured(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The first rewrite replaced Grafana's 395 MiB with an idle 267; a limit could then have been cut below it."""
+    ledger = _cluster(monkeypatch, tmp_path, {"jaeger": _pod("j:1")}, {"jaeger": 40})
+    assert measure_memory.main(["--write"]) == 0
+
+    monkeypatch.setattr(measure_memory, "measure", lambda samples, interval: {"jaeger": 20})
+    assert measure_memory.main(["--write"]) == 0
+    assert yaml.safe_load(ledger.read_text(encoding="utf-8"))["components"]["jaeger"]["peak_mib"] == 40
+
+    monkeypatch.setattr(measure_memory, "_pods", lambda: {"jaeger": _pod("j:2")})
+    assert measure_memory.main(["--write"]) == 0
+    recorded = yaml.safe_load(ledger.read_text(encoding="utf-8"))["components"]["jaeger"]
+    assert recorded == {"image": "j:2", "peak_mib": 20}, "a new image must be measured afresh"
+
+
 # --- `make local-up` names only what is down ------------------------------------
 
 
@@ -169,7 +186,7 @@ def test_only_the_unavailable_deployment_is_named_with_its_reason() -> None:
             "status": {"availableReplicas": available} if available else {},
         }
 
-    names = ["postgres", "minio", "otel-collector", "jaeger", "prometheus"]
+    names = ["postgres", "object-store", "otel-collector", "jaeger", "prometheus"]
     deployments = {"items": [deployment(name, 1) for name in names] + [deployment("grafana", 0)]}
     grafana = {
         "metadata": {"labels": {"app": "grafana"}},

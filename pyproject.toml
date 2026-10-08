@@ -277,7 +277,7 @@ dev = [
 # nothing in CI imports dvc. The inventory detector matches `.dvc/` — a path, not
 # an import — and `tests/test_dataset_lock.py` reads only the registry.
 #
-# The `[s3]` marker is what lets the remote address MinIO locally and the same
+# The `[s3]` marker is what lets the remote address the local object store and the same
 # object store in cloud: one protocol, one code path, only the endpoint moves.
 #
 #     uv sync --group data-versioning

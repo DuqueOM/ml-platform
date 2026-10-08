@@ -83,7 +83,7 @@ updates:
         update-types: [minor, patch]
 
   # --- Container images in the local validation stack ----------------------
-  # Postgres, MinIO, the OTel collector, Jaeger, Prometheus and Grafana are
+  # Postgres, the object store (RustFS), the OTel collector, Jaeger, Prometheus and Grafana are
   # pinned by tag in platform/local/manifests/. An unpinned or stale image is
   # a supply-chain surface, and the local stack is where an upgrade should
   # break first — at zero cost — rather than in a cloud window. Each limit is

@@ -158,14 +158,14 @@ make local-up
 
 Creates the cluster if it does not exist, applies `platform/local/manifests/`,
 and waits up to 300 seconds for every deployment to become available: Postgres
-with pgvector, MinIO, an OpenTelemetry collector, Jaeger, Prometheus and
+with pgvector, an S3-compatible object store (RustFS), an OpenTelemetry collector, Jaeger, Prometheus and
 Grafana. It prints the endpoints when it finishes; `make local-endpoints`
 prints them again.
 
 | Service | URL |
 | --- | --- |
 | Postgres | `localhost:15432` (db/user `mlplatform`) |
-| MinIO API / console | `localhost:19000` / `localhost:19001` |
+| Object store (S3) API / console | `localhost:19000` / `localhost:19001` |
 | Jaeger | `localhost:16686` |
 | Prometheus | `localhost:19090` |
 | Grafana | `localhost:13000` |

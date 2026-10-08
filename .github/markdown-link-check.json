@@ -6,7 +6,7 @@
     },
     {
       "comment": "Cluster-internal DNS. These names resolve only inside the cluster the runbook is describing, which is the point of quoting them.",
-      "pattern": "^https?://(prometheus|pushgateway|grafana|jaeger|minio|postgres|alertmanager)[.:]"
+      "pattern": "^https?://(prometheus|pushgateway|grafana|jaeger|object-store|postgres|alertmanager)[.:]"
     },
     {
       "comment": "Kubernetes service FQDNs, same reason, written out in full.",

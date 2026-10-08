@@ -112,7 +112,7 @@ how "we deploy to two clouds" goes unchallenged.
 | | Layer | Component | Evidence |
 | :-: | :-: | --- | --- |
 | ✅ | L1 | Dataset acquisition scripts | `uv run pytest tests/test_dataset_registry.py -q` passes |
-| 🟡 | — | Local validation stack | 11 file(s), no verification command — the only candidate command inspects HOST state (free ports, free memory), so it returns a different marker from the same commit depending on the machine · L3 evidence, not run here: `make local-up && uv run pytest tests/local/test_local_stack.py -q -m local` |
+| 🟡 | — | Local validation stack | 12 file(s), no verification command — the only candidate command inspects HOST state (free ports, free memory), so it returns a different marker from the same commit depending on the machine · L3 evidence, not run here: `make local-up && uv run pytest tests/local/test_local_stack.py -q -m local` |
 | ✅ | L1 | libs/ml-core implementation | `uv run pytest libs/ml-core -q` passes |
 | ✅ | L1 | libs/data-contracts implementation | `uv run pytest libs/data-contracts -q` passes |
 | ✅ | L1 | Drift contract (ADR-007) | `uv run pytest libs/ml-core/tests/test_drift.py -q` passes |

@@ -27,7 +27,7 @@ spec:
     # The sum of platform/local/budget.yaml's components that run in THIS
     # namespace — every one but the node itself and the workload, which has its
     # own namespace. It said "the total minus the node's allocation", which it
-    # never was; tests/test_local_preflight.py now derives it. A component added
+    # never was; tests/test_local_memory_budget.py now holds it to that sum. A component added
     # without updating the budget is rejected by the quota rather than
     # discovered by the OOM killer.
-    limits.memory: 1888Mi
+    limits.memory: 1824Mi

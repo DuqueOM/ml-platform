@@ -18,6 +18,25 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Changed — the local object store is RustFS, persistent, and provisioned (R15-20)
+
+- **A clean machine could not run `make local-up`.** Every `minio/minio` tag
+  stopped resolving anonymously, so the stack started only where the image was
+  already cached. The store is RustFS (Apache-2.0), pinned by digest, chosen by
+  running the lakehouse's integration tests against each candidate. The
+  component is `object-store`, its Kubernetes objects are renamed, and
+  `make local-up` removes the retired MinIO ones.
+- **A pod restart emptied it, and nothing created its buckets.** The store
+  runs on a persistent volume, and `make local-up` creates the lakehouse's and
+  DVC's buckets, reading their names from the code and `.dvc/config` that use
+  them.
+- **Renamed for the local path.** The lakehouse reads `OBJECT_STORE_ENDPOINT`,
+  `OBJECT_STORE_ACCESS_KEY` and `OBJECT_STORE_SECRET_KEY` (were `MINIO_*`),
+  and DVC's remote is `local-object-store`.
+- **Measured memory only ratchets.** `measure_memory.py --write` keeps the
+  highest peak recorded for an image; a quieter run had replaced Grafana's 395
+  MiB with 267.
+
 ### Security — the generated service moves to ml-service-template v0.32.0 (R16-1, R17-2)
 
 - **pyarrow 25 in the serving image and every service requirement set**, out
