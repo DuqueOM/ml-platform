@@ -123,12 +123,17 @@ SCRIPTS_COMBINED_FLOOR = 86
 #: Ratcheted 2026-10-05, when the lakehouse tests gained a filesystem catalogue
 #: and ran on every build for the first time: projects/ 82.11% -> 84.62%
 #: combined, demand-forecast 79.70% / 67.35% -> 83.25% / 71.43%.
-PROJECTS_COMBINED_FLOOR = 84
+#:
+#: Ratcheted 2026-10-08 by W-15, from CI's own run on that change (37808477492):
+#: projects/ 97.40% combined, demand-forecast 98.47% / 93.86%, store-assistant
+#: 100% / 100% — crossover.py tested from 0%, the tools' refusal paths, and the
+#: guard clauses in backtest, tracing, train and warehouse_checks.
+PROJECTS_COMBINED_FLOOR = 97
 ORCHESTRATION_COMBINED_FLOOR = 100
 ML_PACKAGES = {
-    "projects/demand-forecast": PackageFloor(lines=83, branches=71),
+    "projects/demand-forecast": PackageFloor(lines=98, branches=93),
     "projects/rag-assistant": PackageFloor(lines=96, branches=90),
-    "projects/store-assistant": PackageFloor(lines=85, branches=57),
+    "projects/store-assistant": PackageFloor(lines=100, branches=100),
     "orchestration/dags": PackageFloor(lines=100, branches=100),
     "orchestration/pipelines": PackageFloor(lines=100, branches=100),
 }

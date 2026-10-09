@@ -26,6 +26,16 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   --upgrade-package hydra-core` moves it to the fixed 1.3.7 and nothing else;
   DVC runs on it unchanged. Fixed, not accepted: no baseline entry.
 
+### Changed — the project floors meet the library floors (W-15)
+
+- **`crossover.py` had no test**, and the store's tools, the backtest
+  splitters, tracing, training and the warehouse checks each had untested
+  branches — refusals, guards, and the arithmetic a gate reads. All are tested
+  now, and P17's floors rise to what CI measured: `demand-forecast` 98/93,
+  `store-assistant` 100/100, `projects/` 97 combined (were 83/71, 85/57, 84).
+- **An unreachable `break` left the splitter.** Its size check already made
+  every fold fit; the invariant is now a test across designs instead.
+
 ### Changed — the local object store is RustFS, persistent, and provisioned (R15-20)
 
 - **A clean machine could not run `make local-up`.** Every `minio/minio` tag
