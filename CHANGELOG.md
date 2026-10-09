@@ -56,6 +56,18 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   also could not be imported anywhere, for want of a setuptools it never
   declared. A lane there now installs it and builds a report.
 
+### Fixed — Codecov receives the coverage it was configured for (R15-5)
+
+- **No upload had ever landed.** The token secret was empty, every upload was
+  rejected, and the step stayed green because it may not fail a merge. Uploads
+  authenticate by OIDC now, so there is no secret to forget, and
+  `codecov-health.yml` asks Codecov weekly whether `main`'s recent commits have
+  reports, so a rejection cannot hide again.
+- **Codecov reports; the floors gate.** Every `codecov.yml` status is
+  informational, and its per-path targets — which restated the coverage floors
+  with numbers that had drifted (scripts/ at 60% against a floor of 86) — are
+  gone. Patch coverage and history are what Codecov adds.
+
 ### Fixed — QA-4 round eighteen: what nothing ran, and what a gate passed by default
 
 - **The thresholds gate crashed against its own commit.** Its baseline loader

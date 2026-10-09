@@ -312,6 +312,10 @@ jobs:
   tests:
     name: Tests and coverage
     runs-on: ubuntu-latest
+    # id-token: write is for the Codecov upload's OIDC token, and nothing else.
+    permissions:
+      contents: read
+      id-token: write
     # The slow half. 75 was the bound for the whole lane when it was one job,
     # and the tests are what consumed it — 46.5 min median, 47.4 max over the
     # five green runs measured then. Kept at 75 rather than lowered, because
@@ -431,12 +435,16 @@ jobs:
         run: uv run python scripts/check_coverage_floors.py --xml coverage.xml
 
       - name: Upload coverage
+        # Reporting only: the floors above block; this publishes patch
+        # coverage and history. Authenticated by OIDC — the token secret it
+        # used was empty, so every upload was rejected for months behind
+        # `fail_ci_if_error: false` (R15-5). codecov-health.yml now checks
+        # weekly that reports land, so a rejection cannot hide again.
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
         with:
           files: ./coverage.xml
+          use_oidc: true
           fail_ci_if_error: false   # a Codecov outage must not block a merge
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Cloud-specific surface is measured and within budget
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
