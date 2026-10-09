@@ -18,6 +18,14 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Security — hydra-core 1.3.7 (CVE-2026-106439)
+
+- **A HIGH advisory published against hydra-core 1.3.6** — arbitrary code
+  execution — turned the Trivy gate red on every pull request. It reaches the
+  lock only through DVC, in the `data-versioning` group. `uv lock
+  --upgrade-package hydra-core` moves it to the fixed 1.3.7 and nothing else;
+  DVC runs on it unchanged. Fixed, not accepted: no baseline entry.
+
 ### Changed — the local object store is RustFS, persistent, and provisioned (R15-20)
 
 - **A clean machine could not run `make local-up`.** Every `minio/minio` tag
