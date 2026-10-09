@@ -1264,7 +1264,7 @@ and the expiry test fails if it is not.
 
 ### R16-2 — COMPLIANCE_MAPPING is stale beyond the row the audit named
 
-**Mode**: AUTO · **Size**: ~3h
+**Mode**: AUTO · **Size**: ~3h · **Closed** by *feat(gates): the compliance mapping is gated — quality gate C3 (R16-2)*: every row re-verified on 2026-10-09, the notice removed because nothing it listed is still true, and `scripts/check_compliance_mapping.py` derives the figures, holds the prose's counts and scanner claims to them, and refuses an undated measurement. It also found what the notice had missed — the Checkov count was 104, not 114, undated in three documents, and most of its real findings are on the local stack, not the cloud Terraform
 
 Correcting PR.PS meant reading the rest, and five other statements are no
 longer true — Bandit "invoked by no workflow", Trivy "cannot fail a build",
