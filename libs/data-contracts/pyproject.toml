@@ -5,7 +5,7 @@ description = "See libs/data-contracts/src/data_contracts/__init__.py"
 requires-python = ">=3.11"
 dependencies = [
     "pandera~=0.34",
-    "polars~=1.17",
+    "polars~=2.0",
 ]
 
 [build-system]
