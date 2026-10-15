@@ -2606,3 +2606,67 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_local_memory_budget.py
   expect: killed
+- id: W15-1
+  origin: W-15 — the crossover projection anchored on the smallest slice, which measures noise
+  file: projects/demand-forecast/src/demand_forecast/crossover.py
+  old: '    largest = points[-1]'
+  new: '    largest = points[0]'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_crossover.py
+  expect: killed
+- id: W15-2
+  origin: W-15 — a negative memory delta becomes the projection's slope
+  file: projects/demand-forecast/src/demand_forecast/crossover.py
+  old: '        working = max(_resident_mb() - baseline, 0.0)'
+  new: '        working = _resident_mb() - baseline'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_crossover.py
+  expect: killed
+- id: W15-3
+  origin: W-15 — a lookup without its fixture answers 'not found' instead of refusing
+  file: projects/store-assistant/src/store_assistant/tools.py
+  old: '            return Observation(tool="order_status", ok=False, data={}, error="fixture_not_found")'
+  new: '            return Observation(tool="order_status", ok=False, data={}, error="not_found")'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/store-assistant/tests/test_tools.py
+  expect: killed
+- id: W15-4
+  origin: W-15 — an order line whose quantity is text is accepted
+  file: projects/store-assistant/src/store_assistant/tools.py
+  old: '            if not isinstance(item.get("product_id"), str) or not isinstance(item.get("quantity"), int):'
+  new: '            if not isinstance(item.get("product_id"), str):'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/store-assistant/tests/test_tools.py
+  expect: killed
+- id: W15-5
+  origin: W-15 — the splitter's size check removed, so folds can overrun the series
+  file: projects/demand-forecast/src/demand_forecast/backtest.py
+  old: "    if n_rows < needed:\n        raise ValueError("
+  new: "    if False:\n        raise ValueError("
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_backtest.py
+  expect: killed
+- id: W15-6
+  origin: W-15 — a time window with no rows is scored as a fold
+  file: projects/demand-forecast/src/demand_forecast/backtest.py
+  old: "        train = np.flatnonzero(values < train_end)\n        test = np.flatnonzero((values >= test_start) & (values < test_end))\n        if len(train) == 0 or len(test) == 0:\n            continue"
+  new: "        train = np.flatnonzero(values < train_end)\n        test = np.flatnonzero((values >= test_start) & (values < test_end))\n        if False:\n            continue"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_backtest.py
+  expect: killed
+- id: W15-7
+  origin: W-15 — a perfect baseline divides by zero in the skill the gate reads
+  file: projects/demand-forecast/src/demand_forecast/train.py
+  old: "        return 1.0 - (self.model_mae / self.baseline_mae) if self.baseline_mae else 0.0\n\n    def __str__"
+  new: "        return 1.0 - (self.model_mae / self.baseline_mae)\n\n    def __str__"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_training.py
+  expect: killed
+- id: W15-8
+  origin: W-15 — a stage's attributes no longer reach its span
+  file: projects/demand-forecast/src/demand_forecast/tracing.py
+  old: '            span.set_attribute(f"{name}.{key}", value)'
+  new: '            pass'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_tracing.py
+  expect: killed
