@@ -13,7 +13,7 @@ dependencies = [
     "pyiceberg[s3fs,sql-sqlite,pyiceberg-core]~=0.12",
     # Explicit: pyiceberg accepts Arrow tables but does not pull pyarrow, and
     # the failure is an ImportError at first write rather than at install.
-    "pyarrow~=25.0",
+    "pyarrow~=26.0",
     # HistGradientBoosting rather than LightGBM: comparable on tabular data at
     # this size, and it is already a transitive dependency, so the forecast
     # costs no new supply-chain surface.
@@ -59,6 +59,6 @@ pipelines = [
     "kfp~=2.11",
 ]
 observability = [
-    "opentelemetry-exporter-otlp-proto-grpc~=1.30",
+    "opentelemetry-exporter-otlp-proto-grpc~=1.45",
     "opentelemetry-sdk~=1.45",
 ]

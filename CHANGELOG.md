@@ -18,6 +18,42 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Changed — dependency round, 2026-10-20 (Dependabot #127, #140–#144; #128 declined)
+
+- **One pull request for seven Dependabot proposals**, because the audit grace
+  (C7) was nearly spent and each proposal would have spent a slot alone; their
+  auto-merge was paused for that reason. polars 1.44.2 → 2.0.0 (a major: every
+  `~=1.x` specifier in `libs/` and `projects/rag-assistant` moves to `~=2.0`),
+  pyarrow 25.0.1 → 26.0.0 in demand-forecast (a major), pydantic 2.13.5 →
+  2.14.1, pandera 0.34.0 → 0.34.1, and the OpenTelemetry exporter set
+  1.45.0 → 1.45.1. Each passed the full CI suite on its own pull request before
+  being combined, and the combination passes `make verify`. The serving image's
+  pyarrow stays where ml-service-template pins it; the model artifact carries
+  no Arrow data across that boundary, and gates P14 and P18 hold it.
+- **Grafana 13.2.2 → 13.2.3 in the local stack, measured before it merged.**
+  Started on the kind cluster at the new image and recorded by
+  `scripts/local/measure_memory.py --write`: a 394 MiB peak against its 512 MB
+  limit, inside the 1.25× headroom the budget test requires.
+- **`make local-up` refused to re-apply a manifest to a stack it was already
+  running.** The preflight sampled available memory with the stack up, so the
+  stack's own working set counted against it — 905 MB short, for a patch bump
+  to a healthy cluster. It now credits the memory the kind node holds back as
+  memory available to the stack, read at every sample, and credits nothing when
+  that reading fails, so a failure can only make the check stricter. The port
+  check already made the same exception for the same reason.
+- **#128 declined, and the next one fails CI.** Dependabot proposed
+  `otel/opentelemetry-collector-contrib:0.161.0-386` as an upgrade from
+  `0.161.0`: the same release, as its single-platform linux/386 image rather
+  than the seven-platform index the stack runs. `tests/test_local_stack_images.py`
+  now fails a local-stack tag that names one CPU architecture.
+- **A wedged Docker daemon hung `make verify` for twenty minutes, naming
+  neither.** Docker Desktop stopped answering its API under WSL with the kind
+  node still running; `scripts/bootstrap.sh --check`, which the status
+  generator runs as evidence, waited on `docker info` without a bound. It now
+  gives up after 30 seconds and says the daemon is not answering, as
+  `scripts/local/preflight.py` already did; `tests/test_bootstrap_docker_probe.py`
+  runs the script against a fake daemon that hangs.
+
 ### Security — certifi 2026.10.23, GitPython 3.2.1, virtualenv 21.14.13
 
 - **certifi 2026.7.22 bundles emSign roots whose intermediates are

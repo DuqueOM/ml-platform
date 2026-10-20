@@ -20,11 +20,13 @@ treating one as a measurement.
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 import socket
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +42,14 @@ BUDGET = REPO_ROOT / "platform" / "local" / "budget.yaml"
 
 REQUIRED_TOOLS = ("docker", "kind", "kubectl")
 CLUSTER_NAME = "ml-platform-local"
+
+#: The kind node's container. Every pod of the stack runs inside it, so its
+#: working set is the memory the running stack already holds.
+NODE_CONTAINER = f"{CLUSTER_NAME}-control-plane"
+
+#: `docker stats` prints binary units; MB here means MiB, as in /proc/meminfo.
+_MIB_PER_UNIT = {"B": 1 / 2**20, "KiB": 1 / 2**10, "MiB": 1.0, "GiB": 2.0**10, "TiB": 2.0**20}
+_MEM_USAGE = re.compile(r"^\s*([\d.]+)\s*(B|KiB|MiB|GiB|TiB)\s*/")
 
 
 def cluster_exists() -> bool:
@@ -65,16 +75,42 @@ def _available_mb() -> int:
     raise RuntimeError("MemAvailable not present in /proc/meminfo")
 
 
-def sample_available(count: int, interval: float) -> tuple[int, int, int]:
+def cluster_usage_mb() -> int:
+    """Memory the running cluster's node holds now, in MB — 0 when it cannot be read.
+
+    Zero is the conservative answer: it credits nothing back, so a reading that
+    fails can only make the check stricter, never let an oversized stack pass.
+    """
+    try:
+        result = subprocess.run(
+            ["docker", "stats", "--no-stream", "--format", "{{.MemUsage}}", NODE_CONTAINER],
+            capture_output=True,
+            text=True,
+            timeout=PROBE_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        return 0
+    match = _MEM_USAGE.match(result.stdout) if result.returncode == 0 else None
+    return int(float(match.group(1)) * _MIB_PER_UNIT[match.group(2)]) if match else 0
+
+
+def sample_available(count: int, interval: float, held: Callable[[], int] = lambda: 0) -> tuple[int, int, int]:
     """Sample available memory. Returns (minimum, mean, maximum) in MB.
 
     The **minimum** is what the budget is checked against. Budgeting against
     the mean means the stack fits on average and fails at the moment something
     else on the machine is busy — which is exactly when it will be running.
+
+    ``held`` is memory the stack already occupies, read at each sample: once
+    the cluster is up, what it uses is no longer *available*, yet it is memory
+    the stack can use. Without it, `make local-up` on a running cluster counted
+    the stack against itself and refused to re-apply a manifest the machine
+    was already running (2026-10-20, a Grafana patch bump short by 905 MB with
+    the whole stack up and healthy).
     """
     samples: list[int] = []
     for index in range(count):
-        samples.append(_available_mb())
+        samples.append(_available_mb() + held())
         if index < count - 1:
             time.sleep(interval)
     return min(samples), sum(samples) // len(samples), max(samples)
@@ -139,8 +175,11 @@ def main() -> int:
     required_mb = sum(int(component["limit_mb"]) for component in components)
     utilisation = float(budget["max_utilisation"])
 
+    exists = cluster_exists()
     print(f"\n  sampling available memory ({args.samples}x, {args.interval}s apart)…")
-    low, mean, high = sample_available(args.samples, args.interval)
+    if exists:
+        print(f"  note  cluster {CLUSTER_NAME} is running; the memory its node holds counts as available to it")
+    low, mean, high = sample_available(args.samples, args.interval, cluster_usage_mb if exists else lambda: 0)
     spread = high - low
     print(f"  ok    available: min {low} MB · mean {mean} MB · max {high} MB (spread {spread} MB)")
     if spread > low * 0.25:
@@ -167,7 +206,7 @@ def main() -> int:
         return 1
 
     ports = budget.get("host_ports") or []
-    if ports and cluster_exists():
+    if ports and exists:
         # The stack is already up, so it is holding its own ports. Reporting
         # that as a collision would make preflight fail precisely because it
         # previously succeeded.
