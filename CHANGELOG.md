@@ -18,6 +18,18 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Security — aiohttp 3.14.5 (CVE-2026-111064, GHSA-2g87-pp6c-29x5)
+
+- **Two HIGH advisories against aiohttp 3.14.3** — a denial of service through a
+  missing initial request timeout, and unbounded memory/CPU use — turned the
+  Trivy gate red on every pull request, Dependabot's included (#144 failed
+  `Supply chain` with nothing wrong in it). aiohttp reaches the lock only
+  through `s3fs` → `aiobotocore`, which demand-forecast's lakehouse uses via
+  `pyiceberg[s3fs]`. `uv lock --upgrade-package aiohttp` moves it to 3.14.5 and
+  `yarl` to 1.25.1, which that aiohttp requires; nothing else changes. Trivy on
+  the lock: 2 HIGH on `main`, 0 here. The demand-forecast and `libs/` suites
+  pass on it (386 passed, 3 skipped). Fixed, not accepted: no baseline entry.
+
 ### Security — hydra-core 1.3.7 (CVE-2026-106439)
 
 - **A HIGH advisory published against hydra-core 1.3.6** — arbitrary code
