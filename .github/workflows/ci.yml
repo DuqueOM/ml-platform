@@ -256,6 +256,13 @@ jobs:
         # imported and never declared. It found both on its first run.
         run: uv run python scripts/check_library_reuse.py
 
+      - name: Every llm-core config field is read (R11-6)
+        if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
+        # A use-case set `language: es` and got no language: the field was
+        # loaded, documented and read by nothing. Adopted from
+        # ml-service-template, where 24 of 51 config fields were in that state.
+        run: uv run python scripts/check_config_is_read.py
+
       - name: Technology inventory matches the filesystem
         if: ${{ !cancelled() && steps.sync.outcome == 'success' }}
         # "Is the platform ready?" must not be answerable by an impression.

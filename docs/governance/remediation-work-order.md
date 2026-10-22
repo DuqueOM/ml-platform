@@ -793,7 +793,7 @@ that measures it, and the owner has reviewed it.
 
 ### R11-6 — A configured language that nothing reads
 
-**Mode**: AUTO · **Source**: parity ledger, `check_config_is_read.py` pending · **Size**: ~3h
+**Mode**: AUTO · **Source**: parity ledger, `check_config_is_read.py` pending · **Size**: ~3h · **Closed** by *fix(llm-core): a use-case's language decides which prompts it must bring, and every config field is read (R11-6)*. The ported gate found two more unread fields than the ledger had measured — `max_local_tiers`, enforced from the raw value so a `dataclasses.replace` config skipped it, and `root` — and both are read now; `UNWIRED` is empty
 
 `UsecaseConfig.language` is declared, documented, loaded from YAML and set to
 `es` by store-assistant, and read by nothing outside its module.

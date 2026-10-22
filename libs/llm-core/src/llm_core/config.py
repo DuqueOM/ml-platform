@@ -37,6 +37,12 @@ from .tiers import LOCAL, REMOTE, TierEndpoint
 # ``${VAR}`` / ``${VAR:-default}`` substitution for endpoint URLs and model ids,
 # so one committed config serves every topology profile (store-ADR-011) and no
 # deployment-specific value has to be edited into version control.
+#: A BCP 47 language tag's shape: a two- or three-letter language, then
+#: optional region or script subtags (`es`, `pt-BR`, `zh-Hant`). Shape only —
+#: the point is that a typo such as `spanish` or `es_CO` fails at load rather
+#: than reading as "not English" and passing for a language.
+_LANGUAGE_TAG = re.compile(r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$")
+
 _ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
 
 
@@ -80,7 +86,10 @@ class UsecaseConfig:
     Attributes:
         name: Use-case identifier (matches the folder name).
         root: Absolute path to ``usecases/<name>/``.
-        language: ISO language code of the customer-facing surface.
+        language: Language tag of the customer-facing surface (``en``, ``es``,
+            ``pt-BR``). Not ``en`` means every prompt llm-core would otherwise
+            default — in English — must come from the use-case; the agent
+            refuses construction otherwise.
         allowed_intents: Closed set of intents the router may emit.
         tier_endpoints: Map of tier number to :class:`TierEndpoint` (store-ADR-011).
         router_prompt: System prompt for the Tier-0 router.
@@ -130,6 +139,24 @@ class UsecaseConfig:
     retrieval_max_chars: int = 2000
     structured_tool_calls: bool = True
     max_local_tiers: int = 1
+
+    def __post_init__(self) -> None:
+        """Resident-memory invariant (store-ADR-011), held by the object rather than its loader.
+
+        A workstation cannot hold several GGUF models at once, so exceeding the
+        cap is a configuration error, not a runtime surprise discovered when the
+        OOM killer fires. It was checked in `load_usecase` against the raw value,
+        so the field itself was read by nothing (`scripts/check_config_is_read.py`)
+        and a config built any other way — `dataclasses.replace`, a direct call —
+        was never checked.
+        """
+        if len(self.local_tiers) > self.max_local_tiers:
+            raise ValueError(
+                f"use-case {self.name!r} declares {len(self.local_tiers)} local tiers {self.local_tiers} "
+                f"but limits.max_local_tiers is {self.max_local_tiers} (store-ADR-011). "
+                f"Switch the surplus tiers from kind: {LOCAL} to kind: {REMOTE}, "
+                f"or raise limits.max_local_tiers deliberately."
+            )
 
     @property
     def read_only_mode(self) -> bool:
@@ -278,19 +305,11 @@ def load_usecase(root: Path) -> UsecaseConfig:
             "Tier 0 is required — it is the router and the degradation floor (store-ADR-011)."
         )
 
-    # Resident-memory invariant (store-ADR-011). A workstation cannot hold several
-    # GGUF models at once, so exceeding the cap is a configuration error, not a
-    # runtime surprise discovered when the OOM killer fires.
+    # The resident-memory cap (store-ADR-011) is enforced by UsecaseConfig itself,
+    # on construction — see `__post_init__`.
     limits = raw.get("limits", {})
     max_local_tiers = int(limits.get("max_local_tiers", 1))
     local_tiers = sorted(tier for tier, ep in tier_endpoints.items() if ep.is_local)
-    if len(local_tiers) > max_local_tiers:
-        raise ValueError(
-            f"use-case {name!r} declares {len(local_tiers)} local tiers {local_tiers} "
-            f"but limits.max_local_tiers is {max_local_tiers} (store-ADR-011). "
-            f"Switch the surplus tiers from kind: {LOCAL} to kind: {REMOTE}, "
-            f"or raise limits.max_local_tiers deliberately."
-        )
 
     # Per-device memory budget (store-ADR-012). Counting resident tiers is not enough:
     # the same model that fits in VRAM may not fit in system RAM, and the two
@@ -312,10 +331,17 @@ def load_usecase(root: Path) -> UsecaseConfig:
                 f"or raise the budget after re-measuring the machine."
             )
 
+    language = str(raw.get("language", "en"))
+    if not _LANGUAGE_TAG.match(language):
+        raise ValueError(
+            f"use-case {name!r} declares language {language!r}, which is not a language tag "
+            f"(`en`, `es`, `pt-BR`). It decides which prompts the use-case must supply itself."
+        )
+
     return UsecaseConfig(
         name=raw.get("name", name),
         root=root,
-        language=raw.get("language", "en"),
+        language=language,
         allowed_intents=raw.get("allowed_intents", []),
         tier_endpoints=tier_endpoints,
         router_prompt=prompt_file.read_text(),
