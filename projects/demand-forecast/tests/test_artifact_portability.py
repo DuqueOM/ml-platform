@@ -102,20 +102,23 @@ def test_predictions_survive_the_round_trip(artifact: Path) -> None:
 def test_the_payload_a_container_would_read_needs_only_sklearn(artifact: Path) -> None:
     """What a serving image does with this file, done here without the model class.
 
-    No `demand_forecast` import: the estimator predicts and the quantile is
-    added and subtracted. If this ever needs a workspace import again, the
-    artifact has stopped being portable whatever the test above says.
+    No `demand_forecast` import: the estimator predicts, and each zone's
+    decile quantile (schema 3, F-19) is added and subtracted. If this ever needs
+    a workspace import again, the artifact has stopped being portable whatever
+    the test above says.
     """
     payload = joblib.load(artifact)
-    assert set(payload) >= {"estimator", "conformal_quantile", "feature_columns", "schema"}
+    assert set(payload) >= {"estimator", "conformal_quantiles", "zone_groups", "feature_columns", "schema"}
+    assert "conformal_quantile" not in payload, "schema 2's single half-width would be applied to every zone"
 
-    matrix = np.zeros((3, len(payload["feature_columns"])), dtype=np.float64)
+    zones = sorted(payload["zone_groups"])[:3]
+    matrix = np.zeros((len(zones), len(payload["feature_columns"])), dtype=np.float64)
     point = payload["estimator"].predict(matrix)
-    lower = point - payload["conformal_quantile"]
-    upper = point + payload["conformal_quantile"]
+    half = np.array([payload["conformal_quantiles"][payload["zone_groups"][zone]] for zone in zones])
+    lower, upper = point - half, point + half
 
-    assert point.shape == (3,)
-    assert np.all(upper - lower == pytest.approx(2 * payload["conformal_quantile"]))
+    assert point.shape == (len(zones),)
+    assert np.all(upper - lower == pytest.approx(2 * half))
 
 
 def test_a_reconstructed_model_matches_the_one_that_was_saved(artifact: Path) -> None:
@@ -124,8 +127,9 @@ def test_a_reconstructed_model_matches_the_one_that_was_saved(artifact: Path) ->
     payload = joblib.load(artifact)
 
     assert isinstance(restored, ForecastModel)
-    assert restored.conformal.quantile == payload["conformal_quantile"]
+    assert restored.conformal.quantiles == payload["conformal_quantiles"]
     assert restored.conformal.n_calibration == payload["conformal_n_calibration"]
+    assert restored.zone_groups == payload["zone_groups"]
     assert restored.feature_columns == tuple(payload["feature_columns"])
     assert restored.conformal.alpha == payload["alpha"]
 

@@ -1331,6 +1331,8 @@ dependencies = [
     { name = "pyarrow" },
     { name = "pyiceberg", extra = ["pyiceberg-core", "s3fs", "sql-sqlite"] },
     { name = "scikit-learn" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "scipy", version = "1.18.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
 
 [package.optional-dependencies]
@@ -1357,6 +1359,7 @@ requires-dist = [
     { name = "pyarrow", specifier = "~=26.0" },
     { name = "pyiceberg", extras = ["s3fs", "sql-sqlite", "pyiceberg-core"], specifier = "~=0.12" },
     { name = "scikit-learn", specifier = "~=1.9" },
+    { name = "scipy", specifier = "~=1.17" },
 ]
 provides-extras = ["warehouse-validation", "pipelines", "observability"]
 

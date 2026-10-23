@@ -18,6 +18,9 @@ dependencies = [
     # this size, and it is already a transitive dependency, so the forecast
     # costs no new supply-chain surface.
     "scikit-learn~=1.9",
+    # `train.BacktestReport.group_harm` takes Student's t from it (F-19b). It
+    # arrives with scikit-learn, and available is not declared.
+    "scipy~=1.17",
     # Imported directly by `persist`, so declared directly. It arrives as a
     # scikit-learn transitive today, and a transitive dependency is one
     # upstream release away from not arriving at all.

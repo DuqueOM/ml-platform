@@ -239,10 +239,35 @@ def to_hourly_demand(trips: pl.DataFrame) -> pl.DataFrame:
     if observed.is_empty():
         return observed.sort(["zone_id", "event_time"])
 
-    # Per zone, from its own first observed hour to its own last. A global
-    # calendar would invent zeros for a zone before it existed in the data,
-    # which is a different falsehood from the one being fixed.
-    spans = observed.group_by("zone_id").agg(
+    return densify(observed)
+
+
+def densify(demand: pl.DataFrame) -> pl.DataFrame:
+    """Every hour of each zone's span, with the hours that had no trips as zero demand.
+
+    Per zone, from its own first observed hour to its own last. A global
+    calendar would invent zeros for a zone before it existed in the data, which
+    is a different falsehood from the one being fixed.
+
+    **Applied again wherever history is assembled, not only at ingest (F-19).**
+    `to_hourly_demand` makes one month dense, and the training DAG ingests one
+    month at a time, so a zone's quiet hours between its last trip of one month
+    and its first of the next were never filled. On January and February 2024
+    that left 345,804 rows where one grid over both months has 357,426, and the
+    lag features — `shift(n).over(zone)` — read "n rows ago" across every month
+    boundary, the units error this function exists to remove. The backtest
+    measured on one grid, so the deployed path and the evaluated one differed:
+    skill +11.9% against +12.4% on the same trips. `train.evaluate` and
+    `persist.fit_final` densify the panel they are given, which is idempotent on
+    a frame that is already dense.
+
+    ``trip_count`` and ``total_fare`` are zero on a filled hour — the true count
+    and sum of no trips. Every other column stays null: the mean of no trips is
+    undefined, and writing zero would state that trips occurred.
+    """
+    if demand.is_empty() or "zone_id" not in demand.columns:
+        return demand
+    spans = demand.group_by("zone_id").agg(
         pl.col("event_time").min().alias("first_hour"),
         pl.col("event_time").max().alias("last_hour"),
     )
@@ -256,13 +281,13 @@ def to_hourly_demand(trips: pl.DataFrame) -> pl.DataFrame:
         # default and a silent change to how rows appear is the kind of drift
         # this panel cannot afford.
         .explode("event_time", empty_as_null=False)
-        .select("zone_id", "event_time")
+        .select("zone_id", pl.col("event_time").cast(demand.schema["event_time"]))
     )
+    zeros = [
+        pl.col(name).fill_null(0).cast(demand.schema[name])
+        for name in ("trip_count", "total_fare")
+        if name in demand.columns
+    ]
     return (
-        grid.join(observed, on=["zone_id", "event_time"], how="left")
-        .with_columns(
-            pl.col("trip_count").fill_null(0).cast(pl.UInt32),
-            pl.col("total_fare").fill_null(0.0),
-        )
-        .sort(["zone_id", "event_time"])
+        grid.join(demand, on=["zone_id", "event_time"], how="left").with_columns(zeros).sort(["zone_id", "event_time"])
     )

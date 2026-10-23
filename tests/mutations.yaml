@@ -879,7 +879,7 @@ mutations:
 - id: KFP1
   origin: 'W-5 pipeline component bodies, author — the pipeline''s gate stops gating (re-anchored by W-14: it calls the shared rule)'
   file: orchestration/pipelines/demand_forecast_pipeline.py
-  old: '    check(skill, coverage)'
+  old: '    check(skill, coverage, group_coverage, group_harm)'
   new: '    pass'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_pipeline_components.py tests/test_promotion_agreement.py
@@ -980,7 +980,7 @@ mutations:
 - id: R15-KFP4
   origin: QA-4 round fifteen remediation — the DAG's gate stops calling the shared rule (re-anchored by W-14)
   file: orchestration/dags/demand_forecast_training.py
-  old: '        check(metrics["skill"], metrics["coverage"])'
+  old: '        check(metrics["skill"], metrics["coverage"], metrics["group_coverage"], metrics["group_harm"])'
   new: '        pass'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py tests/test_promotion_agreement.py
@@ -1783,8 +1783,8 @@ mutations:
 - id: R17-W14a
   origin: QA-4 round seventeen, auditor — the DAG rounds the metrics before the shared rule (off the agreement grid)
   file: orchestration/dags/demand_forecast_training.py
-  old: '        check(metrics["skill"], metrics["coverage"])'
-  new: '        check(round(metrics["skill"], 3), round(metrics["coverage"], 3))'
+  old: '        check(metrics["skill"], metrics["coverage"], metrics["group_coverage"], metrics["group_harm"])'
+  new: '        check(round(metrics["skill"], 3), round(metrics["coverage"], 3), round(metrics["group_coverage"], 3), metrics["group_harm"])'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_promotion_agreement.py tests/test_dags.py
   expect: killed
@@ -2047,8 +2047,8 @@ mutations:
 - id: R17-W14b
   origin: QA-4 round seventeen — the pipeline rounds its inputs before the rule
   file: orchestration/pipelines/demand_forecast_pipeline.py
-  old: '    check(skill, coverage)'
-  new: '    check(round(skill, 3), round(coverage, 3))'
+  old: '    check(skill, coverage, group_coverage, group_harm)'
+  new: '    check(round(skill, 3), round(coverage, 3), round(group_coverage, 3), group_harm)'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_promotion_agreement.py
   expect: killed
@@ -2861,6 +2861,74 @@ mutations:
   gates:
   - P4
   - P22
+- id: F19B-1
+  origin: F-19b — the point forecast is fitted to the mean again while MAE judges it
+  file: projects/demand-forecast/src/demand_forecast/train.py
+  old: POINT_LOSS = "absolute_error"
+  new: POINT_LOSS = "squared_error"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_group_harm.py
+  expect: killed
+- id: F19B-2
+  origin: F-19b — a decile the baseline serves better no longer refuses the model
+  file: projects/demand-forecast/src/demand_forecast/promotion.py
+  old: '    elif not _at_least(0.0, group_harm):'
+  new: '    elif False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_promotion.py
+  expect: killed
+- id: F19B-3
+  origin: F-19b — unmeasurable harm is judged as if it were a number
+  file: projects/demand-forecast/src/demand_forecast/promotion.py
+  old: '    if math.isnan(group_harm):'
+  new: '    if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_promotion.py
+  expect: killed
+- id: F19B-4
+  origin: F-19b — the harm bound is taken on the wrong side of the difference
+  file: projects/demand-forecast/src/demand_forecast/train.py
+  old: '            harm[group.group] = (group.model_mae - group.baseline_mae) - quantile * spread'
+  new: '            harm[group.group] = (group.model_mae - group.baseline_mae) + quantile * spread'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_group_harm.py
+  expect: killed
+- id: F19B-5
+  origin: F-19b — the published model is built apart from the one the backtest judged
+  file: projects/demand-forecast/src/demand_forecast/persist.py
+  old: '    estimator = make_estimator(seed)'
+  new: '    estimator = HistGradientBoostingRegressor(max_iter=200, learning_rate=0.08, random_state=seed)'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_group_harm.py
+  expect: killed
+- id: F19B-6
+  origin: F-19b — the DAG hands the gate a constant for harm
+  file: orchestration/dags/demand_forecast_training.py
+  old: '            "group_harm": worst_group_harm(report),'
+  new: '            "group_harm": -1.0,'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dags.py -k plain_floats
+  expect: killed
+- id: F19B-7
+  origin: F-19b — the pipeline's gate judges a constant for harm
+  file: orchestration/pipelines/demand_forecast_pipeline.py
+  old: '    check(skill, coverage, group_coverage, group_harm)
+
+    '
+  new: '    check(skill, coverage, group_coverage, -1.0)
+
+    '
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_promotion_agreement.py
+  expect: killed
+- id: F19B-8
+  origin: F-19b — the harm confidence rises, so harm needs more evidence before it refuses
+  file: projects/demand-forecast/src/demand_forecast/promotion.py
+  old: GROUP_HARM_CONFIDENCE = 0.95
+  new: GROUP_HARM_CONFIDENCE = 0.999
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_promotion.py
+  expect: killed
 - id: W15-1
   origin: W-15 — the crossover projection anchored on the smallest slice, which measures noise
   file: projects/demand-forecast/src/demand_forecast/crossover.py
@@ -2902,10 +2970,10 @@ mutations:
   - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_backtest.py
   expect: killed
 - id: W15-6
-  origin: W-15 — a time window with no rows is scored as a fold
+  origin: W-15 — a time window with no rows is scored as a fold (re-anchored by F-19, which refuses the fold rather than skipping it)
   file: projects/demand-forecast/src/demand_forecast/backtest.py
-  old: "        train = np.flatnonzero(values < train_end)\n        test = np.flatnonzero((values >= test_start) & (values < test_end))\n        if len(train) == 0 or len(test) == 0:\n            continue"
-  new: "        train = np.flatnonzero(values < train_end)\n        test = np.flatnonzero((values >= test_start) & (values < test_end))\n        if False:\n            continue"
+  old: '        if len(test) == 0:'
+  new: '        if False:'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_backtest.py
   expect: killed
@@ -3154,4 +3222,68 @@ mutations:
   new: '        if "__pycache__" not in path.parts'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_config_is_read.py -k read_only_by_a_test
+  expect: killed
+- id: F19-2
+  origin: F-19 — MIN_ZONE_HOURS counts rows again
+  file: projects/demand-forecast/src/demand_forecast/train.py
+  old: '    hours = demand.group_by("zone_id").agg(pl.col("event_time").n_unique().alias("hours"))'
+  new: '    hours = demand.group_by("zone_id").agg(pl.len().alias("hours"))'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_training.py -k hours_not_rows
+  expect: killed
+- id: F19-3
+  origin: F-19 — the backtest stops densifying the history it is given
+  file: projects/demand-forecast/src/demand_forecast/train.py
+  old: '    modellable = select_modellable_zones(densify(demand))'
+  new: '    modellable = select_modellable_zones(demand)'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_training.py -k densifies
+  expect: killed
+- id: F19-4
+  origin: F-19 — Mondrian intervals fall back to one quantile for every group
+  file: libs/ml-core/src/ml_core/conformal.py
+  old: '        half_width = np.array([self._groups[int(group)].quantile for group in groups], dtype=np.float64)'
+  new: '        half_width = np.array([next(iter(self._groups.values())).quantile for group in groups], dtype=np.float64)'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly libs/ml-core/tests/test_mondrian.py
+  expect: killed
+- id: F19-5
+  origin: F-19 — the promotion gate stops holding the worst decile to its floor
+  file: projects/demand-forecast/src/demand_forecast/promotion.py
+  old: '    elif not _at_least(group_coverage, MIN_GROUP_COVERAGE):'
+  new: '    elif False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_promotion.py -k worst_volume_decile
+  expect: killed
+- id: F19-6
+  origin: F-19 — volume deciles are ranked busiest-first, so decile 0 is no longer the quietest
+  file: projects/demand-forecast/src/demand_forecast/train.py
+  old: '    order = np.lexsort((seen, means))'
+  new: '    order = np.lexsort((seen, -means))'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_volume_groups.py
+  expect: killed
+- id: F19-7
+  origin: F-19 — the backtest scores a zone no fold trained on
+  file: projects/demand-forecast/src/demand_forecast/train.py
+  old: '        scored = fold.test[groups[fold.test] >= 0]'
+  new: '        scored = fold.test'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_training.py -k never_trained
+  expect: killed
+- id: F19-8
+  origin: F-19 — the published model ranks no decile and calibrates one group
+  file: projects/demand-forecast/src/demand_forecast/persist.py
+  old: '    groups = volume_groups(zone_ids, target, np.arange(len(target)))'
+  new: '    groups = np.zeros(len(target), dtype=np.int_)'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_persist.py -k busy_zone
+  expect: killed
+- id: F19-9
+  origin: F-19 — the per-decile figures are averaged from per-fold ratios instead of pooled
+  file: projects/demand-forecast/src/demand_forecast/train.py
+  old: '                coverage=inside / n_test if n_test else math.nan,'
+  new: '                coverage=float(np.mean([t.inside / t.n_test for f in self.folds for t in f.by_group if t.group == group])),'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_volume_groups.py -k pooled
   expect: killed

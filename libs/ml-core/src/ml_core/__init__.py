@@ -7,6 +7,7 @@ enforced by ``tests/test_dependency_direction.py`` rather than by review.
     from ml_core import (
         seed_everything,          # reproducibility that reports what it reached
         SplitConformalRegressor,  # intervals whose coverage can be measured
+        MondrianConformalRegressor,  # the same, guaranteed within each group
         ErrorCosts, choose_threshold,  # thresholds in business units, not F1
         calibration_error,        # the precondition cost-based thresholds need
     )
@@ -19,7 +20,7 @@ reading `from ml_core.drift import ...` says which vocabulary is in play:
     from ml_core.drift import DriftSignal, ReferenceWindow, worst_action
 """
 
-from ml_core.conformal import CoverageReport, SplitConformalRegressor
+from ml_core.conformal import CoverageReport, MondrianConformalRegressor, SplitConformalRegressor
 from ml_core.decision import ErrorCosts, ThresholdChoice, calibration_error, choose_threshold, expected_cost
 from ml_core.determinism import SeedReport, seed_everything, stable_hash
 from ml_core.fairness import FairnessReport, GroupOutcome, audit
@@ -31,6 +32,7 @@ __all__ = [
     "ErrorCosts",
     "FairnessReport",
     "GroupOutcome",
+    "MondrianConformalRegressor",
     "SeedReport",
     "SplitConformalRegressor",
     "ThresholdChoice",

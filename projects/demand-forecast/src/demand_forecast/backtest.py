@@ -203,7 +203,9 @@ def expanding_window_folds_by_time(
         caller will index, and silently reordering here would misalign them.
 
     Raises:
-        ValueError: If the observed span is too short for the requested design.
+        ValueError: If the observed span is too short for the requested design,
+            or a fold's train or test window holds no rows — every fold
+            requested is returned, or none is.
     """
     if horizon_hours < 1:
         raise ValueError(f"horizon_hours must be at least 1, got {horizon_hours}")
@@ -234,7 +236,17 @@ def expanding_window_folds_by_time(
 
         train = np.flatnonzero(values < train_end)
         test = np.flatnonzero((values >= test_start) & (values < test_end))
-        if len(train) == 0 or len(test) == 0:
-            continue
+        # Refused, not skipped — as `expanding_window_folds` refuses a design the
+        # rows cannot support. Skipping returned fewer folds than asked for, so a
+        # backtest designed with `DESIGN.n_folds` (a floor gate P20 watches) ran
+        # on fewer with nothing reporting it, and the folds it dropped are the
+        # ones whose window the data did not cover (F-19). The train side cannot
+        # be empty: the span check above puts the first row before the first cut.
+        if len(test) == 0:
+            raise ValueError(
+                f"fold {index} has no test rows in [{test_start}, {test_end}): the data does not cover the window this "
+                f"design asks for. Fill the hours (the warehouse density check exists for this) or change "
+                f"the design deliberately; a fold dropped here is a backtest weaker than the one requested"
+            )
         folds.append(Fold(index=index, train=train, test=test, gap=gap_hours))
     return folds
