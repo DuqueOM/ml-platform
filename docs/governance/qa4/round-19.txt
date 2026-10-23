@@ -1,0 +1,718 @@
+Committed copy of the QA-4 round nineteen report (the auditor's ~/qa4-r19-report.md).
+
+Verbatim, with one exception: the unlisted repository name the auditor used to probe C6
+(a fictitious name) is redacted to <unlisted-repo> in each of its spellings. The probe
+strings name an unpublished repository by construction, and C6 rightly fails on the forms it
+reads. Plain text, like the earlier rounds' copies.
+
+-------------------------------------------------------------------------------
+
+# QA-4 round nineteen — independent audit of `ml-platform` at 947c14d
+
+Auditor session: separate from the authoring session (ADR-005 rule B). Read-only. Nothing was committed or
+pushed. No PR, issue, comment, label, setting or secret was touched, in either repository. Neither main working
+tree was touched. `scripts/audit_record.py`, `AGENTS.md` and `ops/audit.jsonl` were not run or edited. C7's
+marker forms were probed in memory: the check's reader was patched and no file was written.
+
+Cluster writes, all of them:
+- One DVC probe object, `ml-platform-data/dvc/files/md5/73/cfd7902d…`, pushed to prove the remote works and
+  then deleted (bucket listed empty afterwards, as it was before).
+- The L3 make targets as written: `local-serve` (image build, `kind load`, rollout restart of
+  `demand-forecast`) and `local-dashboards` (ConfigMap apply, Grafana rollout restart). `local-up` stopped at
+  its preflight before applying anything.
+- `docker start ml-platform-local-control-plane`, once. Docker Desktop stopped while the session's app was
+  closed. When the user restarted it, the kind node failed to come back on its own (`runc create failed: …
+  cgroup.procs: device or resource busy`, restart policy on-failure). Starting it restored the cluster as it
+  was: node Ready, the same 6 deployments 1/1.
+
+No policy was mutated and no probe pod was created this round. Reads used `kubectl exec … cat
+/sys/fs/cgroup/…` and the kubelet stats endpoint.
+
+- **Tree under audit: `947c14d20a1d4a56a742123c98614a003a332070`** (origin/main, #146).
+  - Previous audit: `746d6d6`, round eighteen. `git rev-list --no-merges --count 746d6d6..947c14d` = **10**.
+    The ten commits are the ten the prompt lists.
+  - Catalogue: **277 entries** in tests/mutations.yaml. The harness expects 275 kills (277 minus the two
+    declared survivors), which matches the prompt.
+- ml-service-template `390f540bac37c2fc1f2d1e511c8dd92753df56eb` (#301), read-only, as worktree
+  `~/template_MLOps`. It is a worktree, so `.git` is a file. All three sibling-dependent checks ran against it:
+  - C2: "152 resolved against the template's index";
+  - the README comparison: shared files byte-identical, both `check_readme.py` OK;
+  - check_upstream_parity's online half: "122 comparable artifacts upstream, all decided".
+- Worktrees, each made with `git worktree add --detach … 947c14d` and synced with
+  `uv sync --all-packages --all-extras --locked`:
+  - `~/qa4-r19`: the plain suite, then the L3 make targets.
+  - `~/qa4-r19b`: `make verify`, then its remaining steps by hand.
+  - `~/qa4-r19-probe`: probes and the committed catalogue.
+  - `~/qa4-r19-mut`: the auditor catalogue.
+  - `~/qa4-r19-nm/ml-platform`: a checkout named `ml-platform`, for R18-RS10.
+  - All are removed at the end (see Closing).
+- Tools:
+  - uv 0.11.19; Python 3.11.15 (workspace) and 3.13.13 (serving image).
+  - pytest 9.1.1, coverage 7.16.2, ruff 0.16.10, mypy 2.4.0, bandit 1.9.4, copier 9.18.2.
+  - markdown-it-py 4.2.0, pyiceberg 0.12.0, pyarrow 25.0.1.
+  - trivy 0.71.0 (CI's action runs 0.70.0). Two DBs: the local cache (UpdatedAt 2026-10-20T19:12Z) and a fresh
+    one in a scratch cache (UpdatedAt 2026-10-21T13:15Z).
+  - gitleaks 8.21.2 (not run this round); dvc 3.67.1 / dvc-s3 3.3.0 via `uvx` (the lock's versions).
+  - kind v0.30.0, node v1.34.0 / containerd 2.1.3, kubectl 1.34.1, Docker 29.5.2. git 2.43.0.
+- Logs, probe scripts and `r19.yaml`: `~/qa4-r19-logs/`.
+
+**The environment broke twice, and the report says where.**
+- For the first ~3 hours the Docker daemon was wedged: `curl --unix-socket /var/run/docker.sock /_ping` timed
+  out, and `docker info` hung in the `docker-ai` CLI plugin. kubectl kept working, because the kind node
+  container kept running. Everything that shells out to `docker` hung until its timeout (P3-6 below).
+- Then the desktop app was closed and Docker Desktop stopped, taking the cluster down. The user restarted
+  Docker; I restarted the node (above).
+- The Docker-dependent steps were re-run after recovery where that was possible.
+
+### Runs (clean trees at 947c14d)
+
+| Run | Command | Result |
+| --- | --- | --- |
+| 1 | `uv run pytest -o addopts='' -q -rs -p no:cacheprovider` (~/qa4-r19, Docker wedged) | **6 failed, 2822 passed, 8 skipped**, 8262 s (2:17:42). 4 failures: status tests, each timed out on `bootstrap.sh --check` → `docker info`. 2: L3 serving tests (`docker exec … crictl` timed out after 60 s; the serving pod showed 3 restarts, `lastState: Unknown`, from node restarts) |
+| 2 | `make verify` (~/qa4-r19b, Docker wedged) | **EXIT=2 after 1482 s**, at `check_implementation_status.py --check`: "`bash scripts/bootstrap.sh --check` FAILS — TIMED OUT after 1200s". Every step before it passed. Make stops at the first failure, so the coverage half never ran |
+| 2b | the steps after it, by hand (`check_readme.py`; `coverage erase/run/combine`; `check_coverage_floors.py --xml coverage.xml`) | check_readme OK. Suite under coverage: the same status tests fail for the same reason (rc=1). **Every coverage floor OK** (below). 8388 s |
+| 2c | `uv run python scripts/check_implementation_status.py --check`, Docker up | **OK** — "implementation status matches the filesystem", 205 s |
+| 2d | the 5 status tests, Docker up (`tests/test_gate_scripts.py` ×3 selections, `tests/test_status_layers.py`) | **23 passed**, 1228 s |
+| 3 | `uv run python scripts/check_doc_coherence.py` | **OK**; `[C7] last independent audit 14 days ago, 10/10 commits not contained in 746d6d6`, as the prompt predicted |
+| 4 | `uv run python scripts/check_implementation_status.py` | 47 done · 3 partial · 5 absent of 55; 37 at L1 · 10 at L2; 4 L3 evidence commands not run. With Docker wedged, "Reproducible dev environment" rendered `FAILS` |
+| 5 | `uv run python scripts/mutation_harness.py` (~/qa4-r19-probe) | **274/275 expected kills**, 2817 s. C10-case and W-ceiling-exclusive survive as declared. **R18-RS10 SURVIVED**, unexpected (P3-10) |
+| 6 | `… mutation_harness.py --catalogue ~/qa4-r19-logs/r19.yaml` | 5/10 killed (Mutations, below) |
+| 7 (L3, Docker up) | `make local-up` / `local-serve` / `local-dashboards` / `local-verify`; `uv run pytest tests/local -m local -rs` | local-up **rc=2**: preflight "does not fit", short by 16 MB (P2-5). local-serve rc=0 (389 s), local-dashboards rc=0 (47 s), local-verify rc=0 (72 s). **tests/local: 40 passed, 0 skipped**. Retried after my own suites had finished: rc=2 again, "short by 98 MB" (available min 5525 MB) |
+| CI | run 39519571546 on 947c14d (push) | success, all six jobs: Fast gates, Tests and coverage, Supply chain, Secret scan, IaC and Kubernetes security, Repository invariants. Scorecard and Docs quality also succeeded |
+
+**Coverage**, from run 2b (`coverage run --branch` over libs, projects, orchestration and scripts, exactly as
+the Makefile does):
+
+| Scope | Lines (floor) | Branches (floor) |
+| --- | --- | --- |
+| libs/ combined | 94.55 (90) | |
+| data-contracts | 95.60 | 90.62 |
+| feature-defs | 100 | 100 |
+| llm-core | 95.23 | 87.23 |
+| ml-core | 97.25 | 94.07 |
+| scripts/ | 87.96 (86) | |
+| projects/ combined | 86.47 (84) | |
+| demand-forecast | 86.00 (83) | 75.86 (71) |
+| rag-assistant | 96.34 (96) | 90.00 (90) |
+| store-assistant | 85.25 (85) | 57.14 (57) |
+| orchestration | 100 | 100 |
+
+The suite in that run had five failing tests, so the figures were measured with five tests short. That can only
+lower them.
+
+**Skips (8)**, from `-rs`:
+- Recorded contract deviations (4): P1 ×2, P6, P7.
+- No nyc-tlc data in the worktree (2).
+- `test_tracing`: OTLP is not port-forwarded on 14317 (1).
+- No EDGAR filings (1).
+- `test_upstream_parity` no longer skips: round 18's P3 is fixed and the worktree sibling is read.
+
+**Code scanning, open alerts** (`gh api …/code-scanning/alerts?state=open&tool_name=…`):
+- **Trivy 2**, both medium:
+  - CVE-2025-69872, diskcache, uv.lock;
+  - CVE-2026-59890, setuptools, `.trivy-resolved/serving-eda-heavy/requirements.txt`.
+- **Scorecard 12**. VulnerabilitiesID names PYSEC-2026-3447 (setuptools), PYSEC-2026-2447 (diskcache) and
+  **PYSEC-2026-4320 (certifi)**. The certifi one is P1-1 below.
+- **CodeQL 0**.
+
+---
+
+## Findings
+
+**Counts: 0 P0 · 1 P1 · 6 P2 · 12 P3**
+
+### P1
+
+```text
+[P1] The lock pins certifi 2026.7.22, which bundles emSign roots whose intermediates are compromised (GHSA-6q48-6c7w-9gw2, CRITICAL); with today's Trivy DB the blocking gate fails on 947c14d, so the next push to main and every PR go red
+  uv.lock (certifi 2026.7.22); fixed in certifi 2026.10.19
+  $ curl -s https://api.osv.dev/v1/vulns/GHSA-6q48-6c7w-9gw2   → severity CRITICAL, github_reviewed_at 2026-10-20T19:35:05Z, CWE-295
+  $ TRIVY_INCLUDE_DEV_DEPS=true trivy fs --cache-dir <scratch> --scanners vuln --severity CRITICAL,HIGH \
+      --ignorefile .security-baselines/.trivyignore --exit-code 1 --skip-dirs .venv .      # DB UpdatedAt 2026-10-21T13:15Z
+  Total: 1 (HIGH: 0, CRITICAL: 1)
+  │ certifi │ GHSA-6q48-6c7w-9gw2 │ CRITICAL │ fixed │ 2026.7.22 │ 2026.10.19 │ certifi bundles emSign root CAs with compromised …
+  rc=1
+  $ (same, DB UpdatedAt 2026-10-20T19:12Z — before the advisory was reviewed)   → rc=0
+  Scorecard VulnerabilitiesID on 947c14d: PYSEC-2026-4320 (certifi)
+  $ gh pr list --state open   → none of #127 #134 #135 #140–#144 #147 names certifi
+```
+
+The remediation under audit did not cause this. The advisory was reviewed after 947c14d's CI ran. It is in the
+report for two reasons:
+- **The risk is real.** Every HTTPS client in the workspace trusts a CA bundle with compromised intermediates.
+- **The next CI run on any branch fails.** That failure is the gate working, not a regression.
+
+The serving image resolves its own requirements. Whether it pins certifi below 2026.10.19 was not checked here,
+because `.trivy-resolved/` is generated in CI.
+
+**Fix:** `uv lock --upgrade-package certifi` (to 2026.10.19 or later), check that the lock moves nothing else,
+and confirm the resolved serving sets pick it up (`scripts/resolve_serving_requirements.py`, then Trivy over
+`.trivy-resolved/`).
+
+### P2
+
+```text
+[P2] C7 is cleared, with no audit and no trail entry, by a date-only marker; an uppercase sha reads as date-only; and a future date disables the age limit
+  scripts/check_doc_coherence.py:1420-1423 (marker regex: sha group optional, [0-9a-f] only), :1439 (corroboration "only when the marker names a commit"), :1474 (age = today - audited, unbounded below)
+  docs/governance/audit-brief.md §10: "C7 reads that line **and requires the trail to corroborate it**"
+  $ uv run python ~/qa4-r19-logs/probes/c7_probe.py     # replaces the AGENTS.md marker in memory, runs check_audit_freshness
+  committed marker                       ok   [C7] last independent audit 14 days ago, 10/10 commits not contained in 746d6d6
+  marker moved to HEAD, no trail entry   FAIL [C7] the audit marker names 947c14d and no `independent-audit` entry … mentions it
+  date-only marker, today                ok   [C7] last independent audit 0 days ago, 0/10 commits dated after 2026-10-21
+  date-only marker, far future           ok   [C7] last independent audit -26734 days ago, 0/10 commits dated after 2099-12-31
+  uppercase sha (947C14D)                ok   [C7] last independent audit 0 days ago, 0/10 commits dated after 2026-10-21
+  future date, committed sha             ok   [C7] last independent audit -26734 days ago, 10/10 commits not contained in 746d6d6
+  unreachable sha / not a commit         FAIL (no trail entry names it)
+  old audited sha 71528ad                FAIL [C7] 11 commits not contained in 71528ad (grace: 10)
+```
+
+The sha-carrying path is sound. A marker moved to HEAD fails; an unreachable sha fails; an old audited sha is
+counted honestly.
+
+The date-only fallback is described as being "only for markers written before that convention existed". It
+accepts any marker today. So one edited line — `Last independent audit: 2099-12-31` — keeps C7 green for every
+future commit with nothing behind it in ops/audit.jsonl. That is the round-six failure this check was built to
+make impossible.
+
+**Merge-commit counting was also checked**, in a throwaway `git clone --no-local` under the scratchpad, with a
+2-commit branch and main moved by one commit:
+
+| Count | Value |
+| --- | --- |
+| branch | 12 |
+| CI's synthetic merge ref | 13 |
+| merge ref with merges included | 14 |
+| main after the squash | 12 |
+
+`--no-merges` does exclude the merge commit. Local and CI agree whenever the branch is up to date. The merge ref
+adds only main's genuinely unreviewed commit. A multi-commit PR is charged per commit and drops back after the
+squash, so a PR can be red at N while the squash lands green.
+
+**Fix:**
+- Refuse a marker without a sha once the trail exists. Every recorded round has one.
+- Match the sha case-insensitively, or reject uppercase explicitly.
+- Fail a marker dated after today, and after the trail entry it cites.
+- Optionally require that the cited trail entry's `ts` is not before the marker date.
+
+```text
+[P2] Bandit, a control SECURITY.md claims blocks, is disarmed two new ways with every workflow test and gate green
+  .github/workflows/ci.yml:159 (the Bandit step); tests/test_security_controls.py:146-207 (_blocks: `shell:` never read; _SWALLOWED_OR's lookahead matches "exit 1" anywhere on the line), :400 (behavioural test reads only the first physical `run:` line)
+  $ (Bandit step gains `shell: bash {0}` and a folded plain-scalar continuation `| tee bandit.txt`)
+    yaml.safe_load → run = 'uv run bandit … -ll -q | tee bandit.txt', shell = 'bash {0}'
+  $ uv run pytest -o addopts= -q $(grep -rl 'ci.yml\|WORKFLOW' tests/*.py)   → 555 passed
+  $ check_action_pins.py → [actions] OK ; ci_verify_yaml.py → [yaml] OK ; check_ci_references.py → OK
+  $ printf 'false | tee /dev/null\n' > s.sh; bash --noprofile --norc s.sh; echo $?   → 0     (what `shell: bash {0}` runs)
+  $ bash --noprofile --norc -eo pipefail s.sh; echo $?                              → 1     (GitHub's default)
+  $ (instead: folded continuation `|| echo "bandit findings, see log; exit 1 is for main only"`, no shell override)
+  555 passed; [actions] OK
+  R19-BLK1, R19-BLK2: SURVIVED
+```
+
+This is the class of rounds 16–18 again, through two doors those fixes left open:
+- **`shell:` is never read.** GitHub's default bash is `-eo pipefail`; `shell: bash {0}` drops both.
+- **The `||` rule is a text search.** It treats any `exit [1-9]` later on the line as a failing branch, even
+  inside a string.
+
+The behavioural test runs only the first physical line of `run:`. A YAML plain-scalar continuation is joined by
+the parser and invisible to the regex, so the test executes a command CI does not run.
+
+The same `shell:` gap reaches every `run:`-based control: `uv lock --check` (P9), and P10's digest checks (P3-4).
+
+**Fix:**
+- Treat any `shell:` on a control's step, job or workflow `defaults.run` as non-blocking unless it is in an
+  allowlist (`bash -eo pipefail {0}`).
+- Judge `||` by parsing the branch: shlex the command list and require that the branch's last command is
+  `exit N` with N ≥ 1, or `false`.
+- Have the behavioural test run the *parsed* `run:` value through `bash -eo pipefail` (or the step's declared
+  shell), not the first physical line.
+- Add R19-BLK1 and R19-BLK2 to the catalogue.
+
+```text
+[P2] The memory-budget gate is an attestation: a hand-edited ledger recreates round eighteen's exact defect with every test green, and three ways of adding an unmeasured image are not read at all
+  tests/test_local_memory_budget.py:36-60 (`*.yaml` glob, `kind == "Deployment"` only, `containers` only); platform/local/measured-memory.yaml:1-3 ("Never edited by hand" — nothing enforces it)
+  $ ~/qa4-r19-logs/probes/mem_attacks.sh     # each mutates ~/qa4-r19-probe, runs the test file, restores
+  M0 committed tree                                                    9 passed
+  M1 tag-only change (grafana 13.3.0, same digest)                     1 failed, 8 passed
+  M2 digest-only change                                                1 failed, 8 passed
+  M3 grafana limit lowered 512->480                                    2 failed, 7 passed
+  M4 new unmeasured Deployment in a .yml file                          9 passed
+  M5 unmeasured initContainer (busybox:latest) on grafana              9 passed
+  M6 new unmeasured StatefulSet (.yaml)                                9 passed
+  M7 image bumped in the manifest AND the ledger by hand (no run)      9 passed
+  M8 ledger peak hand-lowered 395->150, limit 200Mi, budget+quota kept consistent   9 passed
+  $ kubectl apply --dry-run=client -f <dir with a.yml and b.yaml>   → configmap/probe-yml created (dry run); configmap/probe-yaml created (dry run)
+```
+
+What 32f6f39 claims holds for the change Dependabot makes: a tag or digest bump fails, and Dependabot cannot
+edit the ledger. What it does not hold for is the change the next person makes to clear that red. The work order
+and dependabot.yml both say a bump "fails until someone has started the new image and measured it". It fails
+until someone edits two strings.
+
+M8 is Grafana at 200Mi again, green. M4–M6 would be refused at admission in the cluster, because the namespace
+quota already equals the sum of the budget and there is no LimitRange. So they fail at L3, not silently; but CI,
+which has no cluster, passes them.
+
+**Fix:**
+- Give the ledger provenance the test can check. For example, have `measure_memory.py --write` record the
+  node's `crictl inspecti` image id and sample timestamps per component. Have the test require that ledger
+  entries change only together with `measured_on`, and with a value no lower than the previous one for the same
+  image (the script already keeps the highest).
+- Read manifests as kubectl does (`.yaml`, `.yml`, `.json`), every workload kind, and every container list
+  (`initContainers`, `ephemeralContainers`). Fail on anything unrecognised.
+
+```text
+[P2] The audit brief's § 11 — the section the procedure hands each auditor as its starting point — is four rounds stale, and its "attack these first" list is round fourteen's
+  docs/governance/audit-brief.md:389 ("## 11. Since the previous audit — round fifteen's starting point")
+  $ git log --format='%h %ad %s' --date=short -L '/^## 11\./,+6:docs/governance/audit-brief.md' | head -1
+  a130c42 2026-09-29 fix: QA-4 round fourteen — …
+  $ grep -n 'round sixteen\|round seventeen\|round eighteen' docs/governance/audit-brief.md   → (nothing)
+  § 11 reports "Round fourteen audited f8b9d27 … 0 P0, 0 P1, 4 P2, 5 P3"; rounds 15 (56c3693), 16, 17 and 18 (32f6f39) and their remediations are absent
+```
+
+AGENTS.md says the brief is "written FOR the auditing session … Read it first". The brief's own preamble removes
+status figures because "a number restated outside the thing that derives it will diverge from it". § 11 is
+exactly such a restatement, and it has diverged.
+
+The cost is concrete. Its ranked list sends an auditor to round 14's weak points: the artifact gate's `-r`
+includes, V8 descriptions, the copier MINOR. Rounds 15–18's open items live only in the remediation work order.
+Nothing mechanical checks the brief against the marker. C7 knows the last audited commit and the trail knows
+the round; neither is compared with § 11.
+
+**Fix:** either rewrite § 11 at each remediation, or replace it with a pointer to the newest
+`remediation-work-order.md` round section plus the `git log` command it already gives. Then add a C-check that
+the round number § 11 names equals the trail's latest `independent-audit` round.
+
+```text
+[P2] `make local-up` cannot be re-run on a running stack: the preflight charges the stack's own resident memory against the budget, so 2 of the 4 L3 evidence commands fail as written on a host that runs the stack comfortably
+  scripts/local/preflight.py:137-166 (memory check ignores cluster_exists(), which it consults only for ports at :170)
+  docs/architecture/implementation-status.md L3 evidence: `make local-up && uv run pytest tests/local/test_local_stack.py -q -m local` (×2)
+  $ make local-up      # stack already up: 6/6 deployments Available, tests/local 40 passed minutes later
+  ok    available: min 5673 MB · mean 5743 MB · max 5795 MB (spread 122 MB)
+  budget declared : 3136 MB across 8 components
+  budget allowed  : 3120 MB (55% of 5673 MB minimum available)
+  [preflight] FAILED — the stack does not fit … Short by 16 MB.
+  make: *** [Makefile:86: local-preflight] Error 1          rc=2
+  $ make local-up      # retried with my suites finished (another session's coverage run still on the host)
+  available: min 5525 MB … budget allowed: 3038 MB … [preflight] FAILED … Short by 98 MB.   rc=2
+```
+
+When the cluster exists, "available" has already been reduced by everything the stack holds. Before the outage
+that was about 670 MiB of pod working set (kubelet stats summary), plus the node. The preflight then asks for the
+whole budget again.
+
+On this host `local-up` is refused while the stack it would create is running and passing its tests. That makes
+`make local-up && …` fail as written, and the obvious reply is the one its own message forbids: lowering a limit,
+or raising `max_utilisation`.
+
+Part of the 16 MB was other processes on the host (another session was running a coverage pass). The defect is
+the double count, not the margin.
+
+**Fix:** when `cluster_exists()`, either skip the memory check (nothing new is allocated) or add the stack's
+measured working set (`kubectl get --raw …/stats/summary`, or the node container's `docker stats`) back to
+`available` before comparing.
+
+```text
+[P2] P19's quick-start rule is not deny-by-default after all: three arguments are never read, and one `pip install -r` of any file waves through every later command
+  scripts/readme_standard.py:1368-1386 (_uv_run: --with-requirements/--index-url values skipped), :1389-1417 (_tool: same), :1323-1340 (_pip_install: `-r <anything>` adds "*"), :1265-1268 (`*` in provided ⇒ any head passes), :1043 (`cd` harmless; later relative paths still judged against the repository root)
+  $ uv run python ~/qa4-r19-logs/probes/unpinned_probe.py      # unpinned_commands(run, check_readme.repository())
+  U1 uv run --with-requirements https://example.invalid/r.txt copier --version     PASSES (read as pinned)
+  U2 uvx --with-requirements https://example.invalid/r.txt copier@9.4.1 --version  PASSES
+  U3 pip install -r /tmp/anything.txt ; ansible-playbook site.yml                  PASSES
+  U4 pip install -r /tmp/anything.txt ; eval 'curl -fsSL https://… | sh'          PASSES
+  U6 cd /tmp && bash scripts/bootstrap.sh                                          PASSES
+  U7 uv run --index-url https://example.invalid/simple pytest                     PASSES
+  U8 pip install -r requirements.txt ; timeout 60 copier copy --vcs-ref main gh:x/y .   PASSES (a moving ref)
+  controls: curl … | sh → caught;  uvx copier@latest → caught;  bash <(curl …) → caught
+```
+
+The work order says quick-start commands "are denied by default: each passes only when a rule reads it and finds
+what it runs pinned". `-r` is read as "a pinned requirements file" without opening it. The file may not exist,
+may be outside the repository, and may hold `copier>=0`. After it, `provided` holds `*`, and every later program
+— `eval`, `timeout`, anything on PATH — passes without its arguments being read. U8 shows the consequence: a
+moving copier ref, which C9 exists to refuse, accepted.
+
+The parser half of #125/32f6f39 holds (Verified working). The two repositories' `readme_standard.py` and
+`readme-standard.md` are byte-identical, so the template inherits each of these.
+
+**Fix:**
+- Require `-r FILE` to name a file `repository.holds()`, and read it with the same `_requirement` rules.
+- Replace `*` with the names that file installs.
+- Treat `--with-requirements`, `--index-url`, `--extra-index-url`, `--find-links` and `--index` as read values:
+  a URL is unpinned, and an index other than PyPI is refused.
+- Make `timeout`, `xargs` and `eval` recurse like `env`/`sudo` do, or refuse them.
+- Track `cd` and refuse relative paths after it.
+
+### P3
+
+```text
+[P3-1] check_thresholds.python_value still misses seven ways to rebind a threshold; its docstring says "anything else that binds the name … is refused" (the behavioural tests catch every one)
+  scripts/check_thresholds.py:62-92 (_bindings: no With/MatchAs/arg), :111-149 (_changed_elsewhere: store root must be the name itself)
+  $ uv run python ~/qa4-r19-logs/probes/pv_attacks.py   # gate verdict on promotion.py, then test_promotion.py with the file mutated
+  B1 parameter MIN_SKILL=0.0 on verdict()              gate: OK value=0.05   tests: 2 failed
+  B2 `with nullcontext(0.0) as MIN_SKILL`              gate: OK value=0.05   tests: 3 failed
+  B3 `match 0.0: case MIN_SKILL:`                       gate: OK value=0.05   tests: 3 failed
+  B4 sys.modules[__name__].__dict__['MIN_SKILL'] = 0.0   gate: OK value=0.05   tests: 3 failed
+  B5 sys.modules[__name__].__dict__.update(MIN_SKILL=0.0) gate: OK value=0.05  tests: 3 failed
+  B6 operator.setitem(sys.modules[__name__].__dict__, …) gate: OK value=0.05   tests: 3 failed
+  B7 `(lambda MIN_SKILL=0.0: …)()` at the use site       gate: OK value=0.05   tests: 2 failed
+  R19-PV1 (B2, harness): SURVIVED check_thresholds.py + tests/test_thresholds.py
+```
+
+Same shape as round 18's P3-1: defence in depth holds, but the gate's claim is wider than its reading.
+
+**Fix:** count `With.items[].optional_vars`, `MatchAs`/`MatchStar` names, function and lambda parameters with the
+threshold's name, and any store or mutating call whose chain contains `__dict__` or `sys.modules`. Or import the
+module and compare `getattr(module, name)` with the literal the gate read.
+
+```text
+[P3-2] The gates-coverage test is still satisfied by a label for tool gates: gitleaks (P5) is "broken" by a Bandit-only mutation
+  tests/test_mutation_harness.py:75-107 (TOOL_GATE_HOLDERS: P5 and P9 both held by tests/test_security_controls.py)
+  $ (tests/mutations.yaml: drop `gates: [P5]` from R16-SEC3 and R18-BLK1 — the only gitleaks entries — and add it to R17-BAN1, which appends --exit-zero to Bandit)
+  $ uv run pytest -o addopts= -q tests/test_mutation_harness.py   → 564 passed
+```
+
+Round 18's fix holds for script and test gates. For P5 and P9 "runs the gate" means "runs
+test_security_controls.py", which every Bandit, Trivy and lockfile entry also runs.
+
+**Fix:** for a tool gate, also require that the entry's `file`/`old` touches the gate's own step or config — the
+gitleaks step, `.gitleaks.toml`, or the pre-commit hook rev — or give each tool gate its own holder test.
+
+```text
+[P3-3] The copier lock test reads lines, so a backslash-continued `copier \ update` runs whatever copier is on PATH and passes
+  tests/test_tool_versions.py:183-197 (per-line scan; `_COPIER_RUN` needs `copier\s+update` on one line)
+  $ (docs/runbooks/consuming-the-template.md gains a bash block: "copier \" / "  update --trust --vcs-ref=v0.32.0")
+  $ uv run pytest -o addopts= -q tests/test_tool_versions.py   → 12 passed
+  $ check_doc_coherence.py --only C9 → OK   (C9 checks the ref, not the lock)
+  R19-CP1: SURVIVED
+```
+
+**Fix:** join `\`-newline continuations before scanning, as `check_action_pins._commands` already does. Better,
+reuse C9's shlex tokenisation and check what precedes each `copier` token.
+
+```text
+[P3-4] P10 pairs a download with its digest check only when the URL is a literal on the curl/wget line
+  scripts/check_action_pins.py:108-112 (_DOWNLOAD requires `https?://` on the same line), :146-172 (no `shell:`)
+  $ (probe steps added to ci.yml) uv run python scripts/check_action_pins.py
+  A  URL=https://…/tool-linux ; curl -fsSL "$URL" -o tool ; chmod +x tool        → not reported
+  B  curl -fsSL "${{ env.TOOL_URL }}" -o tool2                                    → not reported
+  C  gh release download v1.0.0 -R example/tool -p tool-linux -O tool3            → not reported
+  D  shell: bash {0} ; … | sha256sum -c - | tee check.log  (no pipefail)          → not reported
+  control: curl -fsSL https://…/tool5 -o tool5 (no check)                          → FAIL, caught
+  R19-P10a (A, harness): SURVIVED
+```
+
+This is latent: the one real download (kubescape) is a literal URL with a correct check.
+
+**Fix:** treat any `curl`/`wget` with `-o`/`-O`, and `gh release download`, `aria2c` and `pip download`, as a
+download whatever its URL looks like. Read `shell:` as in P2-2.
+
+```text
+[P3-5] C6 passes a private checkout written with `~` or `$HOME`, and a denylisted name carrying a Cyrillic letter or a soft hyphen — the folding round eighteen added reaches the link scan only
+  scripts/check_doc_coherence.py:829-831 (home_directory needs /home/ or /Users/ and the account), :783 (_check_forbidden_names reads raw `.lower()`, not _as_rendered)
+  $ uv run python ~/qa4-r19-logs/probes/c6_probe.py    # fake denylisted name 'acme-secret' (in memory); unlisted repo '<unlisted-repo>'
+  L2 /home/duqueom/projects/main_projects/<unlisted-repo>    FAIL   (caught)
+  L3 ~/projects/main_projects/<unlisted-repo>                ok     (passes)
+  L4 $HOME/projects/<unlisted-repo>                          ok     (passes)
+  L5 /mnt/c/Users/duqueom/source/repos/<unlisted-repo>       FAIL   (caught)
+  N1 bare name / Title Case / zero-width / &#45; / fullwidth hyphen / *emphasis* / dot   FAIL (caught)
+  N5 name with a Cyrillic а                              ok     (passes)
+  N6 name with a soft hyphen (U+00AD)                    ok     (passes)
+  (N8 camelCase passes too; private-names.sha256 documents that limit)
+```
+
+The tilde form is the one this repository's own prompts and reports use (`~/projects/main_projects/ml-platform`,
+`~/qa4-r18`). The denylist scan still catches a *registered* name there. The link scan, which exists for
+unregistered ones, does not.
+
+**Fix:** accept `~/`, `$HOME/`, `${HOME}/` and `%USERPROFILE%\` as home prefixes, account implied. Run
+`_check_forbidden_names` over `_as_rendered(raw)` and `_as_rendered(_as_markdown_renders(raw))` as well as raw.
+
+```text
+[P3-6] scripts/bootstrap.sh runs `docker info` with no bound, so on a wedged daemon the README's environment check hangs, and the status gate turns that into a failed `make verify` after 20 minutes
+  scripts/bootstrap.sh:251 (`if docker info >/dev/null 2>&1`); scripts/local/preflight.py:35-36 already bounds the same probe "against a wedged daemon — common under WSL"
+  $ timeout 10 curl -s --unix-socket /var/run/docker.sock http://localhost/_ping   → rc=124 (daemon wedged)
+  $ pstree … check_implementation_status.py → sh -c bash scripts/bootstrap.sh --check → docker info → docker-ai docker-cli-plugin-metadata
+  $ make verify   → [status] `bash scripts/bootstrap.sh --check` failed with: TIMED OUT after 1200s … ; make: *** [Makefile:64: verify] Error 1   EXIT=2 (1482 s)
+  plain suite: 4 status tests fail the same way (one timed out after 1380 s)
+  $ (Docker up) check_implementation_status.py --check → OK in 205 s
+```
+
+The script's own design reads an unreachable daemon as a *warning* (docker is optional). The hang converts that
+warning into a gate failure on whichever machine has a wedged daemon, after the longest timeout in the
+repository.
+
+**Fix:** `timeout 10 docker info` (or `docker info --format '{{.ServerVersion}}'` under `timeout`), treating
+exit 124 as "daemon not reachable" — the existing warn path.
+
+```text
+[P3-7] The ledger's "peak" is one 50-second window after start; a day later five of six components ran above their recorded peak while idle
+  platform/local/measured-memory.yaml:5-6 ("peak of 25 samples 2s apart"), :15-17 (object-store peak_mib 222)
+  $ (before the outage; object-store up 21 h, 1518 objects in `lakehouse`) 25× kubectl exec … memory.current − inactive_file, 2 s apart
+  object-store  n=25 min=237 median=241 max=242 MiB          (ledger 222)
+  $ kubectl get --raw /api/v1/nodes/…/proxy/stats/summary   → object-store 240, otel-collector 43 (37), prometheus 39 (33), jaeger 38 (35), postgres 40 (39), grafana 266 (395) MiB
+  $ (after the restart) uv run python scripts/local/measure_memory.py   # no --write
+  object-store peak 169 · grafana 358 · otel-collector 44 · prometheus 41 · postgres 41 · jaeger 16 MiB — "[measure] OK"
+  object-store memory.peak (cgroup, incl. page cache) before the outage: 305 of 320 MiB; grafana 512 of 512 MiB, 0 restarts
+```
+
+RustFS grows with uptime and stored objects: 169 MiB fresh, 240 MiB after 21 hours. Every limit still clears
+1.25× what I measured (RustFS 320 ≥ 303). The number recorded as a peak is not one, so the 25% headroom is
+smaller than the ledger implies, and it shrinks as the store fills.
+
+**Fix:** measure after a soak — the integration tests and a re-run, or `measure_memory.py --soak` over hours —
+and record the method that way. Or call the field `observed_mib` and size headroom for growth.
+
+```text
+[P3-8] ef78621's message names one package; its lock moves nine others and adds two new pre-release packages
+  ef78621 "chore(deps): Bump opentelemetry-sdk from 1.44.0 to 1.45.0 (#129)"
+  $ git show ef78621 -- uv.lock | <name/version diff>
+  opentelemetry-api, -exporter-otlp, -exporter-otlp-proto-common, -proto-grpc, -proto-http, -proto: 1.44.0 → 1.45.0
+  opentelemetry-semantic-conventions 0.65b0 → 0.66b0
+  NEW opentelemetry-exporter-http-transport 0.66b0 ; NEW opentelemetry-exporter-otlp-common 0.66b0
+  projects/demand-forecast/pyproject.toml: opentelemetry-sdk ~=1.30 → ~=1.45
+```
+
+The moves are forced by sdk 1.45's exact pins, so the lock is coherent. But this is the one dependency commit
+whose message does not describe its lock, and it introduces two packages nobody named, both 0.x betas. Every
+other dependency commit checks out (Verified working).
+
+**Fix:** none to the lock. Have `check_scan_coverage.py`, or a small test, list packages *added* by a lock change
+in the PR body, so a dependency nobody named is at least seen.
+
+```text
+[P3-9] DVC's documented setup exports AWS_* for the local store — the variables #133 moved the lakehouse off "so a real cloud key is never sent to it"
+  .dvc/config:16-17 ("export AWS_ACCESS_KEY_ID=mlplatform / AWS_SECRET_ACCESS_KEY=…"); 0f33240 message; projects/demand-forecast/src/demand_forecast/lakehouse.py (OBJECT_STORE_*)
+  (a shell holding a real AWS key that runs `dvc push` without the export sends that key to http://localhost:19000)
+```
+
+Low impact: the endpoint is local, and an unset key fails rather than leaks. But the two consumers of one store
+follow opposite rules, and the second one undoes the reason given for the first.
+
+**Fix:** put the local credentials in `.dvc/config.local` (gitignored, which the file already recommends for
+overrides) through `dvc remote modify --local local-object-store access_key_id …`. Then the instructions export
+nothing.
+
+```text
+[P3-10] R18-RS10's kill depends on the checkout's directory being named `ml-platform`; in any other checkout it survives
+  tests/mutations.yaml (R18-RS10, scripts/check_readme.py:134 `".." in relative.parts` removed); tests/test_readme_standard.py:573 (`../ml-platform/scripts/bootstrap.sh`)
+  $ (~/qa4-r19-probe)          uv run python scripts/mutation_harness.py R18-RS10   → SURVIVED … every command passed
+  $ (~/qa4-r19-nm/ml-platform) uv run python scripts/mutation_harness.py R18-RS10   → KILLED (1 failed, 177 passed)
+  full catalogue run: 274/275, `[mutation] FAILED — survived: R18-RS10`
+```
+
+Without the `..` rule, `_holds` still requires `target.is_relative_to(REPO_ROOT)`. So the only `..` path that
+changes the verdict is one that leaves the checkout and re-enters it by name. The test's probe is exactly that
+path, so it discriminates only when the checkout is called `ml-platform`, as CI's and the author's are. The
+mutation is equivalent everywhere else, and the harness fails on a clean tree in any worktree with another name.
+
+**Fix:** build the test's path from the checkout's real name (`f"../{REPO_ROOT.name}/scripts/bootstrap.sh"`) so it
+re-enters on every machine. Or drop the `..` rule as redundant and delete R18-RS10.
+
+```text
+[P3-11] budget.yaml's prose still budgets 3200 MB; the components sum to 3136 MB since #133
+  platform/local/budget.yaml:24-26 ("the 3200 MB below leave 717 MB of slack")
+  $ uv run python scripts/local/preflight.py → "budget declared : 3136 MB across 8 components"
+```
+
+**Fix:** restate the figure from the file, or drop it ("preflight prints the sum").
+
+```text
+[P3-12] Statements in this prompt that proved wrong or incomplete
+  (§ Read first 1) "Rounds 16–18 are absent from it" → rounds 15–18 are absent: § 11 last changed in a130c42 (round 14's remediation) and reports round fourteen's findings
+  (§ Measured environment) the cluster condition was accurate at the start (6/6 Available); the Docker daemon behind it was wedged, which is the condition that decided what could run
+  (§ Method) "make verify" — on this machine it cannot complete while the daemon is wedged (P3-6); its steps were run in pieces instead
+```
+
+---
+
+## Verified working
+
+**Round eighteen's remediation (32f6f39), each against inputs its author did not try.**
+- **Thresholds baseline loader.**
+  - `THRESHOLD_BASELINE_REF=<r>` for HEAD and every one of the 15 commits that touched
+    `check_thresholds.py` → "OK — 31 watched, none loosened" for all 16.
+  - The commit before the file existed (`e07bf46~1`) fails closed ("could not be loaded … fails rather than
+    passes").
+  - `AUDIT_GRACE_COMMITS` 10→11 is reported as "raised … STOP" against HEAD, 746d6d6, 98a4359 and e07bf46 alike.
+- **Memory gate.** A tag-only change, a digest-only change and a lowered limit each fail (M1–M3). R19-K1 killed.
+- **Non-blocking forms.**
+  - R18-BLK1–6 killed in the committed run.
+  - R19-K3 (`exit-code: "0"` on the Trivy gate) killed.
+  - The gaps are the two in P2-2.
+- **readme_standard's parser.**
+  - 16 inputs outside its corpus agree with the repository's markdown-it reference on headings, images and code:
+    lazy continuations, HTML block types 6/7, nested quote+list+fence, ẞ/ss label folding, tab-indented code,
+    reference images in headings, `<pre class>`, `srcset`.
+  - The two differences are URL percent-encoding (`a b` vs `a%20b`, `\|` vs `%7C`). Both sides find the image.
+- **README comparison.**
+  - `scripts/readme_standard.py` and `docs/governance/readme-standard.md` are byte-identical across the two
+    repositories at 390f540.
+  - Their blobs at CI's pinned template commit `6e3a2f6` are identical to 390f540's (9c01e10…, a0e9cfd…).
+  - `check_readme.py` → OK in both repositories.
+- **C6.** Every round-18 form is caught: `/home/<acct>/projects/main_projects/<repo>`, the WSL
+  `/mnt/c/Users/<acct>/source/repos/<repo>`, zero-width, `&#45;`, fullwidth, emphasis-split, dotted. An unlisted
+  container (`Desktop`) fails safe.
+- **python_value.** Round 18's seven attack forms are refused (R18-PV1–6 killed).
+- **Gates-coverage test.** Holds for script- and test-commanded gates.
+- **Copier lock.** C9 refuses an unpinned `copier update --trust` placed in the runbook.
+- **check_upstream_parity.**
+  - The online half reads the worktree sibling: "122 comparable artifacts upstream, all decided".
+  - A sibling whose `.git` points nowhere fails ("checked out but unreadable").
+  - An absent or plain directory skips.
+  - R19-K4 (`.exists()` → `.is_dir()`) killed.
+- **P10.** An unverified literal-URL download fails.
+- **C7.** A sha-carrying marker must be corroborated by the trail; an unreachable or non-commit sha fails;
+  `--no-merges` excludes the merge commit (P2-1). R19-K2 (corroboration removed) killed.
+
+**#133, RustFS at L3.**
+- **Persistence.**
+  - The pod mounts PVC `object-store-data`: local-path, 2Gi, reclaim Delete, at `/data`, `args: ["/data"]`.
+  - It had restarted 3× (`lastState: Unknown`, node restarts).
+  - Bucket `lakehouse` still held **1518 objects, 4,016,193 bytes** (pyarrow S3FileSystem on localhost:19000).
+- **Both buckets exist**: `lakehouse` and `ml-platform-data`, the names `provision_object_store.py` reads from
+  `LOCAL_WAREHOUSE` and `.dvc/config`.
+- **DVC reaches it.** In a scratch `dvc init --no-scm` with the committed `.dvc/config` (uvx dvc[s3]==3.67.1,
+  dvc-s3 3.3.0): `dvc push` → "1 file pushed"; `dvc status -c` → "Cache and remote 'local-object-store' are in
+  sync". The object was then deleted and the bucket listed empty.
+- **The lakehouse reaches it**: tests/local, 40 passed, including the stack's lakehouse round trip.
+- **Image**: `rustfs/rustfs:1.0.1@sha256:1803faef…`, as in the ledger.
+- **Memory**: within its limit; above its recorded peak after a day (P3-7).
+
+**#132, demand-forecast-serving at v0.32.0.**
+- `uv run copier copy --trust --defaults --vcs-ref v0.32.0 --data <each answer> ~/template_MLOps <scratch>`
+  → `diff -rq` against the committed service shows two differences only:
+  - `_src_path` (a local path vs the GitHub URL, expected);
+  - the gitignored `data/` tree.
+- The regeneration is the v0.32.0 payload rendered, so the service's pins equal it (numpy ~=1.26.0,
+  pyarrow ~=25.0.1).
+- `check_serving_can_load_artifact.py` → "loaded and predicted identically under the image's requirements
+  (Python 3.13.13, numpy 1.26.4, scikit-learn 1.9.1, joblib 1.6.0)".
+- `check_artifact_compatibility.py` → OK, numpy exempt under ADR-008 as recorded.
+- Template main has moved past v0.32.0 (boto3, ruff, mypy, great-tables, pyarrow hold). That is upstream and
+  unreleased, not a divergence.
+
+**Dependency commits.** Each lock moves only what its message says, except ef78621 (P3-8):
+
+| Commit | Lock change |
+| --- | --- |
+| b0da733 | types-pyyaml only |
+| ed79b1b | pandera only |
+| 331a495 | hydra-core 1.3.6→1.3.7 only |
+| 947c14d | aiohttp 3.14.3→3.14.5 and yarl 1.24.5→1.25.1, which its CHANGELOG names |
+| 82f8759, 4d7d510 | none: workflow files only |
+
+CVE closures, with Trivy offline on the extracted locks (DB 2026-10-20T19:12Z):
+
+| Lock | Result |
+| --- | --- |
+| 331a495~1 | 3 HIGH, including hydra-core CVE-2026-106439 |
+| 331a495 | 2 HIGH (aiohttp) |
+| 947c14d~1 | 2 HIGH: aiohttp CVE-2026-111064 and GHSA-2g87-pp6c-29x5 |
+| 947c14d | 0 |
+
+**The Trivy gate fails on a HIGH.** CI's configuration over the whole worktree is TRIVY_INCLUDE_DEV_DEPS, HIGH
+and CRITICAL, the repository's ignorefile, and `--exit-code 1`. It returns rc=0 on the clean tree and **rc=1**
+with uv.lock mutated back to aiohttp 3.14.3.
+
+**L3.**
+- `local-serve` builds, loads and rolls the image (rc=0). `local-dashboards` restarts Grafana onto the
+  ConfigMap (rc=0). `local-verify` rc=0.
+- tests/local: **40 passed, 0 skipped**. These include NetworkPolicy enforcement, the service tests and the
+  dashboard PromQL.
+- Grafana 13.2.2 at 512Mi: Running with 0 restarts.
+
+**Other.**
+- No truthiness test of a string environment variable in libs/projects/scripts/orchestration/serving. The three
+  `os.getenv(...) or default` uses are string defaults.
+- CI on 947c14d is green in all six jobs, read from run 39519571546, not inferred.
+- Committed catalogue: **274/275** kills, with the two declared survivors. The one unexpected survivor is
+  explained in P3-10.
+
+## Mutations
+
+**Committed catalogue (277):** `mutation_harness.py` → 274/275 expected kills. C10-case and
+W-ceiling-exclusive survive as declared; R18-RS10 survives here and is killed only in a checkout named
+`ml-platform` (P3-10). No kill was reclassified by cause this round.
+
+**Auditor additions (`~/qa4-r19-logs/r19.yaml`):** 5 of 10 killed. The killed ones are the four controls and
+R19-MEM1, whose kill is an artefact.
+
+| id | file | mutation | result |
+| --- | --- | --- | --- |
+| R19-BLK1 | .github/workflows/ci.yml | Bandit `shell: bash {0}` + folded `\| tee` | **SURVIVED** (P2-2) |
+| R19-BLK2 | .github/workflows/ci.yml | folded `\|\| echo "… exit 1 …"` | **SURVIVED** (P2-2) |
+| R19-MEM1 | platform/local/manifests/40-metrics.yaml | unmeasured initContainer | killed — **by my mis-anchor**: the insertion after `image:` took the container's `resources`, `KeyError: 'resources'`. Placed before `containers:` (probe M5) it passes 9/9. Re-anchor it at `      containers:` in the grafana Deployment |
+| R19-PV1 | projects/demand-forecast/src/demand_forecast/promotion.py | `with nullcontext(0.0) as MIN_SKILL` | **SURVIVED** (P3-1) |
+| R19-CP1 | docs/runbooks/consuming-the-template.md | `copier \` + `update …` | **SURVIVED** (P3-3) |
+| R19-P10a | .github/workflows/ci.yml | download through `URL=…; curl "$URL"` | **SURVIVED** (P3-4) |
+| R19-K1 | platform/local/manifests/40-metrics.yaml | Grafana tag changed, digest kept | killed (control) |
+| R19-K2 | scripts/check_doc_coherence.py | C7 trail corroboration removed | killed (control) |
+| R19-K3 | .github/workflows/ci.yml | Trivy gate `exit-code: "0"` | killed (control) |
+| R19-K4 | scripts/check_upstream_parity.py | `.exists()` → `.is_dir()` | killed (control) |
+
+Suggested for the catalogue:
+- Now: R19-K1 to R19-K4.
+- After their fixes: R19-BLK1, R19-BLK2, R19-PV1, R19-CP1, R19-P10a, R19-MEM1 (re-anchored).
+- Not run, because it edits AGENTS.md: a C7 entry that turns the marker date-only. Add it with the P2-1 fix.
+
+## Not verifiable here
+
+- **`make local-up` creating the stack from nothing.** The cluster existed, and preflight refused the re-run
+  (P2-5). I did not `local-down` a shared cluster to test creation.
+- **The serving pod's restart-free and loaded-image tests in run 1.** Both failed only because Docker was wedged
+  (a 60 s `docker exec` timeout, and restarts from the node restarting). Both passed in the L3 run after
+  recovery.
+- **One uninterrupted `make verify`.** It ran in pieces instead: run 2 up to the status step, 2b for the rest,
+  2c and 2d for the status step with Docker up. An end-to-end run takes about 2.5 h on this host.
+- **Whether the serving image's resolved sets pin certifi below 2026.10.19.** `.trivy-resolved/` is generated in
+  CI.
+- **gitleaks over history** (not run this round) and **Trivy at CI's 0.70.0** (ran 0.71.0).
+- **CI's per-file coverage**: not published.
+
+## Proposed audit-trail record
+
+```text
+uv run python scripts/audit_record.py --action independent-audit \
+  --target ml-platform --mode CONSULT \
+  --outcome "Round 19 against tree 947c14d20a1d4a56a742123c98614a003a332070 (ml-service-template 390f540 read-only; 10 commits since 746d6d6, --no-merges). 0 P0, 1 P1, 6 P2, 12 P3. P1: uv.lock pins certifi 2026.7.22 under GHSA-6q48-6c7w-9gw2 (CRITICAL, compromised emSign intermediates, reviewed 2026-10-20T19:35Z): with the 2026-10-21 Trivy DB the blocking gate fails on 947c14d (rc=1), so the next CI run is red. P2: C7 is cleared with no trail entry by a date-only, uppercase-sha or future-dated marker; Bandit is disarmed with 555 workflow tests green by shell: bash {0} plus a folded | tee, and by a folded || echo containing 'exit 1'; the memory gate is attestation (a hand-edited ledger recreates round 18's Grafana-at-200Mi defect green; .yml manifests, StatefulSets and initContainers are not read); audit-brief § 11 is four rounds stale (last a130c42); make local-up's preflight double-counts a running stack (short by 16 MB while the stack passed 40/40); unpinned() waves through --with-requirements URLs and everything after any pip install -r. Round 18's closures hold where measured: the thresholds loader across 16 historical baselines, tag/digest/limit changes, the parser against markdown-it on 16 new inputs, the byte-identical README standard (and CI's pin), parity's online half on a worktree sibling, C6's round-18 forms. #133 holds at L3: RustFS on its PVC kept 1518 objects through 3 restarts, both buckets exist, dvc push through the committed remote works, tests/local 40 passed; its memory grows past the ledger's peak (240 vs 222 MiB after 21 h). #132 regenerates identically from its answers; serving loads the artifact. Dependency locks move what their messages say except ef78621 (9 more packages, 2 new betas); CVE closures confirmed by Trivy on the parent locks; the Trivy gate fails on a mutated HIGH. Plain suite 2822 passed/8 skipped/6 failed (Docker wedged: bootstrap.sh's unbounded docker info, and L3 docker exec); make verify EXIT=2 at the status step for that reason, remainder run by hand with every coverage floor OK, status --check OK once Docker recovered. Catalogue 274/275 (R18-RS10 is killed only in a checkout named ml-platform); auditor mutations 5/10 killed, 5 survived (BLK1, BLK2, PV1, CP1, P10a)." \
+  --evidence "Worktrees ~/qa4-r19 (plain suite, L3 targets), ~/qa4-r19b (make verify and its remaining steps), ~/qa4-r19-probe (probes, committed catalogue), ~/qa4-r19-mut (auditor catalogue), ~/qa4-r19-nm/ml-platform (R18-RS10), ~/template_MLOps (ml-service-template 390f540, read-only) at 947c14d20a1d4a56a742123c98614a003a332070 after uv sync --all-packages --all-extras --locked; uv 0.11.19, Python 3.11.15/3.13.13, trivy 0.71.0 (DBs 2026-10-20 and 2026-10-21), markdown-it-py 4.2.0, copier 9.18.2, dvc 3.67.1 via uvx, kind v0.30.0/node v1.34.0, Docker 29.5.2; uv run pytest -o addopts='' -q -rs; make verify; coverage run + check_coverage_floors.py; check_doc_coherence.py; check_implementation_status.py (and --check); mutation_harness.py (277) and --catalogue r19.yaml (10); C7 marker probes in memory and a --no-merges count on a synthetic merge in a scratch clone; THRESHOLD_BASELINE_REF over 16 baselines; python_value B1-B7; memory gate M0-M8; _blocks shell/|| probes over 555 workflow tests; unpinned U1-U8; parser differential (16 inputs); C6 L1-L7/N1-N10; copier continuation; P10 A-D; parity sibling probes; copier copy regeneration diff; check_serving_can_load_artifact.py; lock diffs of 7 dependency commits; trivy fs on 4 extracted locks and on a mutated lock; L3 make local-up/local-serve/local-dashboards/local-verify, pytest tests/local -m local; RustFS PVC, bucket listing, dvc push/status -c (probe object deleted); cgroup and kubelet memory sampling; measure_memory.py without --write; gh run view 39519571546; gh api code-scanning per tool; osv.dev lookups. Report: ~/qa4-r19-report.md"
+```
+
+Marker line, for AGENTS.md once the trail entry exists:
+
+```text
+Last independent audit: 2026-10-22 (947c14d)
+```
+
+The tree audited is on `main`, so no squash re-point applies.
+
+## Closing verdict
+
+Round eighteen's remediation is trustworthy where it fixed what was reported: every round-18 input now fails,
+and the thresholds loader, the parser, the parity check, RustFS's persistence and the regenerated service hold
+under new inputs. Five of its controls still fail on the next spelling over:
+- C7's date-only marker;
+- Bandit's `shell:`;
+- the memory ledger's hand edit;
+- `-r` in the quick-start rule;
+- `local-up`'s double count.
+
+So the claims are trustworthy as to what was tested, and not as to the classes the work order says were closed.
+
+## Closing confirmation
+
+- **Worktrees removed** with `git worktree remove` and then pruned: `~/qa4-r19`, `~/qa4-r19b`, `~/qa4-r19-probe`,
+  `~/qa4-r19-mut`, `~/qa4-r19-nm/ml-platform` (ml-platform), and `~/template_MLOps` (ml-service-template). Each
+  had no tracked change before removal. The scratch clones and probe directories are deleted.
+- **The worktrees that remain** belong to the authoring sessions and were not touched: `cc-verify`, `deps`,
+  `r11-6`, `r16-2`, `w9`, `wo-verify`, and the main checkout on `test/w15-project-floors`.
+- **The cluster is back on its committed manifests.**
+  - Context checked first (`kind-ml-platform-local`). Then `kubectl apply -f platform/local/manifests/` and
+    `kubectl apply -k platform/kubernetes/overlays/local` from my worktree.
+  - All 6 deployments are 1/1 Available, and no probe pod exists.
+  - That apply reported `networkpolicy/allow-dns configured` and `poddisruptionbudget/demand-forecast
+    configured` (as well as the secrets and Grafana's restart annotation, which re-apply always touches). I did
+    not change either object this round. Both had drifted from the committed manifests before this round's
+    re-apply, and they now match them.
+- **Nothing committed, pushed or opened** in either repository: no PR, issue, comment, label, setting or secret.
+  `audit_record.py` was not run; `AGENTS.md` and `ops/audit.jsonl` are unchanged. Both main checkouts are clean.

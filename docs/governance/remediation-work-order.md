@@ -1360,6 +1360,47 @@ runner here can do: run `make local-up`, then
 with the bump. That is the point — round eighteen's defect was a bump nobody
 ran — and RUNBOOK.md says so where an operator meets it.
 
+## Round nineteen — what stays open, and why each one waits
+
+QA-4 round nineteen audited `947c14d` and reported 0 P0, 1 P1, 6 P2 and 12 P3;
+the report is committed as [`qa4/round-19.txt`](qa4/round-19.txt). Its
+verdict: round eighteen's remediation holds for the inputs that round reported
+— the thresholds loader across sixteen historical baselines, the parser, the
+parity check, RustFS's persistence, the regenerated service — and five of the
+controls it changed fail on the next spelling over. The claim that each
+*class* was closed does not hold.
+
+Recorded in *chore: record QA-4 round nineteen, and the lock fixes the gate
+needed to land it*. That commit closes only what blocks it from landing: with
+the vulnerability database of 2026-10-23 the Trivy gate fails on `947c14d`
+itself, so no pull request — this one included — could go green without the
+lock change, and C7 refuses a separate fix as the eleventh unreviewed commit.
+
+| ID | Finding | State |
+| --- | --- | --- |
+| P1 | `uv.lock` pinned certifi 2026.7.22 under GHSA-6q48-6c7w-9gw2 (CRITICAL, compromised emSign intermediates) | **Closed** in the recording commit: certifi 2026.10.23. The resolved serving sets pick it up (`certifi==2026.10.23` in all four that carry it). Two HIGH advisories published after the audit — GitPython CVE-2026-114145 (3.2.1) and virtualenv CVE-2026-113722 / -113725 (21.14.13) — fail the same gate on `947c14d` and are closed in the same commit; Trivy over the whole tree at the gate's settings exits 0 |
+| P2-1 | C7 is cleared with no trail entry by a date-only, uppercase-sha or future-dated marker | Open. Refuse a marker without a sha once the trail exists; match the sha case-insensitively; fail a marker dated after today or after its trail entry. Add the date-only marker mutation with the fix |
+| P2-2 | Bandit is disarmed, every workflow test green, by `shell: bash {0}` with a folded `\| tee`, or by a folded `\|\| echo` containing "exit 1" | Open. Read `shell:` on the step, job and `defaults.run`; judge `\|\|` by parsing the branch; run the *parsed* `run:` value in the behavioural test. Then R19-BLK1 and R19-BLK2 join the catalogue |
+| P2-3 | The memory gate is an attestation: a hand-edited ledger recreates round eighteen's Grafana-at-200Mi defect green; `.yml` manifests, StatefulSets and init containers are not read | Open. Give the ledger provenance the test can check (image id, sample timestamps, `measured_on`, never lower for the same image); read manifests as kubectl does. R19-MEM1, re-anchored at `containers:`, joins the catalogue |
+| P2-4 | The audit brief's § 11 is four rounds stale (last a130c42) | Open. Replace § 11 with a pointer to the newest round section here, and add a C-check that the round it names equals the trail's latest `independent-audit` round |
+| P2-5 | `make local-up` refuses to re-run on a running stack: the preflight charges the stack's own memory against the budget | Open. When `cluster_exists()`, skip the memory check or add the stack's measured working set back to `available` |
+| P2-6 | The quick-start rule is not deny-by-default: `--with-requirements` / index URLs are never read, and any `pip install -r` waves through every later command | Open. `-r FILE` must name a file the repository holds, read with the same rules; read index and requirements URLs as values; recurse into `timeout`, `xargs`, `eval`; track `cd`. Shared byte-for-byte with ml-service-template, so the fix lands in both |
+| P3-1 | `python_value` misses seven ways to rebind a threshold (`with … as`, `match`, parameters, `__dict__`, `sys.modules`) | Open. R19-PV1 joins the catalogue after the fix |
+| P3-2 | The gates-coverage test is satisfied by a label for tool gates (P5, P9) | Open |
+| P3-3 | The copier lock test reads lines, so `copier \` + `update` runs whatever copier is on PATH | Open. R19-CP1 after the fix |
+| P3-4 | P10 pairs a download with its digest check only when the URL is a literal on the same line | Open, latent. R19-P10a after the fix |
+| P3-5 | C6 passes `~/` and `$HOME/` checkouts, and a denylisted name with a Cyrillic letter or a soft hyphen | Open |
+| P3-6 | `scripts/bootstrap.sh` runs `docker info` unbounded, turning a wedged daemon into a 20-minute status-gate failure | Open. `timeout 10`, exit 124 on the existing warn path |
+| P3-7 | The ledger's "peak" is one 50-second window after start; RustFS grows past it with uptime | Open. Measure after a soak, or rename the field `observed_mib` and size headroom for growth |
+| P3-8 | ef78621's message names one package; its lock moves nine more and adds two betas | Open. No change to the lock; surface packages *added* by a lock change |
+| P3-9 | DVC's documented setup exports `AWS_*` for the local store | Open. Move the local credentials to `.dvc/config.local` |
+| P3-10 | R18-RS10 is killed only in a checkout named `ml-platform` | Open. Build the test's path from `REPO_ROOT.name`, or drop the redundant `..` rule and the entry |
+| P3-11 | `budget.yaml`'s prose budgets 3200 MB; the components sum to 3136 MB | Open |
+| P3-12 | Statements in the audit prompt that proved wrong | Recorded for the next prompt: § 11 is missing rounds 15–18, not 16–18; state the Docker daemon's condition, not only the cluster's; `make verify` cannot complete while the daemon is wedged |
+
+The auditor's controls R19-K1 to R19-K4 were killed and join the catalogue with
+the remediation round, alongside the entries above.
+
 ## Not for an agent
 
 Three items where doing the work autonomously would itself be the error,

@@ -18,6 +18,28 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Security — certifi 2026.10.23, GitPython 3.2.1, virtualenv 21.14.13
+
+- **certifi 2026.7.22 bundles emSign roots whose intermediates are
+  compromised** (GHSA-6q48-6c7w-9gw2, CRITICAL, reviewed 2026-10-20). QA-4
+  round nineteen found it: CI on `947c14d` was green only because its Trivy
+  database predated the advisory, and with the current one the blocking gate
+  fails on `main` itself. Every HTTPS client in the workspace trusted that
+  bundle. Two HIGH advisories published after the audit fail the same gate —
+  GitPython CVE-2026-114145 and virtualenv CVE-2026-113722 / CVE-2026-113725,
+  both arbitrary code execution, both dev-side (`pre-commit` brings
+  virtualenv). `uv lock --upgrade-package` moves these three and nothing else.
+  The resolved serving sets resolve certifi 2026.10.23 on their own. Fixed, not
+  accepted: no baseline entry.
+
+### Recorded — QA-4 round nineteen
+
+- Round nineteen audited `947c14d`: 0 P0, 1 P1, 6 P2, 12 P3. The report is
+  `docs/governance/qa4/round-19.txt`; the trail entry is in `ops/audit.jsonl`;
+  the marker in `AGENTS.md` names `947c14d`. The P1 is closed above. The rest
+  are open in `docs/governance/remediation-work-order.md` § *Round nineteen*,
+  each with its fix and the class it has to close.
+
 ### Security — aiohttp 3.14.5 (CVE-2026-111064, GHSA-2g87-pp6c-29x5)
 
 - **Two HIGH advisories against aiohttp 3.14.3** — a denial of service through a
