@@ -1,0 +1,31 @@
+# Codecov receives this repository's coverage.
+#
+# Uploads cannot fail a merge (`fail_ci_if_error: false` in ci.yml), so a
+# Codecov outage cannot block one — and for months that same setting hid every
+# upload being rejected (QA-4 round fifteen, R15-5). This asks Codecov, weekly,
+# whether `main`'s recent commits have reports, so a broken integration is red
+# within a week. Reporting only: the coverage floors are
+# scripts/check_coverage_floors.py, in ci.yml, on every merge.
+name: Codecov health
+
+on:
+  schedule:
+    - cron: "40 6 * * 1" # Mondays 06:40 UTC, after the weekly docs lane
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  reports-land:
+    name: main's recent commits have Codecov reports
+    runs-on: ubuntu-latest
+    # A bound, not a budget: one API request and one git call.
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 20
+          persist-credentials: false
+      - name: Ask Codecov for main's newest report
+        run: python3 scripts/check_codecov_reports.py --slug "${{ github.repository }}"
