@@ -2,13 +2,13 @@
 # Never edited by hand: each entry is what that image used, measured, and the limit in
 # platform/local/budget.yaml must exceed it by `headroom` (tests/test_local_memory_budget.py).
 version: 1
-measured_on: '2026-10-08'
-method: crictl stats working set on the kind node, peak of 25 samples 2s apart; the highest of every recorded run on the same image
+measured_on: '2026-10-20'
+method: crictl stats working set on the kind node, peak of 10 samples 3s apart; the highest of every recorded run on the same image
 headroom: 1.25
 components:
   grafana:
-    image: grafana/grafana:13.2.2@sha256:ac461fb352abc50da10a51c7d02462e9c05488f11f53f14b3ad79a8145f638a0
-    peak_mib: 395
+    image: grafana/grafana:13.2.3@sha256:b28bae15e219c998fb0e0424ed724930cc61b1f61fb404d47c862f9a23f9e572
+    peak_mib: 394
   jaeger:
     image: jaegertracing/all-in-one:1.76.0@sha256:ab6f1a1f0fb49ea08bcd19f6b84f6081d0d44b364b6de148e1798eb5816bacac
     peak_mib: 35
@@ -17,10 +17,10 @@ components:
     peak_mib: 222
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.161.0@sha256:fd328de2552466ad78385e1b1289c3f2402b1c45f265b252aab1955b42845ac1
-    peak_mib: 37
+    peak_mib: 39
   postgres:
     image: pgvector/pgvector:pg17@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
-    peak_mib: 39
+    peak_mib: 40
   prometheus:
     image: prom/prometheus:v3.15.0@sha256:efd719c99d83b060d9daefdcf00360461adf279f45ef5391f8d111892118753e
-    peak_mib: 33
+    peak_mib: 34

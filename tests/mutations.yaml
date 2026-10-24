@@ -2606,3 +2606,35 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_local_memory_budget.py
   expect: killed
+- id: DEP20-1
+  origin: dependency round 2026-10-20 — the preflight counts a running stack's memory against itself again
+  file: scripts/local/preflight.py
+  old: '        samples.append(_available_mb() + held())'
+  new: '        samples.append(_available_mb())'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_local_preflight.py -k counts_the_memory
+  expect: killed
+- id: DEP20-2
+  origin: dependency round 2026-10-20 — an unreadable node reading credits memory instead of nothing
+  file: scripts/local/preflight.py
+  old: '    return int(float(match.group(1)) * _MIB_PER_UNIT[match.group(2)]) if match else 0'
+  new: '    return int(float(match.group(1)) * _MIB_PER_UNIT[match.group(2)]) if match else 4096'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_local_preflight.py -k unreadable
+  expect: killed
+- id: DEP20-3
+  origin: dependency round 2026-10-20 (#128) — a single-architecture image tag is accepted
+  file: tests/test_local_stack_images.py
+  old: _ARCHITECTURE_TAG = re.compile(r"[-_.](?:i?386|amd64|x86_64|arm64|aarch64|armv?[5-8]|ppc64le|s390x|riscv64)$")
+  new: _ARCHITECTURE_TAG = re.compile(r"[-_.](?:i386|amd64|x86_64|arm64|aarch64|armv?[5-8]|ppc64le|s390x|riscv64)$")
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_local_stack_images.py -k architecture
+  expect: killed
+- id: DEP20-4
+  origin: dependency round 2026-10-20 — bootstrap's docker probe is unbounded again, and a wedged daemon hangs the status generator
+  file: scripts/bootstrap.sh
+  old: '    timeout "$DOCKER_PROBE_SECONDS" docker info >/dev/null 2>&1 || docker_status=$?'
+  new: '    docker info >/dev/null 2>&1 || docker_status=$?'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_bootstrap_docker_probe.py -k wedged
+  expect: killed

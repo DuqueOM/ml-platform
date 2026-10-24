@@ -53,3 +53,32 @@ def test_every_exception_still_has_its_reason() -> None:
     present = {image for _, image in _images()}
     stale = [image for image in UNPINNABLE if image not in present or _PINNED.match(image)]
     assert not stale, f"exceptions that no longer apply — delete them: {stale}"
+
+
+#: A tag naming one CPU architecture. Such a tag resolves to a single-platform
+#: image, not to the multi-platform index the plain tag points at, and its
+#: digest pins that one architecture. Dependabot proposed
+#: `opentelemetry-collector-contrib:0.161.0-386` as an upgrade from `0.161.0` (#128):
+#: the same release, built for linux/386, which would have run an i386 binary
+#: on every amd64 and arm64 machine this stack starts on.
+_ARCHITECTURE_TAG = re.compile(r"[-_.](?:i?386|amd64|x86_64|arm64|aarch64|armv?[5-8]|ppc64le|s390x|riscv64)$")
+
+
+def test_no_local_image_is_pinned_to_one_architecture() -> None:
+    single = [
+        f"{name}: {image}"
+        for name, image in _images()
+        if _ARCHITECTURE_TAG.search(image.split("@", 1)[0].rsplit(":", 1)[-1])
+    ]
+    assert not single, (
+        "these tags name one CPU architecture; pin the release's multi-platform tag instead:\n  " + "\n  ".join(single)
+    )
+
+
+def test_the_architecture_pattern_catches_the_tag_dependabot_proposed() -> None:
+    """The guard above is only as good as this pattern, so its one real input is pinned here."""
+    assert _ARCHITECTURE_TAG.search("0.161.0-386")
+    assert _ARCHITECTURE_TAG.search("1.2.3-arm64")
+    assert not _ARCHITECTURE_TAG.search("0.161.0")
+    assert not _ARCHITECTURE_TAG.search("0.8.1-pg17")
+    assert not _ARCHITECTURE_TAG.search("v3.15.0")
