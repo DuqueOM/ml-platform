@@ -132,9 +132,10 @@ def pipeline_run(run_id: str, **attributes: str | int | float) -> Iterator[trace
 def stage(name: str, **attributes: str | int | float) -> Iterator[trace.Span]:
     """One pipeline stage, nested under whatever span is current.
 
-    Attributes are set on the way OUT as well as in, because the interesting
-    numbers — rows written, skill, coverage — are only known once the stage has
-    run, and a span recording only its inputs describes an intention.
+    The attributes given here are set on entry. The interesting numbers — rows
+    written, skill, coverage — are only known once the stage has run, so the
+    caller sets those on the yielded span before leaving it: a span recording
+    only its inputs describes an intention.
     """
     with tracer().start_as_current_span(f"pipeline.{name}") as span:
         for key, value in attributes.items():

@@ -148,3 +148,31 @@ def test_one_outlier_timestamp_collapses_density() -> None:
     ok, density = check_density(pl.concat([table, outlier]))
     assert not ok
     assert density < 0.01
+
+
+# --- what the result says, and where its docs are (W-15) ---------------------
+
+
+def test_the_result_says_what_held_and_what_failed() -> None:
+    from demand_forecast.warehouse_checks import WarehouseValidation
+
+    assert str(WarehouseValidation(success=True, failed=(), checked=5)) == "[warehouse] OK — 5 expectation(s) held"
+    failed = WarehouseValidation(success=False, failed=("expect_a", "expect_b"), checked=5)
+    assert str(failed) == "[warehouse] FAILED — 2 of 5: expect_a, expect_b"
+
+
+def test_data_docs_are_built_when_asked_and_their_index_exists(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:  # type: ignore[no-untyped-def]
+    """CI publishes these; a docs path that names nothing would publish an empty link."""
+    import tempfile
+    from pathlib import Path
+    from urllib.parse import urlparse
+
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))  # the ephemeral context writes under tempfile
+
+    result = validate_warehouse(_table(), build_docs=True)
+
+    assert result.success
+    assert result.docs_path is not None
+    index = Path(urlparse(result.docs_path).path)
+    assert index.is_file()
+    assert index.is_relative_to(tmp_path)

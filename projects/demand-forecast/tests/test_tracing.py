@@ -122,3 +122,84 @@ def test_a_real_trace_reaches_jaeger() -> None:
         {tag["key"]: tag["value"] for tag in span["tags"]} for span in spans if span["operationName"] == "pipeline.run"
     )
     assert parent_tags["pipeline.run_id"] == run_id, "the run id is not on the parent span"
+
+
+# --- what configure_tracing decides, and what the spans carry (W-15) --------
+
+
+def _free_port() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return int(probe.getsockname()[1])
+
+
+def test_reachability_is_a_real_connection_attempt() -> None:
+    from demand_forecast.tracing import _reachable
+
+    with socket.socket() as server:
+        server.bind(("127.0.0.1", 0))
+        server.listen()
+        port = server.getsockname()[1]
+        assert _reachable(f"http://127.0.0.1:{port}") is True
+    assert _reachable(f"http://127.0.0.1:{_free_port()}") is False
+
+
+def test_a_reachable_collector_gets_a_provider_named_for_the_service(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The enabled path, without replacing the process's global provider (which OTel allows once)."""
+    from demand_forecast import tracing
+
+    installed = []
+    monkeypatch.setattr(tracing, "_reachable", lambda endpoint: True)
+    monkeypatch.setattr(tracing, "OTLPSpanExporter", lambda endpoint, insecure: ("exporter", endpoint, insecure))
+    monkeypatch.setattr(tracing, "BatchSpanProcessor", lambda exporter: _NullProcessor(exporter))
+    monkeypatch.setattr(tracing.trace, "set_tracer_provider", installed.append)
+
+    setup = tracing.configure_tracing("http://collector:4317")
+
+    assert setup.enabled is True
+    assert setup.endpoint == "http://collector:4317"
+    assert str(setup) == "tracing -> http://collector:4317"
+    (provider,) = installed
+    assert provider.resource.attributes["service.name"] == "demand-forecast"
+    assert provider._active_span_processor._span_processors[0].exporter == ("exporter", "http://collector:4317", True)
+
+
+class _NullProcessor:
+    """A span processor that records what it was given and exports nothing."""
+
+    def __init__(self, exporter: object) -> None:
+        self.exporter = exporter
+
+    def on_start(self, span: object, parent_context: object = None) -> None: ...
+
+    def on_end(self, span: object) -> None: ...
+
+    def shutdown(self) -> None: ...
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        return True
+
+
+def test_the_run_and_its_stages_carry_their_attributes_in_one_trace(monkeypatch: pytest.MonkeyPatch) -> None:
+    from demand_forecast import tracing
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(tracing, "tracer", lambda: provider.get_tracer("demand-forecast"))
+
+    with tracing.pipeline_run("run-7", month="2024-01", rows=3) as run, tracing.stage("train", folds=5) as train:
+        train.set_attribute("train.skill", 0.12)  # known only at the end, set by the caller
+
+    spans = {span.name: span for span in exporter.get_finished_spans()}
+    assert spans["pipeline.run"].attributes == {
+        "pipeline.run_id": "run-7",
+        "pipeline.month": "2024-01",
+        "pipeline.rows": 3,
+    }
+    assert spans["pipeline.train"].attributes == {"train.folds": 5, "train.skill": 0.12}
+    assert spans["pipeline.train"].parent.span_id == run.get_span_context().span_id
+    assert spans["pipeline.train"].context.trace_id == spans["pipeline.run"].context.trace_id

@@ -382,3 +382,69 @@ def test_calibration_bounds_are_symmetric_and_inclusive(coverage: float, calibra
         index=0, model_mae=3.0, baseline_mae=4.0, coverage=coverage, interval_width=5.0, n_test=168, n_compared=168
     )
     assert BacktestReport(folds=[fold], seed=42).intervals_are_calibrated() is calibrated
+
+
+# --- the report's arithmetic and the evaluation's refusals (W-15) ------------
+
+
+def _fold_result(index: int, model_mae: float, baseline_mae: float, coverage: float = 0.9):  # type: ignore[no-untyped-def]
+    from demand_forecast.train import FoldResult
+
+    return FoldResult(
+        index=index,
+        model_mae=model_mae,
+        baseline_mae=baseline_mae,
+        coverage=coverage,
+        interval_width=10.0,
+        n_test=168,
+        n_compared=168,
+    )
+
+
+def test_skill_is_zero_not_a_division_by_zero_when_the_baseline_is_perfect() -> None:
+    """A baseline with zero error leaves nothing to remove; it must read as no skill, not crash the gate."""
+    from demand_forecast.train import BacktestReport
+
+    assert _fold_result(0, model_mae=1.0, baseline_mae=0.0).skill == 0.0
+    assert BacktestReport(folds=[_fold_result(0, 1.0, 0.0), _fold_result(1, 2.0, 0.0)], seed=42).skill == 0.0
+
+
+def test_the_summary_reports_every_fold_and_both_gates() -> None:
+    from demand_forecast.train import BacktestReport
+
+    report = BacktestReport(folds=[_fold_result(0, 8.0, 10.0), _fold_result(1, 9.0, 10.0, coverage=0.95)], seed=42)
+    lines = report.summary().splitlines()
+
+    assert lines[0].startswith("fold 0: MAE   8.00 vs baseline  10.00")
+    assert lines[1].startswith("fold 1: MAE   9.00 vs baseline  10.00")
+    assert "OVERALL: MAE 8.50 vs baseline 10.00 (skill +15.0%), coverage 92.5% against 90% nominal" in lines[2]
+    assert lines[3] == f"beats baseline: {report.beats_baseline()}   calibrated: {report.intervals_are_calibrated()}"
+
+
+def test_a_fold_too_short_to_calibrate_is_refused_not_fitted() -> None:
+    """Conformal intervals from one calibration row are noise; the fold must say so rather than fit."""
+    from demand_forecast.backtest import Fold
+    from demand_forecast.train import _fit_fold
+
+    times = np.array([np.datetime64("2024-01-01T00") + np.timedelta64(h, "h") for h in range(4)])
+    fold = Fold(index=3, train=np.arange(3), test=np.array([3]), gap=0)
+
+    with pytest.raises(ValueError, match="fold 3 splits into"):
+        _fit_fold(np.zeros((4, 2)), np.zeros(4), times, fold, seed=0)
+
+
+def test_a_single_series_without_zones_is_modelled_whole() -> None:
+    from demand_forecast.train import select_modellable_zones
+
+    series = pl.DataFrame({"event_time": [datetime(2024, 1, 1)], "trip_count": [3]})
+
+    assert select_modellable_zones(series).equals(series)
+
+
+def test_evaluation_refuses_when_no_zone_has_enough_history() -> None:
+    from demand_forecast.train import MIN_ZONE_HOURS
+
+    short = _demand(n_hours=MIN_ZONE_HOURS - 1, zones=2)
+
+    with pytest.raises(ValueError, match=f"no zone has the {MIN_ZONE_HOURS} hours of history"):
+        evaluate(short, n_folds=2, horizon=24)

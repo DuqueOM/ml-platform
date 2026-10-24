@@ -97,14 +97,16 @@ def expanding_window_folds(
             f"with a gap of {gap}: at least {needed} are required"
         )
 
+    # The size check above makes every fold fit: the last test window ends at
+    # `first_train + n_folds * horizon + gap`, which is `needed` with `min_train`
+    # given and exactly `n_rows` without it. A bounds `break` here was
+    # unreachable, so it is not kept; tests sweep designs and assert it holds.
     first_train = min_train if min_train is not None else n_rows - n_folds * horizon - gap
     folds = []
     for index in range(n_folds):
         train_end = first_train + index * horizon
         test_start = train_end + gap
         test_end = test_start + horizon
-        if test_end > n_rows:
-            break
         folds.append(
             Fold(
                 index=index,

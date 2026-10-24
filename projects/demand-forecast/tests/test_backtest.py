@@ -203,3 +203,92 @@ def test_every_entity_shares_the_same_temporal_boundary() -> None:
 def test_a_span_too_short_is_refused() -> None:
     with pytest.raises(ValueError, match="cannot support"):
         expanding_window_folds_by_time(_panel(hours=200), n_folds=3, horizon_hours=168, gap_hours=168)
+
+
+# --- the splitters' guards and their invariant (W-15) ------------------------
+
+
+@pytest.mark.parametrize(
+    ("n_rows", "n_folds", "horizon", "gap", "min_train"),
+    [
+        (rows, folds, horizon, gap, min_train)
+        for folds, horizon, gap in itertools.product((1, 3, 5), (1, 24, 168), (0, 1, 24))
+        for rows, min_train in (
+            ((folds + 1) * horizon + gap, None),
+            ((folds + 1) * horizon + gap + 50, 10),
+            (3000, None),
+        )
+        if rows >= (min_train or horizon) + folds * horizon + gap
+    ],
+)
+def test_every_fold_fits_inside_the_series(
+    n_rows: int, n_folds: int, horizon: int, gap: int, min_train: int | None
+) -> None:
+    """The invariant the size check guarantees, and the reason the splitter has no bounds `break`."""
+    folds = expanding_window_folds(n_rows, n_folds=n_folds, horizon=horizon, gap=gap, min_train=min_train)
+
+    assert len(folds) == n_folds, "a fold was dropped: the design reported is not the one run"
+    for fold in folds:
+        assert len(fold.test) == horizon
+        assert fold.test[-1] < n_rows
+        assert fold.train[-1] + gap + 1 == fold.test[0]
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"horizon": 0, "gap": 0}, "horizon must be at least 1"),
+        ({"horizon": 24, "gap": -1}, "gap must not be negative"),
+        ({"horizon": 24, "gap": 0, "n_folds": 5, "n_rows": 100}, "cannot support 5 folds"),
+    ],
+)
+def test_a_design_the_rows_cannot_support_is_refused(kwargs: dict, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        expanding_window_folds(kwargs.pop("n_rows", 1000), **kwargs)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"horizon_hours": 0, "gap_hours": 0}, "horizon_hours must be at least 1"),
+        ({"horizon_hours": 24, "gap_hours": -1}, "gap_hours must not be negative"),
+    ],
+)
+def test_a_time_based_design_with_impossible_arguments_is_refused(kwargs: dict, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        expanding_window_folds_by_time(_series(), n_folds=3, **kwargs)
+
+
+def test_a_time_window_that_falls_in_a_gap_of_the_data_is_skipped_not_scored_empty() -> None:
+    """Real feeds miss hours. A fold whose test window holds no rows has nothing to score, so it is not a fold."""
+    series = _series(n_rows=600)
+    times = series["event_time"]
+    # Remove exactly the window the middle fold tests — [end-48h, end-24h), half-open as the splitter cuts —
+    # leaving the series' span intact.
+    end = times.max()
+    hole = series.filter(
+        (pl.col("event_time") >= end - timedelta(hours=48)) & (pl.col("event_time") < end - timedelta(hours=24))
+    )
+    sparse = series.join(hole, on="event_time", how="anti")
+
+    folds = expanding_window_folds_by_time(sparse, n_folds=3, horizon_hours=24, gap_hours=0)
+
+    assert len(folds) == 2
+    assert all(len(fold.test) > 0 for fold in folds)
+
+
+def test_the_leakage_check_ignores_a_fold_with_nothing_on_one_side() -> None:
+    from demand_forecast.backtest import Fold
+
+    series = _series(n_rows=48)
+    empty = Fold(index=0, train=np.array([], dtype=int), test=np.arange(10, 20), gap=0)
+
+    assert_no_temporal_leakage(series, [empty])  # nothing to compare, so nothing to refuse
+
+
+def test_a_fold_describes_itself_by_its_sizes() -> None:
+    from demand_forecast.backtest import Fold
+
+    fold = Fold(index=2, train=np.arange(100), test=np.arange(100, 124), gap=6)
+
+    assert str(fold) == "fold 2: train[100] gap[6] test[24]"

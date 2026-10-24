@@ -602,6 +602,14 @@ asserts the same verdict.
 
 ### W-15 — Raise the project floors toward the library floors
 
+> **Status: done** — every file in the table below is at or above 90% lines and 80% branches: `crossover.py`
+> from 0%, `store_assistant/tools.py` and `backtest`, `tracing`, `train` and `warehouse_checks` at 100%. CI measured
+> `projects/demand-forecast` at 98.47% / 93.86%, `projects/store-assistant` at 100% / 100% and `projects/` at
+> 97.40% combined, and P17's floors are raised to 98/93, 100/100 and 97 in the same commit. Each new property is a
+> catalogue entry (W15-1..8). Two defects surfaced: a bounds `break` in the expanding-window splitter that its own
+> size check made unreachable — removed, with the invariant swept across designs — and a `stage()` docstring
+> promising attributes set on exit, which the code never did.
+
 **Mode**: AUTO · **Source**: W-5's measurement · **Size**: ~3h, after #106
 
 P17 holds `demand-forecast` at 79% lines / 65% branches and `store-assistant` at
