@@ -1088,6 +1088,12 @@ artifact load by removing state it does not need; only B removes the straddle.
 
 ### R15-5 — Codecov has never received an upload
 
+> **Status: done** — decided 2026-10-08: OIDC, reporting only. The upload sends `use_oidc: true` with
+> `id-token: write` on its job; every status in `codecov.yml` is informational, and the per-path targets that
+> restated the floors with stale numbers are gone, so the floors in `check_coverage_floors.py` stay the only gate.
+> `codecov-health.yml` runs `scripts/check_codecov_reports.py` weekly and fails when `main`'s recent commits have no
+> complete report — the check whose absence let every upload fail unnoticed.
+
 **Mode**: CONSULT · **Size**: ~15min once decided
 
 Every upload is rejected for want of credentials (`CODECOV_TOKEN` is empty), so
