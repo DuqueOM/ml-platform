@@ -96,7 +96,6 @@ def test_a_large_overlap_still_terminates() -> None:
     assert all(isinstance(chunk, Chunk) for chunk in chunks)
 
 
-@pytest.mark.integration
 @pytest.mark.xfail(
     reason="measured broken on real filings: 36% of chunks exceed 3x target, largest 1,087,381 chars", strict=True
 )
@@ -119,15 +118,20 @@ def test_chunking_survives_a_real_filing() -> None:
     measured, the fix needs a second boundary for non-prose text, and a test
     that silently passes once someone changes the threshold would hide it. When
     the chunker is fixed this test fails as XPASS and must be un-marked.
+
+    It runs on every build (W-11). Marked `integration` and fed only from a
+    downloaded filing, it was deselected everywhere and would have skipped
+    anyway, so the XPASS that is the point of `strict` could never fire. The
+    fixture is the first 6 KB of a real 10-K — 22nd Century Group, CIK 1347858,
+    filed 2024-03-28, public on EDGAR — and its inline XBRL, which carries no
+    sentence boundary, already becomes one chunk of 5,998 characters, seven
+    times the 800-character target.
     """
     from pathlib import Path
 
-    filings = sorted(Path("data/sec-edgar/filings").glob("*.txt"))
-    if not filings:
-        pytest.skip("no filings downloaded; run rag_assistant.ingest.fetch_filings")
-
-    text = filings[0].read_text(encoding="utf-8", errors="ignore")
-    chunks = chunk_document(text, filings[0].stem)
+    filing = Path(__file__).parent / "fixtures" / "10-K-1347858-2024-03-28-excerpt.txt"
+    text = filing.read_text(encoding="utf-8")
+    chunks = chunk_document(text, filing.stem)
     oversized = [chunk for chunk in chunks if len(chunk.text) > 3 * 800]
 
     assert not oversized, (

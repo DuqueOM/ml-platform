@@ -203,3 +203,18 @@ def test_the_run_and_its_stages_carry_their_attributes_in_one_trace(monkeypatch:
     assert spans["pipeline.train"].attributes == {"train.folds": 5, "train.skill": 0.12}
     assert spans["pipeline.train"].parent.span_id == run.get_span_context().span_id
     assert spans["pipeline.train"].context.trace_id == spans["pipeline.run"].context.trace_id
+
+
+def test_the_endpoint_variable_is_read_when_tracing_is_configured(monkeypatch: pytest.MonkeyPatch) -> None:
+    """QA-4 F-29: read at import, a variable set afterwards — by a test, or a launcher — was ignored."""
+    from demand_forecast import tracing
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        closed = probe.getsockname()[1]
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_ENDPOINT", f"http://127.0.0.1:{closed}")
+
+    setup = tracing.configure_tracing()
+
+    assert setup.enabled is False
+    assert setup.reason == f"nothing listening at http://127.0.0.1:{closed}"

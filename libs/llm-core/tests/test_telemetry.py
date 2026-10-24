@@ -134,3 +134,34 @@ def test_shadow_not_sampled_at_zero(agent: Any) -> None:
     agent.router.route = lambda m: _route(tier=1)
     result = agent.handle("hola")
     assert result["shadow"] is None
+
+
+def test_shadow_sampling_leaves_the_seeded_global_stream_alone(agent: Any) -> None:
+    """QA-4 F-28: sampling from the global `random` moved the stream `seed_everything` seeds."""
+    import random
+
+    agent.config.telemetry["shadow_sample_rate"] = 0.5
+    agent.tiers = FakeTiers(["NONE", "hola"] * 20)
+    agent.router.route = lambda m: _route(tier=1)
+
+    random.seed(7)
+    expected = [random.random() for _ in range(3)]
+    random.seed(7)
+    for _ in range(10):
+        agent.handle("hola")
+    assert [random.random() for _ in range(3)] == expected, "handling requests consumed the seeded stream"
+
+
+def test_shadow_sampling_uses_the_sampler_it_is_given(agent: Any) -> None:
+    import random
+
+    agent.config.telemetry["shadow_sample_rate"] = 0.5
+    agent.tiers = FakeTiers(["NONE", "hola"])
+    agent.router.route = lambda m: _route(tier=1)
+
+    class Always(random.Random):
+        def random(self) -> float:
+            return 0.0
+
+    agent.controller.shadow_sampler = Always()
+    assert agent.handle("hola")["shadow"]["sampled"] is True

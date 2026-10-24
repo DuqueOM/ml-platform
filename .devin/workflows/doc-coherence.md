@@ -50,6 +50,7 @@ which is worse than no list.
 - **C8** `[Unreleased]` in the CHANGELOG covers the commits since the last tag.
 - **C9** every documented `copier` command names a pinned template version.
 - **C10** every link to a markdown heading names a heading that exists.
+- **C11** every acceptance command in the technical plan resolves, or is marked PENDING with its reason.
 
 Version consistency across `VERSION`, `pyproject.toml`, `llms.txt`, the
 CHANGELOG and the plan header is a SEPARATE gate:

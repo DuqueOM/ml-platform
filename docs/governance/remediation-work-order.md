@@ -64,6 +64,10 @@ that any of this happened.
 
 ### W-1 — Re-measure the forecast and publish the corrected figure
 
+> **Status: done** — re-measured from the files rather than the stale lakehouse, twice at the same seed: the
+> dated +55.8% corrects to +23.0% like for like (three folds), +12.6% at the current five. The CHANGELOG entry
+> carrying both is the evidence; marked here in round eighteen's bookkeeping, where it had been left unmarked.
+
 **Mode**: AUTO · **Closes**: the last third of F-01 · **Size**: ~1h
 
 `to_hourly_demand()` was fixed to densify the panel, but nothing re-ran the
@@ -126,6 +130,10 @@ is byte-identical to before; `uv run pytest projects/demand-forecast -q` and
 `uv run python scripts/check_doc_coherence.py` both pass.
 
 ### W-2 — Record the audit and its remediation in the hash-chained trail
+
+> **Status: done** — `ops/audit.jsonl` records every round since, and `audit_record.py --verify` reports the
+> chain intact (85 entries at this marking); C7 recomputes the audit's freshness against the trail. Marked in
+> round eighteen's bookkeeping.
 
 **Mode**: AUTO · **Size**: ~15min
 
@@ -295,6 +303,13 @@ deliberately deleted test in `projects/` turns the new step red;
 
 ### W-6 — Make the plan's acceptance commands resolve, and gate them
 
+> **Status: done** — C11 in `check_doc_coherence.py` reads every command in the plan's acceptance blocks and
+> resolves its paths, `-m` modules, `make` targets and `pytest -k` selectors; a test file run as a script is
+> refused. A command that cannot resolve yet carries `PENDING` with its reason, and one that resolves while
+> marked fails. Phase 3 runs the dependency-direction test under `pytest`; Phase 6 names the compliance
+> test that exists instead of a script nobody wrote; nine future commands are PENDING. It reports "36 plan
+> acceptance commands read: 27 resolve, 9 PENDING".
+
 **Mode**: AUTO · **Closes**: F-08 and F-09 · **Size**: ~2h
 
 Two problems, one fix.
@@ -326,6 +341,12 @@ ungated. Phase 1 currently names `projects/demand-forecast/tests/load.js` and
 command that names a nonexistent script turns it red.
 
 ### W-7 — Stop the status document from being complete only where someone remembered
+
+> **Status: done** — `DELIVERABLES` in `check_implementation_status.py` maps every deliverable bullet of the
+> plan to the rows that show it, and the script refuses to write or check while a bullet has none, or names a
+> row that does not exist. Drawing the map found eight deliverables with no row and four covered only in part:
+> ten new rows (marked W-7) make them visible — six absent, four built or partial — and the totals move to
+> 51 done · 3 partial · 11 absent of 65.
 
 **Mode**: AUTO · **Closes**: the rest of F-15 · **Size**: ~1h
 
@@ -466,6 +487,11 @@ raises before unpickling.
 
 ### W-11 — Let the RAG chunker's known defect announce its own fix
 
+> **Status: done** — the test runs on every build and reports `xfail`: no `integration` marker, and it reads
+> a committed 6 KB excerpt of a real 10-K (CIK 1347858, public on EDGAR) whose inline XBRL already becomes one
+> chunk of 5,998 characters. The formatting hooks no longer rewrite `*/tests/fixtures/`, so the excerpt stays
+> byte for byte.
+
 **Mode**: AUTO · **Closes**: F-17 · **Size**: ~1h
 
 `test_chunking_survives_a_real_filing` records a measured defect precisely —
@@ -529,7 +555,7 @@ no longer disagree with `KNOWN_DEVIATIONS` without a test failing.
 | ~~F-22~~ | **Done** — *fix(rag-assistant): read the EDGAR contact from the environment*. Read from `EDGAR_USER_AGENT`, no default, refusing before the first request; the guard test greps the module for any address and fails against the previous revision |
 | ~~F-23~~ | **Done** — *fix(demand-forecast): the lakehouse no longer defaults to a laptop*. Worse in practice than recorded: the training DAG called the lakehouse with no catalogue, so it relied on the fallback. The catalogue is required now, resolved from `LAKEHOUSE_CATALOG` with no default; unset is a refusal |
 | ~~F-25~~ | **Done** — same commit. The leak rate divides by the rows that could be checked, and unexamined rows are named in the report; `is_clean` keeps the existing decision that a missing feature is a coverage problem |
-| F-28 / F-29 | Shadow-mode sampling uses the unseeded global `random`, which `seed_everything` also seeds. `DEFAULT_ENDPOINT` in `tracing.py` reads its environment variable at import time, so a test cannot monkeypatch it afterwards |
+| ~~F-28 / F-29~~ | **Done** — *fix: shadow sampling and retry jitter leave the seeded stream alone; tracing reads its endpoint when configured*. The controller's shadow sampler and the tiers' retry jitter each have their own `random.Random`, so neither moves the stream `seed_everything` seeds — retry jitter had the same defect and was not in the finding. `configure_tracing` reads `OTEL_EXPORTER_OTLP_ENDPOINT` when called. Tests fail against the previous revision (F28-1, F28-2, F29-1 in the catalogue) |
 
 **F-16 and F-24 are deliberately excluded from this list.** The agent core's
 connection reuse and shared breaker state (F-16) need a benchmark and a
