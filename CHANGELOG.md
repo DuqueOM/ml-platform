@@ -18,6 +18,18 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Fixed — Codecov receives the coverage it was configured for (R15-5)
+
+- **No upload had ever landed.** The token secret was empty, every upload was
+  rejected, and the step stayed green because it may not fail a merge. Uploads
+  authenticate by OIDC now, so there is no secret to forget, and
+  `codecov-health.yml` asks Codecov weekly whether `main`'s recent commits have
+  reports, so a rejection cannot hide again.
+- **Codecov reports; the floors gate.** Every `codecov.yml` status is
+  informational, and its per-path targets — which restated the coverage floors
+  with numbers that had drifted (scripts/ at 60% against a floor of 86) — are
+  gone. Patch coverage and history are what Codecov adds.
+
 ### Security — MLflow 3.17.2 from ml-service-template v0.33.0, and filelock 4.2.4 (CVE-2026-53995, CVE-2026-112940)
 
 - **Two HIGH advisories published on 2026-10-24 failed the Trivy gate on every pull request, `main` included.**

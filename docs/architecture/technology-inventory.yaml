@@ -47,11 +47,11 @@ categories:
   - name: CI/CD
     items:
       - {id: github-actions, tier: core, detect: [".github/workflows/ci.yml"]}
-      # Detected by the wiring an upload needs to SUCCEED, not by its configuration
-      # file. Every upload has been rejected ("Token required - not valid tokenless
-      # upload"; CODECOV_TOKEN is empty), so none of codecov.yml's statuses has ever
-      # run, while `detect: ["codecov.yml"]` reported it built (QA-4 R15).
-      - {id: codecov, tier: core, detect: ["pattern:use_oidc: true|.github/workflows/ci.yml"], note: "Configured but enforcing nothing: every upload is rejected for want of credentials (QA-4 R15, R15-5). L1/L2/P12/P17 are enforced by scripts/check_coverage_floors.py, not by this."}
+      # Detected by the wiring an upload needs to SUCCEED, and by the check that it
+      # does — not by its configuration file. Every upload was rejected for months
+      # ("Token required - not valid tokenless upload"; CODECOV_TOKEN was empty)
+      # while `detect: ["codecov.yml"]` reported it built (QA-4 R15, R15-5).
+      - {id: codecov, tier: core, detect: ["pattern:use_oidc: true|.github/workflows/ci.yml", "pattern:check_codecov_reports.py|.github/workflows/codecov-health.yml"], note: "Reporting only: patch coverage and history, every status informational. Uploads authenticate by OIDC; codecov-health.yml fails weekly if main's recent commits have no report. The gates are L1/L2/P12/P17 in scripts/check_coverage_floors.py."}
       - {id: coverage-gate, tier: core, detect: ["pattern:check_coverage_floors.py|.github/workflows/ci.yml"]}
       - {id: release-on-tag, tier: core, detect: [".github/workflows/release-on-tag.yml"], note: "The template added this after finding six tags with zero published releases."}
       - {id: openssf-scorecard, tier: core, detect: [".github/workflows/scorecard.yml"]}

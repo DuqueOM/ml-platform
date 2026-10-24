@@ -1215,10 +1215,12 @@ mutations:
   gates:
   - P14
 - id: AD1
-  origin: R11-7 secrets named for adopters, author
-  file: docs/ADOPTION.md
-  old: '| `CODECOV_TOKEN` secret, or OIDC |'
-  new: '| Codecov token secret, or OIDC |'
+  origin: 'R11-7 secrets named for adopters, author (re-anchored by R15-5: no workflow reads a secret now, so the mutation adds an undocumented one)'
+  file: .github/workflows/ci.yml
+  old: '          fail_ci_if_error: false   # a Codecov outage must not block a merge
+
+    '
+  new: "          fail_ci_if_error: false   # a Codecov outage must not block a merge\n        env:\n          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}\n"
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_adoption_secrets.py
   expect: killed
