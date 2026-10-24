@@ -34,6 +34,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
+import check_implementation_status as status  # noqa: E402
 from check_implementation_status import COMPONENTS, Component, _substantive_files  # noqa: E402
 
 
@@ -138,3 +139,46 @@ def test_component_names_are_unique() -> None:
     names = [c.name for c in COMPONENTS]
     duplicates = sorted({name for name in names if names.count(name) > 1})
     assert not duplicates, f"duplicated component names: {duplicates}"
+
+
+# --- every plan deliverable has a row (W-7) ---------------------------------
+
+
+def test_every_plan_deliverable_maps_to_status_rows() -> None:
+    """The status was complete only where someone had written a row; the drift contract had none (W-7)."""
+    assert status.unmapped_deliverables(status.PLAN.read_text(encoding="utf-8")) == []
+    assert len(status.plan_deliverables(status.PLAN.read_text(encoding="utf-8"))) >= 40, (
+        "the parser stopped finding bullets"
+    )
+
+
+def test_a_new_plan_deliverable_without_a_row_fails() -> None:
+    plan = status.PLAN.read_text(encoding="utf-8")
+    added = plan.replace(
+        "### Deliverables\n\n", "### Deliverables\n\n- A quantum feature store with no row anywhere.\n", 1
+    )
+
+    problems = status.unmapped_deliverables(added)
+
+    assert problems == ["plan deliverable without a status row: '0: A quantum feature store with no'"]
+
+
+def test_a_row_the_map_names_must_exist() -> None:
+    original = dict(status.DELIVERABLES)
+    try:
+        status.DELIVERABLES["0: uv workspace with libs/ and projects/"] = ("A row nobody wrote",)
+        problems = status.unmapped_deliverables(status.PLAN.read_text(encoding="utf-8"))
+    finally:
+        status.DELIVERABLES.clear()
+        status.DELIVERABLES.update(original)
+
+    assert problems == [
+        "'0: uv workspace with libs/ and projects/' maps to 'A row nobody wrote', which is not a COMPONENTS row"
+    ]
+
+
+def test_markdown_does_not_change_a_deliverables_key() -> None:
+    assert (
+        status.deliverable_key("2", "**Edge protection** ([ADR-006](x.md)): Cloudflare")
+        == "2: Edge protection (ADR-006): Cloudflare"
+    )

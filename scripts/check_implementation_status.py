@@ -144,6 +144,11 @@ COMPONENTS: list[Component] = [
         # check meaning nothing. This asserts every `run:` script resolves.
         "uv run python scripts/check_ci_references.py",
     ),
+    # Rows below marked "(W-7)" were added when every plan deliverable was first
+    # held to a row: each was a promise in the plan that this document did not
+    # show at all. Where nothing exists yet, the path is where it is expected,
+    # so the row reads ⬜ until it does.
+    Component("0", "Path-filtered CI from the import graph (W-7)", ["scripts/ci_paths_from_imports.py"]),
     # --- Phase 1: first vertical slice --------------------------------------
     Component(
         "1",
@@ -309,6 +314,23 @@ COMPONENTS: list[Component] = [
         # command that needs a cluster would make this document machine-dependent.
         "uv run pytest tests/test_dashboards_structure.py -q",
         evidence="make local-dashboards && uv run pytest tests/local/test_dashboards.py -q -m local",
+    ),
+    Component(
+        "1", "Historical backfill on serverless Spark (W-7)", ["projects/demand-forecast/src/demand_forecast/backfill"]
+    ),
+    Component(
+        "1",
+        "Model card (W-7)",
+        ["projects/demand-forecast/model-card.md"],
+        'uv run pytest tests/test_project_contract.py -q -k "demand-forecast and P7"',
+    ),
+    # --- Phase 1c: it actually starts ---------------------------------------
+    Component(
+        "1c",
+        "Serving image on kind (W-7)",
+        ["services/demand-forecast-serving/Dockerfile", "tests/local/test_service_runs.py"],
+        evidence="make local-serve && uv run pytest tests/local/test_service_runs.py -q -m local",
+        why_unverifiable="building the image and serving it need Docker and the kind cluster",
     ),
     # --- Phase 1d: upstream parity + the enterprise surface -----------------
     # These exist because copier covers `services/`, not the repository: every
@@ -508,6 +530,14 @@ COMPONENTS: list[Component] = [
         ["platform/policies"],
         "uv run pytest tests/test_gitops_manifests.py -q -k default_deny",
     ),
+    Component(
+        "2",
+        "External Secrets (W-7)",
+        ["platform/kubernetes/base/secrets"],
+        "uv run pytest tests/test_gitops_manifests.py -q -k external_secret",
+    ),
+    Component("2", "Edge protection with origin lock (W-7)", ["platform/edge"]),
+    Component("2", "Ephemeral per-PR environments (W-7)", [".github/workflows/preview-environment.yml"]),
     # --- Phase 3+: remaining projects ---------------------------------------
     Component(
         "3",
@@ -536,7 +566,15 @@ COMPONENTS: list[Component] = [
     ),
     Component("4", "projects/credit-risk", ["projects/credit-risk"]),
     Component("5", "projects/doc-intelligence", ["projects/doc-intelligence"]),
+    Component("3", "LLM evaluation gate that blocks merge (W-7)", ["projects/rag-assistant/evals/config.yaml"]),
     Component("6", "projects/agent-ops", ["projects/agent-ops"]),
+    Component("6", "SLSA L3 provenance (W-7)", [".github/workflows/provenance.yml"]),
+    Component(
+        "6",
+        "Independent-audit staleness gate (W-7)",
+        ["scripts/check_doc_coherence.py"],
+        "uv run python scripts/check_doc_coherence.py --only C7",
+    ),
     Component(
         "1d",
         "Compliance mapping",
@@ -551,6 +589,132 @@ COMPONENTS: list[Component] = [
         "uv run pytest tests/test_documentation_set.py -q -k compliance",
     ),
 ]
+
+
+PLAN = REPO_ROOT / "docs" / "architecture" / "technical-plan.md"
+
+
+#: Every deliverable of the technical plan, by :func:`deliverable_key`, with the
+#: COMPONENTS rows that show whether it exists. Before this (W-7), the status
+#: was derived only over the rows someone had remembered to write: the drift
+#: contract had none, and when the map was first drawn eight more deliverables —
+#: Phase 1c's serving image, edge protection, per-PR environments, the LLM
+#: evaluation gate, SLSA provenance among them — had no row either, and four
+#: were covered only in part. A bullet
+#: added to the plan without a row here fails `--check`, and so does a row
+#: named here that no longer exists.
+DELIVERABLES: dict[str, tuple[str, ...]] = {
+    "0: uv workspace with libs/ and projects/": ("uv workspace + lockfile",),
+    "0: tests/test_dependency_direction.py — parses the import graph;": ("Dependency direction test",),
+    "0: Path-filtered CI whose filters are derived": ("Path-filtered CI from the import graph (W-7)",),
+    "0: Agentic surface: canonical agentic/ (rules, skills,": (
+        "Agentic canonical store",
+        "Agentic 4-tool surfaces",
+        "Agentic surface integrity",
+    ),
+    "0: Documentation coherence gate wired into CI.": ("Documentation coherence gate",),
+    "0: Ruff, mypy, pre-commit, secret scanning.": ("Lint + format", "Type checking (libs, strict)", "pre-commit"),
+    "1: Ingestion into Iceberg with monthly partitions;": (
+        "Iceberg ingestion (demand-forecast)",
+        "Historical backfill on serverless Spark (W-7)",
+    ),
+    "1: Pandera contracts at the code boundary;": (
+        "libs/data-contracts implementation",
+        "Warehouse validation (Great Expectations)",
+    ),
+    "1: Feast: offline store in the warehouse,": ("Feature store definitions",),
+    "1: Training pipeline authored in KFP v2,": ("Training pipeline (KFP v2) — compiles",),
+    "1: Backtesting with an expanding window; conformal": (
+        "Expanding-window backtesting",
+        "Model training + baseline gate",
+    ),
+    "1: Serving generated from ml-service-template (ADR-003), wrapped": ("libs/serving-core implementation",),
+    "1: OpenTelemetry traces spanning request → feature": ("Observability (OTel traces)", "Grafana LGTM dashboards"),
+    "1: Model card; quality gates as data.": ("Model card (W-7)", "projects/demand-forecast"),
+    "1: Drift, tabular (ADR-007):": ("Drift contract (ADR-007)",),
+    "1b: platform/local/: a kind cluster definition with": ("Local validation stack",),
+    "1b: A local variant of every Phase": ("Local validation stack",),
+    "1b: A conformance list stating explicitly which": ("Local validation stack",),
+    "1c: A Dockerfile per deployable project, building": ("Serving image on kind (W-7)",),
+    "1c: The image loaded into the local": ("Serving image on kind (W-7)", "Kubernetes manifests"),
+    "1c: The endpoint called from outside the": ("Serving image on kind (W-7)",),
+    "1c: Airflow for business orchestration, which ADR-004": ("Orchestration DAGs (Airflow)",),
+    "1d: The parity gate first. scripts/check_upstream_parity.py lists": ("Upstream parity gate",),
+    "1d: Public-repo hygiene. SECURITY.md, CONTRIBUTING.md,": ("Public-repo hygiene",),
+    "1d: The enterprise documentation set: llms.txt, docs/ADOPTION.md,": (
+        "Enterprise documentation set",
+        "Agent entry point (llms.txt)",
+    ),
+    "1d: Portable guards: scripts/check_test_clock_isolation.py,": ("Portable guards from upstream",),
+    "1d: What the gate found that a": ("Scanner baselines",),
+    "1e: llms.txt first — it lands in": ("Agent entry point (llms.txt)",),
+    "1e: A gold set of questions agents": ("Documentation retrieval index",),
+    "1e: Retrieval evaluated with the instrument this": ("Documentation retrieval index",),
+    "1e: Index freshness gated in CI, on": ("Documentation retrieval index",),
+    "2: The Phase 1 project deploys to": ("Terraform (GCP)", "Terraform (AWS)", "Kubernetes manifests"),
+    "2: Terraform with per-environment remote state.": ("Terraform (GCP)", "Terraform (AWS)"),
+    "2: ArgoCD with ApplicationSets covering the environment": ("GitOps (ArgoCD)",),
+    "2: External Secrets Operator; default-deny NetworkPolicies.": ("External Secrets (W-7)", "Admission policies"),
+    "2: Edge protection (ADR-006):": ("Edge protection with origin lock (W-7)",),
+    "2: Ephemeral per-PR environments with a database": ("Ephemeral per-PR environments (W-7)",),
+    "3: agent-local migrated with history per ADR-002;": ("libs/llm-core implementation", "projects/store-assistant"),
+    "3: libs/llm-core extracted; projects/store-assistant consumes it unchanged.": (
+        "libs/llm-core implementation",
+        "projects/store-assistant",
+    ),
+    "3: projects/rag-assistant on SEC EDGAR filings: pgvector": ("projects/rag-assistant",),
+    "3: Evaluation gates that block merge —": ("LLM evaluation gate that blocks merge (W-7)",),
+    "4: Probability calibration with reliability curves; threshold": ("projects/credit-risk",),
+    "4: Fairness gates (disparate impact ratio) evaluated": ("projects/credit-risk",),
+    "4: Temporal leakage test that fails on": ("projects/credit-risk",),
+    "4: Uplift/causal analysis demonstrating why predictive feature": ("projects/credit-risk",),
+    "4: Drift, concept — sliced performance against": ("projects/credit-risk",),
+    "5: LoRA fine-tune of a document model.": ("projects/doc-intelligence",),
+    "5: ONNX export, quantisation, Triton serving.": ("projects/doc-intelligence",),
+    "5: Measured before/after on latency, throughput, memory": ("projects/doc-intelligence",),
+    "6: SLSA Level 3 provenance with in-toto": ("SLSA L3 provenance (W-7)",),
+    "6: EU AI Act risk classification, ISO/IEC": ("Compliance mapping",),
+    "6: projects/agent-ops: agents operating over this repository's": ("projects/agent-ops",),
+    "6: Recurring independent audit (ADR-005 rule B)": ("Independent-audit staleness gate (W-7)",),
+}
+
+
+def unmapped_deliverables(plan_text: str) -> list[str]:
+    """Why the plan and DELIVERABLES disagree: a bullet without rows, a stale key, or a row that does not exist."""
+    names = {component.name for component in COMPONENTS}
+    keys = plan_deliverables(plan_text)
+    problems = [f"plan deliverable without a status row: {key!r}" for key in keys if key not in DELIVERABLES]
+    problems += [
+        f"DELIVERABLES names a bullet the plan no longer has: {key!r}" for key in DELIVERABLES if key not in keys
+    ]
+    problems += [
+        f"{key!r} maps to {name!r}, which is not a COMPONENTS row"
+        for key, rows in DELIVERABLES.items()
+        for name in rows
+        if name not in names
+    ]
+    return problems
+
+
+def deliverable_key(phase: str, bullet: str) -> str:
+    """A plan bullet's stable name: its phase and first six words, Markdown removed."""
+    plain = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", bullet)
+    plain = re.sub(r"[*`]", "", plain)
+    return f"{phase}: " + " ".join(plain.split()[:6])
+
+
+def plan_deliverables(text: str) -> list[str]:
+    """The key of every bullet under a `### Deliverables` heading, in plan order."""
+    keys, phase, inside = [], "", False
+    for line in text.splitlines():
+        heading = re.match(r"^## Phase (\S+)", line)
+        if heading:
+            phase, inside = heading.group(1), False
+        elif line.startswith("### "):
+            inside = line.strip() == "### Deliverables"
+        elif inside and line.startswith("- "):
+            keys.append(deliverable_key(phase, line[2:]))
+    return keys
 
 
 def _substantive_files(component: Component) -> int:
@@ -842,6 +1006,15 @@ def main() -> int:
     )
     args = parser.parse_args()
     document: Path = args.document
+
+    # Before anything is evaluated: a document derived over a list that misses
+    # a plan deliverable is complete only where someone remembered (W-7).
+    unmapped = unmapped_deliverables(PLAN.read_text(encoding="utf-8"))
+    if unmapped:
+        for problem in unmapped:
+            print(f"  FAIL [status] {problem}")
+        print("\n[status] map each deliverable to its rows in DELIVERABLES (scripts/check_implementation_status.py)")
+        return 1
 
     rows = evaluate()
     generated = render(rows)

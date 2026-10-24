@@ -104,9 +104,16 @@ class ExecutiveController:
     across requests (the agent owns a single controller instance).
     """
 
-    def __init__(self, agent: Agent, breaker: CircuitBreaker | None = None):
+    def __init__(
+        self, agent: Agent, breaker: CircuitBreaker | None = None, shadow_sampler: random.Random | None = None
+    ):
         self.agent = agent
         self.breaker = breaker or CircuitBreaker()
+        # Its own generator, never the module-level one (QA-4 F-28):
+        # `seed_everything` seeds the global stream for reproducible training,
+        # and sampling from it made which requests were shadowed depend on the
+        # last seed — while each sample shifted the stream a seeded run reads.
+        self.shadow_sampler = shadow_sampler or random.Random()
 
     def handle(self, message: str, customer_id: str = "") -> dict[str, Any]:
         ctx = RunContext(self.agent, message, customer_id, self.breaker)
@@ -136,7 +143,7 @@ class ExecutiveController:
         # a higher tier *would* route. The comparison call is gated (needs a
         # model); here we record the sampling decision + the intended shadow tier.
         rate = self.agent.config.telemetry.get("shadow_sample_rate", 0.0)
-        if rate >= 1.0 or (rate > 0.0 and random.random() < rate):
+        if rate >= 1.0 or (rate > 0.0 and self.shadow_sampler.random() < rate):
             ctx.shadow = {"sampled": True, "would_route_tier": min(tier + 1, 3)}
 
     # --- phase 2: execute --------------------------------------------------

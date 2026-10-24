@@ -1661,6 +1661,128 @@ def _anchors(path: Path, cache: dict[Path, set[str]]) -> set[str]:
     return cache[path]
 
 
+PLAN = REPO_ROOT / "docs" / "architecture" / "technical-plan.md"
+
+#: A repository path a command names: relative, with at least one `/`, no
+#: variables. An option's value (`-chdir=platform/x`) is read after its `=`.
+_REPO_PATH = re.compile(r"^(?:--?[\w-]+=)?((?:\.?[\w@.-]+/)+[\w@.{}-]*)$")
+_MODULE = re.compile(r"(?:^|\s)-m\s+([A-Za-z_][\w.]*)")
+_MAKE_TARGET = re.compile(r"^\s*make\s+([\w-]+)")
+
+
+def plan_acceptance_commands(text: str) -> list[tuple[str, int, str]]:
+    """(phase, line, command) for every command in a `### Acceptance` code block.
+
+    A line ending in `\\` continues on the next; an indented line that does
+    not continue one is the block's sample output, not a command.
+    """
+    commands: list[tuple[str, int, str]] = []
+    phase, inside, fence, pending = "", False, False, ""
+    for number, line in enumerate(text.splitlines(), start=1):
+        heading = re.match(r"^## Phase (\S+)", line)
+        if heading:
+            phase, inside = heading.group(1), False
+            continue
+        if line.startswith("### "):
+            inside = line.strip() == "### Acceptance"
+            continue
+        if not inside:
+            continue
+        if line.startswith("```"):
+            fence, pending = not fence, ""
+            continue
+        if not fence or not line.strip():
+            continue
+        if pending:
+            pending += " " + line.strip()
+        elif line.startswith((" ", "\t")):
+            continue
+        else:
+            pending, start = line.strip(), number
+        if pending.endswith("\\"):
+            pending = pending[:-1].rstrip()
+            continue
+        commands.append((phase, start, pending))
+        pending = ""
+    return commands
+
+
+def _module_exists(module: str) -> bool:
+    relative = Path(*module.split("."))
+    roots = [REPO_ROOT, *REPO_ROOT.glob("libs/*/src"), *REPO_ROOT.glob("projects/*/src")]
+    return any(
+        (root / relative).with_suffix(".py").is_file() or (root / relative / "__init__.py").is_file() for root in roots
+    )
+
+
+def unresolved_in_command(command: str) -> list[str]:
+    """What a plan command names in this repository that is not here."""
+    body = command.split(" #", 1)[0]
+    missing = []
+    for token in body.split():
+        token = token.strip("\"'")
+        found = _REPO_PATH.match(token)
+        if not found or "$" in token or token.startswith("http"):
+            continue
+        path = found.group(1)
+        # A repository path starts at something at the root, or names a file.
+        # `svc/demand-forecast` is a kubectl resource, not a missing directory.
+        if not ((REPO_ROOT / path.split("/")[0]).exists() or re.search(r"\.\w+$", path)):
+            continue
+        if not (REPO_ROOT / path).exists():
+            missing.append(f"names {path}, which does not exist")
+    for module in _MODULE.findall(body):
+        if not _module_exists(module):
+            missing.append(f"runs the module {module}, which does not exist")
+    target = _MAKE_TARGET.match(body)
+    if target and not re.search(rf"^{re.escape(target.group(1))}:", _read(REPO_ROOT / "Makefile"), re.M):
+        missing.append(f"runs `make {target.group(1)}`, which the Makefile does not define")
+    for selector in _K_SELECTOR.findall(body):
+        tokens = [t for t in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", selector) if t not in {"and", "or", "not"}]
+        missing += [f"selects `-k {t}`, which matches no test" for t in tokens if not _selects_a_test(t)]
+    run_as_script = re.search(r"\bpython3?\s+((?:[\w.-]+/)*test_[\w]+\.py)", body)
+    if run_as_script:
+        test_file = REPO_ROOT / run_as_script.group(1)
+        if test_file.is_file() and "__main__" not in _read(test_file):
+            missing.append(f"runs {run_as_script.group(1)} as a script, which executes no test — use `pytest`")
+    return missing
+
+
+def check_plan_acceptance_commands() -> None:
+    """C11 — every acceptance command in the technical plan resolves, or says it cannot yet.
+
+    The plan's own rule 1: a phase is complete only when every acceptance
+    command exits zero. Nothing read them (QA-4 F-08/F-09, W-6). Phase 3's
+    block ran `uv run python tests/test_dependency_direction.py`, which has no
+    `__main__` guard, so it exited 0 having executed zero assertions over the
+    STOP-class charter criterion it names; Phase 1 named a `load.js` and a
+    `demand_forecast.pipeline` that do not exist. Each command is resolved
+    against the repository — paths, `-m` modules, `make` targets, `pytest -k`
+    selectors — never against a host's tools. A command that cannot resolve
+    YET carries `PENDING` in its comment; one that does resolve and still
+    carries it fails, so the marker cannot outlive its reason.
+    """
+    commands = plan_acceptance_commands(_read(PLAN))
+    if not commands:
+        shown = PLAN.relative_to(REPO_ROOT) if PLAN.is_relative_to(REPO_ROOT) else PLAN
+        fail("C11", f"no acceptance commands found in {shown} — the parser stopped matching")
+        return
+    pending = 0
+    for phase, line, command in commands:
+        missing = unresolved_in_command(command)
+        if "PENDING" in command:
+            pending += 1
+            if not missing:
+                fail("C11", f"Phase {phase}, line {line}: `{command}` resolves now — remove its PENDING marker")
+            continue
+        for item in missing:
+            fail(
+                "C11",
+                f"Phase {phase}, line {line}: `{command.split(' #', 1)[0].strip()}` {item}",
+            )
+    ok("C11", f"{len(commands)} plan acceptance commands read: {len(commands) - pending} resolve, {pending} PENDING")
+
+
 def check_markdown_anchors() -> None:
     """C10 — every link to a heading in a markdown file names a heading that exists.
 
@@ -1722,6 +1844,7 @@ def _registry(adrs: dict[str, Path]) -> dict[str, Callable[[], None]]:
         "C8": check_changelog_covers_the_commit_range,
         "C9": check_copier_commands_are_pinned,
         "C10": check_markdown_anchors,
+        "C11": check_plan_acceptance_commands,
         "C7": check_audit_freshness,
     }
 
@@ -1732,7 +1855,7 @@ def main() -> int:
         "--only",
         metavar="CHECK",
         help=(
-            "run one check by id (C1..C10) instead of all of them. For negative controls: "
+            "run one check by id (C1..C11) instead of all of them. For negative controls: "
             "a test asserting that C6 does not fire should not also assert that C7's audit "
             "counter is green, and one that does reports a false cause when it is not."
         ),

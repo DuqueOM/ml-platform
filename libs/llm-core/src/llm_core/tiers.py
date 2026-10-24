@@ -235,9 +235,14 @@ def _retry_after_seconds(exc: Exception) -> float | None:
     return None
 
 
+#: Retry jitter's own generator, for the same reason the shadow sampler has one
+#: (QA-4 F-28): the global stream belongs to `seed_everything`.
+_JITTER = random.Random()
+
+
 def _backoff_delay(attempt: int, policy: RetryPolicy) -> float:
     base: float = min(policy.base_delay * (2**attempt), policy.max_delay)
-    return base + random.random() * policy.jitter * base
+    return base + _JITTER.random() * policy.jitter * base
 
 
 def with_retry(

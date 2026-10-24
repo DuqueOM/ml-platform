@@ -40,7 +40,11 @@ SERVICE_NAME = "demand-forecast"
 #: in cluster it is the collector service, in cloud the managed endpoint. Only
 #: the endpoint changes, which is the property that makes the local stack worth
 #: having (ADR-004).
-DEFAULT_ENDPOINT = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:14317")
+DEFAULT_ENDPOINT = "http://localhost:14317"
+
+#: Read when tracing is configured, not when the module is imported (QA-4
+#: F-29): read at import, a test or a process that set it afterwards was ignored.
+ENDPOINT_VARIABLE = "OTEL_EXPORTER_OTLP_ENDPOINT"
 
 
 @dataclass(frozen=True)
@@ -83,7 +87,8 @@ def configure_tracing(endpoint: str | None = None, *, require: bool = False) -> 
     """Point the tracer at a collector, or fall back to a no-op.
 
     Args:
-        endpoint: OTLP gRPC endpoint. Defaults to :data:`DEFAULT_ENDPOINT`.
+        endpoint: OTLP gRPC endpoint. Defaults to ``$OTEL_EXPORTER_OTLP_ENDPOINT``, then
+            :data:`DEFAULT_ENDPOINT`.
         require: Raise instead of falling back. For the integration test that
             exists to prove the trace arrives — there, a silent no-op would
             make the test pass while proving nothing.
@@ -94,7 +99,7 @@ def configure_tracing(endpoint: str | None = None, *, require: bool = False) -> 
     Raises:
         RuntimeError: If ``require`` and no collector is listening.
     """
-    target = endpoint or DEFAULT_ENDPOINT
+    target = endpoint or os.environ.get(ENDPOINT_VARIABLE, DEFAULT_ENDPOINT)
 
     if not _reachable(target):
         if require:

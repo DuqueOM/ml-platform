@@ -260,3 +260,17 @@ def test_call_degrades_to_local_tier_when_higher_tier_absent(monkeypatch: pytest
 
     assert seen["url"] == "http://127.0.0.1:8091/v1"
     assert seen["headers"] == {}  # local endpoints are unauthenticated
+
+
+def test_retry_jitter_leaves_the_seeded_global_stream_alone() -> None:
+    """QA-4 F-28, the same class as the shadow sampler: jitter drew from the stream `seed_everything` seeds."""
+    import random
+
+    from llm_core.tiers import _backoff_delay
+
+    random.seed(11)
+    expected = random.random()
+    random.seed(11)
+    delays = [_backoff_delay(attempt, RetryPolicy(max_retries=3, base_delay=1.0, jitter=0.5)) for attempt in range(3)]
+    assert random.random() == expected, "computing a backoff consumed the seeded stream"
+    assert all(1.0 * 2**i <= delay <= 1.5 * 2**i for i, delay in enumerate(delays)), delays

@@ -135,8 +135,8 @@ public data catalogues of both target clouds, and carries no licensing friction.
 
 ```bash
 uv run pytest projects/demand-forecast -q            # incl. point-in-time test
-uv run python -m demand_forecast.pipeline --dry-run
-k6 run projects/demand-forecast/tests/load.js        # p99 within stated SLO
+uv run python -m demand_forecast.pipeline --dry-run    # PENDING — no pipeline entry point yet
+k6 run projects/demand-forecast/tests/load.js        # p99 within stated SLO · PENDING — no load test or SLO yet (gate S2)
 curl -s "$SERVICE_URL/health" && curl -s -XPOST "$SERVICE_URL/predict" -d @sample.json
 ```
 
@@ -490,7 +490,7 @@ the one that replaced it, is worse than no retriever.
 
 ```bash
 uv run pytest libs/llm-core -q -k retrieval
-uv run python scripts/check_doc_index_freshness.py
+uv run python scripts/check_doc_index_freshness.py   # PENDING — Phase 1e not started
 ```
 
 **The gate is the deliverable.** If semantic retrieval over this corpus cannot
@@ -571,8 +571,8 @@ teardown is proof, and a shared project can never produce that proof.
 
 ```bash
 uv run pytest libs/llm-core projects/store-assistant projects/rag-assistant -q
-uv run promptfoo eval -c projects/rag-assistant/evals/config.yaml   # gate
-uv run python tests/test_dependency_direction.py
+uv run promptfoo eval -c projects/rag-assistant/evals/config.yaml   # gate · PENDING — needs an LLM endpoint (gate A2)
+uv run pytest tests/test_dependency_direction.py -q
 ```
 
 **This phase proves charter criterion C1**: `rag-assistant` must reuse ≥3 shared
@@ -626,8 +626,8 @@ plus Folktables/ACS (real distribution shift with sensitive attributes).
 ### Acceptance
 
 ```bash
-uv run pytest projects/credit-risk -q               # incl. leakage + fairness
-uv run python -m credit_risk.gates --check          # promotion gates
+uv run pytest projects/credit-risk -q               # incl. leakage + fairness · PENDING — Phase 4 not started
+uv run python -m credit_risk.gates --check          # promotion gates · PENDING — Phase 4 not started
 ```
 
 ---
@@ -651,8 +651,8 @@ LoRA fine-tuning of a small document model and for the quantisation work below.
 ### Acceptance
 
 ```bash
-uv run pytest projects/doc-intelligence -q
-uv run python -m doc_intelligence.bench --compare baseline quantised
+uv run pytest projects/doc-intelligence -q          # PENDING — Phase 5 not started
+uv run python -m doc_intelligence.bench --compare baseline quantised   # PENDING — Phase 5 not started
 ```
 
 The benchmark must be run in a configuration that does **not** presuppose its
@@ -679,8 +679,8 @@ this class of error.
 
 ```bash
 cosign verify-attestation --type slsaprovenance "$IMAGE_DIGEST"
-uv run python scripts/check_compliance_mapping.py
-uv run pytest projects/agent-ops -q
+uv run pytest tests/test_documentation_set.py -q -k compliance   # the mapping; named a script nobody wrote until W-6
+uv run pytest projects/agent-ops -q                 # PENDING — Phase 6 not started
 ```
 
 `agent-ops` closes the loop: it consumes the other projects' telemetry, which is

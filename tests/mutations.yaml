@@ -2704,3 +2704,73 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_tracing.py
   expect: killed
+- id: W6-1
+  gates:
+  - P4
+  origin: W-6 — a plan command naming a missing path resolves
+  file: scripts/check_doc_coherence.py
+  old: "        if not (REPO_ROOT / path).exists():\n            missing.append(f\"names {path}, which does not exist\")"
+  new: "        if False:\n            missing.append(f\"names {path}, which does not exist\")"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_plan_acceptance.py
+  expect: killed
+- id: W6-2
+  gates:
+  - P4
+  origin: W-6 — a test file run as a script is accepted
+  file: scripts/check_doc_coherence.py
+  old: '        if test_file.is_file() and "__main__" not in _read(test_file):'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_plan_acceptance.py
+  expect: killed
+- id: W6-3
+  gates:
+  - P4
+  origin: W-6 — a PENDING marker that outlived its reason is accepted
+  file: scripts/check_doc_coherence.py
+  old: "            if not missing:\n                fail(\"C11\", f\"Phase {phase}, line {line}: `{command}` resolves now — remove its PENDING marker\")"
+  new: "            if False:\n                fail(\"C11\", f\"Phase {phase}, line {line}: `{command}` resolves now — remove its PENDING marker\")"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_plan_acceptance.py
+  expect: killed
+- id: W7-1
+  origin: W-7 — a plan deliverable without a status row passes
+  file: scripts/check_implementation_status.py
+  old: '    problems = [f"plan deliverable without a status row: {key!r}" for key in keys if key not in DELIVERABLES]'
+  new: '    problems: list[str] = []'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_status_components.py
+  expect: killed
+- id: W7-2
+  origin: W-7 — the deliverables map may name rows that do not exist
+  file: scripts/check_implementation_status.py
+  old: "        for name in rows\n        if name not in names\n"
+  new: "        for name in rows\n        if False\n"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_status_components.py
+  expect: killed
+- id: F28-1
+  origin: QA-4 F-28 — shadow sampling draws from the global stream `seed_everything` seeds
+  file: libs/llm-core/src/llm_core/controller.py
+  old: '        if rate >= 1.0 or (rate > 0.0 and self.shadow_sampler.random() < rate):'
+  new: '        if rate >= 1.0 or (rate > 0.0 and random.random() < rate):'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly libs/llm-core/tests/test_telemetry.py
+  expect: killed
+- id: F28-2
+  origin: QA-4 F-28 — retry jitter draws from the global stream
+  file: libs/llm-core/src/llm_core/tiers.py
+  old: '    return base + _JITTER.random() * policy.jitter * base'
+  new: '    return base + random.random() * policy.jitter * base'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly libs/llm-core/tests/test_tiers.py
+  expect: killed
+- id: F29-1
+  origin: QA-4 F-29 — the tracing endpoint is fixed when the module is imported
+  file: projects/demand-forecast/src/demand_forecast/tracing.py
+  old: '    target = endpoint or os.environ.get(ENDPOINT_VARIABLE, DEFAULT_ENDPOINT)'
+  new: '    target = endpoint or DEFAULT_ENDPOINT'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_tracing.py
+  expect: killed

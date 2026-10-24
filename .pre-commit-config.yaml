@@ -60,10 +60,13 @@ repos:
       # extend-exclude and `services/*` in [tool.coverage.run] omit. The
       # template's own CI applies these hooks at the source. The generated
       # tool surfaces are excluded for the reason at the top of this file.
+      # Fixtures under */tests/fixtures/ are excerpts of real third-party files
+      # kept byte for byte — a 10-K's SGML header ends its lines in tabs — so
+      # neither hook may rewrite them.
       - id: trailing-whitespace
-        exclude: '^(services|\.agents|\.claude|\.codex|\.cursor|\.devin)/'
+        exclude: '^(services|\.agents|\.claude|\.codex|\.cursor|\.devin)/|/tests/fixtures/'
       - id: end-of-file-fixer
-        exclude: '^(services|\.agents|\.claude|\.codex|\.cursor|\.devin)/'
+        exclude: '^(services|\.agents|\.claude|\.codex|\.cursor|\.devin)/|/tests/fixtures/'
       - id: check-yaml
         args: [--allow-multiple-documents]
         # Two scope corrections, both measured on a clean checkout of HEAD.

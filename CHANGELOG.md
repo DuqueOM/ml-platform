@@ -18,6 +18,30 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Fixed — the plan is held to the tree, both ways (W-6, W-7, W-11)
+
+- **Nothing read the plan's acceptance commands.** Phase 3 ran a test file as
+  a script, which executes no test; Phase 1 named a load test and a module that
+  do not exist. Coherence check C11 resolves every acceptance command's paths,
+  modules, `make` targets and `pytest -k` selectors, and accepts a command
+  that cannot resolve yet only when it says `PENDING` and why.
+- **The status document covered only the rows someone remembered.** Every plan
+  deliverable now maps to the rows that show it, and the status script refuses
+  to run while one does not. Eight deliverables had no row and four only part
+  of one; ten new rows make them visible, six of them absent.
+- **The chunker's known defect could never announce its fix.** Its `xfail`
+  test was deselected everywhere and needed a downloaded filing; it runs on
+  every build now, on a committed excerpt of a real 10-K.
+
+### Fixed — sampling leaves the seeded stream alone; tracing reads its endpoint late (F-28, F-29)
+
+- **Shadow sampling drew from the global `random`** that `seed_everything`
+  seeds, so which requests were shadowed depended on the last seed, and each
+  sample shifted the stream a seeded run reads. Retry jitter in the tier client
+  had the same defect. Each has its own generator now.
+- **The tracing endpoint was read at import**, so a variable set afterwards
+  was ignored. `configure_tracing` reads it when called.
+
 ### Changed — the project floors meet the library floors (W-15)
 
 - **`crossover.py` had no test**, and the store's tools, the backtest
