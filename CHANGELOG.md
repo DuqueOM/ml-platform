@@ -18,6 +18,24 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Security — MLflow 3.17.2 from ml-service-template v0.33.0, and filelock 4.2.4 (CVE-2026-53995, CVE-2026-112940)
+
+- **Two HIGH advisories published on 2026-10-24 failed the Trivy gate on every pull request, `main` included.**
+  `filelock` 3.32.2 (CVE-2026-112940, arbitrary file overwrite) is in `uv.lock`; it moves to 4.2.4, a lock-only
+  change whose dependents — virtualenv, DVC 3.67.1 through iterative-telemetry, python-discovery — import and run
+  on it. `mlflow` 3.16.1 (CVE-2026-53995, arbitrary file write through FileStore path traversal) was in the
+  generated service's training set.
+- **Fixed at its source, not accepted.** A fix had been published, and the template is ours, so a baseline
+  entry would only have shipped known exposure to every service generated from it. ml-service-template v0.33.0
+  moves the client to `mlflow ~= 3.17.2` and both tracking-server images to `v3.17.2`. The fix lives in the
+  server, which an upstream Dependabot bump had left at 3.16 while raising the client. A contract test there now
+  holds the client and every server to one version (#307). The template's own dependency scan had stopped
+  resolving when `ubuntu-latest` became ubuntu-26.04, and resolves on the service image's Python now (#308).
+- **The service is regenerated at v0.33.0**, after a v0.32.0 regeneration matched the committed service exactly
+  apart from the ignored `data/`. 19 files change: the MLflow pins and server image, plus the dependency updates
+  merged upstream since v0.32.0. The runbook moves to v0.33.0, and the update is recorded in the audit trail.
+  Trivy at CI's settings over `uv.lock` and the seven resolved serving sets reports nothing at HIGH or CRITICAL.
+
 ### Changed — dependency round, 2026-10-20 (Dependabot #127, #140–#144; #128 declined)
 
 - **One pull request for seven Dependabot proposals**, because the audit grace
