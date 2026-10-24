@@ -171,7 +171,7 @@ oversight.
 | Types | `uv run mypy libs/ scripts/ projects/demand-forecast/src/ projects/rag-assistant/src/ projects/store-assistant/src/ orchestration/` | `strict` applies to everything in scope, not only `libs/` — the per-module override that appeared to narrow it never did (mypy applies `strict` globally) |
 | Agentic surfaces stale | `uv run python scripts/sync_agentic_adapters.py --check` | A canonical body changed without re-rendering. Fix with `make sync`, never by editing a rendered file. Passing, it reports the artifact and surface counts it checked — 74 across 4 |
 | Agentic surface integrity | `uv run python scripts/validate_agentic_surface.py --strict` | V1–V6: missing surface, drifted mirror, policy text in a pointer, an unresolvable authority, or a **de-escalated mode**. V7: a skill or command not where Claude Code, Cursor or Codex looks, or copies one tool reaches twice that disagree. V8: nested discovery directories anywhere in the tree. A copy of a root skill fails, except under `services/`, where it is reported as inherited. A different skill under a root skill's name fails unless `V8_EXEMPT` records it |
-| Documentation coherence | `uv run python scripts/check_doc_coherence.py` | C1–C10; see the table below |
+| Documentation coherence | `uv run python scripts/check_doc_coherence.py` | C1–C11; see the table below |
 | Derived document stale | `uv run python scripts/check_implementation_status.py --check` | The committed table no longer matches the filesystem. Regenerate — never hand-edit |
 | Technology inventory stale | `uv run python scripts/check_technology_inventory.py --check` | Same, for detected technology use |
 | Cloud surface | `uv run python scripts/measure_cloud_surface.py --check` | The cloud-specific share of Terraform moved past its ceiling, or the report is stale. Needs a `terraform` binary, which is why it is not in `make verify` |
@@ -227,6 +227,7 @@ against absolute paths, examined **zero files**, and passed.
 | C8 | `CHANGELOG.md` has a non-empty `[Unreleased]` while commits accumulate | Write the entry |
 | C9 | Every copier command in a fenced block names a `--vcs-ref` | Pin it. Unpinned, copier resolves to the highest-sorting tag; upstream that destroyed a real service, deleting 582 files including the answers file it would have needed to recover |
 | C10 | Every link to a heading in a markdown file names a heading that exists, by GitHub's slug. Offline; links inside code are skipped | Point the link at the heading's current slug. The link checker cannot see anchors, so this is the only thing that will |
+| C11 | Every acceptance command in the technical plan resolves — its paths, `-m` modules, `make` targets and `pytest -k` selectors — or carries `PENDING` with its reason; a PENDING command that now resolves fails | Fix the command, or mark it PENDING with why. Never delete a target after missing it: that is how a plan stops being one |
 
 C6 and C9 scan **fenced blocks and tracked markdown**, including this file, so
 a command you document here is held to the same rule as one you run.

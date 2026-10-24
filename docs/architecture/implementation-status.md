@@ -88,9 +88,9 @@ how "we deploy to two clouds" goes unchallenged.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**48 done · 2 partial · 5 absent** — of 55 tracked components.
+**51 done · 3 partial · 11 absent** — of 65 tracked components.
 
-**Proven in CI: 37 at L1 · 11 at L2.** Evidence available but NOT run here: 4 at L3, 0 at L4.
+**Proven in CI: 39 at L1 · 12 at L2.** Evidence available but NOT run here: 5 at L3, 0 at L4.
 
 ### Phase 0
 
@@ -106,6 +106,7 @@ how "we deploy to two clouds" goes unchallenged.
 | ✅ | L2 | Lint + format | `uv run ruff check . && uv run ruff format --check .` passes |
 | ✅ | L2 | Type checking (libs, strict) | `uv run mypy libs/` passes |
 | ✅ | L2 | CI workflow | `uv run python scripts/check_ci_references.py` passes |
+| ⬜ | — | Path-filtered CI from the import graph (W-7) | absent |
 
 ### Phase 1
 
@@ -130,6 +131,14 @@ how "we deploy to two clouds" goes unchallenged.
 | ✅ | L1 | Orchestration DAGs (Airflow) | `uv run pytest tests/test_dags.py -q` passes |
 | ✅ | L1 | Observability (OTel traces) | `uv run pytest projects/demand-forecast/tests/test_tracing.py -q` passes · L3 evidence, not run here: `make local-up && uv run pytest tests/local/test_local_stack.py -q -m local` |
 | ✅ | L1 | Grafana LGTM dashboards | `uv run pytest tests/test_dashboards_structure.py -q` passes · L3 evidence, not run here: `make local-dashboards && uv run pytest tests/local/test_dashboards.py -q -m local` |
+| ⬜ | — | Historical backfill on serverless Spark (W-7) | absent |
+| ✅ | L1 | Model card (W-7) | `uv run pytest tests/test_project_contract.py -q -k "demand-forecast and P7"` passes |
+
+### Phase 1c
+
+| | Layer | Component | Evidence |
+| :-: | :-: | --- | --- |
+| 🟡 | — | Serving image on kind (W-7) | 2 file(s), no verification command — building the image and serving it need Docker and the kind cluster · L3 evidence, not run here: `make local-serve && uv run pytest tests/local/test_service_runs.py -q -m local` |
 
 ### Phase 1d
 
@@ -165,6 +174,9 @@ how "we deploy to two clouds" goes unchallenged.
 | ✅ | L1 | Kubernetes manifests | `uv run pytest tests/test_gitops_manifests.py -q -k overlay` passes · L3 evidence, not run here: `make local-serve && uv run pytest tests/local/test_service_runs.py -q -m local` |
 | ✅ | L1 | GitOps (ArgoCD) | `uv run pytest tests/test_gitops_manifests.py -q -k applicationset` passes |
 | ✅ | L1 | Admission policies | `uv run pytest tests/test_gitops_manifests.py -q -k default_deny` passes |
+| ✅ | L1 | External Secrets (W-7) | `uv run pytest tests/test_gitops_manifests.py -q -k external_secret` passes |
+| ⬜ | — | Edge protection with origin lock (W-7) | absent |
+| ⬜ | — | Ephemeral per-PR environments (W-7) | absent |
 
 ### Phase 3
 
@@ -173,6 +185,7 @@ how "we deploy to two clouds" goes unchallenged.
 | ✅ | L1 | libs/llm-core implementation | `uv run pytest libs/llm-core -q` passes |
 | ✅ | L1 | projects/store-assistant | `uv run pytest projects/store-assistant -q` passes |
 | ✅ | L1 | projects/rag-assistant | `uv run pytest projects/rag-assistant -q` passes |
+| ⬜ | — | LLM evaluation gate that blocks merge (W-7) | absent |
 
 ### Phase 4
 
@@ -191,6 +204,8 @@ how "we deploy to two clouds" goes unchallenged.
 | | Layer | Component | Evidence |
 | :-: | :-: | --- | --- |
 | ⬜ | — | projects/agent-ops | absent |
+| ⬜ | — | SLSA L3 provenance (W-7) | absent |
+| ✅ | L2 | Independent-audit staleness gate (W-7) | `uv run python scripts/check_doc_coherence.py --only C7` passes |
 
 <!-- END GENERATED -->
 
