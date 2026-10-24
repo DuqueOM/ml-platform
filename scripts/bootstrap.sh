@@ -247,9 +247,26 @@ report_tool docker   optional "the local stack and the service image cannot be b
 # fail very differently: an absent docker is obvious, an unreachable daemon
 # reports a connection error from inside `kind create cluster`, several minutes
 # in. This repository has already lost most of a session to it.
+#
+# Bounded, because a wedged daemon never answers: on 2026-10-20 Docker Desktop
+# stopped serving its API under WSL with the kind node still running, and
+# `docker info` hung inside its docker-ai CLI plugin — which held the status
+# generator, which runs this script, for its whole per-command limit.
+# `scripts/local/preflight.py` bounds the same probe for the same reason.
+DOCKER_PROBE_SECONDS="${BOOTSTRAP_DOCKER_PROBE_SECONDS:-30}"
 if command -v docker >/dev/null 2>&1; then
-  if docker info >/dev/null 2>&1; then
+  docker_status=0
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$DOCKER_PROBE_SECONDS" docker info >/dev/null 2>&1 || docker_status=$?
+  else
+    docker info >/dev/null 2>&1 || docker_status=$?   # no coreutils timeout (stock macOS): unbounded
+  fi
+  if (( docker_status == 0 )); then
     ok "$(printf '%-10s daemon reachable' 'docker')"
+  elif (( docker_status == 124 )); then
+    warn "$(printf '%-10s daemon NOT answering — no reply within %ss' 'docker' "$DOCKER_PROBE_SECONDS")"
+    note "Docker Desktop is wedged or still starting; restart it, then run this again"
+    MISSING_OPTIONAL+=("docker-daemon")
   else
     warn "$(printf '%-10s daemon NOT reachable — the binary is installed, nothing is listening' 'docker')"
     note "start Docker Desktop, or: sudo systemctl start docker"

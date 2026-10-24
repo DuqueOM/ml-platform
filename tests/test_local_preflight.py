@@ -174,3 +174,47 @@ def test_the_real_port_probe_sees_a_listening_socket() -> None:
         server.listen()
         port = server.getsockname()[1]
         assert preflight.occupied_ports([{"port": port, "service": "probe"}]) == [(port, "probe")]
+
+
+def test_a_running_cluster_counts_the_memory_it_holds_as_its_own(host, monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
+    """`make local-up` on a running stack counted the stack against itself and refused to re-apply.
+
+    The 400 MB declared does not fit in half of 500 MB available, but 400 MB
+    of that stack is already running inside the node: the machine is already
+    holding it, and half of 900 MB does.
+    """
+    host.update(memory=[500], clusters=f"{preflight.CLUSTER_NAME}\n")
+    monkeypatch.setattr(preflight, "cluster_usage_mb", lambda: 400)
+    assert _main(host, monkeypatch) == 0
+    assert "memory its node holds counts as available to it" in capsys.readouterr().out
+
+
+def test_without_a_cluster_nothing_is_credited(host, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    host.update(memory=[500])
+    monkeypatch.setattr(preflight, "cluster_usage_mb", lambda: 400)
+    assert _main(host, monkeypatch) == 1
+
+
+@pytest.mark.parametrize(
+    ("returncode", "stdout", "expected"),
+    [
+        (0, "1.418GiB / 9.712GiB\n", 1452),
+        (0, "512MiB / 9.712GiB\n", 512),
+        (0, "900KiB / 9.712GiB\n", 0),
+        (1, "", 0),
+        (0, "--\n", 0),
+    ],
+)
+def test_the_node_reading_is_parsed_and_an_unreadable_one_credits_nothing(
+    monkeypatch: pytest.MonkeyPatch, returncode: int, stdout: str, expected: int
+) -> None:
+    monkeypatch.setattr(preflight.subprocess, "run", lambda *_a, **_k: _Completed(returncode, stdout))
+    assert preflight.cluster_usage_mb() == expected
+
+
+def test_a_wedged_docker_stats_credits_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    def hang(argv: list[str], **_: Any) -> _Completed:
+        raise subprocess.TimeoutExpired(argv, preflight.PROBE_TIMEOUT_SECONDS)
+
+    monkeypatch.setattr(preflight.subprocess, "run", hang)
+    assert preflight.cluster_usage_mb() == 0
