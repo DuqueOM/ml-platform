@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
@@ -1342,7 +1342,7 @@ warehouse-validation = [
 [package.metadata]
 requires-dist = [
     { name = "data-contracts", editable = "libs/data-contracts" },
-    { name = "great-expectations", marker = "extra == 'warehouse-validation'", specifier = "~=1.23" },
+    { name = "great-expectations", marker = "extra == 'warehouse-validation'", specifier = "~=1.24" },
     { name = "joblib", specifier = "~=1.6" },
     { name = "kfp", marker = "extra == 'pipelines'", specifier = "~=2.11" },
     { name = "ml-core", editable = "libs/ml-core" },
@@ -2102,7 +2102,7 @@ wheels = [
 
 [[package]]
 name = "great-expectations"
-version = "1.23.2"
+version = "1.24.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "altair" },
@@ -2126,9 +2126,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "tzlocal" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5c/39/88c2f24b0c17b62571d0773fa03bcadbddde004be77676c9ba060fc0a7b5/great_expectations-1.23.2.tar.gz", hash = "sha256:c4781d99413a60f45e15febd70b5bb14a27dd8368d7f9b9f766b03eb64645a16", size = 36995637, upload-time = "2026-09-25T18:48:29.536Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/67/fe/0fd67f25cf5ca58f5035fc6241db24c138c5b27138312ae3c5043cc54c0f/great_expectations-1.24.1.tar.gz", hash = "sha256:d35f98a4a1ec27457b61a99ed194ad55eeabcd9c9677162dd2a5db853e9f2490", size = 37085005, upload-time = "2026-10-22T20:56:36.151Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/13/45/1b5ef5eb28e09ab4d223c77fa94f87d15326a9d36e0f3740c1f328df8803/great_expectations-1.23.2-py3-none-any.whl", hash = "sha256:2b8e3825e1695b5b6a3a5d85a8a225e5f3e1db37dbb6d1a381a28c7dc296101e", size = 5716039, upload-time = "2026-09-25T18:48:25.247Z" },
+    { url = "https://files.pythonhosted.org/packages/bb/6f/57cb807b762e106d85a6d140fc69bbdf6270eb098bbbb72e041265489dad/great_expectations-1.24.1-py3-none-any.whl", hash = "sha256:a6d57e0904e3aaf51839fcec7352b652881d20e5dbdf4aa731ffb8ee8f93ae13", size = 5747271, upload-time = "2026-10-22T20:56:33.33Z" },
 ]
 
 [[package]]
@@ -5417,7 +5417,7 @@ resolution-markers = [
     "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" } },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7a/97/5a3609c4f8d58b039179648e62dd220f89864f56f7357f5d4f45c29eb2cc/scipy-1.17.1.tar.gz", hash = "sha256:95d8e012d8cb8816c226aef832200b1d45109ed4464303e997c5b13122b297c0", size = 30573822, upload-time = "2026-02-23T00:26:24.851Z" }
 wheels = [
@@ -5502,7 +5502,7 @@ resolution-markers = [
     "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" } },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a7/25/c2700dfaf6442b4effaa91af24ebce5dc9d31bb4a69706313aae70d72cd0/scipy-1.18.0.tar.gz", hash = "sha256:67b2ad2ad54c72ca6d04975a9b2df8c3638c34ddd5b28738e94fc2b57929d378", size = 30774447, upload-time = "2026-06-19T15:01:43.456Z" }
 wheels = [
