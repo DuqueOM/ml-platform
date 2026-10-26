@@ -48,9 +48,9 @@ dev = [
     # quick start included, under a standard that requires a pinned version
     # (QA-4 round seventeen). Locked here, it is the version CI tests the
     # generator with, Dependabot moves it, and Trivy scans it.
-    "copier~=9.18",
+    "copier~=9.19",
     "mypy~=2.4",
-    "ruff~=0.16",
+    "ruff~=0.17",
     # Without stubs, every `import yaml` in scripts/ is an error under the
     # widened type gate — and silently untyped under the narrow one.
     "types-PyYAML~=6.0",
@@ -264,7 +264,7 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
-    "pre-commit>=4.6.2",
+    "pre-commit>=4.7.0",
 ]
 # DVC owns exactly one class of data (ADR-009): datasets with no authoritative
 # URL — generated, derived, curated or labelled here. Third-party downloads are
