@@ -35,7 +35,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install uv
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         # The interpreter is pinned by .python-version, not left to whatever
         # the runner image ships. Unpinned, CI resolved 3.12 while local
         # resolved 3.11, and mypy — told to parse as 3.11 — choked on numpy
@@ -330,7 +330,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install uv
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         # The interpreter is pinned by .python-version, not left to whatever
         # the runner image ships. Unpinned, CI resolved 3.12 while local
         # resolved 3.11, and mypy — told to parse as 3.11 — choked on numpy
@@ -560,7 +560,7 @@ jobs:
         # no credentials, so it runs while the cloud work is deliberately
         # paused. soft_fail on the FIRST run only — an unread wall of findings
         # is a gate people switch off, and the triage is a separate commit.
-        uses: bridgecrewio/checkov-action@6f26dc90000b74feb589a906cdfae540f5119895 # v12.3134.0
+        uses: bridgecrewio/checkov-action@c3e106d5f8f4253a6de5110efb41a080f83db294 # v12.3135.0
         with:
           directory: platform/
           framework: terraform,kubernetes
@@ -622,7 +622,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
 
       - name: Resolve the serving image's requirements for scanning
         # The image's requirements.txt pins with `~=`, which Trivy's pip
@@ -678,7 +678,7 @@ jobs:
           exit-code: "0"
           trivyignores: .security-baselines/.trivyignore
 
-      - uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+      - uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         if: ${{ !cancelled() }}
         with:
           sarif_file: trivy.sarif
