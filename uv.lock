@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
@@ -1344,7 +1344,7 @@ requires-dist = [
     { name = "data-contracts", editable = "libs/data-contracts" },
     { name = "great-expectations", marker = "extra == 'warehouse-validation'", specifier = "~=1.23" },
     { name = "joblib", specifier = "~=1.6" },
-    { name = "kfp", marker = "extra == 'pipelines'", specifier = "~=2.11" },
+    { name = "kfp", marker = "extra == 'pipelines'", specifier = "~=2.17" },
     { name = "ml-core", editable = "libs/ml-core" },
     { name = "opentelemetry-exporter-otlp-proto-grpc", marker = "extra == 'observability'", specifier = "~=1.45" },
     { name = "opentelemetry-sdk", marker = "extra == 'observability'", specifier = "~=1.45" },
@@ -2538,11 +2538,13 @@ wheels = [
 
 [[package]]
 name = "kfp"
-version = "2.17.0"
+version = "2.17.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
+    { name = "certifi" },
     { name = "click" },
     { name = "click-option-group" },
+    { name = "cryptography" },
     { name = "docstring-parser" },
     { name = "google-api-core" },
     { name = "google-auth" },
@@ -2550,33 +2552,35 @@ dependencies = [
     { name = "kfp-pipeline-spec" },
     { name = "kfp-server-api" },
     { name = "kubernetes" },
+    { name = "oauthlib" },
     { name = "protobuf" },
+    { name = "pyasn1" },
     { name = "pyyaml" },
     { name = "requests" },
     { name = "requests-toolbelt" },
     { name = "tabulate" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e9/e8/a14556188eb695055db4bfa7714ed84eb555637c97e4da77b67df573499b/kfp-2.17.0.tar.gz", hash = "sha256:92dd2fc0cca5b073f14860253e936cc9e6901f871dfae355be6a9f8ea9d580c5", size = 362373, upload-time = "2026-07-09T13:46:40.295Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/be/3a/e116ed607caf9546e5a2e04a72c932d41c41a4629364304ef8c565a5333b/kfp-2.17.3.tar.gz", hash = "sha256:43982a70c8b3f9c47a818f2946e4d0cb3a21ee59935163644939956b9e0793aa", size = 362751, upload-time = "2026-10-22T14:58:22.718Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e9/c6/eab3e5ed59497c09e0aca3f1cf0fc7c9c7ceaa05be0db620787355ffb351/kfp-2.17.0-py3-none-any.whl", hash = "sha256:dff321b76b2be8a09748a1be805a88699b4919e13bb6a1bf67ebf3074ea8ce3f", size = 477920, upload-time = "2026-07-09T13:46:38.614Z" },
+    { url = "https://files.pythonhosted.org/packages/23/1b/5d268b3e05fff0b6717cca6505254c677456f652ebd6c0ee8ac0b059a416/kfp-2.17.3-py3-none-any.whl", hash = "sha256:13f365673ba419efd8c90382b4a2bbac80a6702254c27e64ce4745ec8d4f7b47", size = 477973, upload-time = "2026-10-22T14:58:20.781Z" },
 ]
 
 [[package]]
 name = "kfp-pipeline-spec"
-version = "2.17.0"
+version = "2.17.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "protobuf" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/83/ba/61c1986a0724e146b745cac3006e4123dad6077084c5eeca43f5351d77ec/kfp_pipeline_spec-2.17.0.tar.gz", hash = "sha256:9ffe0a9a881d52ae867fd274d6b458a92d980bb368c15793d9f5e536c7f24521", size = 10621, upload-time = "2026-07-09T13:46:39.095Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7a/72/5c2c2c58533b3d667dc6d14cc69b11856542b6bcd840eb25b49a4e61c05c/kfp_pipeline_spec-2.17.3.tar.gz", hash = "sha256:b59d7efc2bcd3ee49cee85023a5280ae38e9f7825d09ac2167c8c0b130a4ea5a", size = 10643, upload-time = "2026-10-22T14:58:37.348Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b1/b3/15c2bf2a0063b1fe595cba12ce88e858a90861a166e966fc3d656a3ebbac/kfp_pipeline_spec-2.17.0-py3-none-any.whl", hash = "sha256:a2ae9f287ce69d72f2fc10a5dca30a5e32ab3b6975ad6ce9d4b54e0e02c54371", size = 9920, upload-time = "2026-07-09T13:46:38.132Z" },
+    { url = "https://files.pythonhosted.org/packages/11/b4/2ae078adda7f1bc4813530e42307aaff554db468d16828995e1de666e788/kfp_pipeline_spec-2.17.3-py3-none-any.whl", hash = "sha256:f0703cbf97891b6884a0230a1e72256367ccd03d8177581f6ed5b168fbfa1a64", size = 9921, upload-time = "2026-10-22T14:58:36.156Z" },
 ]
 
 [[package]]
 name = "kfp-server-api"
-version = "2.17.0"
+version = "2.17.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -2584,7 +2588,7 @@ dependencies = [
     { name = "six" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/4c/66/96e957346130828d5b8eaf9d3bea89fea5008680289c54f03be70cb745a3/kfp_server_api-2.17.0.tar.gz", hash = "sha256:12adfe269ca4758f01c687898f4471e786183e720fe5fa5aa4ad4fb0f3737d4f", size = 69867, upload-time = "2026-07-09T13:46:09.233Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ef/b2/8ad63c5f5e4efd6d31b934b2a9649bb72f9718495ccefbe9f9885e094671/kfp_server_api-2.17.3.tar.gz", hash = "sha256:bae229d12bfca09cb7992d0db6f89e4d0facbf274cd8d1597bb93a714dd4aa86", size = 69821, upload-time = "2026-10-22T14:57:48.151Z" }
 
 [[package]]
 name = "kombu"
@@ -5417,7 +5421,7 @@ resolution-markers = [
     "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" } },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7a/97/5a3609c4f8d58b039179648e62dd220f89864f56f7357f5d4f45c29eb2cc/scipy-1.17.1.tar.gz", hash = "sha256:95d8e012d8cb8816c226aef832200b1d45109ed4464303e997c5b13122b297c0", size = 30573822, upload-time = "2026-02-23T00:26:24.851Z" }
 wheels = [
@@ -5502,7 +5506,7 @@ resolution-markers = [
     "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" } },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/a7/25/c2700dfaf6442b4effaa91af24ebce5dc9d31bb4a69706313aae70d72cd0/scipy-1.18.0.tar.gz", hash = "sha256:67b2ad2ad54c72ca6d04975a9b2df8c3638c34ddd5b28738e94fc2b57929d378", size = 30774447, upload-time = "2026-06-19T15:01:43.456Z" }
 wheels = [
