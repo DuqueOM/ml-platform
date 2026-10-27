@@ -13,6 +13,7 @@ local-only, hybrid or all-remote, so these tests drive `load_usecase` through
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 from typing import Any
 
@@ -203,3 +204,25 @@ def test_missing_tier_zero_is_rejected(tmp_path: Path, monkeypatch: pytest.Monke
 
 
 # --- startup preflight ------------------------------------------------------
+
+
+def test_the_cap_holds_however_the_config_is_built(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The check lived in `load_usecase`, against the raw value: a config built any other way skipped it.
+
+    `UsecaseConfig.max_local_tiers` was therefore read by nothing
+    (`scripts/check_config_is_read.py`), and `dataclasses.replace` produced a
+    config two local tiers deep under a cap of one without complaint.
+    """
+    root = _write_usecase(
+        tmp_path,
+        monkeypatch,
+        {
+            0: {"url": "http://127.0.0.1:8091/v1", "kind": "local"},
+            1: {"url": "http://127.0.0.1:8092/v1", "kind": "local"},
+        },
+        limits={"max_local_tiers": 2},
+    )
+    config = load_usecase(root)
+
+    with pytest.raises(ValueError, match=r"limits\.max_local_tiers is 1"):
+        dataclasses.replace(config, max_local_tiers=1)

@@ -590,22 +590,17 @@ artifacts:
       this instance is not. Reverses the day a deploy workflow lands, in the payload or here, which Phase 2 and 3
       both imply.
   - path: scripts/check_config_is_read.py
-    status: pending
-    expires: 2026-12-31
+    status: adopted
     reason: >-
-      Decided to adopt, and measured before deciding rather than assumed either way. It catches the class where a
-      field is declared, loaded from YAML, validated, and read by NOTHING — a config that answers "where do my runs
-      go?" with a value that is not the answer, and the adopter cannot tell from the outside. Upstream found 24 of
-      51 fields in that state. The obvious rejection here is that this repository ships no `configs/` tree and no
-      pydantic settings class, and it is wrong: `libs/llm-core/src/llm_core/config.py` declares `UsecaseConfig`,
-      loaded from a use-case `config.yaml`, and that is the documented extension seam — a new domain is a new
-      `usecases/<name>/`, so the surface grows by design. Measured across 29 declared fields in 2 classes, ONE is
-      read by nothing outside the declaring module: `UsecaseConfig.language`. It is documented in the class
-      docstring as the ISO code of the customer-facing surface, it is loaded with a default of `en`, and
-      `projects/store-assistant/src/store_assistant/config.yaml` sets it to `es` — so a user who set the language
-      got no language. That is the upstream defect exactly, at one instance instead of twenty-four. Closes by
-      fixing `language` first, since a gate landing red teaches people to skip it, then porting the AST analysis
-      pointed at llm-core's config module with a ratchet on the unwired count.
+      Adopted, pointed at `libs/llm-core/src/llm_core/config.py` — `UsecaseConfig` and `PolicyRules`, loaded from a
+      use-case `config.yaml`, which is the documented extension seam, so the surface grows by design. The ledger's
+      earlier measurement said ONE of 29 fields was read by nothing (`language`); the ported gate, which counts an
+      attribute read and not a name, found three. `language` (set to `es` by store-assistant, read by nothing) now
+      decides which prompts a use-case must supply: a non-English use-case that leaves any prompt to llm-core's
+      English defaults is refused at construction. `max_local_tiers` was enforced in the loader from the raw value,
+      so the field was unread and a config built with `dataclasses.replace` skipped the cap; `UsecaseConfig` enforces
+      it on construction now. `root` names the file the language refusal tells the operator to fix. `UNWIRED` is
+      empty, and `tests/test_config_is_read.py` holds it to a ceiling of zero (R11-6).
   - path: docs/DIAGRAMS.md
     status: pending
     expires: 2026-12-31

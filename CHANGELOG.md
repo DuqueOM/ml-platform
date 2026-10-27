@@ -18,6 +18,27 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Fixed — a use-case's language decides what its customers can receive (R11-6)
+
+- **`language: es` changed nothing.** `UsecaseConfig.language` was loaded,
+  documented as the language of the customer-facing surface, and read by
+  nothing, so a Spanish use-case that omitted a prompt answered its customers
+  with llm-core's English default — *"Sorry, I can't process your request right
+  now"*. Every default is English, so a use-case in any other language must now
+  supply each one, and the agent refuses construction otherwise, naming the
+  prompts and the file to fix. A value that is not a language tag (`spanish`,
+  `es_CO`) fails at load instead of passing for "not English". store-assistant
+  supplies all five and is unchanged.
+- **`scripts/check_config_is_read.py`**, adopted from ml-service-template and
+  pointed at llm-core's config: a field declared and read by nothing outside
+  tests fails CI and `make verify`. It counts attribute reads, not names — the
+  upstream lesson — and found two fields the ledger's measurement had missed.
+  `max_local_tiers` was enforced in the loader from the raw value, so a config
+  built with `dataclasses.replace` skipped the resident-memory cap;
+  `UsecaseConfig` enforces it on construction now. `root` now names the file in
+  the language refusal. Nothing is left unwired, and a test holds that list to
+  a ceiling of zero. The parity ledger entry moves to `adopted`.
+
 ### Added — the compliance mapping is gated (quality gate C3, R16-2)
 
 - **`docs/COMPLIANCE_MAPPING.md` had gone stale in seven places at once.**
