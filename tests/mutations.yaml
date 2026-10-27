@@ -1265,18 +1265,18 @@ mutations:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_security_controls.py
   expect: killed
 - id: DEP2
-  origin: dependency round — the urllib3 security override removed
+  origin: dependency round — a security override lands without the entry the test holds it to (re-aimed 2026-10-27, when the urllib3 override it once removed was retired)
   file: pyproject.toml
-  old: override-dependencies = ["urllib3>=2.8.0"]
-  new: override-dependencies = []
+  old: '[tool.uv.sources]'
+  new: "override-dependencies = [\"urllib3>=2.8.0\"]\n\n[tool.uv.sources]"
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependency_overrides.py
   expect: killed
 - id: DEP3
   origin: dependency round — the pre-commit ruff hook drifts from the locked ruff
   file: .pre-commit-config.yaml
-  old: '    rev: v0.16.10'
-  new: '    rev: v0.16.1'
+  old: '    rev: v0.17.3'
+  new: '    rev: v0.17.2'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_tool_versions.py
   expect: killed
@@ -2639,6 +2639,62 @@ mutations:
   new: '    docker info >/dev/null 2>&1 || docker_status=$?'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_bootstrap_docker_probe.py -k wedged
+  expect: killed
+- id: DEP27-1
+  origin: dependency round 2026-10-27 — Dependabot may spend the whole audit grace again
+  file: scripts/dependabot_merge_budget.py
+  old: RESERVED = AUDIT_GRACE_COMMITS // 2
+  new: RESERVED = 0
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
+  expect: killed
+- id: DEP27-2
+  origin: dependency round 2026-10-27 — the budget is held to the whole grace, not the half Dependabot may spend
+  file: scripts/dependabot_merge_budget.py
+  old: '    if after > limit:'
+  new: '    if after > AUDIT_GRACE_COMMITS:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
+  expect: killed
+- id: DEP27-3
+  origin: dependency round 2026-10-27 — the budget counts against a marker the trail does not corroborate
+  file: scripts/check_doc_coherence.py
+  old: "    if reviewed and not _audit_trail_names(reviewed):\n        return None\n"
+  new: ''
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
+  expect: killed
+- id: DEP27-4
+  origin: dependency round 2026-10-27 — the budget counts against a marker off HEAD's history
+  file: scripts/check_doc_coherence.py
+  old: "    if drift == UNREACHABLE:\n        return None\n"
+  new: ''
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
+  expect: killed
+- id: DEP27-5
+  origin: 'dependency round 2026-10-27 — the budget is read from the pull request''s own code, in a job holding contents: write'
+  file: .github/workflows/dependabot-auto-merge.yml
+  old: '          ref: ${{ github.event.pull_request.base.ref }}'
+  new: '          ref: ${{ github.event.pull_request.head.sha }}'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
+  expect: killed
+- id: DEP27-6
+  origin: dependency round 2026-10-27 — the merge is queued whatever the budget says
+  file: .github/workflows/dependabot-auto-merge.yml
+  old: "          if uv run --locked --no-dev --package ml-platform python scripts/dependabot_merge_budget.py; then\n            gh pr merge --auto"
+  new: "          if true; then\n            gh pr merge --auto"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
+  expect: killed
+- id: DEP27-7
+  origin: dependency round 2026-10-27 — a merge queued while there was room is never unqueued
+  file: .github/workflows/dependabot-auto-merge.yml
+  old: "  push:\n    branches: [main]\n"
+  new: ''
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
   expect: killed
 - id: W15-1
   origin: W-15 — the crossover projection anchored on the smallest slice, which measures noise

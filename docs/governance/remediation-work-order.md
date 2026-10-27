@@ -1441,6 +1441,12 @@ lock change, and C7 refuses a separate fix as the eleventh unreviewed commit.
 The auditor's controls R19-K1 to R19-K4 were killed and join the catalogue with
 the remediation round, alongside the entries above.
 
+## Between rounds — found while landing a dependency round
+
+| ID | Finding | State |
+| --- | --- | --- |
+| DEP27-D1 | `libs/ml-core/pyproject.toml` declares duckdb and nothing in the tree imports it, while [ADR-004](../decisions/ADR-004-tooling-triage.md) places "DuckDB / Polars" at Core for the incremental path. `demand_forecast.ingest` and `demand_forecast.crossover` describe a "DuckDB/Polars" side they measure with Polars alone, and the technology inventory marks `duckdb` implemented because its only `detect` rule matches the declaration. A declared dependency is being counted as a technology in use, the defect class ADR-005 rule H names | Open, **CONSULT**: it moves an ADR-004 tier or adds a path. Either measure a DuckDB path in `crossover.py` beside Polars, or take duckdb out of Core in ADR-004, drop the declaration, and point the inventory's `detect` rule at an import. Found in the 2026-10-27 dependency round, which takes duckdb 2.0.0 because nothing calls it |
+
 ## Not for an agent
 
 Three items where doing the work autonomously would itself be the error,

@@ -157,7 +157,7 @@ repos:
   # `rev` is held to the ruff version uv.lock resolves — the one CI runs — by
   # the same test. It sat at v0.16.1 against a locked 0.16.9.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.10
+    rev: v0.17.3
     hooks:
       - id: ruff-check
         args: [--fix, --exit-non-zero-on-fix]

@@ -13,8 +13,20 @@ name: Dependabot auto-merge
 # merge and GitHub performs it only once Repository invariants, IaC and
 # Kubernetes security, Supply chain and Secret scan have all passed. If one
 # fails, the PR stays open with the failure attached.
+#
+# One addition upstream does not need: each merge is a commit of C7's
+# independent-audit grace, and Dependabot spent it with nobody choosing to —
+# #152 merged as the seventh of ten after round nineteen, and the remediation
+# waiting had to be cut to fit the three left. `scripts/dependabot_merge_budget.py`
+# asks C7's own count whether one more fits in the half of the window Dependabot
+# may spend; when it does not, the update waits open for the next batched
+# dependency round. It is asked again on every push to `main`, because `--auto`
+# waits for checks and `main` moves in the meantime: a merge queued while there
+# was room is unqueued once there is not.
 on:
   pull_request:
+  push:
+    branches: [main]
 
 permissions:
   contents: write        # queue the merge
@@ -23,15 +35,15 @@ permissions:
 jobs:
   auto-merge:
     name: Queue merge for non-major updates
-    # A bound, not a budget. Two API calls and no checkout: seconds, not
-    # minutes. Without it a hung step holds a runner for GitHub's six-hour
+    # A bound, not a budget: a checkout, uv and two API calls take well under
+    # a minute. Without it a hung step holds a runner for GitHub's six-hour
     # default while reporting nothing — and this job was the one that showed
     # the convention was not enforced anywhere (QA-4 round eleven bounded the
     # other eight by hand; nothing stopped the ninth from arriving unbounded).
     timeout-minutes: 5
     # Dependabot-authored PRs only. `github.actor` would also match a human
     # who pushed to a dependabot/* branch; the PR author does not.
-    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Read Dependabot's metadata
@@ -40,16 +52,71 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Queue auto-merge (patch, minor, digest)
+      - name: Check out main, not the pull request
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The base, so the budget is read by code the pull request cannot
+          # edit — this job holds `contents: write`.
+          ref: ${{ github.event.pull_request.base.ref }}
+          # C7 counts the commits since the audited one; a shallow clone
+          # cannot resolve it, and the budget then refuses.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install uv
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+
+      - name: Queue auto-merge (patch, minor, digest) while the audit grace has room
         if: steps.metadata.outputs.update-type != 'version-update:semver-major'
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
         run: |
-          gh pr merge --auto --squash "$PR_URL"
-          echo "::notice::Auto-merge queued (${{ steps.metadata.outputs.update-type }}). GitHub merges it when every required check passes."
+          if uv run --locked --no-dev --package ml-platform python scripts/dependabot_merge_budget.py; then
+            gh pr merge --auto --squash "$PR_URL"
+            echo "::notice::Auto-merge queued (${UPDATE_TYPE}). GitHub merges it when every required check passes."
+          else
+            # A rebase re-runs this job; an earlier run may have queued it.
+            if [ "$(gh pr view "$PR_URL" --json autoMergeRequest --jq '.autoMergeRequest != null')" = "true" ]; then
+              gh pr merge --disable-auto "$PR_URL"
+            fi
+            echo "::notice::Not queued: the audit grace Dependabot may spend is used (see the budget line above). It waits for the next batched dependency round."
+          fi
 
       - name: Leave majors for a human
         if: steps.metadata.outputs.update-type == 'version-update:semver-major'
         run: |
           echo "::notice::Major update — not auto-merged. A major asks whether a boundary should move, which CI cannot answer. Review it, or add an ignore entry with the reason."
+
+  unqueue:
+    name: Unqueue Dependabot merges the audit grace no longer has room for
+    timeout-minutes: 5
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+
+      - name: Unqueue every queued Dependabot merge once the budget is spent
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if uv run --locked --no-dev --package ml-platform python scripts/dependabot_merge_budget.py; then
+            exit 0
+          fi
+          gh pr list --app dependabot --state open --json number,autoMergeRequest \
+            --jq '.[] | select(.autoMergeRequest != null) | .number' |
+          while read -r number; do
+            gh pr merge --disable-auto "$number"
+            gh pr comment "$number" --body "Auto-merge withdrawn: \`main\` has used the part of the independent-audit grace Dependabot may spend (\`scripts/dependabot_merge_budget.py\`). This update waits for the next batched dependency round."
+            echo "::notice::Unqueued #${number}."
+          done
