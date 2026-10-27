@@ -174,6 +174,7 @@ oversight.
 | Documentation coherence | `uv run python scripts/check_doc_coherence.py` | C1–C11; see the table below |
 | Derived document stale | `uv run python scripts/check_implementation_status.py --check` | The committed table no longer matches the filesystem. Regenerate — never hand-edit |
 | Technology inventory stale | `uv run python scripts/check_technology_inventory.py --check` | Same, for detected technology use |
+| Compliance mapping (quality gate C3) | `uv run python scripts/check_compliance_mapping.py` | The derived-figures block in `docs/COMPLIANCE_MAPPING.md` is stale, a count in its prose disagrees with that block, a figure nothing can re-derive stands without its date (there, in `SECURITY.md` or in `docs/ADOPTION.md`), a sentence about a scanner contradicts `SECURITY.md`'s Blocking column, a CSF Category lost its row, or a `file::symbol` citation names nothing. Regenerate the block with `--write`, then reread the rows the moved figure supports — the gate holds figures, not verdicts |
 | Cloud surface | `uv run python scripts/measure_cloud_surface.py --check` | The cloud-specific share of Terraform moved past its ceiling, or the report is stale. Needs a `terraform` binary, which is why it is not in `make verify` |
 | CI references | `uv run python scripts/check_ci_references.py` | A workflow names a script that no longer exists — a step that stopped testing anything while staying green |
 | Clock isolation | `uv run python scripts/check_test_clock_isolation.py` | A test reads the wall clock, or production code hands git a bare `--since` date. Exemptions are reviewed, not silent — it reports how many it honoured |
@@ -316,8 +317,8 @@ alongside another `[C7]`-free failure, the suite reports it normally.
 
 ## The derived documents
 
-Three documents, and two blocks of the README, are generated from the
-repository and **must never be hand-edited**. Editing a tick into a status table does not make something true,
+Three documents, two blocks of the README, and one block of the compliance
+mapping are generated from the repository and **must never be hand-edited**. Editing a tick into a status table does not make something true,
 and the gate notices.
 
 | Document | Derived from | Regenerate | Check |
@@ -326,9 +327,11 @@ and the gate notices.
 | `docs/architecture/technology-inventory.md` | detected **use** of each declared technology | `uv run python scripts/check_technology_inventory.py --write` | `--check` |
 | `docs/architecture/cloud-surface.md` | the ratio of cloud-specific to cloud-agnostic Terraform | `uv run python scripts/measure_cloud_surface.py --write` | `--check` |
 | `README.md` — the status block and the related-repositories table | the implementation status, the audit marker in `AGENTS.md`, the committed QA-4 reports, and [the README standard](docs/governance/readme-standard.md) | `uv run python scripts/check_readme.py --write` | no flag |
+| `docs/COMPLIANCE_MAPPING.md` — the derived-figures block | the agentic store, the ADR index, the gate table, the implementation status, `SECURITY.md`'s controls table, `.security-baselines/`, the workflows and the branch-protection script | `uv run python scripts/check_compliance_mapping.py --write` | no flag |
 
-`make sync` runs the first two and the README together with the agentic
-re-render — the README last, because its status is read from the first. Recording
+`make sync` runs the first two, the README and the compliance mapping together
+with the agentic re-render — the README and the mapping last, because both read
+the first. Recording
 an audit changes the README too: its status names the latest round. The third
 is a separate call because it needs a `terraform` binary — it reports the split
 it measured (run here: 183 of 268 significant lines cloud-specific, 85 shared,

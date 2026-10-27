@@ -642,19 +642,26 @@ def _measured_paths(text: str) -> list[str]:
     return missing
 
 
+def agentic_counts(root: Path = AGENTIC) -> dict[str, int]:
+    """Rules, skills and workflows on disk — the one way they are counted.
+
+    Shared with `check_compliance_mapping.py`, which quotes these counts, so a
+    document and this check cannot count the same directory two ways.
+    """
+    return {
+        "rules": len(list((root / "rules").glob("*.md"))) if (root / "rules").is_dir() else 0,
+        "skills": len([p for p in (root / "skills").glob("*") if p.is_dir()]) if (root / "skills").is_dir() else 0,
+        "workflows": len(list((root / "workflows").glob("*.md"))) if (root / "workflows").is_dir() else 0,
+    }
+
+
 def check_agentic_surface() -> None:
     """C5 — the agentic surface counts stated in AGENTS.md match the filesystem."""
     if not AGENTIC.is_dir():
         fail("C5", "agentic/ does not exist")
         return
 
-    counts = {
-        "rules": len(list((AGENTIC / "rules").glob("*.md"))) if (AGENTIC / "rules").is_dir() else 0,
-        "skills": len([p for p in (AGENTIC / "skills").glob("*") if p.is_dir()])
-        if (AGENTIC / "skills").is_dir()
-        else 0,
-        "workflows": len(list((AGENTIC / "workflows").glob("*.md"))) if (AGENTIC / "workflows").is_dir() else 0,
-    }
+    counts = agentic_counts()
     ok("C5", f"agentic surface: {counts['rules']} rules, {counts['skills']} skills, {counts['workflows']} workflows")
 
     for skill_dir in sorted(p for p in (AGENTIC / "skills").glob("*") if p.is_dir()):

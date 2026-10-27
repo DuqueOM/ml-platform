@@ -128,7 +128,7 @@ Evaluated before promotion, never after.
 | C0 | Version consistent across every location | `uv run python scripts/check_version_consistency.py` | All 5 agree · a half-applied bump ships correct release notes with a stale entry point |
 | C1 ⏳ | Provenance attested | `cosign verify-attestation --type slsaprovenance` | SLSA L3 · **PENDING — same reason as S4: no image, no provenance to attest** |
 | C2 ⏳ | SBOM published per image | `scripts/check_sbom.py` | Present and attested · **PENDING — Phase 3 (needs images to bill of materials)** |
-| C3 ⏳ | Compliance mapping current | `scripts/check_compliance_mapping.py` | Every control mapped · a self-assessment nothing regenerates drifts toward optimism, and the drift is invisible because the document keeps reading as coverage · **PENDING — Phase 3** |
+| C3 | Compliance mapping current | `uv run python scripts/check_compliance_mapping.py` | All 22 CSF 2.0 Categories mapped, every derived figure current, no quoted count or scanner claim contradicting the tree · a self-assessment nothing regenerates drifts — this one went stale in seven places at once, all understating the controls — and the drift is invisible because the document keeps reading as coverage |
 | C4 ⏳ | Model cards current | `scripts/check_model_cards.py` | One per deployed model, matching the deployed version · **PENDING — Phase 2 (needs a trained model)** |
 
 ---

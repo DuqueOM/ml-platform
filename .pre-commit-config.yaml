@@ -279,6 +279,17 @@ repos:
         pass_filenames: false
         files: '\.md$'
 
+      - id: compliance-mapping
+        name: compliance mapping states what the tree supports (quality gate C3)
+        description: >
+          Regenerated figures, prose counts and scanner claims held to them,
+          and undated measurements refused. Under a second; every input it
+          derives a figure from triggers it.
+        entry: uv run python scripts/check_compliance_mapping.py
+        language: system
+        pass_filenames: false
+        files: '^(docs/COMPLIANCE_MAPPING\.md|SECURITY\.md|docs/ADOPTION\.md|agentic/|docs/decisions/|docs/governance/quality-gates\.md|docs/architecture/implementation-status\.md|\.security-baselines/|\.github/workflows/|scripts/(setup_branch_protection\.sh|check_compliance_mapping\.py))'
+
       - id: yaml-whole-tree
         name: YAML parses across the repository
         description: >

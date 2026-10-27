@@ -63,6 +63,7 @@ verify: ## Run every repository gate (superset of CI's; see RUNBOOK for what it 
 	uv run python scripts/check_technology_inventory.py --check
 	uv run python scripts/check_implementation_status.py --check
 	uv run python scripts/check_readme.py
+	uv run python scripts/check_compliance_mapping.py
 	@# The suite, measured exactly as CI measures it: one run, then every
 	@# coverage floor. A single run, so the floors cost the tracing overhead
 	@# rather than a second pass of the suite.
@@ -78,6 +79,7 @@ sync: ## Re-render agentic surfaces and refresh derived docs
 	uv run python scripts/check_contract_deviations.py --write
 	uv run python scripts/check_implementation_status.py --write
 	uv run python scripts/check_readme.py --write
+	uv run python scripts/check_compliance_mapping.py --write
 
 # --- local validation stack (Phase 1b) --------------------------------------
 

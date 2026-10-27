@@ -87,13 +87,18 @@ every commit.
 
 ### Where the gaps are, stated rather than implied
 
-**Checkov reports and does not block.** It currently finds 114 failures under
-`platform/` — roughly 36 of them a scan-scope artifact, because the overlay
+**Checkov reports and does not block.** On 2026-10-09, at `331a495`, CI's
+Checkov (3.3.22) reported 104 failed checks under `platform/` — 13 Terraform,
+91 Kubernetes. 58 of the Kubernetes ones are a scan-scope artifact: the overlay
 patches are strategic merges and Checkov reads each raw file as if it were a
-complete Deployment. The rest are real: the Terraform for both clouds lacks
+complete Deployment, and reads a resource whose namespace the overlay sets as if
+it ran in `default`. The rest are real. The Terraform for both clouds lacks
 private nodes, master authorized networks, network policy, binary
-authorization, and EKS secrets encryption. Those are Phase 2 work and are
-tracked there. Turning `soft_fail` off before they are fixed would produce a
+authorization, and EKS secrets encryption; the local stack's manifests lack CPU
+limits, read-only root filesystems and liveness probes, and mount service-account
+tokens they do not use; the base Deployment reads a secret as an environment
+variable and names its image by tag. `docs/COMPLIANCE_MAPPING.md` carries the
+breakdown. Those are Phase 2 work and are tracked there. Turning `soft_fail` off before they are fixed would produce a
 permanently red build, which is how a gate gets deleted.
 
 **Trivy does not scan for IaC misconfiguration.** `scan-type: fs` runs the

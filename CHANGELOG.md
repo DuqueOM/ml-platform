@@ -18,6 +18,36 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Added — the compliance mapping is gated (quality gate C3, R16-2)
+
+- **`docs/COMPLIANCE_MAPPING.md` had gone stale in seven places at once.**
+  Checked by nothing since 2026-08-08, it said Bandit ran in no workflow, Trivy
+  could not fail a build, branch protection required two of four jobs, C7 was
+  red at a commit count two months old, and quoted audit-trail and ADR sizes
+  the tree had outgrown. Every one understated the controls. The rows are
+  re-verified against the tree: GV.OV, GV.SC, ID.RA, ID.IM, PR.AA, PR.PS,
+  DE.CM, RS.MA and RC.RP are rewritten, the verdicts hold at 3 Satisfied,
+  14 Partial and 5 Not satisfied, and the stale notice is gone because nothing
+  it listed is still true.
+- **`scripts/check_compliance_mapping.py`**, the gate quality-gates C3 had
+  reserved since Phase 1. It derives every figure the mapping rests on into a
+  generated block (`--write`), holds the prose's counts to that block, refuses
+  a measurement nothing here can re-derive — a Checkov count, C7's commit
+  count, the audit trail's length — unless its paragraph carries the date it
+  was measured on, checks every sentence about whether a scanner blocks
+  against `SECURITY.md`'s Blocking column, requires one row and one verdict
+  for each of CSF 2.0's 22 Categories with a summary that agrees, and resolves
+  every `file::symbol` citation. In CI's fast gates, `make verify`, `make sync`
+  and pre-commit; C3 is no longer ⏳ PENDING.
+- **The Checkov count was wrong in three documents, and undated in all of
+  them.** `SECURITY.md` said it "currently finds 114"; CI's Checkov reported
+  104 on 2026-10-09. The figure is now dated everywhere it appears, and the
+  "rest are real gaps in both clouds' Terraform" claim is corrected: 58 of the
+  91 Kubernetes findings are scan-scope artifacts, and most of the real ones
+  are on the local stack's manifests, not the cloud Terraform.
+- `check_doc_coherence.agentic_counts()` is the one way rules, skills and
+  workflows are counted, shared by check C5 and the mapping's figures.
+
 ### Fixed — the plan is held to the tree, both ways (W-6, W-7, W-11)
 
 - **Nothing read the plan's acceptance commands.** Phase 3 ran a test file as

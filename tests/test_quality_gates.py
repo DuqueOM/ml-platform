@@ -10,7 +10,8 @@ regressions rather than described in a commit message nobody re-reads:
   a compliance citation resolve to two thresholds, which is to say neither.
 * Row C3's justification was `**PENDING — Phase 3**`, a schedule standing in
   for a reason. The threshold is the part someone will be tempted to lower, and
-  "Phase 3" is no argument against doing so.
+  "Phase 3" is no argument against doing so. (C3 is implemented since; the
+  probe plants the same shape in C2.)
 
 The third finding is a hole rather than a defect and is asserted last:
 `tests/test_project_contract.py` SKIPS a project listed in `KNOWN_DEVIATIONS`,
@@ -135,24 +136,25 @@ def test_a_duplicate_gate_id_fails() -> None:
 def test_a_phase_marker_is_not_accepted_as_a_threshold_reason() -> None:
     """Row C3's original justification, which said WHEN and never WHY.
 
-    The four other pending compliance rows each give a real reason inside their
-    PENDING marker, which is why this is a reachable standard rather than a rule
+    C3 is implemented now (R16-2), so the probe plants the same shape in C2,
+    which is still pending: its marker gives a reason — no image, no bill of
+    materials — and stripped to the bare phase it must fail exactly as C3's
+    did. The other pending rows each give a real reason inside their PENDING
+    marker, which is why this is a reachable standard rather than a rule
     invented to fail one row.
     """
     original = TABLE.read_text(encoding="utf-8")
     reverted = original.replace(
-        "Every control mapped · a self-assessment nothing regenerates drifts toward optimism, "
-        "and the drift is invisible because the document keeps reading as coverage · "
-        "**PENDING — Phase 3**",
-        "Every control mapped · **PENDING — Phase 3**",
+        "Present and attested · **PENDING — Phase 3 (needs images to bill of materials)**",
+        "Present and attested · **PENDING — Phase 3**",
     )
-    assert reverted != original, "the probe did not apply — row C3 was rewritten"
+    assert reverted != original, "the probe did not apply — row C2 was rewritten"
 
     with temporarily(TABLE, reverted):
         result = _run()
 
     assert result.returncode == 1
-    assert "gate C3 gives a phase where a reason belongs" in result.stdout
+    assert "gate C2 gives a phase where a reason belongs" in result.stdout
 
 
 def test_a_row_with_no_recorded_reason_fails() -> None:
@@ -279,3 +281,41 @@ def test_the_probes_left_no_residue() -> None:
         check=True,
     )
     assert "evals/gates.yaml" not in status.stdout, "the deviated-project probe was left behind"
+
+
+#: Gates whose command is a tool CI runs under its own name, rather than a
+#: script or a test file here.
+_TOOLS = ("mypy", "ruff", "gitleaks", "uv lock", "pytest")
+
+
+def test_every_implemented_gate_runs_in_a_workflow() -> None:
+    """A gate whose command no workflow runs is a row that cannot fail a build.
+
+    `make verify` is checked against CI by `tests/test_verify_parity.py` in one
+    direction only — every CI command is in `make verify` — so a gate removed
+    from CI and left in the Makefile still read as enforced. A script gate must
+    be named in a workflow; a test-file gate runs in CI's suite, which collects
+    `tests/` and every project's tests; a tool gate's tool must be invoked.
+    """
+    workflows = "\n".join(
+        path.read_text(encoding="utf-8") for path in (REPO_ROOT / ".github" / "workflows").glob("*.yml")
+    )
+    rows = re.finditer(
+        r"^\| ([A-Z]\d+)( ⏳| ⚠️)? \| [^|]+ \| `([^`]+)`", TABLE.read_text(encoding="utf-8"), re.MULTILINE
+    )
+    unrun = []
+    for row in rows:
+        if row.group(2):
+            continue
+        gate, command = row.group(1), row.group(3)
+        script = re.search(r"scripts/[\w/]+\.(?:py|sh)", command)
+        test = re.search(r"(?:projects/[\w-]+/)?tests/[\w/]+\.py", command)
+        if script:
+            ran = script.group(0) in workflows
+        elif test:
+            ran = (REPO_ROOT / test.group(0)).is_file() and "pytest" in workflows
+        else:
+            ran = any(tool in command and tool in workflows for tool in _TOOLS)
+        if not ran:
+            unrun.append(f"{gate}: {command}")
+    assert not unrun, f"implemented gates no workflow runs: {unrun}"

@@ -38,6 +38,7 @@ GATES = {
     "implementation-status": SCRIPTS / "check_implementation_status.py",
     "agentic-sync": SCRIPTS / "sync_agentic_adapters.py",
     "agentic-surface": SCRIPTS / "validate_agentic_surface.py",
+    "compliance-mapping": SCRIPTS / "check_compliance_mapping.py",
 }
 
 
@@ -247,6 +248,7 @@ def test_gate_script_exists_and_is_executable_python(name: str) -> None:
         ("implementation-status", ("--check",)),
         ("agentic-sync", ("--check",)),
         ("agentic-surface", ("--strict",)),
+        ("compliance-mapping", ()),
     ],
 )
 def test_gate_passes_on_the_current_repository(name: str, args: tuple[str, ...]) -> None:

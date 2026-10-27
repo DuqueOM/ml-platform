@@ -582,7 +582,9 @@ COMPONENTS: list[Component] = [
         # exist — so this row read ⬜ absent while a 337-line NIST CSF 2.0
         # self-assessment sat at `docs/COMPLIANCE_MAPPING.md`. Three names for
         # one artifact: the plan used a third, and gate C3 named a
-        # `check_compliance_mapping.py` nobody wrote. A derived document
+        # `check_compliance_mapping.py` nobody wrote (written since, R16-2 —
+        # deliberately not this row's evidence: it reads the document this
+        # script generates, so it would verify the status against itself). A derived document
         # asserting absence about something present is the defect it exists to
         # prevent, and it survived three audits.
         ["docs/COMPLIANCE_MAPPING.md"],
