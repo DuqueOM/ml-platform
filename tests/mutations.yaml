@@ -2774,3 +2774,115 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_tracing.py
   expect: killed
+- id: R16-2a
+  gates:
+  - C3
+  origin: R16-2 — a stale derived-figures block passes
+  file: scripts/check_compliance_mapping.py
+  old: '    elif _replace(text, render(figures)) != text:'
+  new: '    elif False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_compliance_mapping.py -k "stale_derived_block"
+  expect: killed
+- id: R16-2b
+  gates:
+  - C3
+  origin: R16-2 — a count quoted in the prose is not held to the derived one
+  file: scripts/check_compliance_mapping.py
+  old: '            if match.group(1) != figures[key]:'
+  new: '            if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_compliance_mapping.py -k "quoted_count"
+  expect: killed
+- id: R16-2c
+  gates:
+  - C3
+  origin: R16-2 — an undated measurement is accepted
+  file: scripts/check_compliance_mapping.py
+  old: '        if _ISO_DATE.search(paragraph):'
+  new: '        if True:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_compliance_mapping.py -k "undated"
+  expect: killed
+- id: R16-2d
+  gates:
+  - C3
+  origin: R16-2 — SECURITY.md and ADOPTION.md quote the Checkov count undated again
+  file: scripts/check_compliance_mapping.py
+  old: '    for document in QUOTE_THE_SAME_MEASUREMENTS:'
+  new: '    for document in ():'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_compliance_mapping.py -k "quoting_the_same"
+  expect: killed
+- id: R16-2e
+  gates:
+  - C3
+  origin: R16-2 — a claim is attributed to every scanner in its sentence
+  file: scripts/check_compliance_mapping.py
+  old: '            stop = min(stop, mentions[index + 1].start())'
+  new: '            stop = stop'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_compliance_mapping.py -k "attributed or true_and_past"
+  expect: killed
+- id: R16-2f
+  gates:
+  - C3
+  origin: R16-2 — a summary that disagrees with the rows passes
+  file: scripts/check_compliance_mapping.py
+  old: '        if actual != stated:'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_compliance_mapping.py -k "summary_that_disagrees"
+  expect: killed
+- id: R16-2g
+  gates:
+  - C3
+  origin: R16-2 — a cited symbol that does not exist passes
+  file: scripts/check_compliance_mapping.py
+  old: '        if not re.search(rf"^\s*(?:async\s+def|def|class)\s+{re.escape(name)}\b", source, re.MULTILINE):'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_compliance_mapping.py -k "symbol_that_does_not_exist"
+  expect: killed
+- id: R16-2h
+  gates:
+  - C3
+  origin: R16-2 — an aggregator that needs a job without asserting its result counts as waiting on it
+  file: scripts/check_compliance_mapping.py
+  old: '        covered.update(dependency for dependency in needs if f"needs.{dependency}.result" in body)'
+  new: '        covered.update(needs)'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_compliance_mapping.py -k "aggregator"
+  expect: killed
+- id: R16-2i
+  gates:
+  - C3
+  origin: R16-2 — a comment mentioning cosign counts as an image step
+  file: scripts/check_compliance_mapping.py
+  old: '            line for line in str(step.get("run", "")).splitlines() if not line.lstrip().startswith("#")'
+  new: '            line for line in str(step.get("run", "")).splitlines()'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_compliance_mapping.py -k "image_step"
+  expect: killed
+- id: R16-2j
+  gates:
+  - C3
+  origin: R16-2 — make verify stops running the compliance-mapping gate
+  file: Makefile
+  old: "\tuv run python scripts/check_compliance_mapping.py\n\t@#"
+  new: "\t@#"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_verify_parity.py
+  expect: killed
+- id: R16-2k
+  origin: R16-2 — CI stops running the compliance-mapping gate while make verify still does
+  file: .github/workflows/ci.yml
+  old: '        run: uv run python scripts/check_compliance_mapping.py
+
+    '
+  new: '        run: ''true''
+
+    '
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_quality_gates.py -k runs_in_a_workflow
+  expect: killed

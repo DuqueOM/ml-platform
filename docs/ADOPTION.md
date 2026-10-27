@@ -82,10 +82,11 @@ anything. The sequencing constraint in the technical plan says it will not
 until everything else is finished, and that is a deliberate choice about where
 discovery happens, not an oversight.
 
-**Checkov reports and does not block.** 114 findings under `platform/`, roughly
-36 of them a scan-scope artifact and the rest real gaps in both clouds'
-Terraform — no private nodes, no master authorized networks, no network policy,
-no binary authorization, no EKS secrets encryption. `SECURITY.md` lists which
+**Checkov reports and does not block.** On 2026-10-09 CI's Checkov reported
+104 failed checks under `platform/`, 58 of them a scan-scope artifact. The rest
+are real: gaps in both clouds' Terraform — no private nodes, no master
+authorized networks, no network policy, no binary authorization, no EKS secrets
+encryption — and in the local stack's manifests, which `SECURITY.md` lists. `SECURITY.md` lists which
 controls block and which are advisory, and a test compares that table against
 the workflows on every commit.
 

@@ -8,42 +8,20 @@ a *Current Profile*: a statement of where the repository stands today, produced
 by the people responsible for it, which is the least independent form of
 evidence there is.
 
-> **Stale in known places — dated 2026-10-06, tracked as R16-2.** Most of
-> this profile was written against the tree of 2026-08-08, and nothing
-> generates or gates it (see [Maintenance](#maintenance)). QA-4 round sixteen
-> found PR.PS still saying no cluster had been observed enforcing the
-> NetworkPolicies, after #105 had observed it; PR.PS and PR.IR are corrected.
-> Reading the rest for that correction found these statements no longer
-> true, each checked against the tree on that date:
->
-> - Bandit "invoked by no workflow" (ID.RA, and the opening section): CI runs
->   it, blocking, over `libs/ scripts/ projects/ orchestration/`.
-> - Trivy "cannot fail a build", `exit-code: "0"` (the section on controls
->   that did not hold, and "What would move a verdict" item 2): it blocks on
->   HIGH and CRITICAL, and a coverage check fails a scan that skipped part of
->   `uv.lock` (round sixteen, P1).
-> - `.security-baselines/` "holds zero entries" (ID.RA): on 2026-10-07 it holds
->   Trivy's accepted findings, each with an owner and an expiry; the Checkov
->   and tfsec baselines are empty. (This line first said all three held
->   entries — QA-4 round seventeen found that false and it is corrected here.)
-> - Branch protection "requires two of four CI jobs" (the closing caveats): PR.AA
->   in this same document records all four as required.
-> - C7 "red at 37 commits" (GV.OV, the opening section, the re-derive list) and
->   "55 audit entries" (ID.IM, the re-derive list): QA-4 rounds have been
->   recorded since, each in `docs/governance/qa4/` and in `ops/audit.jsonl`,
->   whose `--verify` gives the current count.
-> - "9 ADRs" (the re-derive list): `docs/decisions/` holds more since; its index
->   is the count.
->
-> Each of these understates the controls rather than overstating them, so no
-> verdict here is more favourable than the tree supports. That is a reason to
-> fix them, not to leave them: an adopter reading this document gets a false
-> picture either way.
+Every figure this document rests on is generated, not typed — see
+[Figures, derived from the tree](#figures-derived-from-the-tree) — and gate C3,
+`scripts/check_compliance_mapping.py`, fails CI when that block is stale, when
+a count quoted in the prose disagrees with it, when a figure that cannot be
+derived appears without the date it was measured on, or when a sentence about
+whether a scanner blocks contradicts `SECURITY.md`'s Blocking column, which is
+itself checked against every workflow step. The rows are argued rather than
+generated: they were last re-verified against the tree on 2026-10-09 (R16-2),
+and the gate holds their figures, not their judgement.
 
 If you are evaluating this platform for adoption, read this document as an
 argued claim you should spot-check, not as a result. Every row names a file, a
 gate, or a test, precisely so that you can check it. The commands to re-derive
-every number are in [How to re-derive every number here](#how-to-re-derive-every-number-here).
+every figure are in [Figures, derived from the tree](#figures-derived-from-the-tree).
 
 ## Why this document exists in this form
 
@@ -51,7 +29,7 @@ When `SECURITY.md` was first committed (`71d6e12`), its controls table opened by
 asserting that every item below it was a step in `ci.yml` that failed the build.
 **That was false for four of its six rows**: Checkov ran with `soft_fail`,
 Kubescape with `continue-on-error`, Bandit was configured in `pyproject.toml`
-and invoked by no workflow, and tfsec appeared nowhere. The correction landed an
+and no workflow ran it, and tfsec appeared nowhere. The correction landed an
 hour later in `0bf9fff`, together with the thing that caught it —
 `tests/test_security_controls.py`, which compares each row against the workflows
 on every commit.
@@ -77,27 +55,38 @@ Nothing in this document should be read without these. They are stated in
 consistent with them.
 
 **Zero components have ever run in a cloud.** `docs/architecture/implementation-status.md`
-prints **0 at L4** — L4 being "a real rollout on GKE or EKS". The Terraform for
+shows **0 at L4** — L4 being "a real rollout on GKE or EKS". The Terraform for
 GKE and EKS renders and validates offline and has never provisioned anything.
 Every control about operating a system in production is therefore unproven here,
 however well it is written down. Where a row's evidence is a manifest or a
 Terraform file, it proves what is *declared*, never what *runs*.
 
 **Checkov reports and does not block.** Its CI step carries `soft_fail: true`.
-Re-run for this document, it reports **115 failed checks** under `platform/`
-(14 Terraform, 101 Kubernetes). `SECURITY.md` and `docs/ADOPTION.md` state 114;
-the one-finding difference is most likely a scanner-version difference between
-the local binary and the pinned action, and it was not chased. `SECURITY.md`
-attributes roughly 36 of the findings to a scan-scope artifact — Checkov reads
-each overlay patch as if it were a complete Deployment — and states that the
-rest are real gaps in both clouds' Terraform.
+On 2026-10-09, at `331a495`, CI's Checkov (3.3.22, from the pinned
+`bridgecrewio/checkov-action`) reported 104 failed checks under `platform/`:
+13 Terraform, 91 Kubernetes. A local checkov 3.3.10 run the same day agreed on
+the Kubernetes count and reported one more Terraform finding, and it is the
+source of this breakdown: 58 of the 91 are a scan-scope artifact — Checkov reads
+each overlay patch (the six cloud `replicas.yaml` patches and the local
+overlay's `local-runtime.yaml`) as a complete Deployment, and each resource
+that leaves its namespace to the overlay's kustomization as if it ran in
+`default`. The remaining 33 Kubernetes
+findings are real: 29 on the local stack's manifests under
+`platform/local/manifests/` (no CPU limits, writable root filesystems, mounted
+service-account tokens, missing liveness probes) and 4 on the base Deployment
+(no image digest, a secret read as an environment variable, a mounted token,
+the pull policy). The Terraform findings are the gaps `SECURITY.md` names in
+both clouds — private nodes, master authorized networks, network policy, binary
+authorization, EKS secrets encryption.
 
-**The independent-audit gate is currently red.** Check C7 in
-`scripts/check_doc_coherence.py` fails: 37 commits have landed since the audit
-marker dated 2026-08-08, against a grace of 10. This bounds the credibility of
-this document specifically. The one mechanism this repository has for catching a
-claim its author believed is, right now, reporting that it has lapsed — and this
-document is exactly the kind of artifact that mechanism exists to check.
+**The only independent review is an audit by a separate session.** QA-4 runs in
+a session apart from the work, so its findings are not self-review; its rounds
+are recorded in `docs/governance/QA-4-independent-audit.md`, and from round
+twelve each report is committed verbatim under `docs/governance/qa4/`. Check C7 in `scripts/check_doc_coherence.py` fails CI
+when more than ten commits land after the latest round's marker, so oversight
+cannot lapse silently. But the auditor is tooling the maintainer runs, not a
+party independent of the maintainer, and no external party has reviewed
+anything here. This bounds the credibility of this document specifically.
 
 ## Why NIST CSF 2.0, and why only it
 
@@ -150,41 +139,41 @@ because "not applicable" is how an absent control stops being counted.
 | --- | --- | :-: | --- |
 | **GV.OC** Organizational context | Mission, scope, stakeholders and obligations are understood and inform risk decisions | Partial | `docs/decisions/ADR-000-charter-and-scope.md` (Accepted) fixes what the platform is and refuses to be; `docs/architecture/technical-plan.md` §"Sequencing constraints" states four constraints as non-negotiable; the single first-party dependency is recorded in `ADR-003` and governed by `docs/governance/upstream-parity.yaml` with `scripts/check_upstream_parity.py` in CI. **Missing**: no legal or regulatory obligations are identified anywhere. The obligation set is empty by circumstance — no users, no personal data — not by analysis, and an adopter inherits that analysis undone |
 | **GV.RM** Risk management strategy | Risk objectives, appetite and tolerance are established and agreed | Partial | `docs/architecture/technical-plan.md` §"Risk register" carries five risks, each with a likelihood and a named response, and ADRs carry revisit triggers that state when a decision is reopened. **Missing**: the register is a delivery-risk register — scope, boundaries, spend, doc drift. No security risk appears in it. No appetite or tolerance is stated, no risk has an owner, and no review date exists |
-| **GV.RR** Roles, responsibilities, authorities | Roles and authorities are established, communicated and enforced | Partial | `.github/CODEOWNERS` maps every path to an owner with the reasoning inline; `AGENTS.md` carries an AUTO/CONSULT/STOP authority matrix covering roughly forty operations, and `scripts/validate_agentic_surface.py --strict` fails CI if a rendered tool surface de-escalates a mode. **Missing, and the artifact says so itself**: CODEOWNERS states "@DuqueOM is the only maintainer… this file distributes no review today", and branch protection requires `required_approving_review_count: 0`. There is no separation of duties, and one maintainer cannot create one — a person cannot approve their own pull request. What protection now delivers is the MECHANISM without the CONTROL: pull requests are mandatory, all four CI jobs must pass, `enforce_admins` applies the rule to the owner, and every merge leaves a record. An adopter with two engineers turns this row from Partial to Satisfied by raising one number; this repository cannot |
+| **GV.RR** Roles, responsibilities, authorities | Roles and authorities are established, communicated and enforced | Partial | `.github/CODEOWNERS` maps every path to an owner with the reasoning inline; `AGENTS.md` carries an AUTO/CONSULT/STOP authority matrix covering roughly forty operations, and `scripts/validate_agentic_surface.py --strict` fails CI if a rendered tool surface de-escalates a mode. **Missing, and the artifact says so itself**: CODEOWNERS states "@DuqueOM is the only maintainer… this file distributes no review today", and branch protection requires `required_approving_review_count: 0`. There is no separation of duties, and one maintainer cannot create one — a person cannot approve their own pull request. What protection delivers is the MECHANISM without the CONTROL: pull requests are mandatory, the required status checks wait on every CI job (the derived block counts both), `enforce_admins` applies the rule to the owner, and every merge leaves a record. An adopter with two engineers turns this row from Partial to Satisfied by raising one number; this repository cannot |
 | **GV.PO** Policy | Policy is established, communicated and enforced | Satisfied | `AGENTS.md`, `agentic/rules/` (23 rules), `SECURITY.md`, `CONTRIBUTING.md`, `docs/governance/qa-procedures.md` (QA-1…QA-7) and `ADR-005`. Policy is not merely written: `scripts/sync_agentic_adapters.py --check` fails CI when a canonical rule change is not rendered to all four tool surfaces, and `validate_agentic_surface.py --strict` fails when a mirror weakens a declared mode or a pointer file grows policy text of its own. Both run in CI and in `.pre-commit-config.yaml` |
-| **GV.OV** Oversight | Risk management activities are reviewed and adjusted | Partial | `docs/governance/qa-procedures.md` §QA-4 defines an independent audit that must run in a session separate from the work; one was executed and is written up in `docs/governance/QA-4-independent-audit.md` (2026-08-06, commit `f580c4f`), and its findings and their closure are recorded in `CHANGELOG.md` §"Fixed — independent audit remediation". Staleness is gated by check C7. **Why not Satisfied**: C7 fails today at 37 commits past the marker against a grace of 10. The oversight mechanism exists, is enforced, and is currently reporting that oversight has lapsed |
-| **GV.SC** Supply chain risk management | Supplier risk is identified, assessed and managed across the lifecycle | Partial | `uv.lock` with `uv lock --check` blocking in CI; `.github/dependabot.yml` covering pip, GitHub Actions and the local stack's container images, grouped, with `versioning-strategy: increase` so a compatible-release pin is not silently widened into a major-version range; OpenSSF Scorecard weekly against an external rubric; `.security-baselines/` defines what an accepted finding must carry (id, reason, owner, expiry ≤ one quarter) before anyone needs it. **Missing**: no SBOM is produced for anything; no artifact is signed or attested; most actions are pinned by tag (`actions/checkout@v7`) rather than by digest, `hashicorp/setup-terraform` being the exception; Trivy runs with `exit-code: "0"` and cannot fail a build; and `.security-baselines/README.md` states plainly that none of its files are wired to the scanners that would read them |
+| **GV.OV** Oversight | Risk management activities are reviewed and adjusted | Partial | `docs/governance/qa-procedures.md` §QA-4 defines an independent audit that must run in a session separate from the work. It recurs: its rounds are recorded in `docs/governance/QA-4-independent-audit.md` and, from round twelve, verbatim under `docs/governance/qa4/`, each finding's closure in `CHANGELOG.md` and `docs/governance/remediation-work-order.md`. Staleness is gated: check C7 fails CI when more than ten commits land after the latest round's marker, so oversight cannot lapse without the build saying so. **Why not Satisfied**: the auditor is a separate session of tooling the maintainer runs, not a party independent of the maintainer. No external review has happened, and none is scheduled |
+| **GV.SC** Supply chain risk management | Supplier risk is identified, assessed and managed across the lifecycle | Partial | `uv.lock` with `uv lock --check` blocking in CI; `.github/dependabot.yml` covering uv, GitHub Actions and the local stack's container images, grouped, with `versioning-strategy: increase` so a compatible-release pin is not silently widened into a major-version range; every third-party action pinned to a commit with its tag in a comment, enforced by `scripts/check_action_pins.py` in CI; Trivy blocking on HIGH and CRITICAL over every package `uv.lock` installs, with `scripts/check_scan_coverage.py` failing a scan that examined less; OpenSSF Scorecard weekly against an external rubric; `.security-baselines/` defines what an accepted finding must carry (id, reason, owner, expiry ≤ one quarter), and `scripts/check_baselines_expiry.py` fails CI on an expired one. **Missing**: no SBOM is produced for anything, and no artifact is built, signed or attested — quality-gates S4 and C1 are marked ⏳ PENDING for that reason |
 
 ## IDENTIFY
 
 | Category | What it asks for | Verdict | Evidence, or the reason there is none |
 | --- | --- | :-: | --- |
 | **ID.AM** Asset management | Assets are inventoried, and the inventory is maintained | Satisfied | `docs/architecture/technology-inventory.yaml` with `scripts/check_technology_inventory.py --check` in CI — the detectors match the filesystem and are forbidden from matching documentation, because the easiest way to appear finished is to write about being finished. `docs/architecture/implementation-status.md` is generated by `scripts/check_implementation_status.py --check`, so a hand-edited tick fails the build. `uv.lock` is the dependency inventory; `docs/datasets/register.md` with `tests/test_dataset_registry.py` is the data-asset inventory, registering datasets by reference, with `check-added-large-files --maxkb=512` in pre-commit as the backstop. **Scope note**: this covers software and data assets. There are no hardware, network or service assets to inventory, because none have been provisioned |
-| **ID.RA** Risk assessment | Vulnerabilities are identified, recorded, prioritised and tracked | Partial | Identification is real and multi-layered: gitleaks over full history in CI (the one scanner here that genuinely blocks), Trivy filesystem scan, Checkov, Kubescape, Scorecard. **Missing, in two places that matter.** First, coverage: there is no SAST over first-party Python — Bandit is configured in `pyproject.toml` and invoked by no workflow, and no workflow runs CodeQL analysis (the workflows use `github/codeql-action/upload-sarif` only, never the analyze action). Second, and worse, tracking: the ~115 Checkov findings are described in prose in `SECURITY.md` and assigned to "Phase 2". There is no per-finding record, no owner, no date. `.security-baselines/` is the artifact designed to hold exactly that and holds zero entries |
-| **ID.IM** Improvement | Improvements are identified from evaluations, incidents and reviews, and are tracked | Satisfied | `ops/audit.jsonl` is an append-only hash-chained decision log — 55 entries, verified for this document with `scripts/audit_record.py --verify` ("chain intact"), which also compares against `git show HEAD:ops/audit.jsonl` so that deleting entries cannot leave a valid chain. QA-4's findings produced concrete mechanism changes recorded in `CHANGELOG.md`: the C4 gate-row regex that was skipping 15 of 29 rows, the C6 tokenizer that could not match a bare name in prose, and the coverage gate that measured a different scope than the one it declared. Corrections to ADRs are appended with a dated section rather than applied in place, so the error survives alongside the fix |
+| **ID.RA** Risk assessment | Vulnerabilities are identified, recorded, prioritised and tracked | Partial | Identification is real and multi-layered: gitleaks over full history, Trivy over the dependency closure, and Bandit over first-party Python at MEDIUM and above, each of which can fail a merge; Checkov, Kubescape and Scorecard report. **Missing, in two places that matter.** First, coverage: no workflow runs CodeQL analysis (the workflows use `github/codeql-action/upload-sarif` only, never the analyze action), so Bandit is the only SAST. Second, and worse, tracking: the Checkov findings described under the bounding facts above are prose in `SECURITY.md`, assigned to Phase 2. There is no per-finding record, no owner, no date. `.security-baselines/checkov.yml` is the artifact designed to hold exactly that, holds no entries, and is not read by the Checkov step |
+| **ID.IM** Improvement | Improvements are identified from evaluations, incidents and reviews, and are tracked | Satisfied | `ops/audit.jsonl` is an append-only hash-chained decision log, verified by `scripts/audit_record.py --verify` ("chain intact"), which also compares against `git show HEAD:ops/audit.jsonl` so that deleting entries cannot leave a valid chain. QA-4's findings produce concrete mechanism changes recorded in `CHANGELOG.md` and tracked to closure in `docs/governance/remediation-work-order.md`: the C4 gate-row regex that was skipping 15 of 29 rows, the C6 tokenizer that could not match a bare name in prose, the coverage gate that measured a different scope than the one it declared, and this document's own figures, which nothing checked until gate C3. Corrections to ADRs are appended with a dated section rather than applied in place, so the error survives alongside the fix |
 
 ## PROTECT
 
 | Category | What it asks for | Verdict | Evidence, or the reason there is none |
 | --- | --- | :-: | --- |
-| **PR.AA** Identity, authentication, access control | Identities are managed and access is granted on least privilege | Partial | Repository side: `.github/CODEOWNERS`, and `scripts/setup_branch_protection.sh` as branch protection expressed in code rather than clicked. Cloud side: every overlay pairs an ExternalSecret with a SecretStore, and `tests/test_gitops_manifests.py` asserts per cloud that the auth block contains `workloadIdentity` or `jwt` and contains no `secretRef` — federated identity, no stored key, checked rather than promised. **Corrected this round**: the payload required only two of the four CI jobs, and — worse — the script had never been run, so `main` had no protection of any kind. An audit read the script as the configuration; the API said "Branch not protected". All four jobs are required now and the protection is applied, which is the difference between a control expressed in code and a control. The approving review count remains zero for the reason under GV.RR. No identity has ever been exercised against a cloud (L4 = 0), so least privilege is a property of the declaration only |
+| **PR.AA** Identity, authentication, access control | Identities are managed and access is granted on least privilege | Partial | Repository side: `.github/CODEOWNERS`, and `scripts/setup_branch_protection.sh` as branch protection expressed in code rather than clicked — and applied: the protection on `main` was read back through the API on 2026-10-09 and matches the script's four required checks, `enforce_admins`, and zero approving reviews. That last check matters because an earlier audit read the script as the configuration while the API said "Branch not protected". Cloud side: every overlay pairs an ExternalSecret with a SecretStore, and `tests/test_gitops_manifests.py` asserts per cloud that the auth block contains `workloadIdentity` or `jwt` and contains no `secretRef` — federated identity, no stored key, checked rather than promised. The approving review count remains zero for the reason under GV.RR. No identity has ever been exercised against a cloud (L4 = 0), so least privilege is a property of the declaration only |
 | **PR.AT** Awareness and training | Personnel are provided awareness and role-based training | Not satisfied | `CONTRIBUTING.md`, `AGENTS.md` and 23 rules function as operator instruction for humans and agents, and they are genuinely load-bearing. But there is no security training, no role-based curriculum, and no record of anyone completing anything. With one maintainer there is nobody to train — which is an explanation, not a control, and an adopting organisation inherits this Category whole |
 | **PR.DS** Data security | Data is protected at rest, in transit and in use, consistent with its risk | Partial | No dataset is committed: `docs/datasets/register.md` registers by reference and pre-commit caps added files at 512 KB. No credential is committed: gitleaks over full history in CI plus a staged-content hook, `detect-private-key` in pre-commit, and `tests/test_gitops_manifests.py::test_no_real_credential_is_committed` — which is paired with a test proving that check can actually fail, so it is not trusted merely for passing. Secrets are referenced through ExternalSecrets and never materialised in the tree. **Missing**: encryption at rest and in transit are properties of infrastructure that has never been provisioned, and EKS secrets encryption is among the Checkov findings that do not block |
-| **PR.PS** Platform security | Hardware, software and services are managed consistent with risk | Partial | `platform/kubernetes/base/deployment.yaml` sets `runAsNonRoot`, `runAsUser: 10001`, `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem: true` and drops all capabilities. `platform/policies/` ships a default-deny NetworkPolicy with explicit allow-DNS and allow-ingress companions, included by all six cloud overlays, and `tests/test_gitops_manifests.py` asserts per overlay that default-deny and allow-dns are both present — the second because a default-deny namespace with no DNS egress breaks every lookup. Every overlay is rendered in CI. **Missing**: no workflow builds, pushes, signs or attests any image, so the admission control that would make a signature mandatory has nothing to rule on and does not exist. **Corrected by QA-4 round eleven**, which found this row still reporting three gaps that had closed: every overlay — all six cloud cells and `local` — now ships a Namespace at `pod-security.kubernetes.io/enforce: restricted`, asserted by `tests/test_gitops_manifests.py::test_every_overlay_creates_its_namespace_at_restricted`; the base image is an unresolvable placeholder tag rather than `:latest`, asserted by `test_no_overlay_ships_a_mutable_image_tag`; and `platform/policies/README.md` describes the NetworkPolicies it holds rather than Kyverno policies it never did. A fourth policy, `allow-serving-egress`, now scopes egress to the metadata server on port 80, public HTTPS with the private ranges excluded, and the OTLP collector. **Closed since**: those `namespaceSelector` peers selected labels no namespace carried, so the pod could be neither scraped nor reached under `default-deny`. `platform/policies/namespace-contract.yaml` now declares each namespace role and its provisioner, the policies select those roles, and a test fails on a selector nobody declared. **Observed enforced since** (QA-4 round sixteen found this row still saying no cluster had been): `tests/local/test_network_policies.py`, against the local overlay that includes `platform/policies/` (R11-2, #105) — on kind with kindnetd v20250512, on 2026-09-30, under `default-deny` a probe pod's DNS is denied, `allow-dns` restores it, the peer selector rewritten as `commonLabels` once did denies it again, and Prometheus scrapes the pod through `allow-serving-ingress`. That is L3 evidence: it needs Docker, CI does not run it, and it is as current as that run. No cloud CNI has been observed, so the six cloud overlays' enforcement remains a property of the declaration |
+| **PR.PS** Platform security | Hardware, software and services are managed consistent with risk | Partial | `platform/kubernetes/base/deployment.yaml` sets `runAsNonRoot`, `runAsUser: 10001`, `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem: true` and drops all capabilities, and its image is a placeholder tag that cannot resolve rather than a mutable `:latest` (`tests/test_gitops_manifests.py::test_no_overlay_ships_a_mutable_image_tag`). Every overlay — the six cloud cells and `local` — ships a Namespace at `pod-security.kubernetes.io/enforce: restricted` (`tests/test_gitops_manifests.py::test_every_overlay_creates_its_namespace_at_restricted`). `platform/policies/` ships `default-deny` with three companions — `allow-dns`, `allow-serving-ingress`, and `allow-serving-egress`, which scopes egress to the metadata server on port 80, public HTTPS with the private ranges excluded, and the OTLP collector — included by every overlay; `platform/policies/namespace-contract.yaml` declares each namespace role and its provisioner, the policies select those roles, and a test fails on a selector nobody declared. Every overlay is rendered in CI. **Observed enforced** on the local cluster: `tests/local/test_network_policies.py`, on kind with kindnetd v20250512, on 2026-09-30 — under `default-deny` a probe pod's DNS is denied, `allow-dns` restores it, the peer selector rewritten as `commonLabels` once did denies it again, and Prometheus scrapes the pod through `allow-serving-ingress`. That is L3 evidence: it needs Docker, CI does not run it, and it is as current as that run. **Missing**: no workflow builds, pushes, signs or attests any image, so the admission control that would make a signature mandatory has nothing to rule on and does not exist; and no cloud CNI has been observed, so the six cloud overlays' enforcement remains a property of the declaration |
 | **PR.IR** Technology infrastructure resilience | Infrastructure is managed to achieve resilience requirements | Partial | A PodDisruptionBudget in the base; production replicas asserted greater than dev per cloud; an ArgoCD ApplicationSet with production auto-sync disabled and pruning disabled everywhere, both asserted by tests, so neither a bad commit nor a rendering mistake removes running workloads by itself. **Missing**: no resilience requirement is stated anywhere to be met — no availability target, no capacity plan, no failover design. Nothing has ever run. The local cluster CAN close part of the gap for the network controls, which this row denied until QA-4 round eleven: on a throwaway kind v0.30 cluster, kindnetd enforced a default-deny and the rendered policies timed DNS out, so kind is capable of the enforcement evidence this row said it could not produce. That evidence now exists — see PR.PS — and is the only resilience-adjacent property observed on a running cluster |
 
 ## DETECT
 
 | Category | What it asks for | Verdict | Evidence, or the reason there is none |
 | --- | --- | :-: | --- |
-| **DE.CM** Continuous monitoring | Assets are monitored to find anomalies and indicators of compromise | Partial | Read strictly, the only asset that exists is the repository, and it is monitored: CI runs four jobs on every push and pull request, Scorecard runs weekly on a cron and on branch-protection changes, Dependabot polls three ecosystems on a schedule. Runtime monitoring is built and unproven: `platform/observability/dashboards/` holds one Grafana dashboard, the demand-forecast pipeline emits one correlated OpenTelemetry trace across ingest, validation and training, and the base Deployment carries the Prometheus scrape annotations that were measured to be missing. All of it sits at L1 with L3 evidence available and not run here. Nothing is monitored in an operating environment, because nothing operates |
+| **DE.CM** Continuous monitoring | Assets are monitored to find anomalies and indicators of compromise | Partial | Read strictly, the only asset that operates is the repository, and it is monitored: CI runs on every push and pull request, Scorecard runs weekly on a cron and on branch-protection changes, Dependabot polls three ecosystems on a schedule. Runtime monitoring is built and observed only locally: `platform/observability/dashboards/` holds one Grafana dashboard, `scripts/check_dashboard_inventory.py` fails CI on a provisioned dashboard nobody registered or one whose uid or title collides, the demand-forecast pipeline emits one correlated OpenTelemetry trace across ingest, validation and training, and the local stack's Prometheus was observed scraping the serving pod through `allow-serving-ingress` (`tests/local/test_network_policies.py`, L3, not run in CI). Nothing is monitored in an operating environment, because nothing operates |
 | **DE.AE** Adverse event analysis | Anomalies are analysed to characterise events and detect incidents | Not satisfied | There are no alert rules anywhere in `platform/` or `orchestration/` — the only occurrence of the word is a comment in the base Deployment explaining that, before the scrape annotations were added, an alert rule would never have fired. There is no log aggregation, no alert routing, no threshold, no on-call, and no event to analyse |
 
 ## RESPOND
 
 | Category | What it asks for | Verdict | Evidence, or the reason there is none |
 | --- | --- | :-: | --- |
-| **RS.MA** Incident management | Responses to detected incidents are executed and managed | Partial | `SECURITY.md` defines one intake channel — GitHub private vulnerability reporting, with email as fallback — and a severity table with first-response targets of 48 hours, 7, 14 and 30 days. `docs/governance/qa-procedures.md` §QA-7 defines the procedure and makes every step STOP-class, requiring recorded human authorisation. `agentic/workflows/incident.md` and the `incident-postmortem` skill exist. **Missing**: the response targets have no roster behind them. One maintainer, no rotation, no escalation path if that person is unavailable — a 48-hour commitment that depends on one inbox is a commitment with a single point of failure. `docs/incidents/` does not exist; `docs/governance/upstream-parity.yaml` carries it as pending |
+| **RS.MA** Incident management | Responses to detected incidents are executed and managed | Partial | `SECURITY.md` defines one intake channel — GitHub private vulnerability reporting, with email as fallback — and a severity table with first-response targets of 48 hours, 7, 14 and 30 days. `docs/governance/qa-procedures.md` §QA-7 defines the procedure and makes every step STOP-class, requiring recorded human authorisation. `agentic/workflows/incident.md` and the `incident-postmortem` skill exist. **Missing**: the response targets have no roster behind them. One maintainer, no rotation, no escalation path if that person is unavailable — a 48-hour commitment that depends on one inbox is a commitment with a single point of failure. There is no `docs/incidents/` directory and nothing that would write one |
 | **RS.AN** Incident analysis | Investigation is conducted to ensure effective response and support recovery | Partial | The forensic material is unusually strong for a repository this size: a hash-chained audit trail that detects both editing and truncation, conventional commits, a CHANGELOG, and ADR corrections appended rather than applied. QA-7 requires capturing evidence *before* mutating state, on the grounds that a restarted pod has destroyed the evidence, and requires a blameless post-mortem whose action items each carry an owner and a date. **Missing**: analysing an incident in a running system needs telemetry from a running system. No post-mortem has been written, and the template for one lives in a skill rather than in a directory anything writes to |
 | **RS.CO** Incident response reporting and communication | Response activities are coordinated with internal and external stakeholders | Partial | `SECURITY.md` §Disclosure states that an advisory is published once a fix ships, with credit to the reporter unless anonymity is requested, and that a finding judged to be a design decision is recorded as an ADR with the trade-off stated. For a public repository that outbound path is the one that matters, and it is defined. **Missing**: no stakeholder list, no internal notification path, no communication template, and nothing has ever been communicated |
 | **RS.MI** Incident mitigation | Incidents are contained and eradicated | Not satisfied | Containment acts on a running system. The rollback workflow and skill exist and are well specified, but they presume Argo Rollouts and an MLflow registry: `platform/gitops/` ships an ApplicationSet and no Rollout, and the only occurrence of MLflow in the platform is a secret key name. There is nothing to contain and no rehearsed means of containing it |
@@ -193,7 +182,7 @@ because "not applicable" is how an absent control stops being counted.
 
 | Category | What it asks for | Verdict | Evidence, or the reason there is none |
 | --- | --- | :-: | --- |
-| **RC.RP** Incident recovery plan execution | Restoration is performed to ensure operational availability | Not satisfied | No backup exists, no restore has been rehearsed, and there is no recovery plan document — `RUNBOOK.md` is listed as pending in `docs/governance/upstream-parity.yaml`. One recovery property does hold, at repository level only: history lives on GitHub, the branch-protection payload forbids force-push and deletion of `main`, and the audit chain detects tampering and truncation. That is source recovery, not system recovery, and the distinction is the whole Category |
+| **RC.RP** Incident recovery plan execution | Restoration is performed to ensure operational availability | Not satisfied | No backup exists, no restore has been rehearsed, and there is no recovery plan. `RUNBOOK.md` exists and is an operator's guide to the gates and the local stack, not a plan for restoring a running system. One recovery property does hold, at repository level only: history lives on GitHub, the branch-protection payload forbids force-push and deletion of `main`, and the audit chain detects tampering and truncation. That is source recovery, not system recovery, and the distinction is the whole Category |
 | **RC.CO** Incident recovery communication | Restoration is coordinated with internal and external parties | Not satisfied | `CHANGELOG.md` and GitHub Releases are the only outbound channel, and neither has carried a recovery communication. There is no stakeholder list and no status channel |
 
 ---
@@ -221,66 +210,57 @@ will do themselves, not as work they are inheriting.
 ## Where a control was expected to hold and did not
 
 The most useful part of this exercise. Each of these looked Satisfied on the
-strength of the documentation around it, and turned out not to be.
+strength of the documentation around it, and turned out not to be. All of them
+have since closed; they are kept, in the past tense, as the record of what a
+mapping nobody checks drifts into — and the last one is why gate C3 exists.
 
-**Trivy is claimed blocking and cannot fail a build.** `SECURITY.md`'s controls
-table marks "Dependency and image vulnerabilities / Trivy" as blocking **yes**.
-The step in `.github/workflows/ci.yml` carries `exit-code: "0"`, which is the
-scanner's own way of saying "report, never fail" — the third spelling of the
-same suppression, after `continue-on-error` and `soft_fail`.
-`tests/test_security_controls.py::_blocks` checks the first two and not this
-one, so the row passes the test written specifically to catch this class of
-claim. This is the original defect surviving in a place the fix did not reach.
+**Trivy was claimed blocking and could not fail a build.** `SECURITY.md`'s
+controls table marked Trivy as blocking while the step in
+`.github/workflows/ci.yml` carried `exit-code: "0"` — the scanner's own way of
+saying "report, never fail", and the third spelling of the same suppression
+after `continue-on-error` and `soft_fail`. `tests/test_security_controls.py`
+knew the first two and not this one. **Closed**: the gate step fails on HIGH and
+CRITICAL, `scripts/check_scan_coverage.py` fails a scan that examined less than
+every installed package, and `tests/test_security_controls.py::_blocks` now
+knows six spellings, including an action whose default is not to fail.
 
-**Two supply-chain gates are declared as active and are wired to nothing.**
-`docs/governance/quality-gates.md` lists S4 "Image signed and attested" under
-Service gates and C1 "Provenance attested" under Compliance gates, both with no
-⏳ PENDING
-marker, unlike the fifteen rows around them that carry one. Nothing in this
-repository builds an image, and `cosign` appears in no workflow. Check C4 in
-`check_doc_coherence.py` verifies that a gate row's command exists only when the
-command is a `scripts/*.py` or `*.sh` path, so a row naming a third-party binary
-is unchecked — the same gap the PENDING-marker convention was invented to close.
+**Two supply-chain gates were declared active and wired to nothing.**
+`docs/governance/quality-gates.md` listed S4 "Image signed and attested" and C1
+"Provenance attested" with no ⏳ PENDING marker, while nothing here built an
+image and `cosign` appeared in no workflow. **Closed**: both carry the marker,
+with the reason — no image, nothing to sign — and the derived block below
+counts the workflow steps that build, sign or attest an image.
 
-**`platform/policies/README.md` describes contents the directory does not have.**
-It says the directory holds Kyverno policies enforcing image signatures and Pod
-Security, and that it is "empty until Phase 2" so that a clean clone matches the
-documented layout. It now holds three NetworkPolicies and no Kyverno policy. The
-file names ADR-005 rule H — a document asserting something false is itself a
-defect — in its own text.
+**`platform/policies/README.md` described contents the directory did not
+have** — Kyverno policies, while it held NetworkPolicies. **Closed**: it
+describes the NetworkPolicies it holds.
 
-**Both findings in this place have closed, and the text is kept as the record
-of what they were.** The base Deployment's comment said Pod Security
-"restricted" was the namespace default while only `local` shipped a Namespace,
-so the six cloud overlays carried no enforcement label; and the image was
-pinned to `:latest`, a mutable tag, in a repository that argues for immutable
-references everywhere else. Every overlay now ships a Namespace at `restricted`
-and the base image is a placeholder tag that cannot resolve, each asserted by a
-test in `tests/test_gitops_manifests.py`. This section went on reporting both
-as open until QA-4 round eleven — a compliance document is the last place a
-closed gap should still read as open, because it is the one an adopting
-organisation reads to decide what it inherits.
+**The base Deployment's Pod Security comment and its image tag.** The comment
+said Pod Security "restricted" was the namespace default while only `local`
+shipped a Namespace, and the image was pinned to `:latest`. **Closed**: every
+overlay ships a Namespace at `restricted` and the base image is a placeholder
+tag that cannot resolve, each asserted by a test in
+`tests/test_gitops_manifests.py`. This section went on reporting both as open
+until QA-4 round eleven.
 
-**`.security-baselines/README.md` opens by saying CI runs four scanners.** Its
-own table two lines later says tfsec is not in CI, which is correct — three run.
-A small inconsistency in the one document whose subject is not overstating what
-scanners do.
+**Branch protection was a script nobody had run.** `scripts/setup_branch_protection.sh`
+listed two of the CI jobs as required, and `main` had no protection at all.
+**Closed**: the required checks wait on every CI job, the protection is
+applied, and PR.AA records it as read back from the API.
 
-**Branch protection requires two of four CI jobs and zero reviews.**
-`scripts/setup_branch_protection.sh` lists `REQUIRED_CHECKS` as "Repository
-invariants" and "Secret scan". The IaC-security and supply-chain jobs are not
-required to merge — which is defensible given that neither can currently fail
-anything, but it means a red Checkov or a red Trivy would not block even if the
-suppressions came off. And whether any of this is applied to the GitHub
-repository cannot be determined from the tree.
+**The name "compliance mapping" denoted three artifacts.** The plan, the status
+table and quality-gates C3 each used a different name, and the status table
+called this document absent. **Closed**: the status component points here,
+and C3 is `scripts/check_compliance_mapping.py`.
 
-**The name "compliance mapping" already denotes three different artifacts.**
-`technical-plan.md` §Phase 1d names `docs/COMPLIANCE_MAPPING.md` — this file.
-`scripts/check_implementation_status.py` tracks a Phase 6 component pointing at
-`docs/governance/compliance-mapping.md`. `quality-gates.md` row C3 names
-`scripts/check_compliance_mapping.py`, correctly marked PENDING. Publishing this
-file therefore does **not** flip the Phase 6 row in the status table, and should
-not be expected to.
+**This document went stale in seven places at once.** Written against the tree
+of 2026-08-08 and checked by nothing, it went on saying Bandit ran in no
+workflow, Trivy could not fail a build, branch protection required two of four
+jobs, C7 was red at a commit count two months old, the audit trail and the ADR
+index had sizes they had long outgrown, and no cluster had observed the
+NetworkPolicies enforced. Every one understated the controls — the direction
+nobody notices. **Closed** by R16-2: the rows were re-verified, and gate C3
+derives the figures they rest on and fails when the prose stops agreeing.
 
 ## What would move a verdict
 
@@ -290,65 +270,82 @@ Ordered by how much each would change what an adopter can rely on, not by effort
    to an artifact, gives GV.SC an SBOM, and makes quality-gates S4 and C1
    real rather than declared. It is also the precondition for a Kyverno policy
    meaning anything.
-2. **Turn one advisory scanner into a blocking one.** Removing `exit-code: "0"`
-   from Trivy is the smallest honest step, and it corrects a claim `SECURITY.md`
-   already makes. Checkov's `soft_fail` should come off only after its findings
-   are triaged into `.security-baselines/` with owners and expiries — turning it
-   red first is how a gate gets deleted.
-3. **Run QA-4 and reset C7.** Until the independent-audit gate is green, every
-   governance claim in this repository — including this document — rests on
-   self-review.
-4. **Record the Checkov findings as findings.** Prose in `SECURITY.md` assigning
-   115 findings to "Phase 2" is not a vulnerability register. Entries with an
-   owner and an expiry date are, and the policy for writing them already exists.
+2. **Record the Checkov findings as findings, then make it fail.** Prose in
+   `SECURITY.md` assigning them to "Phase 2" is not a vulnerability register.
+   Entries in `.security-baselines/checkov.yml` with an owner and an expiry
+   are, the policy for writing them already exists, and the file has to be
+   wired to the step before an entry means anything. Only then should
+   `soft_fail` come off — turning a scanner red before its findings are
+   triaged is how a gate gets deleted. It moves ID.RA.
+3. **Run CodeQL analysis.** It is the second SAST engine ID.RA lacks, and the
+   workflows already upload SARIF to the same place.
+4. **Have someone other than the maintainer review something.** GV.OV and
+   GV.RR are both capped by there being one person: an external audit moves the
+   first, a second engineer with one raised number moves the second.
 5. **Reach L4 once.** Every Partial verdict in PROTECT and every verdict in
    DETECT, RESPOND and RECOVER is capped by the same fact.
 
-## How to re-derive every number here
+## Figures, derived from the tree
 
-Every figure in this document came from one of these. None is quoted from
-memory or carried over from another repository.
+Generated by `scripts/check_compliance_mapping.py --write`, and checked by the
+same script without the flag in CI — so this table cannot be edited by hand
+and cannot fall behind the tree. A count quoted elsewhere in this document is
+held to it.
+
+<!-- BEGIN DERIVED FIGURES -->
+<!-- Generated by scripts/check_compliance_mapping.py --write. Do not edit by hand. -->
+
+| Figure | Value | Derived from |
+| --- | :-: | --- |
+| Agentic rules | 23 | `agentic/rules/*.md` |
+| Agentic skills | 29 | `agentic/skills/*/` |
+| Agentic workflows | 22 | `agentic/workflows/*.md` |
+| ADRs | 11 | `docs/decisions/ADR-*.md` |
+| Declared gates | 43 | `docs/governance/quality-gates.md` |
+| Declared gates marked ⏳ PENDING | 17 | the same table |
+| Components shown at L4 (a real cloud rollout) | 0 | `docs/architecture/implementation-status.md`, generated |
+| Components with L4 evidence written down | 0 | the same document |
+| Security controls that block a merge | Bandit, Trivy, gitleaks | `SECURITY.md` |
+| Security controls that only report | Checkov, Dependabot, Kubescape, Scorecard | `SECURITY.md` |
+| Accepted Checkov findings | 0 | `.security-baselines/` |
+| Accepted Trivy findings | 0 | `.security-baselines/` |
+| Accepted tfsec findings | 0 | `.security-baselines/` |
+| Workflow steps that build, sign or attest an image | 0 | `.github/workflows/*.yml` |
+| Required status checks | 4 | `scripts/setup_branch_protection.sh` |
+| CI jobs a merge waits on | 6 of 6 | `.github/workflows/ci.yml`, through the required checks |
+| Approving reviews required | 0 | `scripts/setup_branch_protection.sh` |
+<!-- END DERIVED FIGURES -->
+
+What the table cannot derive, and how to check it yourself:
 
 ```bash
-# 0 components at L4, and the done / partial / absent counts
+# The status table the L4 figure comes from, regenerated by running each
+# component's evidence command
 uv run python scripts/check_implementation_status.py --check
-grep -n "Proven in CI" docs/architecture/implementation-status.md
 
-# C7 red: 37 commits since the audit marker, grace 10
-uv run python scripts/check_doc_coherence.py
+# The independent-audit gate (C7), with the current commit count
+uv run python scripts/check_doc_coherence.py --only C7
 
-# 115 Checkov failures under platform/ (14 Terraform, 101 Kubernetes)
-# checkov 3.3.10; CI uses bridgecrewio/checkov-action@v12, which may differ
-checkov -d platform/ --framework terraform,kubernetes --compact --quiet
-
-# 55 audit entries, chain intact
+# The audit trail: length, and whether the chain is intact
 uv run python scripts/audit_record.py --verify
 
-# 23 rules, 29 skills, 22 workflows; 9 ADRs; 31 declared gates
-uv run python scripts/check_doc_coherence.py   # checks C1, C4 and C5
+# Checkov's current findings; CI's version is the one the dated figure uses
+checkov -d platform/ --framework terraform,kubernetes --compact --quiet
 
-# Which security steps can actually fail a build
-grep -n "continue-on-error\|soft_fail\|exit-code" .github/workflows/ci.yml
-
-# No workflow builds, signs or attests an image
-grep -rniE "docker build|buildx|cosign|syft|sbom|attest" .github/workflows/
-
-# Only the local overlay ships a Namespace
-grep -rn "kind: Namespace" platform/
+# Branch protection as applied, rather than as scripted
+gh api repos/DuqueOM/ml-platform/branches/main/protection
 ```
 
 ## Maintenance
 
-This document goes stale silently — nothing generates it and no gate checks it.
-That is a known weakness, and `quality-gates.md` row C3 reserves the name
-`scripts/check_compliance_mapping.py` — which does not exist yet — for closing
-it.
-
-Until that exists, re-verify this file when any of the following happens:
+Gate C3 holds what can be held mechanically: the figures, the 22 rows and
+their counted summary, every scanner sentence against `SECURITY.md`, and every
+`file::symbol` citation. It cannot hold a judgement. Re-read the rows — not
+just the figures — when any of the following happens:
 
 - A scanner's blocking status changes in `.github/workflows/ci.yml`, in either
-  direction. A suppression removed is as much a change to this document as one
-  added.
+  direction. C3 will flag a sentence that now contradicts `SECURITY.md`; it
+  will not notice a row whose verdict should move.
 - The first image is built, or the first cloud resource is provisioned. Both
   invalidate the bounding facts at the top.
 - `SECURITY.md`'s controls table changes.
@@ -366,5 +363,5 @@ Until that exists, re-verify this file when any of the following happens:
   filesystem rather than declared, with the layer each claim is proven at.
 - `docs/governance/quality-gates.md` — every published quality claim and the
   command that can falsify it.
-- `docs/governance/QA-4-independent-audit.md` — the one independent review this
-  repository has had.
+- `docs/governance/QA-4-independent-audit.md` and `docs/governance/qa4/` — the
+  independent audits this repository has had, round by round.
