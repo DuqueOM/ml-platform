@@ -53,10 +53,10 @@ packages = ["src/demand_forecast"]
 # imposing on everyone who installs this project. It also pulls a large
 # dependency tree, which the local memory budget notices.
 warehouse-validation = [
-    "great-expectations~=1.23",
+    "great-expectations~=1.24",
 ]
 pipelines = [
-    "kfp~=2.11",
+    "kfp~=2.17",
 ]
 observability = [
     "opentelemetry-exporter-otlp-proto-grpc~=1.45",

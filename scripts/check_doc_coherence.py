@@ -1388,6 +1388,38 @@ def _commits_since(when: date) -> int:
     return sum(1 for line in result.stdout.splitlines() if line.strip() > cutoff)
 
 
+def _audit_marker() -> re.Match[str] | None:
+    """The independent-audit marker: group 1 its date, group 2 the commit it names, if any."""
+    return re.search(
+        r"Last independent audit:\s*(\d{4}-\d{2}-\d{2})(?:\s*\(([0-9a-f]{7,40})\))?",
+        _read(REPO_ROOT / "AGENTS.md") + _read(PLAN),
+    )
+
+
+def audit_drift() -> int | None:
+    """C7's drift — the commits on HEAD the last independent audit did not review.
+
+    For a caller that spends the grace rather than judges it:
+    `scripts/dependabot_merge_budget.py` asks it before queueing a merge, so
+    the count that decides is C7's own and cannot disagree with it. None
+    whenever C7 fails for a reason other than drift — no marker, a marker the
+    trail does not corroborate, one naming a commit off HEAD's history — so
+    "cannot measure" never reads as room to spend.
+    """
+    marker = _audit_marker()
+    if not marker:
+        return None
+    reviewed = marker.group(2)
+    if reviewed and not _audit_trail_names(reviewed):
+        return None
+    drift = _commits_since_ref(reviewed) if reviewed else None
+    if drift == UNREACHABLE:
+        return None
+    if drift is None:
+        return _commits_since(datetime.strptime(marker.group(1), "%Y-%m-%d").date())
+    return drift
+
+
 def check_audit_freshness() -> None:
     """C7 — the independent-audit marker has not gone stale (ADR-005 rule B).
 
@@ -1398,10 +1430,7 @@ def check_audit_freshness() -> None:
     # The commit is optional in the pattern and preferred in the measurement:
     # a marker naming what was audited can be counted exactly, one carrying
     # only a date cannot. See `_commits_since_ref`.
-    marker = re.search(
-        r"Last independent audit:\s*(\d{4}-\d{2}-\d{2})(?:\s*\(([0-9a-f]{7,40})\))?",
-        _read(REPO_ROOT / "AGENTS.md") + _read(PLAN),
-    )
+    marker = _audit_marker()
     if not marker:
         # This previously returned ok() unconditionally, which made C7 a check
         # that PASSED BECAUSE THE THING WAS ABSENT — anti-pattern P-09, and a

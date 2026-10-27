@@ -18,6 +18,34 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Changed — dependency round 2026-10-27, and Dependabot spends at most half the audit grace
+
+- **Five Dependabot updates in one commit** (#153–#157): copier 9.19.1, ruff
+  0.17.3, pre-commit 4.7.0, coverage 7.17.0, kfp 2.17.3, great-expectations
+  1.24.1 and duckdb 2.0.0. The pre-commit ruff hook moves to `v0.17.3` with
+  the lock, which `tests/test_tool_versions.py` requires.
+- **The urllib3 security override is retired.** kfp 2.17.3 pins
+  `urllib3==2.8.0` itself on Python 3.10 and later, and
+  `tests/test_dependency_overrides.py` failed as designed; the lock resolves
+  2.8.0 without the override. That test's checks now run against a recorded
+  declaration as well, so they keep failing correctly while no override is in
+  force.
+- **Auto-merge no longer spends the remediation's commits.** Every squash
+  merge is one of the ten commits C7 allows between QA-4 rounds, and after
+  round nineteen #152 merged as the seventh with nobody choosing to. The
+  workflow now asks `scripts/dependabot_merge_budget.py`, which reads C7's own
+  count (`check_doc_coherence.audit_drift`), and queues a merge only while it
+  leaves `main` within the first half of the window. Otherwise the update
+  stays open for the next batched round. A push to `main` asks the same
+  question and unqueues any merge that no longer fits. The budget is read from
+  `main`'s code, never the pull request's, because the job holds
+  `contents: write`. Mutations DEP27-1 to DEP27-7; DEP2 now targets an override
+  added without its entry.
+- **Found, not fixed:** ml-core declares duckdb and nothing imports it, while
+  ADR-004 and the technology inventory count DuckDB as Core for the
+  incremental path. Recorded in the work order as a decision for the
+  maintainer.
+
 ### Fixed — a use-case's language decides what its customers can receive (R11-6)
 
 - **`language: es` changed nothing.** `UsecaseConfig.language` was loaded,
