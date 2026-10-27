@@ -24,7 +24,11 @@ from .telemetry import TelemetrySink
 from .tiers import RetryPolicy, TierClient
 from .tools import ToolRegistry
 
-# Generic fallbacks if a use-case omits a prompt key.
+#: The language every default below is written in.
+DEFAULT_PROMPT_LANGUAGE = "en"
+
+# Generic fallbacks if a use-case omits a prompt key. English, so a use-case
+# serving any other language must supply each of them (see `_require_own_prompts`).
 _DEFAULT_PROMPTS = {
     "plan_system": "You plan which tools are needed to answer. Be concise.",
     "generate_system": "You are a helpful assistant. Answer clearly and briefly.",
@@ -32,6 +36,32 @@ _DEFAULT_PROMPTS = {
     "critic_system": "You are a verifier. Validate answers against real data.",
     "safe_fallback": "Sorry, I can't process your request right now. Could you rephrase?",
 }
+
+
+def _require_own_prompts(config: UsecaseConfig) -> None:
+    """Refuse a use-case that would answer its customers in another language.
+
+    ``language`` was loaded, documented as the ISO code of the customer-facing
+    surface, set to ``es`` by store-assistant — and read by nothing (R11-6). A
+    use-case that omitted ``safe_fallback`` therefore served a Spanish-speaking
+    customer *"Sorry, I can't process your request right now"*, and setting the
+    language changed nothing. Every default here is English, so a use-case in
+    any other language must bring each one itself; the refusal happens at
+    construction, before any customer is answered.
+
+    Raises:
+        ValueError: Naming each prompt the use-case leaves to an English default.
+    """
+    if config.language.split("-", 1)[0].lower() == DEFAULT_PROMPT_LANGUAGE:
+        return
+    missing = sorted(set(_DEFAULT_PROMPTS) - set(config.prompts))
+    if missing:
+        raise ValueError(
+            f"use-case {config.name!r} serves language {config.language!r} and leaves "
+            f"{', '.join(missing)} to llm-core's {DEFAULT_PROMPT_LANGUAGE!r} defaults, so its "
+            f"customers would be answered in English. Define each under `prompts:` in "
+            f"{config.root / 'config.yaml'}."
+        )
 
 
 class Agent:
@@ -46,6 +76,7 @@ class Agent:
     """
 
     def __init__(self, config: UsecaseConfig, registry: ToolRegistry):
+        _require_own_prompts(config)
         self.config = config
         self.registry = registry
         self.router = Router(config)

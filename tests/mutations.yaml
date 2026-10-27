@@ -2886,3 +2886,51 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_quality_gates.py -k runs_in_a_workflow
   expect: killed
+- id: R11-6a
+  origin: R11-6 — a non-English use-case may again fall back to English prompts
+  file: libs/llm-core/src/llm_core/agent.py
+  old: '    missing = sorted(set(_DEFAULT_PROMPTS) - set(config.prompts))'
+  new: '    missing: list[str] = []'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly libs/llm-core/tests/test_language.py
+  expect: killed
+- id: R11-6b
+  origin: R11-6 — a regional English tag is no longer read as English
+  file: libs/llm-core/src/llm_core/agent.py
+  old: '    if config.language.split("-", 1)[0].lower() == DEFAULT_PROMPT_LANGUAGE:'
+  new: '    if config.language == DEFAULT_PROMPT_LANGUAGE:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly libs/llm-core/tests/test_language.py -k english_in_any_spelling
+  expect: killed
+- id: R11-6c
+  origin: R11-6 — a value that is not a language tag passes for a language
+  file: libs/llm-core/src/llm_core/config.py
+  old: '    if not _LANGUAGE_TAG.match(language):'
+  new: '    if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly libs/llm-core/tests/test_language.py -k not_a_language_tag
+  expect: killed
+- id: R11-6d
+  origin: R11-6 — the resident-memory cap is held only by the loader again
+  file: libs/llm-core/src/llm_core/config.py
+  old: '        if len(self.local_tiers) > self.max_local_tiers:'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly libs/llm-core/tests/test_tier_topology.py
+  expect: killed
+- id: R11-6e
+  origin: R11-6 — the config gate counts a name instead of an attribute read
+  file: scripts/check_config_is_read.py
+  old: '            if isinstance(node, ast.Attribute):'
+  new: "            if isinstance(node, ast.Name):\n                seen.add(node.id)\n            if isinstance(node, ast.Attribute):"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_config_is_read.py -k local_variable
+  expect: killed
+- id: R11-6f
+  origin: R11-6 — a field read only by its test counts as read
+  file: scripts/check_config_is_read.py
+  old: '        if "__pycache__" not in path.parts and not _is_test(path.relative_to(root))'
+  new: '        if "__pycache__" not in path.parts'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_config_is_read.py -k read_only_by_a_test
+  expect: killed
