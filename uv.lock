@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15' and sys_platform == 'win32'",
@@ -1350,7 +1350,7 @@ requires-dist = [
     { name = "data-contracts", editable = "libs/data-contracts" },
     { name = "great-expectations", marker = "extra == 'warehouse-validation'", specifier = "~=1.24" },
     { name = "joblib", specifier = "~=1.6" },
-    { name = "kfp", marker = "extra == 'pipelines'", specifier = "~=2.17" },
+    { name = "kfp", marker = "extra == 'pipelines'", specifier = "~=2.18" },
     { name = "ml-core", editable = "libs/ml-core" },
     { name = "opentelemetry-exporter-otlp-proto-grpc", marker = "extra == 'observability'", specifier = "~=1.45" },
     { name = "opentelemetry-sdk", marker = "extra == 'observability'", specifier = "~=1.45" },
@@ -2530,13 +2530,12 @@ wheels = [
 
 [[package]]
 name = "kfp"
-version = "2.17.3"
+version = "2.18.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
     { name = "click" },
     { name = "click-option-group" },
-    { name = "cryptography" },
     { name = "docstring-parser" },
     { name = "google-api-core" },
     { name = "google-auth" },
@@ -2546,33 +2545,32 @@ dependencies = [
     { name = "kubernetes" },
     { name = "oauthlib" },
     { name = "protobuf" },
-    { name = "pyasn1" },
     { name = "pyyaml" },
     { name = "requests" },
     { name = "requests-toolbelt" },
     { name = "tabulate" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/be/3a/e116ed607caf9546e5a2e04a72c932d41c41a4629364304ef8c565a5333b/kfp-2.17.3.tar.gz", hash = "sha256:43982a70c8b3f9c47a818f2946e4d0cb3a21ee59935163644939956b9e0793aa", size = 362751, upload-time = "2026-10-22T14:58:22.718Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d6/8a/ed632db82041b4238ea423ad2dfd0ee4c5c37ac15d46f9a762b0c75ca5a3/kfp-2.18.0.tar.gz", hash = "sha256:8331041be2a8cca9188e5a4c716844afbb163cd0f34983654f40fee50b7dd451", size = 1084643, upload-time = "2026-10-28T01:25:29.04Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/23/1b/5d268b3e05fff0b6717cca6505254c677456f652ebd6c0ee8ac0b059a416/kfp-2.17.3-py3-none-any.whl", hash = "sha256:13f365673ba419efd8c90382b4a2bbac80a6702254c27e64ce4745ec8d4f7b47", size = 477973, upload-time = "2026-10-22T14:58:20.781Z" },
+    { url = "https://files.pythonhosted.org/packages/1f/37/4331d305eae12f0761f39564a4ba60aeeeda04faa9e594f137914b94e5c6/kfp-2.18.0-py3-none-any.whl", hash = "sha256:4afaeb45fd923c27a5958eac59c3a06f844441533e1c38c69214209392f7cbca", size = 1207518, upload-time = "2026-10-28T01:25:27.265Z" },
 ]
 
 [[package]]
 name = "kfp-pipeline-spec"
-version = "2.17.3"
+version = "2.18.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "protobuf" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/7a/72/5c2c2c58533b3d667dc6d14cc69b11856542b6bcd840eb25b49a4e61c05c/kfp_pipeline_spec-2.17.3.tar.gz", hash = "sha256:b59d7efc2bcd3ee49cee85023a5280ae38e9f7825d09ac2167c8c0b130a4ea5a", size = 10643, upload-time = "2026-10-22T14:58:37.348Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/74/c9/034a62e3f8a82121fecfd7d199dfc7866e077a8d72fa3b8e9fbcd4b65ba6/kfp_pipeline_spec-2.18.0.tar.gz", hash = "sha256:7cd354b2ec2217de49e226dd3a70a244270f4ff73d2d5ecce1dc5c7aa5ea37ff", size = 10749, upload-time = "2026-10-28T01:23:37.68Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/11/b4/2ae078adda7f1bc4813530e42307aaff554db468d16828995e1de666e788/kfp_pipeline_spec-2.17.3-py3-none-any.whl", hash = "sha256:f0703cbf97891b6884a0230a1e72256367ccd03d8177581f6ed5b168fbfa1a64", size = 9921, upload-time = "2026-10-22T14:58:36.156Z" },
+    { url = "https://files.pythonhosted.org/packages/19/14/580a25a38b87b478bc89c3236a04d934d91db68c49b05ff72267b33543b3/kfp_pipeline_spec-2.18.0-py3-none-any.whl", hash = "sha256:ce6f8900ab2213102b5aadb9a39f1f3ab79d5d666d4ce2636eec025b9d109742", size = 10040, upload-time = "2026-10-28T01:23:36.493Z" },
 ]
 
 [[package]]
 name = "kfp-server-api"
-version = "2.17.3"
+version = "2.18.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
@@ -2580,7 +2578,7 @@ dependencies = [
     { name = "six" },
     { name = "urllib3" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ef/b2/8ad63c5f5e4efd6d31b934b2a9649bb72f9718495ccefbe9f9885e094671/kfp_server_api-2.17.3.tar.gz", hash = "sha256:bae229d12bfca09cb7992d0db6f89e4d0facbf274cd8d1597bb93a714dd4aa86", size = 69821, upload-time = "2026-10-22T14:57:48.151Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/42/ba/1a953f0c1fa9d6fed2049cf62557ae5b7e7559e488dad147245e1b5dd4aa/kfp_server_api-2.18.0.tar.gz", hash = "sha256:3e81460a2e7bb66fa260825b0b1f87e7f0bff6d8e0da2015a4e8fbc7b4ec28c9", size = 70389, upload-time = "2026-10-28T01:24:19.948Z" }
 
 [[package]]
 name = "kombu"

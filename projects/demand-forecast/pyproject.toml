@@ -56,7 +56,7 @@ warehouse-validation = [
     "great-expectations~=1.24",
 ]
 pipelines = [
-    "kfp~=2.17",
+    "kfp~=2.18",
 ]
 observability = [
     "opentelemetry-exporter-otlp-proto-grpc~=1.45",
