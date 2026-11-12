@@ -1,0 +1,560 @@
+Committed copy of the QA-4 round twenty report (the auditor's ~/qa4-r20-report.md).
+
+Verbatim, with no redaction. Plain text, like the earlier rounds' copies.
+
+-------------------------------------------------------------------------------
+
+# QA-4 round twenty — independent audit of `ml-platform` at a057807
+
+Auditor session: separate from the authoring session (ADR-005 rule B). Read-only. Nothing was committed or
+pushed. No PR, issue, comment, label, setting, secret or branch was touched in either repository. Neither main
+working tree was touched. `scripts/audit_record.py` ran only with `--verify`. `AGENTS.md` and `ops/audit.jsonl`
+were not edited. Mutations stayed uncommitted in my own worktrees (or a `--catalogue` file). Probes planted files
+only inside `~/qa4-r20*`, and each was reverted with `git checkout`. Cluster effects are listed under Closing confirmation. One `git fetch` of `refs/pull/170/merge` was
+run to count commits on the merge ref, and its local ref was deleted (the fetched objects stay in the shared
+object store; no ref remains).
+
+- **Tree under audit: `a057807c0887fb893a91e794403f0e0d2b85e23e`** (origin/main, #159).
+  - Previous audit: `947c14d`, round nineteen. `git rev-list --count --no-merges 947c14d..a057807` = **10**,
+    the ten the prompt lists.
+  - Catalogue: **321 entries** at a057807 (`git show a057807:tests/mutations.yaml | grep -c '^- id:'`).
+  - Main itself is at **10**, not 11 (below, Open Dependabot PRs).
+- **ml-service-template at `aea4eaf` (v0.33.0)**, as the detached worktree `~/template_MLOps`. All three
+  sibling-dependent checks ran against it:
+  - C2 → "152 resolved against the template's index";
+  - README comparison → `scripts/readme_standard.py` byte-identical (`cmp`); `check_readme.py` OK in both repositories;
+  - `check_upstream_parity` online half → "122 comparable artifacts upstream, all decided".
+- **Worktrees** (each `git worktree add --detach … a057807`, synced with
+  `uv sync --all-packages --all-extras --locked`):
+  - `~/qa4-r20`: probes, the resolved serving sets and the regen;
+  - `~/qa4-r20-verify`: `make verify`;
+  - `~/qa4-r20-mut`: the committed catalogue;
+  - `~/qa4-r20-c11`: bare-sync acceptance probe, then the auditor catalogue.
+- **Tools:** uv 0.11.19; copier 9.19.1 (locked; the service's lock moved it from 9.18.2); trivy 0.71.0 locally
+  (CI's action runs 0.70.0); gh 2.103.3; terraform 1.17.1; Docker 29.9.2 (Desktop 4.97.0), kubectl 1.36 against a 1.34 server; git 2.43.0.
+- **Logs:** `~/qa4-r20-logs/`; mutation catalogues `r20.yaml` and `r20b.yaml` there; probes in `probes/`.
+
+**Docker daemon and cluster: three different conditions in one session.**
+
+| Window (local time) | Measured | Consequence |
+| --- | --- | --- |
+| 10:32 to 11:11 | `docker version` → "could not be found in this WSL 2 distro"; no `/var/run/docker.sock`; `kubectl` → connection to 127.0.0.1:36919 refused | I did not start it. `make verify` ran entirely in this window. `bash scripts/bootstrap.sh --check` exited 0 with Docker absent (P3-6 of round nineteen stays closed). |
+| 11:11 to about 13:38 | The maintainer brought Docker up. Server 29.9.2, `_ping` OK; node `ml-platform-local-control-plane` up; kindnetd `startedAt` 17:11:40Z; six `ml-platform` deployments 1/1; context `kind-ml-platform-local` | Every L3 item ran in this window. |
+| From about 13:38 | `/mnt/wsl/docker-desktop` unmounted: `/usr/local/bin/kubectl` and `/usr/bin/docker` are dangling links, `docker` "could not be found". `/var/run/docker.sock` exists but `curl --unix-socket … /_ping` times out (rc=28, at 13:39:17 and 13:40:49). `/usr/bin/kubectl` still reaches the API server and the pods | The daemon was not answering while the cluster still served. I did not start or restart anything. The two probes at 13:39 and 13:40 (`netpol-deny.log`, `netpol-final.log`) were taken in this state, and P2-6 says so. |
+
+### Runs (clean trees at a057807)
+
+| Run | Command | Result |
+| --- | --- | --- |
+| 1 | `make verify` (`~/qa4-r20-verify`), detached per the prompt | **EXIT=0**, 3125 passed, 6 skipped, 1 xfailed (`-m 'not local and not integration'`; count from the progress characters). Finished about 11:07, before Docker came up. Log `make-verify.log`. Per-project floors below |
+| 2 | `uv run python scripts/mutation_harness.py` (`~/qa4-r20-mut`) | **318/319 expected kills** (321 entries, C10-case and W-ceiling-exclusive survive as declared). **R18-RS10 SURVIVED**, P3-10 of round nineteen (still open), because the worktree is not named `ml-platform`. 0 CRASH |
+| 3 | `… mutation_harness.py --catalogue ~/qa4-r20-logs/r20.yaml` + `r20b.yaml` (`~/qa4-r20-c11`) | **1 of 13 killed, 12 survived** (Mutations, below). Entry R20-BUD-age was corrected and re-run |
+| 4 | `uv run python scripts/check_doc_coherence.py` | **OK**; `[C7] last independent audit 18 days ago, 10/10 commits not contained in 947c14d`; `[C11] 36 plan acceptance commands read: 27 resolve, 9 PENDING` |
+| 5 | `TRIVY_INCLUDE_DEV_DEPS=true trivy fs --cache-dir … --scanners vuln --severity CRITICAL,HIGH --ignorefile .security-baselines/.trivyignore --exit-code 1 --skip-dirs .venv .` DB UpdatedAt 2026-11-09T13:58Z | **rc=1, 7 HIGH in `uv.lock`** (P1) |
+| 6 | `uv run python scripts/audit_record.py --verify` | `[audit] OK — 87 entries, chain intact` |
+| 7 | `uv run copier copy --trust --defaults --overwrite --vcs-ref aea4eaf --data-file <answers> ~/template_MLOps …`, `diff -rq` against the committed service | One difference: `data/` (only in the rendered tree) |
+| 8 | `uv run python scripts/check_codecov_reports.py` | `[codecov] OK — main at a057807c0887 reports 88.12% on Codecov` |
+| 9 (L3) | `make local-preflight` | **rc=0**, 17 s. Minimum available 6959 MB; budget 3136 MB across 8 components; allowance 3827 MB (55%); 691 MB of headroom |
+| 10 (L3) | `make local-up` | **rc=0**, 62 s, on the existing cluster (not created from nothing) |
+| 11 (L3) | `make local-serve` | **rc=0**, 196 s |
+| 12 (L3) | `make local-dashboards` | **rc=0**, 18 s |
+| 13 (L3) | `make local-verify`, 11:17:35 | **rc=2**, 303 s: **1 failed, 39 passed**, `test_rewriting_the_dns_peer_selector_denies_dns` (P2-6) |
+| 14 (L3) | `uv run pytest tests/local -m local -rs`, 11:22:38 | **rc=1**, 205 s: **1 failed, 39 passed**, same test, 0 skipped (P2-6) |
+| 15 (L3) | The same `tests/local`, twice more, 13:34:34 and 13:36:00 | **40 passed in 84 s; 40 passed in 102 s.** Same tree, no change between runs (`netpol-rerun.log`) |
+| CI | run 40551713187 on a057807 (push) | "Dependabot auto-merge" push run success; CI, Docs quality, Scorecard success (`gh api …/actions/runs?head_sha=…`) |
+
+Coverage from run 1 (floor in brackets, lines/branches), all met: libs 94.60 (90); data-contracts 95.60/90.62; feature-defs 100/100; llm-core 95.30/87.50; ml-core 97.25/94.07; scripts 88.54 (86); projects 97.40 (97); demand-forecast 98.48/93.86 (98/93); rag-assistant 96.34/90.00 (96/90); store-assistant 100/100; orchestration 100/100.
+
+---
+
+## Findings
+
+**Counts: 0 P0 · 1 P1 · 6 P2 · 7 P3** (new to this round; round nineteen's open findings are below and are
+not recounted).
+
+### P1
+
+```text
+[P1] The blocking Trivy gate fails on a057807 with today's database — 7 HIGH in uv.lock — so every open PR, the next push to main and the commit that records this round go red
+  uv.lock (dnspython 2.8.0, hydra-core 1.3.7, oauthlib 4.0.0, pyasn1 0.6.4)
+  $ TRIVY_INCLUDE_DEV_DEPS=true trivy fs --cache-dir ~/qa4-r20-logs/trivy-cache --scanners vuln --severity CRITICAL,HIGH \
+      --ignorefile .security-baselines/.trivyignore --exit-code 1 --skip-dirs .venv .      # DB UpdatedAt 2026-11-09T13:58:27Z
+  uv.lock (uv)  Total: 7 (HIGH: 7, CRITICAL: 0)   rc=1
+  dnspython   CVE-2026-114605      HIGH  fixed  2.8.0  → 2.9.0
+  hydra-core  GHSA-wf6j-7hvr-gr93  HIGH  fixed  1.3.7  → 1.3.8      (GHSA published 2026-10-27T17:08:41Z)
+  oauthlib    CVE-2026-49272       HIGH  fixed  4.0.0  → 4.0.1      authentication bypass via missing device-code validation
+  pyasn1      CVE-2026-119194/5/6/7 HIGH fixed  0.6.4  → 0.6.5      (four DoS)
+  $ gh run view 42574226805 --log-failed   # CI on #170, 2026-11-09, trivy 0.70.0
+  Report Summary: uv.lock 7, every .trivy-resolved/serving-* 0 · Total: 7 (HIGH: 7, CRITICAL: 0)
+  $ gh pr checks 162 / 166 / 167 / 168 / 169 / 170 | fail
+  Each: Fast gates, Repository invariants, Supply chain, Tests and coverage
+```
+
+Same shape as round nineteen's P1. CI on a057807 was green because its database predated these advisories.
+
+- **The prompt's account is incomplete:** the seven Dependabot PRs fail `Fast gates` with the C7 line, and
+  **also** fail `Supply chain` on these seven CVEs. #162 and #167 change only workflow files, so the base lock
+  is what fails.
+- **Reachability, from `uv.lock`'s graph:** `dnspython` ← email-validator ← `ml-platform[orchestration]`;
+  `hydra-core` ← dvc ← the `data-versioning` dependency group; `oauthlib` ← kfp, kubernetes, requests-oauthlib,
+  and `pyasn1` ← kfp, pyasn1-modules, both ← `demand-forecast[pipelines]`. None is in a serving image: all seven
+  `.trivy-resolved/serving-*` sets scan 0, the same in CI.
+- **Nothing was going to fix this.** `gh api …/dependabot/alerts` answers 403 "Dependabot alerts are disabled for
+  this repository", so no security update opens. #170 is a `remaining-patches` group, and its own CI still shows
+  all seven.
+- **Why it matters:** `Supply chain` is a required check on `main` (branch protection lists it), so nothing lands
+  until the lock moves, including this round's own recording commit.
+
+**Fix:** `uv lock --upgrade-package dnspython --upgrade-package hydra-core --upgrade-package oauthlib
+--upgrade-package pyasn1`, in the recording commit as round nineteen did (C7 refuses a separate one). Confirm with
+Trivy on the new lock, then re-run the resolved serving sets (still 0). Consider enabling Dependabot security
+updates, or a scheduled Trivy on `main` that files an issue, so a newly reviewed advisory is seen before a PR hits
+it. Round nineteen recorded the same failure with certifi.
+
+### P2
+
+```text
+[P2-1] The auto-merge job's base-ref checkout does not keep PR-controlled code out of a job holding contents: write: on pull_request GitHub runs the PR's own workflow file, so Dependabot's bumped action pins execute with the write token before any check passes
+  .github/workflows/dependabot-auto-merge.yml:31-33 (workflow permissions), :59-61 (comment "the budget is read by code the pull request cannot edit — this job holds `contents: write`"), :69 setup-uv pin
+  tests/test_dependabot_merge_budget.py:120-126 ("it must not run code the pull request can edit"; asserts only the ref)
+  $ gh pr diff 167 -- .github/workflows/dependabot-auto-merge.yml
+  -  uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+  +  uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+  $ gh api repos/DuqueOM/ml-platform/actions/runs/42572619784 --jq '{head_sha,path,event,actor:.actor.login}'
+  {"head_sha":"f7b1070c91f31e5dd003a0a9edc98d2250f57fba","path":".github/workflows/dependabot-auto-merge.yml","event":"pull_request","actor":"dependabot[bot]"}
+  $ gh run view 42572619784 --log | grep -E "GITHUB_TOKEN Permissions|Contents:|PullRequests:|Download action"
+  Contents: write
+  PullRequests: write
+  Download action repository 'actions/checkout@3d3c42e5…' (SHA:3d3c42e5…)
+  Download action repository 'astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2' (SHA:68559e99…)
+  R20-WF-pr-actions-write: SURVIVED   (job-level `actions: write` added; 15 tests pass)
+```
+
+The base checkout does protect `scripts/` and `uv.lock`: the budget that ran is `main`'s. It does not protect the
+job: `pull_request` executes the workflow **as the PR has it**, with the PR's `uses:` lines and `run:` bodies.
+
+- **#159 widened the surface.** The previous workflow ran only `fetch-metadata` before its `gh` calls
+  (`git show a057807^:…` has one `uses:`). #159 added `checkout` and `setup-uv` to the job holding the token.
+  A SHA-pin protects until Dependabot proposes a new SHA; from then on, the first thing that runs it is this job,
+  with write, before required checks.
+- **The token reaches the action:** the step log shows `with: github-token: ***` for setup-uv, whose default is `github.token`. The commit message
+  ("The budget runs from main's code, never the pull request's") states the belief this disproves.
+- **Why P2, not P1:** Dependabot-triggered runs get `secrets: Dependabot` only, and branch protection holds
+  `main`. A malicious bump can still write other refs or tags and queue merges.
+- **The unqueue job holds `contents: write` too**, but needs only `pull-requests: write`.
+
+**Fix:** split it. A read-only job checks out `main` and answers the budget through a step output. A separate job
+(`needs:` it, `if:` the output) holds `pull-requests: write` and uses no third-party action, only `gh` on the
+runner. Or use `pull_request_target` with no checkout of the head, which runs the base's workflow. Add a test that
+walks every `uses:` in a job with `contents: write`, and that the unqueue job holds least privilege.
+
+```text
+[P2-2] "Asked again on every push to main" is false for the push that matters: 13 of 13 auto-merged Dependabot commits fired no push workflow, so the unqueue job has only ever run on a maintainer's merge, and the reserve survives only because of a branch-protection setting
+  .github/workflows/dependabot-auto-merge.yml:23-26 ("It is asked again on every push to `main`"); scripts/dependabot_merge_budget.py:25-27
+  $ gh pr list --state merged --app dependabot --limit 30 --json number,mergedBy,mergeCommit … ; gh api "repos/…/actions/runs?head_sha=<sha>&event=push"
+  #152 app/github-actions 7d7eb83 push_runs=0 · #145 4d7d510 =0 · #139 82f8759 =0 · #137 ed79b1b =0 · #131 b0da733 =0
+  #129 ef78621 =0 · #115 fbd1eb0 =0 · #107 c99a759 =0 · #98 93a06f4 =0 · #97 e135c4c =0 · #96 f9c845d =0 · #95 9562457 =0 · #94 e62566a =0
+  (the 15 of #24–#64 merged by DuqueOM: 14 have 2 push runs, #39 has 0)
+  $ gh api repos/…/actions/runs?head_sha=$(git rev-parse 7d7eb83)   → schedule runs only: Codecov health, Docs quality, Scorecard
+  $ gh pr view 152 --json mergedBy   → app/github-actions
+  $ gh api repos/…/branches/main/protection   → required_status_checks.strict: true
+  $ gh api "repos/…/actions/runs?branch=dependabot/uv/opentelemetry-sdk-1.45.0"
+  2026-10-07T21:42:33Z pull_request e62d4baa
+  2026-10-07T22:12:37Z pull_request 6adfa4ba    # synchronize, after #131 merged at 22:09:45
+```
+
+A merge queued with `gh pr merge --auto` under `GITHUB_TOKEN` is performed as `github-actions[bot]`, and events made
+by `GITHUB_TOKEN` do not start workflows. So the `push` this job exists for, a Dependabot auto-merge moving `main`
+while another update is queued, cannot fire it.
+
+- **What is actually holding the budget:** `strict: true` makes the second queued PR BEHIND; Dependabot rebases it;
+  that `synchronize` re-runs the `pull_request` job, which re-asks and calls `--disable-auto` (the #129/#131 pair
+  shows the rebase and re-run). Turn `strict` off and a second armed update merges past the reserve, and the
+  documented control does nothing. C7 still stops at 11, so the loss is the reserve, not the audit gate.
+- **Same mechanism, wider effect:** none of those 13 commits has a CI run on `main`. They were tested as PR merge
+  refs, but every push-only job skipped them, and QA-6's "CI verified green on the release commit" cannot be
+  answered from `main` if the release commit is an auto-merge.
+- **The `push` branch is not unexercised**, against the prompt: run 40551713187 (a057807, a maintainer merge) ran
+  it, printed `WAIT — main is 10/10 …`, listed nothing and did nothing.
+
+**Fix:** either enable auto-merge with a GitHub App/PAT token so the resulting push fires workflows (which also
+restores CI on those commits), or reword the workflow comment and the script's docstring to name `strict` and the
+rebase as the mechanism, and add a test or gate that the branch-protection payload keeps `strict: true`
+(`scripts/setup_branch_protection.sh`).
+
+```text
+[P2-3] C3 passes a wrong figure and most false scanner claims: ADOPTION.md still says 31 declared gates against the derived 43; SECURITY.md's undated 56 HIGH re-measures at 48; and 11 of 12 spellings of "this scanner blocks" are not read
+  docs/ADOPTION.md:71 ("this repository has 31 declared gates"); SECURITY.md:106 ("surfaces 56 HIGH findings")
+  scripts/check_compliance_mapping.py:353-360,:380 (QUOTED, read only over the mapping), :407-416 (_ADVISORY_CLAIM/_BLOCKING_CLAIM), :483 (check_scanner_claims called only on the mapping)
+  $ uv run python ~/qa4-r20-logs/probes/c3_probe.py   # check_scanner_claims / check_dated_measurements on patched text, nothing written
+  check_quoted_figures(ADOPTION.md, figures)   → ["the prose says '31 declared gates'; the tree says 43"]    (not run by the gate)
+  check_scanner_claims, Checkov blocks the build.                 CAUGHT
+  Checkov and Kubescape block every merge.   Checkov fails CI on any finding.   Checkov gates every merge.
+  Checkov is a required check.   Checkov: blocking.   checkov blocks the build.   Blocking on every merge: Checkov.
+  Trivy only reports.   Trivy is non-blocking.   Trivy does not fail the build.   Bandit reported and did not block.     ALL PASS
+  $ trivy fs … --scanners misconfig --severity HIGH --skip-dirs .venv --format json .   → 48 FAIL (trivy 0.71.0, DB 2026-11-09)
+  R20-C3-plural-verb, -fails-ci, -adoption-claim, -adoption-count, -security-interleaved, -crossdoc: SURVIVED
+```
+
+C3's six rules are real where they read; two of them do not read where the wrong sentences are.
+
+- **A wrong figure that passes:** `docs/ADOPTION.md:71`, "31 declared gates", and C3 derives 43
+  (`validate_quality_gates`: "43 gate rows"). The gate reads only the mapping for quoted counts, while its own
+  docstring holds `SECURITY.md` and `docs/ADOPTION.md` "to this rule" for measurements.
+- **An undated measurement that passes:** `SECURITY.md:106`, "56 HIGH findings", has no date. The `DATED` pattern
+  needs `\d+ findings` with nothing between, so `56 HIGH findings` is not read. Re-measured today: 48.
+- **The docstring's own example fails:** "Bandit and Trivy block; Checkov and Kubescape report" is the shape it
+  says the parser assigns correctly, and `\bblocks\b` does not match `block`. So "Checkov and Kubescape block
+  every merge" passes on a scanner `SECURITY.md` marks as advisory.
+- **Scope:** `check_scanner_claims` runs on the mapping alone, so a false blocking claim in `SECURITY.md`,
+  `ADOPTION.md` or the README is not read. All three documents quote the same 104-failed-checks Checkov
+  measurement, and none is compared with another (R20-C3-crossdoc).
+- **A date anywhere in the paragraph satisfies the rule**, unrelated or future (`2020-01-01`, `2099-12-31`).
+
+**Fix:** Run `check_quoted_figures` and `check_scanner_claims` over the three documents. Widen `_BLOCKING_CLAIM` to
+`block` (verb), `fails CI`, `gates`, `required check`, and both directions of a colon-form, or invert the rule: a
+sentence naming a scanner must not contain a blocking word unless it says so correctly. Generalise the dated
+pattern to tolerate an adjective between number and noun. Compare the Checkov figure across the three documents.
+Correct ADOPTION.md:71, or point it at the block. Date or re-measure SECURITY.md:106.
+
+```text
+[P2-4] C11 resolves a command that cannot pass and DELIVERABLES marks a plan bullet ✅ against a row whose own document rejects it
+  docs/architecture/technical-plan.md:84, :86, :140 ; :669-670 ; scripts/check_implementation_status.py:678
+  scripts/check_doc_coherence.py:1754-1784 (unresolved_in_command: paths, modules, make targets, -k selectors only)
+  $ uv run python ~/qa4-r20-logs/probes/c11_dump.py
+  [0] L84: uv sync && uv run pytest tests/ -q   || unresolved=[]
+  $ git worktree add --detach ~/qa4-r20-c11 a057807; cd ~/qa4-r20-c11; uv sync --locked; uv run pytest tests/ -q --collect-only
+  error: Failed to spawn: `pytest`
+    Caused by: Permission denied (os error 13)
+  $ ls -la .venv/bin/pytest → No such file; uv pip list | wc -l → 16 packages, no pytest, no ruff, no mypy, no workspace members
+  $ grep -n 'uv sync' QUICK_START.md CONTRIBUTING.md .github/workflows/ci.yml scripts/bootstrap.sh
+  QUICK_START.md:52: uv sync --all-packages --all-extras        (and CI, bootstrap, CONTRIBUTING likewise)
+  L140: curl -s "$SERVICE_URL/health" && curl -s -XPOST "$SERVICE_URL/predict" -d @sample.json
+  $ find . -name sample.json -not -path './.venv/*'   → none   (and `curl -s` exits 0 on a 4xx or 5xx; only a network error fails it)
+  R20-C11-flag (… check_library_reuse.py --no-such-flag), R20-C11-nodeid (… test_dependency_direction.py::test_no_such_test): SURVIVED
+  $ uv run python ~/qa4-r20-logs/probes/c11_dump.py   # DELIVERABLES → status rows
+  6: EU AI Act risk classification, ISO/IEC     → "Compliance mapping" ✅ L1
+     technical-plan.md:669  "EU AI Act risk classification, ISO/IEC 42001 and NIST AI RMF mapping, human oversight records."
+     docs/COMPLIANCE_MAPPING.md:109  "(NIST AI RMF, ISO/IEC 42001, EU AI Act Arts. 9–15) were rejected here"
+  0: Ruff, mypy, pre-commit, secret scanning. → Lint + format, Type checking, pre-commit   (no row shows secret scanning)
+```
+
+This is C11's whole purpose inverted. Its docstring cites the plan's rule 1, "a phase is complete only when every
+acceptance command exits zero", and C11 reports `27 resolve` while the first one of Phase 0 cannot exit zero on the
+sync it names. A bare `uv sync` installs 16 packages and no test tools.
+
+The DELIVERABLES map is real work (every bullet has a key and rows; #150 added ten rows, six of them `absent`, and says so), and the two
+above are the cost of mapping a bullet to a row by name:
+
+- **Phase 6's bullet** is shown ✅ L1 against a NIST CSF 2.0 document that says those three frameworks "were
+  rejected here". The deliverable is in fact undone, and the row reports the mapping that replaced it.
+- **Phase 0's secret scanning** has no row: gitleaks in CI and a staged-content hook exist, so it is a missing row
+  rather than a missing control.
+
+**Fix:** Plan L84 → `uv sync --all-packages --all-extras --locked && uv run pytest tests/ -q`. Have C11 run
+`--help`-class resolution for argparse scripts, resolve `path::node` selectors through `_selects_a_test`, and treat a
+`curl` without `-f` as unresolved. Map 6's bullet to a new ⬜ absent row. Add a Secret-scanning row (or map to
+"Public-repo hygiene" if that shows it).
+
+```text
+[P2-5] One of the service's two MLflow tracking servers stays at v2.9.2, wired to a 3.17.2 client: #149's "both tracking-server images" excludes the demo compose, which the service's `make demo` starts
+  services/demand-forecast-serving/docker-compose.demo.yml:22 (ghcr.io/mlflow/mlflow:v2.9.2), :63 (MLFLOW_TRACKING_URI=http://mlflow:5000)
+  services/demand-forecast-serving/Makefile:211 (docker compose -f docker-compose.demo.yml up -d --build)
+  $ grep -rn 'mlflow/mlflow:v' services
+  services/demand-forecast-serving/docker-compose.demo.yml:22:    image: ghcr.io/mlflow/mlflow:v2.9.2
+  services/demand-forecast-serving/infra/docker-compose.mlflow.yml:76:    image: ghcr.io/mlflow/mlflow:v3.17.2
+  $ git show aea4eaf:templates/tests/governance/test_mlflow_client_server_pin.py   # the contract test
+  SERVER_IMAGES = (REPO_ROOT / "docker-compose.yml", SERVICE / "infra" / "docker-compose.mlflow.yml")
+  $ grep -rln 'mlflow.*client.*server\|docker-compose.mlflow\|test_mlflow_client_server' tests/ docs/governance   → (none)
+```
+
+Confirmed as the prompt asked, and mostly holds: `requirements-train.txt:20` and `pyproject.toml:59` pin
+`mlflow ~= 3.17.2`, and `infra/docker-compose.mlflow.yml:76` runs v3.17.2. The resolved train set carries
+`mlflow==3.17.2`, and the other serving sets correctly carry no mlflow. **The local stack has no MLflow server at
+all** (`grep -rn -i mlflow platform/local Makefile` → none), so that half of the question has no second party.
+
+The demo compose is the third server and the contract test's list omits it. Its v2.9.2 predates the CVE-2026-53995 fix
+by more than a major version, and a 3.17 client calling a 2.9 server is not exercised by anything. It is
+upstream-inherited (`aea4eaf:templates/service/docker-compose.demo.yml:22`), so the fix belongs in the template. Nothing
+in this repository would notice it either. I did not run the pair: `make demo` is not part of L3, and the Docker daemon stopped answering before I reached it.
+
+**Fix:** in `ml-service-template`, raise `templates/service/docker-compose.demo.yml` to the client's pin and add it
+to `SERVER_IMAGES`; regenerate. Until then, record it in the parity ledger.
+
+[P2-6] `make local-verify` failed on the first two runs after a Docker restart, on the negative control its own message calls the foundation of the file, and the cause is not established
+tests/local/test_network_policies.py:233 (the assertion), :46 (the 150 s window); Makefile:161
+$ make local-verify        (11:17:35; kindnetd had started at 11:11:40)
+FAILED tests/local/test_network_policies.py::test_rewriting_the_dns_peer_selector_denies_dns
+AssertionError: DNS still resolved with a peer selector no CoreDNS pod carries. Either the CNI stopped enforcing NetworkPolicy, or something else is permitting it — both make every other assertion in this file meaningless
+1 failed, 39 passed                                    → make: *** [Makefile:161: local-verify] Error 1
+$ uv run pytest tests/local -m local -rs -o addopts=   (11:22:38)   → same failure, 1 failed, 39 passed, rc=1
+$ the same suite at 13:34:34 and 13:36:00              → 40 passed in 84 s; 40 passed in 102 s
+
+The same mutation by hand at 13:30:40 (`netpol-probe.log`), probe pod created seconds earlier:
+  t+0s rc=0 · t+8s rc=0 · t+17s rc=1 · … denied through t+163s · restored · resolved again at t+3s
+
+The failure is real, it came twice in a row, and both runs were within about 15 minutes of kindnetd's start. Later runs on the same tree pass. I could not reproduce it, so I do not claim the restart as the cause: that is a correlation across two runs. `tests/local` is the L3 gate, and a maintainer who restarts Docker and runs it gets a red with a message that says either the CNI stopped enforcing or the file means nothing, and no way to tell which.
+
+**What I measured around it, on fresh pods in the same namespace.** `allow-dns` and `default-deny` select every pod, so non-DNS egress should be denied:
+```text
+netpol-probe.log, 13:30, Docker up, pod seconds old:   wget prometheus:9090 rc=0 (1 sample: the denied connection SUCCEEDED)
+netpol-final.log, about 13:41, pod from Ready:         t+0s … t+59s  dns_rc=0 wget_rc=0 (10 of 10: succeeded for at least 59 s)
+netpol-deny.log, 13:39, the previous pod, 98 s old:    wget rc=1 (3 of 3: denied); nslookup rc=1 (1 sample, with the shipped allow-dns in force, unexplained)
+```
+Only the first line was taken with Docker fully up. The other two came after the daemon stopped answering (header table), so they are indicative. `netpol-rerun.log` also shows 12 "rc=0" lines from 13:37, and **I discount them**: my loop read `$?` after a `$(date)` in the same `echo`, so those lines report `date`, not `wget`.
+
+`nft list table inet kindnet-network-policies` shows `queue flags bypass` and a `podips-v4` set, which is how kindnetd fails open when its listener or its set is not current. I did not establish that this is what happened at 11:20. None of the four files in `tests/local/` asserts that a non-DNS connection is denied (`grep -iE 'egress|denied|deny'` finds only "regression" outside this file; here the tests are :197, :204, :214, :249), so a window on new pods is visible to nothing. It is kindnet behaviour and says nothing about GKE or EKS.
+
+Separately, the test's `finally` restores from the raw `platform/policies/allow-dns.yaml` (:240), not from the overlay, so every run of it leaves `allow-dns` without the overlay's `cloud` and `environment` labels (`kubectl diff -k` showed them missing). That is the drift round nineteen's closing note recorded.
+
+**Fix:** capture kindnetd's log and the nft sets on failure, so the next occurrence is diagnosable. Add a negative test for non-DNS egress with the same polling, and state the measured propagation for a new pod (the docstring's 41 s is exceeded here). Until the cause is known, do not lengthen the 150 s window.
+
+### P3
+
+```text
+[P3-1] The unqueue step has no pipefail, so a failing `gh pr list` is a green no-op; any non-zero from the budget script is read as "budget spent" and withdraws every queued merge with a false comment
+  .github/workflows/dependabot-auto-merge.yml:112-121 (no `shell:`)
+  $ gh run view 40551713187 --log | grep 'shell:'  → shell: /usr/bin/bash -e {0}
+  $ bash -e -c 'false | while read x; do :; done; echo ...; '   → prints, rc=0
+  $ bash -e -c 'set -o pipefail; false | while read x; do :; done; echo not-reached'; echo $?   → 1
+```
+GitHub's default without `shell:` is `bash -e {0}`, not `-eo pipefail`. `if uv run …; then exit 0; fi` treats a uv
+failure, an import error or a Python crash like a `WAIT`, and the job posts "main has used the part of the
+independent-audit grace" on each PR. Unlikely in practice, since a crash there needs a bad runner.
+**Fix:** `shell: bash` for `-eo pipefail`, and let the budget script exit 2 on "cannot run" so the step fails.
+
+```text
+[P3-2] audit_drift's docstring says None "whenever C7 fails for a reason other than drift", and C7's 90-day age check is not read; C7 fails and the budget says OK
+  scripts/check_doc_coherence.py:1399-1421; scripts/dependabot_merge_budget.py:20-21 ("so this cannot disagree with the gate it protects")
+  $ uv run python ~/qa4-r20-logs/probes/c7_age_budget.py   # marker date 2026-04-01, trail corroboration stubbed, drift 2
+  C7 FAIL last independent audit was 222 days ago (limit 90) — run QA-4
+  drift 2  budget (True, '…merging makes it 3, within the 5 Dependabot may spend.')
+  $ uv run python ~/qa4-r20-logs/probes/c7_budget_probe.py     # other shapes, in memory
+  date-only today → C7 ok, drift 0, budget OK · uppercase sha → same · date-only 2099 → same · audited sha 91 days → C7 FAIL, drift 10, WAIT
+  R20-BUD-age (C7's `age` forced to 0): SURVIVED tests/test_audit_drift_counter.py, tests/test_dependabot_merge_budget.py and tests/test_gate_scripts.py -k c7
+```
+The two sentences promise equivalence, and this is the one shape that splits them. Harmless in effect, since a
+merge queued while C7 fails has Fast gates red, but it should either agree or say so. C7's 90-day branch is also
+untested: R20-BUD-age forces `age = 0` and every C7 test still passes.
+**Fix:** `audit_drift` returns None when `age > AUDIT_MAX_AGE_DAYS`, or the docstrings say "drift only"; add a test
+of the 90-day limit.
+
+```text
+[P3-3] The reserve is unowned: half the grace is the author's choice and no decision records it
+  scripts/dependabot_merge_budget.py:40-43; CHANGELOG.md:36 mentions the number, no ADR or quality-gates row states the reason
+  $ grep -rn 'RESERVED\|half the grace\|merge.budget' docs AGENTS.md | grep -v CHANGELOG   → upstream-parity.yaml:79 only ("Adopted, with one addition")
+  $ python3 (git log per window)   # Dependabot-authored / total, marker to marker
+  96128c0..f8b9d27 5/9 · f8b9d27..98a4359 1/10 · 98a4359..aea1410 1/10 · aea1410..f89a910 0/3 · f89a910..746d6d6 0/2
+  746d6d6..947c14d 5/10 · 947c14d..a057807 3/10
+```
+My judgement: half is defensible and the observed maximum is 5 of 10, but it is not what the code computes. The
+budget caps total drift, not Dependabot's share, so if humans spend the first five commits Dependabot gets none,
+and if seven PRs wait for the next reset (as now) Dependabot spends the first five of the window remediation needs
+most. It also treats security updates like any other (they do not currently arrive, P1). A threshold with no recorded reason is what
+QA-3 exists to catch. **Fix:** a quality-gates row or an ADR section stating the number, its reason and who may
+change it.
+
+```text
+[P3-4] check_config_is_read counts assignments as reads and matches names globally; the 29/29 figure does not overstate today, but both limits are live
+  scripts/check_config_is_read.py:106 (`isinstance(node, ast.Attribute)` with no ctx check)
+  $ uv run python ~/qa4-r20-logs/probes/config_reads.py     # every field's read sites, per receiver
+  R20-CFG-global-name (policy.py policy_version=rules.version → a literal): SURVIVED ("29 read, 0 unwired"; `.version` of ColumnRule keeps it)
+  R20-CFG-store-only (new field written and never read): SURVIVED
+```
+Every one of the 29 fields has a genuine read on a config receiver today (full list in `probes/config_reads.out`),
+so the figure stands. The docstring says the gate is a lower bound and names the global-name limit. It does not
+mention that a `Store` counts: `node.attr` for an assignment target is added too.
+**Fix:** add `isinstance(node.ctx, ast.Load)`.
+
+```text
+[P3-5] A blank prompt satisfies the non-English rule
+  libs/llm-core/src/llm_core/agent.py:57 (set difference of keys)
+  $ uv run python ~/qa4-r20-logs/probes/lang_probe.py
+  es, safe_fallback missing → refused   ·   es, safe_fallback "" → ACCEPTED   ·   es, safe_fallback "   " → ACCEPTED
+```
+A Spanish customer with `safe_fallback: ""` now gets an empty reply instead of English. The rule's own example is
+that one key. **Fix:** require a non-blank value. (`_LANGUAGE_TAG` also accepts `es\n`, since `$` matches before a
+trailing newline; YAML will not produce it.)
+
+```text
+[P3-6] The technology inventory's detectors treat a declaration as use for polars too, not only duckdb (DEP27-D1)
+  docs/architecture/technology-inventory.yaml (duckdb: pattern:duckdb|libs/ml-core/pyproject.toml)
+  $ uv run python ~/qa4-r20-logs/probes/inventory_decl.py
+  DECLARATION-ONLY: duckdb core ['libs/ml-core/pyproject.toml'] · polars core ['libs/ml-core/pyproject.toml']
+  DECLARATION-ONLY: ruff, mypy, pytest, uv-workspaces core ['pyproject.toml']   (tools, used through the CLI)
+  $ uv run python ~/qa4-r20-logs/probes/declared_unused.py   # declared and imported nowhere, workspace-wide
+  libs/ml-core/pyproject.toml: duckdb~=2.0 (import duckdb)   ← the only non-tool
+```
+Polars is really imported, but its detector matches the declaration, so it would stay ✅ if every import were
+removed. The other instance of the class: `scripts/check_library_reuse.py` fails on a library declared and never
+imported, and is scoped to workspace libraries, which is why duckdb passes. **Fix:** point duckdb's and polars's
+detectors at `import` in code, as DEP27-D1 already plans.
+
+```text
+[P3-7] Statements in the audit prompt that proved wrong
+  - "Open Dependabot PRs: their Fast gates fail with C7": also every Supply chain, on 7 Trivy HIGHs (P1).
+  - "Not yet exercised on any real event: … the push to main trigger": run 40551713187 on a057807 ran the Unqueue job and printed WAIT (P2-2).
+  - "the server image in the local stack and the compose file": no MLflow server in the local stack (P2-5).
+```
+
+---
+
+## Open Dependabot PRs — count only, as asked
+
+```text
+$ git rev-list --count --no-merges 947c14d..a057807
+10
+$ git fetch origin +refs/pull/170/merge:refs/qa4-r20/pr170; git rev-list --parents -n1 refs/qa4-r20/pr170
+4af2621… a057807… 3efa5e5…
+$ git rev-list --count --no-merges 947c14d..refs/qa4-r20/pr170
+11
+$ git rev-list --count 947c14d..refs/qa4-r20/pr170
+12
+$ gh pr list --app dependabot --state open --json number,autoMergeRequest,mergeStateStatus
+170 null BLOCKED · 169 · 168 · 167 · 166 · 162 · 160 (none armed)
+```
+The PR's `FAIL [C7] 11 commits` is right: `--no-merges` drops the merge commit and counts the PR's head commit, so
+a one-commit PR on `main` at 10 reads 11. A multi-commit PR is charged per commit and drops back after the squash
+(round nineteen's measurement). `main` is at 10, not 11. Nothing was merged or commented on.
+
+## Round nineteen's open findings — status at a057807
+
+Each was re-checked by running its probe where one exists. None is closed by this window.
+
+| ID | Status | Evidence |
+| --- | --- | --- |
+| P2-1 | **Open and grown:** #159's budget takes the same marker, so a date-only or future-dated marker opens the budget too (test_a_date_only_marker_is_counted_by_date) | c7_budget.out: date-only today / 2099 / uppercase sha → C7 ok, drift 0, budget OK |
+| P2-2 | Open | Bandit step + `shell: bash {0}` + folded `| tee` on ci.yml: `tests/test_security_controls.py` 63 passed; action pins and yaml OK |
+| P2-3 | Open | mem_attacks M4–M7 (a `.yml`, an initContainer, a StatefulSet, a hand ledger bump) 9 passed. M8 re-run against the current 394 MiB ledger, limit 200Mi, 150 MiB ledger peak: 9 passed |
+| P2-4 | Open | audit-brief.md § 11 is still "round fifteen's starting point" |
+| P2-6 | Open | unpinned_probe U1–U4, U6–U8 pass; `curl \| sh` and `bash <(…)` caught |
+| P3-1 | Open | pv_attacks B1–B7: gate OK, tests fail |
+| P3-2 | Open | P5 tag moved to a Bandit-only entry: tests/test_mutation_harness.py 652 passed |
+| P3-3 | Open | runbook gains `copier \` + `update`: tests/test_tool_versions.py 12 passed |
+| P3-4 | Open | indirect URL download added to ci.yml: `check_action_pins` OK |
+| P3-5 | Open | c6_probe L3, L4, N5, N6, N8 pass |
+| P3-7 | Open | ledger `peak_mib` still from a single short window: "peak of 10 samples 3s apart" (measured_on 2026-10-20) |
+| P3-8 | Open, immutable | the commit message cannot change |
+| P3-9 | Open | `.dvc/config:17-18` still shows `export AWS_ACCESS_KEY_ID=…` |
+| P3-10 | Open | R18-RS10 SURVIVED in `~/qa4-r20-mut` (run 2) |
+| P3-11 | Open | budget.yaml's components sum to 3136 MB; its prose says 3200 |
+| P3-12 | Superseded | this prompt asks for the daemon's condition; see P3-7 here for the new statements |
+
+**Closed by this window:** P3-6 verified (`bootstrap.sh --check` rc=0 with Docker absent, no 20-minute hang). Round nineteen's P2-5 (preflight "does not fit", short by 16 MB) did not recur: `make local-preflight` and `make local-up` both rc=0 with 691 MB of headroom. That was at 6959 MB minimum available, so it shows no regression at this memory level and does not exercise the boundary round nineteen hit.
+
+## What holds, with its evidence
+
+**L3 on the live stack, apart from P2-6.** `local-preflight`, `local-up`, `local-serve` and `local-dashboards` all rc=0; `tests/local` 40 passed twice with 0 skipped. The node came back from a Docker restart with all six monitoring deployments 1/1 (five at restart count 9, unchanged since; Grafana rolled by `local-dashboards`).
+
+**Grafana 13.2.3 (#147).** The live image is `grafana/grafana:13.2.3@sha256:b28bae15…`, the digest in `platform/local/manifests/40-metrics.yaml:155` and `measured-memory.yaml:10`. Working set by the ledger's own method (`memory.current` 536494080 minus `inactive_file` 122400768) = 394.9 MiB against a ledger of 394 and a 512 MiB limit. `memory.current` itself sits at the limit because of page cache: `memory.events` reports `max 17609`, `oom 0`, `oom_kill 0`, so reclaim is working and nothing has been killed.
+
+**W-15, measured.** 22 project files in `coverage.xml`, **0 below 90% lines or 80% branches**. `check_coverage_floors.py` enforces per-project floors only, so this holds as a measurement and is not gated per file.
+
+**The auto-merge budget's measured paths (#159).**
+- Refusal path on real events: runs 41400357558 and 41400874749 logged `Contents: write`, `PullRequests: write`
+  and `[dependabot-merge-budget] WAIT — main is 10/10 … past the 5 Dependabot may spend`; the else-branch's
+  `gh pr view … autoMergeRequest` returned false and queued nothing. The token permissions are the ones the job
+  needs. `gh pr list --app dependabot` returns the seven open PRs with `autoMergeRequest: null`.
+- `gh pr merge --disable-auto` exists in gh 2.103.3. It has not been exercised on an armed PR anywhere, and I did
+  not arm one, because that would have touched a PR.
+- The budget reads C7's own count: on every marker shape I tried except age (P3-2), `audit_drift` agrees with the C7
+  verdict. Budget tests: 15 passed; DEP27-1…7 killed in run 2. `--package ml-platform --no-dev` works (the job ran).
+- The base checkout does keep `scripts/` and `uv.lock` to main's; the gap is the workflow file (P2-1).
+
+**#151 C3.** `[compliance] OK — 22 Categories assessed, 17 figures derived and current`. The structural checks and
+the derived-block stale check do what they say (the committed catalogue's R16-2 entries killed); scanner claims on
+the exact phrases it lists are caught; `Required status checks: 4` agrees with the live protection (4 contexts).
+
+**#158 config-is-read.** `[config-is-read] OK — 29 fields across 2 classes; 29 read`. For every field I found a real
+read on a config receiver. The language rule refuses a missing prompt; `dataclasses.replace(cfg,
+max_local_tiers=0)` raises, so the invariant is on construction. A real `language: es` use-case loads.
+
+**#150.** C11 rejects `PENDING` that resolves, a missing module and a missing make target (R-C11 entries killed).
+`DELIVERABLES`: every plan bullet has a key and every named row exists (#150 added ten rows, six stated `absent`). Argo `demand-forecast-prod-gcp`,
+namespace `demand-forecast-local`, selector `app=demand-forecast` and port 18080:80 all exist in the manifests.
+
+**#149 regen.** `copier copy --vcs-ref aea4eaf --data-file …` against `~/template_MLOps`, `diff -rq` against the
+committed service: identical except the rendered-only `data/`. Resolved sets: train has mlflow, mlflow-skinny and
+mlflow-tracing at 3.17.2; every other set has no mlflow; filelock is 4.2.9 where present, past the 4.2.4 floor.
+
+**#159 dependency round.** Lock diffs match each message's list; `tomli` is removed (an unstated transitive).
+`[coherence] OK`, including C2 with 152 template references. Trivy 7 HIGH is new since the commit (P1).
+
+**#134 Codecov.** `id-token: write` and `use_oidc: true` on the upload, `fail_ci_if_error: false`,
+`check_codecov_reports.py` → OK at a057807 (88.12%), and Codecov health is green on schedule.
+
+**DEP27-D1 confirmed:** nothing in the tree imports duckdb, and `ADR-004`, `ingest.py:3` and `crossover.py:3,16,68`
+still say DuckDB/Polars.
+
+**#148 #147.** a84ab8b: certifi, gitpython and virtualenv only. 1e583cf moves what the message names. a057807's
+message is accurate as to the moved packages and the urllib3 override.
+
+## Mutations added this round (`~/qa4-r20-logs/r20.yaml`, `r20b.yaml`)
+
+| ID | Mutation | Result |
+| --- | --- | --- |
+| R20-C3-plural-verb | "Checkov and Kubescape block every merge" in the mapping | SURVIVED |
+| R20-C3-fails-ci | "Checkov fails CI on any finding" | SURVIVED |
+| R20-C3-adoption-claim | "Checkov blocks every merge" in ADOPTION.md | SURVIVED |
+| R20-C3-adoption-count | ADOPTION.md 31 → 999 declared gates | SURVIVED |
+| R20-C3-security-interleaved | SECURITY.md 56 → 560 HIGH findings | SURVIVED |
+| R20-C3-crossdoc | SECURITY.md 104 → 105 failed checks | SURVIVED |
+| R20-CFG-global-name | PolicyRules.version's only read removed | SURVIVED |
+| R20-CFG-store-only | a new field written and never read | SURVIVED |
+| R20-C11-flag | an acceptance command with a flag its script lacks | SURVIVED |
+| R20-C11-nodeid | a pytest node id naming no test | SURVIVED |
+| R20-WF-pr-actions-write | unqueue job gains `actions: write` | SURVIVED |
+| R20-WF-queue-without-budget-in-unqueue | unqueue `if` broadened to `pull_request` | **KILLED** by test_a_push_to_main_unqueues_what_no_longer_fits |
+| R20-BUD-age | C7's age check removed (`age = 0`), against the C7 and budget tests, then `check_doc_coherence.py --only C7` | SURVIVED (nothing tests the 90-day limit) |
+
+The first harness run reported R20-BUD-age as KILLED. That kill was invalid: the entry named a test file that does
+not exist, and the harness counted the pytest error as a kill. Re-run against real test files (`r20b.yaml`), it
+SURVIVES. A note on the harness: a missing test file counts as a KILL, not a CRASH (`_CRASH` matches `ERROR collecting`, not
+`ERROR: file or directory not found`). The committed catalogue is protected by `tests/test_mutation_harness.py:53`,
+and no committed entry names a missing file; an external `--catalogue` gets no such check.
+
+## What this audit did not do
+
+- **`make demo`, the DVC push and pull against the object store, and RustFS persistence across a restart.** Docker stopped answering before I reached them; `tests/local/test_local_stack.py` touches the object store, but no local test asserts persistence across a restart.
+- **Creating the cluster from nothing.** The rules forbid deleting the node, so `local-up` ran on the existing one.
+- **A root cause for P2-6.** Three later runs passed, so the failure could not be reproduced.
+- **`gh pr merge --disable-auto` and the "room in the budget" path on a real PR**, because they would touch a PR.
+  The queue path is the same `gh pr merge --auto --squash` that merged 13 PRs before #159.
+- **Trivy at CI's 0.70.0.** I ran 0.71.0; CI's own run on #170 reports the same seven.
+- **Checkov's dated 104-check count** (would need re-running against the tree; dated, so C3 accepts it).
+- **The Scorecard and CodeQL code-scanning counts changed since round nineteen:** I read them
+  (Trivy 4, Scorecard 11, CodeQL 0) and did not investigate each.
+
+## Proposed audit-trail record
+
+```text
+uv run python scripts/audit_record.py --action independent-audit \
+  --target ml-platform --mode CONSULT \
+  --outcome "Round 20 against tree a057807c0887fb893a91e794403f0e0d2b85e23e (ml-service-template aea4eaf read-only; 10 commits since 947c14d, --no-merges). 0 P0, 1 P1, 6 P2, 7 P3. P1: 7 HIGH in uv.lock fail the Trivy gate on a057807 with today's DB. P2: the base checkout does not keep the PR's action pins out of the write-token job; auto-merge pushes fire no workflow, so the unqueue job is not what enforces the budget; C3 misses a wrong figure and most false scanner claims; C11 and DELIVERABLES; one MLflow server left at v2.9.2; make local-verify failed twice after a Docker restart on the DNS negative control, cause not established, later runs passed." \
+  --evidence "Worktrees ~/qa4-r20, ~/qa4-r20-verify, ~/qa4-r20-mut, ~/qa4-r20-c11; ~/qa4-r20-logs/."
+```
+
+Marker line, for AGENTS.md once the trail entry exists:
+
+```text
+Last independent audit: 2026-11-09 (a057807)
+```
+
+## Closing confirmation
+
+**Cluster.** The rules forbid `local-down` and deleting the node; neither was run, and no image was pruned. What L3 changed, all from the committed tree at a057807:
+- `local-serve` built `ml-platform/demand-forecast:local` (sha256:94cc8579…) from a057807, loaded it on the node and rolled the deployment. The previous `:local` image is untagged on the node.
+- `local-dashboards` restarted Grafana.
+- The tests' and my probe pods are gone: `get pods -A | grep -E 'netpolicy-probe|qa4-r20'` finds none.
+- `allow-dns` was mutated by the test and by hand, then restored. I re-applied `platform/kubernetes/overlays/local` at 13:47 because the test's restore had dropped the overlay's labels. `kubectl diff -k` on the overlay now reports nothing, and `kubectl diff -f platform/local/manifests/` reported nothing. That apply reported `secret/demand-forecast` and the PodDisruptionBudget as configured, as re-apply always does, and created no new pod.
+
+**Docker.** The daemon was still not answering when I finished (`_ping` rc=28), the same state as from about 13:38. I did not start, stop or restart it.
+
+**Worktrees.** `~/qa4-r20`, `~/qa4-r20-verify`, `~/qa4-r20-mut`, `~/qa4-r20-c11` and `~/template_MLOps` were removed with a plain `git worktree remove` (each clean at removal) and pruned. Every other worktree in both repositories is still listed and I did not touch it. `~/qa4-r20-logs/` and this report remain.
+
+**Repositories.** Nothing committed, pushed or opened in either: no PR, issue, comment, label, setting or secret. `audit_record.py` ran only with `--verify`; `AGENTS.md` and `ops/audit.jsonl` are unchanged. Both main checkouts are clean, ml-platform at `4d59376` (its checked-out branch, `test/w15-project-floors`, not a057807) and the template at `25a7c77`. No background process of mine remains.
+
+
+## Closing verdict
+
+**a057807 does not pass as it stands: `make verify`, the harness and most of L3 hold, but the Trivy gate fails on today's vulnerability data and the first `make local-verify` after a Docker restart failed, with no established cause. 0 P0, 1 P1, 6 P2, 7 P3.**
