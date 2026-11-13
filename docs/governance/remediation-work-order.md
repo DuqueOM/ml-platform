@@ -1441,6 +1441,41 @@ lock change, and C7 refuses a separate fix as the eleventh unreviewed commit.
 The auditor's controls R19-K1 to R19-K4 were killed and join the catalogue with
 the remediation round, alongside the entries above.
 
+## Round twenty — what stays open, and why each one waits
+
+QA-4 round twenty audited `a057807` and reported 0 P0, 1 P1, 6 P2 and 7 P3;
+the report is committed as [`qa4/round-20.txt`](qa4/round-20.txt). Its
+verdict: `make verify`, the mutation harness and most of L3 hold, but the
+Trivy gate fails on that day's vulnerability data, and the first
+`make local-verify` after a Docker restart failed with no established cause.
+
+Recorded in *chore: record QA-4 round twenty, and the lock fixes the gate
+needed to land it*. That commit closes only what blocks it from landing:
+`Supply chain` is a required check, it fails on `a057807` itself, and C7
+refuses a separate fix as the eleventh unreviewed commit.
+
+| ID | Finding | State |
+| --- | --- | --- |
+| P1 | Seven HIGH advisories in `uv.lock` (dnspython, hydra-core, oauthlib, pyasn1) fail the blocking Trivy gate on `a057807` | **Closed** in the recording commit: dnspython 2.9.2, hydra-core 1.3.8, oauthlib 4.0.1, pyasn1 0.6.5. The resolved serving sets scan clean before and after. Dependabot alerts are disabled on the repository, so no security update would have opened; whether to enable them, or schedule Trivy on `main`, is open |
+| P2-1 | `pull_request` runs the PR's own workflow file, so Dependabot's bumped action pins execute in the auto-merge job holding `contents: write` before any check passes; the base-ref checkout protects `scripts/` and `uv.lock`, not the job | Open. Split the job: a read-only job answers the budget; a second job holds only `pull-requests: write` and uses no third-party action. Test every `uses:` in a job with `contents: write`, and least privilege on the unqueue job |
+| P2-2 | Merges queued under `GITHUB_TOKEN` fire no `push` workflow (13 of 13 auto-merged Dependabot commits), so the unqueue job is not what enforces the reserve: branch protection's `strict: true` and Dependabot's rebase are | Open. Merge with an App or PAT token, or name `strict` as the mechanism in the workflow and the script, and gate that the protection payload keeps it |
+| P2-3 | C3 passes `docs/ADOPTION.md`'s "31 declared gates" (43 derived), `SECURITY.md`'s undated "56 HIGH findings" (48 re-measured), and 11 of 12 spellings of a false blocking claim | Open. Run the figure and scanner-claim checks over all three documents; widen the blocking pattern; tolerate an adjective in the dated pattern |
+| P2-4 | C11 resolves the plan's Phase 0 command, which cannot pass on the bare `uv sync` it names; `DELIVERABLES` shows Phase 6's framework bullet ✅ against a row whose document rejects those frameworks; no row shows secret scanning | Open. Fix the plan command, resolve flags and node ids, treat `curl` without `-f` as unresolved, and add the two rows |
+| P2-5 | The service's demo compose runs MLflow server v2.9.2 against a 3.17.2 client, and the template's client/server contract test omits that file | Open, upstream. Fix in `ml-service-template` and regenerate; record it in the parity ledger until then |
+| P2-6 | `make local-verify` failed twice on the DNS negative control within about 15 minutes of a Docker restart, then passed; no local test asserts that non-DNS egress is denied, and the test's restore drops the overlay's labels on `allow-dns` | Open, cause not established. Capture kindnetd's log and nft sets on failure; add a non-DNS egress test; restore from the overlay. Do not lengthen the 150 s window until the cause is known |
+| P3-1 | The unqueue step runs under `bash -e` without `pipefail`, and any non-zero from the budget script is read as "budget spent" | Open. `shell: bash`, and exit 2 on "cannot run" |
+| P3-2 | `audit_drift` ignores C7's 90-day age check, so C7 can fail while the budget says OK; nothing tests the 90-day limit | Open |
+| P3-3 | The Dependabot reserve (half the grace) has no recorded reason or owner | Open. A quality-gates row or ADR section |
+| P3-4 | `check_config_is_read.py` counts assignments as reads; 29/29 holds today | Open. Require `ast.Load` |
+| P3-5 | A blank prompt satisfies the non-English rule | Open. Require a non-blank value |
+| P3-6 | The inventory's detectors treat a declaration as use for polars as well as duckdb (extends DEP27-D1) | Open. Detect imports in code |
+| P3-7 | Statements in the audit prompt that proved wrong | Recorded for the next prompt: the Dependabot PRs also fail `Supply chain`; the `push` path had run; the local stack has no MLflow server |
+
+Round nineteen's open findings are re-checked in the report's own table and
+none is closed by this window; its P2-1 has grown, because #159's budget reads
+the same marker. The auditor's thirteen mutations are in the report: one was
+killed, and the survivors join the catalogue with the fixes above.
+
 ## Between rounds — found while landing a dependency round
 
 | ID | Finding | State |

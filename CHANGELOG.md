@@ -18,6 +18,32 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Security — dnspython 2.9.2, hydra-core 1.3.8, oauthlib 4.0.1, pyasn1 0.6.5
+
+- **Seven HIGH advisories fail the blocking Trivy gate on `a057807` itself.**
+  QA-4 round twenty found them, and CI on that commit had been green only
+  because its database predated them: dnspython CVE-2026-114605, hydra-core
+  GHSA-wf6j-7hvr-gr93, oauthlib CVE-2026-49272 (authentication bypass through
+  missing device-code validation) and pyasn1 CVE-2026-119194 to -119197 (four
+  denials of service). `Supply chain` is a required check, so no pull request
+  could land until the lock moved, the seven open Dependabot ones included.
+  In the workspace lock, dnspython comes through `email-validator` from the
+  orchestration extra, hydra-core through `dvc` in the `data-versioning`
+  group, and oauthlib and pyasn1 through `kfp` in `demand-forecast[pipelines]`.
+  Of the four, only pyasn1 reaches an image (`serving-gcp` and `serving-train`),
+  and those variants resolve from the service's own `~=` requirements and
+  already pick 0.6.5: every resolved serving set scans clean before and after.
+  `uv lock --upgrade-package` moves these four and nothing else. Fixed, not
+  accepted: no baseline entry.
+
+### Recorded — QA-4 round twenty
+
+- Round twenty audited `a057807`: 0 P0, 1 P1, 6 P2, 7 P3. The report is
+  `docs/governance/qa4/round-20.txt`; the trail entry is in `ops/audit.jsonl`;
+  the marker in `AGENTS.md` names `a057807`. The P1 is closed above. The rest
+  are open in `docs/governance/remediation-work-order.md` § *Round twenty*,
+  each with its fix.
+
 ### Changed — dependency round 2026-10-27, and Dependabot spends at most half the audit grace
 
 - **Five Dependabot updates in one commit** (#153–#157): copier 9.19.1, ruff
