@@ -18,6 +18,29 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Changed — dependency round 2026-11-12
+
+- **What Dependabot's own merges left, in one commit** (#162, #167, #169):
+  pytest 9.2.0, mypy 2.4.1, ruff 0.17.5, coverage 7.17.3, setuptools 84.2.1,
+  setup-uv 10.3.3, checkov-action 12.3139.0, codeql upload-sarif 4.39.3 and
+  markdownlint-cli2-action 25.0.0. Each action pin was checked against its
+  tag through the GitHub API. #166, #168, #170 and #173 merged themselves
+  first: Dependabot's rebase after the round-twenty recording re-ran the
+  half-the-grace rule, which queued them at 1/10 — the failure the budget
+  redesign that follows exists to end.
+- **#169 was red for a real reason:** the pre-commit ruff hook was not the
+  locked ruff. It moves to `v0.17.5` with the lock, and mutation DEP3 is
+  re-anchored to it.
+- **Left out: #160** (local-stack images): every image must be measured on a
+  running stack first. **Still open:** diskcache 5.6.3, CVE-2025-69872
+  (medium), which has no fixed release.
+- **The suppression policy's own example expired.** `.security-baselines/README.md`
+  showed the entry format with a real date, 2026-11-13, and on 2026-11-14
+  `test_no_suppression_has_expired` read it as an expired suppression and
+  failed on every pull request. The example is `YYYY-MM-DD` now, as in
+  `.trivyignore`, and a test refuses a dated one (mutation GOV-1). Closed here
+  because nothing can land without it.
+
 ### Security — dnspython 2.9.2, hydra-core 1.3.8, oauthlib 4.0.1, pyasn1 0.6.5
 
 - **Seven HIGH advisories fail the blocking Trivy gate on `a057807` itself.**
