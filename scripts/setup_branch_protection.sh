@@ -29,11 +29,21 @@ MODE="${1:---dry-run}"
 # "analysis" (Scorecard) runs on its own schedule. A required check that never
 # reports leaves a PR unmergeable forever, which is how required checks get
 # removed wholesale instead of fixed.
+#
+# "Dependabot merge budget" is the fifth: the check that keeps unattended merges
+# inside the audit grace (`scripts/dependabot_merge_budget.py`). It reports on
+# EVERY pull request — skipped, and therefore successful, on one a person
+# opened — so requiring it cannot strand a PR. It is enforced only because
+# `strict` below stays true: a merge queued with GITHUB_TOKEN starts no
+# workflow, so the only re-check after `main` moves is the update `strict`
+# forces (QA-4 round twenty, P2-2). `tests/test_dependabot_merge_budget.py`
+# holds both.
 REQUIRED_CHECKS=(
   "Repository invariants"
   "IaC and Kubernetes security"
   "Supply chain"
   "Secret scan"
+  "Dependabot merge budget"
 )
 
 payload() {

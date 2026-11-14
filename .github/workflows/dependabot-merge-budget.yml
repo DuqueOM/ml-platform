@@ -1,0 +1,58 @@
+name: Dependabot merge budget
+
+# The required status check "Dependabot merge budget". Why it is a check, why it
+# runs on `pull_request` with a read-only token, and what re-runs it after
+# `main` moves: `.github/workflows/dependabot-auto-merge.yml`, header.
+on:
+  pull_request:
+
+permissions: {}
+
+# `bash -eo pipefail`: GitHub's default step shell has no pipefail, so a failing
+# `gh` call inside a pipe or a test went unnoticed (QA-4 round twenty, P3-3).
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  budget:
+    name: Dependabot merge budget
+    # A bound, not a budget: a checkout, uv and one OSV request take well
+    # under a minute. Unbounded, a hung step holds a runner for six hours.
+    timeout-minutes: 5
+    # Skipped by this condition, the job reports success, which is what a
+    # required check needs on every pull request a person opened.
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Read Dependabot's metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check out main, not the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.base.ref }}
+          # C7 counts the commits since the audited one; a shallow clone
+          # cannot resolve it, and the budget then refuses.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+
+      - name: Answer the budget
+        env:
+          UPDATED_DEPENDENCIES_JSON: ${{ steps.metadata.outputs.updated-dependencies-json }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+        run: |
+          if [ "$UPDATE_TYPE" = "version-update:semver-major" ]; then
+            echo "::notice::Major update: never merged unattended, so it spends no unattended budget. A person who merges it spends a commit by choice."
+            exit 0
+          fi
+          uv run --locked --no-dev --package ml-platform python scripts/dependabot_merge_budget.py

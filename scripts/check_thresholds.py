@@ -389,6 +389,20 @@ THRESHOLDS = (
         symbol="AUDIT_GRACE_COMMITS",
         higher_is_stricter=False,
     ),
+    # The unattended share of that grace (QA-4 round twenty, P3-5: "half the
+    # grace" had no recorded decision). A larger quota lets Dependabot spend
+    # more of the window; a smaller floor leaves less of it for remediation.
+    Threshold(
+        "Dependabot unattended commits per audit window",
+        "scripts/dependabot_merge_budget.py",
+        symbol="DEPENDABOT_QUOTA",
+        higher_is_stricter=False,
+    ),
+    Threshold(
+        "audit-window commits no unattended merge may spend",
+        "scripts/dependabot_merge_budget.py",
+        symbol="RESERVED_FLOOR",
+    ),
     Threshold(
         "retrieval promotion margin",
         "libs/llm-core/src/llm_core/retrieval_eval.py",

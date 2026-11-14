@@ -2641,57 +2641,135 @@ mutations:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_bootstrap_docker_probe.py -k wedged
   expect: killed
 - id: DEP27-1
-  origin: dependency round 2026-10-27 — Dependabot may spend the whole audit grace again
+  origin: Dependabot budget enforced at merge time (QA-4 round twenty) — Dependabot's quota grows past one commit per window
   file: scripts/dependabot_merge_budget.py
-  old: RESERVED = AUDIT_GRACE_COMMITS // 2
-  new: RESERVED = 0
+  old: DEPENDABOT_QUOTA = 1
+  new: DEPENDABOT_QUOTA = 5
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
   expect: killed
+  gates:
+  - P22
 - id: DEP27-2
-  origin: dependency round 2026-10-27 — the budget is held to the whole grace, not the half Dependabot may spend
+  origin: Dependabot budget enforced at merge time (QA-4 round twenty) — the floor is measured against the whole grace
   file: scripts/dependabot_merge_budget.py
   old: '    if after > limit:'
   new: '    if after > AUDIT_GRACE_COMMITS:'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
   expect: killed
+  gates:
+  - P22
 - id: DEP27-3
-  origin: dependency round 2026-10-27 — the budget counts against a marker the trail does not corroborate
+  origin: Dependabot budget enforced at merge time (QA-4 round twenty) — C7 accepts a marker no trail entry names
   file: scripts/check_doc_coherence.py
-  old: "    if reviewed and not _audit_trail_names(reviewed):\n        return None\n"
-  new: ''
+  old: "        if not recorded:\n            return AuditState("
+  new: "        if False:\n            return AuditState("
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
   expect: killed
+  gates:
+  - P4
+  - P22
 - id: DEP27-4
-  origin: dependency round 2026-10-27 — the budget counts against a marker off HEAD's history
+  origin: Dependabot budget enforced at merge time (QA-4 round twenty) — C7 counts against a marker off HEAD's history
   file: scripts/check_doc_coherence.py
-  old: "    if drift == UNREACHABLE:\n        return None\n"
-  new: ''
+  old: "    if drift == UNREACHABLE:\n        return AuditState("
+  new: "    if False:\n        return AuditState("
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
   expect: killed
+  gates:
+  - P4
+  - P22
 - id: DEP27-5
-  origin: 'dependency round 2026-10-27 — the budget is read from the pull request''s own code, in a job holding contents: write'
-  file: .github/workflows/dependabot-auto-merge.yml
+  origin: Dependabot budget enforced at merge time (QA-4 round twenty) — the budget is read from the pull request's head
+  file: .github/workflows/dependabot-merge-budget.yml
   old: '          ref: ${{ github.event.pull_request.base.ref }}'
   new: '          ref: ${{ github.event.pull_request.head.sha }}'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
   expect: killed
+  gates:
+  - P22
 - id: DEP27-6
-  origin: dependency round 2026-10-27 — the merge is queued whatever the budget says
+  origin: Dependabot budget enforced at merge time (QA-4 round twenty) — the merge is queued whatever the budget answers
   file: .github/workflows/dependabot-auto-merge.yml
-  old: "          if uv run --locked --no-dev --package ml-platform python scripts/dependabot_merge_budget.py; then\n            gh pr merge --auto"
-  new: "          if true; then\n            gh pr merge --auto"
+  old: '          answer=$(uv run --locked --no-dev --package ml-platform python scripts/dependabot_merge_budget.py) || status=$?'
+  new: '          answer=$(uv run --locked --no-dev --package ml-platform python scripts/dependabot_merge_budget.py) || true'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
   expect: killed
+  gates:
+  - P22
 - id: DEP27-7
-  origin: dependency round 2026-10-27 — a merge queued while there was room is never unqueued
+  origin: Dependabot budget enforced at merge time (QA-4 round twenty) — the queue runs the pull request's own workflow file again
   file: .github/workflows/dependabot-auto-merge.yml
-  old: "  push:\n    branches: [main]\n"
+  old: "on:\n  pull_request_target:\n"
+  new: "on:\n  pull_request:\n"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
+  expect: killed
+  gates:
+  - P22
+- id: DEP28-1
+  origin: Dependabot budget enforced at merge time (QA-4 round twenty) — the quota counts the window's position, not Dependabot's commits
+  file: scripts/dependabot_merge_budget.py
+  old: '    used = spent(state.reviewed)
+
+    '
+  new: '    used = state.drift
+
+    '
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
+  expect: killed
+  gates:
+  - P22
+- id: DEP28-2
+  origin: Dependabot budget enforced at merge time (QA-4 round twenty) — a security update may spend the floor
+  file: scripts/dependabot_merge_budget.py
+  old: "        return EXIT_WAIT, (\n            f\"{held}main is"
+  new: "        return (EXIT_OK if fixed else EXIT_WAIT), (\n            f\"{held}main is"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
+  expect: killed
+  gates:
+  - P22
+- id: DEP28-3
+  origin: Dependabot budget enforced at merge time (QA-4 round twenty) — an unanswerable security question is read as no
+  file: scripts/dependabot_merge_budget.py
+  old: "    except ClassificationError as error:\n        return EXIT_CANNOT, ("
+  new: "    except ClassificationError as error:\n        return EXIT_WAIT, ("
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
+  expect: killed
+  gates:
+  - P22
+- id: DEP28-4
+  origin: Dependabot budget enforced at merge time (QA-4 round twenty) — a paginated OSV answer is read as complete
+  file: scripts/dependabot_merge_budget.py
+  old: '        if result.get("next_page_token"):'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
+  expect: killed
+  gates:
+  - P22
+- id: DEP28-5
+  origin: Dependabot budget enforced at merge time (QA-4 round twenty) — the budget job may write
+  file: .github/workflows/dependabot-merge-budget.yml
+  old: "      contents: read\n      pull-requests: read"
+  new: "      contents: write\n      pull-requests: read"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
+  expect: killed
+  gates:
+  - P22
+- id: DEP28-6
+  origin: Dependabot budget enforced at merge time (QA-4 round twenty) — steps run without pipefail again
+  file: .github/workflows/dependabot-auto-merge.yml
+  old: "defaults:\n  run:\n    shell: bash\n"
   new: ''
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
@@ -2704,6 +2782,85 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_governance_files.py -k cannot_expire
   expect: killed
+  gates:
+  - P22
+- id: DEP28-7
+  origin: Dependabot budget enforced at merge time (QA-4 round twenty) — branch protection stops requiring the budget
+  file: scripts/setup_branch_protection.sh
+  old: '  "Dependabot merge budget"
+
+    '
+  new: ''
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
+  expect: killed
+  gates:
+  - P22
+- id: DEP28-8
+  origin: Dependabot budget enforced at merge time (QA-4 round twenty) — branch protection stops forcing an update, the only re-check after main moves
+  file: scripts/setup_branch_protection.sh
+  old: '    "strict": true,'
+  new: '    "strict": false,'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
+  expect: killed
+  gates:
+  - P22
+- id: DEP28-9
+  origin: Dependabot budget enforced at merge time (QA-4 round twenty) — C7 reads an upper-case sha as no sha (round nineteen P2-1)
+  file: scripts/check_doc_coherence.py
+  old: (?:\s*\(([0-9a-fA-F]{7,40})\))?")
+  new: (?:\s*\(([0-9a-f]{7,40})\))?")
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
+  expect: killed
+  gates:
+  - P4
+  - P22
+- id: DEP28-10
+  origin: Dependabot budget enforced at merge time (QA-4 round twenty) — C7 accepts a date-only marker once the trail records audits
+  file: scripts/check_doc_coherence.py
+  old: '        if _audit_trail_dates(None, trail):'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
+  expect: killed
+  gates:
+  - P4
+  - P22
+- id: DEP28-11
+  origin: Dependabot budget enforced at merge time (QA-4 round twenty) — C7 accepts a marker dated in the future
+  file: scripts/check_doc_coherence.py
+  old: '    if audited > today:'
+  new: '    if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
+  expect: killed
+  gates:
+  - P4
+  - P22
+- id: DEP28-12
+  origin: Dependabot budget enforced at merge time (QA-4 round twenty) — C7 accepts a marker moved past its trail entry
+  file: scripts/check_doc_coherence.py
+  old: '        if audited > max(recorded):'
+  new: '        if False:'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
+  expect: killed
+  gates:
+  - P4
+  - P22
+- id: DEP28-13
+  origin: Dependabot budget enforced at merge time (QA-4 round twenty) — the budget gets a count while C7 fails (round twenty P3-6)
+  file: scripts/check_doc_coherence.py
+  old: '    return state.drift if state.passed else None'
+  new: '    return state.drift'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
+  expect: killed
+  gates:
+  - P4
+  - P22
 - id: W15-1
   origin: W-15 — the crossover projection anchored on the smallest slice, which measures noise
   file: projects/demand-forecast/src/demand_forecast/crossover.py
