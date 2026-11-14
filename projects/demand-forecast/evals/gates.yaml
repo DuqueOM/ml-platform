@@ -44,6 +44,41 @@ gates:
       confidence. Measured on held-out folds, never on the calibration window.
     blocking: true
 
+  - id: interval_coverage_per_volume_decile
+    metric: worst_volume_decile_coverage
+    threshold: 0.85
+    check: orchestration/dags/demand_forecast_training.py::check_quality_gate
+    rationale: >
+      The marginal figure above averages zones whose intervals are too wide
+      with zones whose intervals are too narrow. Measured on 2024-01/02 with one
+      global quantile, the aggregate read 89.6% while the busiest decile was
+      covered 37.7% of the time, and staffing is decided per zone. Every
+      volume decile (ranked on training rows) must meet the same floor as the
+      aggregate. No per-decile ceiling: the quietest zones' counts are mostly
+      zero, so their over-coverage is partly discreteness and is reported, not
+      gated (F-19, decided 2026-10-23).
+    blocking: true
+
+  - id: no_volume_decile_harmed
+    metric: worst_volume_decile_harm
+    threshold: 0.0
+    check: orchestration/dags/demand_forecast_training.py::check_quality_gate
+    rationale: >
+      Aggregate skill was +12.4% while the model lost to the seasonal-naive
+      baseline in the quietest five deciles (-840.5% in decile 0), because it
+      was fitted to the mean and judged by MAE, which rewards the median. A
+      decile is harmed when the baseline beats the model there by more than
+      fold-to-fold variation explains: the lower 95% bound (Student's t over
+      the folds) of model MAE minus baseline MAE above zero. Refusing on
+      evidence of harm, not on a non-inferiority margin, because on the
+      measured folds a margin separated the two candidate models only inside an
+      8.4-10.3% band and would have been fitted to this sample. Absolute error,
+      not relative skill, which divided by 0.02 in decile 0. The confidence is
+      GROUP_HARM_CONFIDENCE in demand_forecast.promotion (F-19b, decided
+      2026-11-13). Measured with the absolute-error loss on 2024-01/02: the
+      worst decile's bound is -0.0082.
+    blocking: true
+
   - id: no_temporal_leakage
     metric: leakage_test
     threshold: must_fail_on_naive_build

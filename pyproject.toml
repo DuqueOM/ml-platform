@@ -155,7 +155,7 @@ ignore_missing_imports = true
 # Third-party packages that ship no type information. Listed explicitly rather
 # than set globally, so a NEW untyped import has to be added here deliberately
 # instead of being absorbed in silence.
-module = ["pyarrow.*", "pyiceberg.*", "duckdb.*", "sklearn.*", "joblib.*", "rank_bm25.*"]
+module = ["pyarrow.*", "pyiceberg.*", "duckdb.*", "sklearn.*", "scipy.*", "joblib.*", "rank_bm25.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

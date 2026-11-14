@@ -362,3 +362,58 @@ def test_a_zone_gets_no_hours_before_it_appears() -> None:
     demand = to_hourly_demand(trips)
     late = demand.filter(pl.col("zone_id") == 2)
     assert late.height == 1, f"zone 2 first appears at hour 10 and gained {late.height} rows"
+
+
+# --- densify: dense across months, not only within one (F-19) ----------------
+
+
+def _hours(zone: int, start: datetime, count: int, trips: int = 1) -> pl.DataFrame:
+    return pl.DataFrame(
+        {
+            "zone_id": [zone] * count,
+            "event_time": [start + timedelta(hours=i) for i in range(count)],
+            "trip_count": [trips] * count,
+            "total_fare": [10.0] * count,
+            "mean_distance": [2.0] * count,
+        }
+    ).cast({"zone_id": pl.Int32, "trip_count": pl.UInt32, "event_time": pl.Datetime("ns")})
+
+
+def test_the_hours_between_two_ingested_months_are_filled() -> None:
+    """Two monthly grids, concatenated as the DAG's lakehouse holds them, leave the boundary empty."""
+    from demand_forecast.ingest import densify
+
+    january = _hours(7, datetime(2024, 1, 31, 20), 2)  # last trip 21:00
+    february = _hours(7, datetime(2024, 2, 1, 3), 2)  # first trip 03:00
+    dense = densify(pl.concat([january, february]))
+
+    assert dense.height == 2 + 5 + 2, "the five quiet hours across midnight were not filled"
+    filled = dense.filter(pl.col("event_time").is_between(datetime(2024, 1, 31, 22), datetime(2024, 2, 1, 2)))
+    assert filled["trip_count"].to_list() == [0] * 5
+    assert filled["total_fare"].to_list() == [0.0] * 5
+    assert filled["mean_distance"].null_count() == 5, "the mean of no trips was written as a number"
+
+
+def test_densify_keeps_each_zone_to_its_own_span() -> None:
+    """A zone that appears later gets no invented zeros before it existed."""
+    from demand_forecast.ingest import densify
+
+    early, late = _hours(1, datetime(2024, 1, 1), 10), _hours(2, datetime(2024, 1, 1, 8), 2)
+    dense = densify(pl.concat([early, late]))
+    assert dense.filter(pl.col("zone_id") == 2)["event_time"].min() == datetime(2024, 1, 1, 8)
+
+
+def test_densify_is_idempotent_and_preserves_the_schema() -> None:
+    from demand_forecast.ingest import densify
+
+    gappy = pl.concat([_hours(3, datetime(2024, 1, 1), 3), _hours(3, datetime(2024, 1, 1, 6), 3)])
+    once = densify(gappy)
+    assert densify(once).equals(once)
+    assert once.schema == gappy.schema
+
+
+def test_a_frame_without_zones_is_returned_unchanged() -> None:
+    from demand_forecast.ingest import densify
+
+    series = pl.DataFrame({"event_time": [datetime(2024, 1, 1)], "trip_count": [1]})
+    assert densify(series).equals(series)

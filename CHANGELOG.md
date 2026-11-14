@@ -18,6 +18,58 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Fixed — prediction intervals that held on average and failed the busiest zones, and a point forecast fitted to the wrong functional (F-19, F-19b)
+
+- **One conformal quantile for 255 zones.** On the real January and February
+  2024 files the intervals covered 89.6% of all hours — on target — while
+  covering 100% of the quietest six volume deciles and 63.9% and 37.7% of the
+  two busiest. Staffing is decided per zone, and the busiest zones are where
+  the volume is. The model now uses Mondrian conformal: one quantile per
+  volume decile, each calibrated on its own residuals, and zones are ranked on
+  training rows only. Under the squared-error loss every decile sat between
+  88.4% and 92.8% and the aggregate at 89.3%; the figures under the loss
+  below are 88.7% to 98.4% and 92.0%.
+  `ml_core.MondrianConformalRegressor` is new and additive.
+- **The promotion gate holds every decile to a floor.** `MIN_GROUP_COVERAGE =
+  0.85`, decided on 2026-10-23, is watched by gate P20, declared in
+  `evals/gates.yaml`, and applied identically by the Airflow DAG and the KFP
+  pipeline. A missing figure refuses rather than passes. There is no
+  per-decile ceiling: the quietest zones' counts are mostly zero, so their
+  over-coverage is reported, not gated.
+- **Artifact schema 3.** It carries a quantile per decile and each zone's
+  decile. A container's interval is
+  `point ± conformal_quantiles[zone_groups[zone]]`, still with no workspace
+  import. Schema 2's single `conformal_quantile` is removed rather than kept,
+  so nothing can apply one global half-width again. `predict` refuses a zone
+  the model does not cover.
+- **The month-by-month ingest left holes between months.** Each month's grid
+  was dense, and the hours between a zone's last trip of one month and its
+  first trip of the next were not. On these two files that left 345,804 rows
+  where one grid holds 357,426, so the lag features read across every month
+  boundary. `ingest.densify` is applied wherever history is assembled, in the
+  backtest and the final fit. Densified, the monthly panel is identical to the
+  single grid.
+- `expanding_window_folds_by_time` now refuses a fold with no test rows, as the
+  positional splitter does, instead of silently backtesting fewer folds than
+  designed. `MIN_ZONE_HOURS` counts distinct hours, not rows.
+- The backtest reports coverage, MAE and skill per volume decile
+  (`BacktestReport.by_volume`). The model card's Fairness section is now
+  measured, not "not measured".
+- **The point forecast is the median, and no decile may be served worse than
+  the baseline (F-19b).** The per-decile measurement showed the model losing
+  to "same hour last week" in the quietest five deciles (0.16 against 0.02
+  trips an hour in decile 0) while the aggregate read +12.4%. The cause was
+  the loss: squared error estimates the mean, and the forecast is judged by
+  MAE, which rewards the median — zero, in zones that are empty most hours.
+  `train.POINT_LOSS = "absolute_error"`, built once by `make_estimator` for
+  the backtest and the published artifact. Measured on the same two months:
+  the model beats the baseline in all ten deciles, aggregate skill +12.9%. The
+  promotion gate refuses a model that any decile's baseline beats at 95%
+  confidence (`GROUP_HARM_CONFIDENCE`, Student's t over the folds, in trips an
+  hour rather than relative skill, which divided by 0.02). Both orchestrators
+  pass it to the same `promotion.check`. scipy is declared, since it is now
+  imported. Mutations F19B-1 to F19B-8.
+
 ### Fixed — unattended merges have a budget the merge itself must pass (QA-4 round twenty)
 
 - **The budget is a required check, enforced at merge time.** The required

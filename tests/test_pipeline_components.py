@@ -16,6 +16,7 @@ is which inputs reach them and which outputs and failures come back.
 
 from __future__ import annotations
 
+import dataclasses
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -58,28 +59,37 @@ def _body(pipeline: ModuleType, name: str) -> Any:
 
 
 def test_the_gate_promotes_a_model_that_clears_the_rule(pipeline: ModuleType) -> None:
-    assert _body(pipeline, "check_quality_gate")(skill=0.124, coverage=0.896) is None
+    gate = _body(pipeline, "check_quality_gate")
+    assert gate(skill=0.124, coverage=0.896, group_coverage=0.884, group_harm=-0.008) is None
 
 
 @pytest.mark.parametrize(
-    ("skill", "coverage", "reason"),
+    ("skill", "coverage", "group_coverage", "group_harm", "reason"),
     [
         # A tie with "same hour last week" has not earned a deployment — and
         # neither, now, has a skill under the floor the DAG always held.
-        pytest.param(0.0, 0.90, "skill", id="tie-with-baseline"),
-        pytest.param(0.03, 0.90, "skill", id="below-the-skill-floor"),
-        pytest.param(-0.183, 0.90, "skill", id="loses-to-baseline"),
-        pytest.param(0.124, 0.84, "is below 0.85", id="under-covered"),
-        pytest.param(0.124, 0.97, "is above 0.95", id="over-covered"),
+        pytest.param(0.0, 0.90, 0.9, 0.0, "skill", id="tie-with-baseline"),
+        pytest.param(0.03, 0.90, 0.9, 0.0, "skill", id="below-the-skill-floor"),
+        pytest.param(-0.183, 0.90, 0.9, 0.0, "skill", id="loses-to-baseline"),
+        pytest.param(0.124, 0.84, 0.9, 0.0, "is below 0.85", id="under-covered"),
+        pytest.param(0.124, 0.97, 0.9, 0.0, "is above 0.95", id="over-covered"),
+        # On target in aggregate, failing a decile: the global quantile's busiest decile (F-19).
+        pytest.param(0.124, 0.896, 0.377, 0.0, "worst volume decile", id="a-decile-under-covered"),
+        # Better in aggregate, worse than the baseline where a decile's zones are quiet (F-19b).
+        pytest.param(0.124, 0.896, 0.9, 0.110, "baseline beats the model", id="a-decile-harmed"),
     ],
 )
-def test_the_gate_refuses_promotion(pipeline: ModuleType, skill: float, coverage: float, reason: str) -> None:
+def test_the_gate_refuses_promotion(
+    pipeline: ModuleType, skill: float, coverage: float, group_coverage: float, group_harm: float, reason: str
+) -> None:
     """Raising is what fails the run; a gate that returned would let promotion proceed.
 
     The rule is `demand_forecast.promotion.check`, the DAG's too (W-14).
     """
     with pytest.raises(ValueError, match="quality gate failed") as refused:
-        _body(pipeline, "check_quality_gate")(skill=skill, coverage=coverage)
+        _body(pipeline, "check_quality_gate")(
+            skill=skill, coverage=coverage, group_coverage=group_coverage, group_harm=group_harm
+        )
     assert reason in str(refused.value)
 
 
@@ -173,13 +183,23 @@ def test_the_backtest_is_the_promotion_design_and_hands_the_gate_raw_numbers(
 
     pl.DataFrame({"zone": [1]}).write_parquet(tmp_path / "demand.parquet")
     fold = train.FoldResult(
-        index=0, model_mae=3.0, baseline_mae=4.0, coverage=0.97, interval_width=5.0, n_test=168, n_compared=168
+        index=0,
+        model_mae=3.0,
+        baseline_mae=4.0,
+        coverage=0.97,
+        interval_width=5.0,
+        n_test=168,
+        n_compared=168,
+        by_group=(
+            train.GroupTally(group=0, n_test=168, inside=150, n_compared=168, model_error=1.0, baseline_error=2.0),
+        ),
     )
     received: list[object] = []
 
     def backtest(frame: pl.DataFrame) -> train.BacktestReport:
         received.append(frame)
-        return train.BacktestReport(folds=[fold], seed=promotion.DESIGN.seed)
+        # Two folds: a decile's harm needs a spread to measure (F-19b).
+        return train.BacktestReport(folds=[fold, dataclasses.replace(fold, index=1)], seed=promotion.DESIGN.seed)
 
     monkeypatch.setattr(promotion, "backtest", backtest)
     metrics = Artifact(tmp_path / "metrics")
@@ -187,12 +207,15 @@ def test_the_backtest_is_the_promotion_design_and_hands_the_gate_raw_numbers(
     outcome = _body(pipeline, "backtest_model")(demand=Artifact(tmp_path / "demand.parquet"), metrics=metrics)
 
     assert len(received) == 1
-    assert (outcome.skill, outcome.coverage) == (0.25, 0.97)
+    assert (outcome.skill, outcome.coverage, outcome.group_coverage) == (0.25, 0.97, 150 / 168)
+    assert outcome.group_harm == -1 / 168
     assert metrics.metrics == {
         "model_mae": 3.0,
         "baseline_mae": 4.0,
         "skill": 0.25,
         "coverage": 0.97,
+        "worst_group_coverage": 150 / 168,
+        "worst_group_harm": -1 / 168,
         "n_folds": promotion.DESIGN.n_folds,
         "seed": promotion.DESIGN.seed,
     }

@@ -131,7 +131,9 @@ def validate_warehouse_table(
 def backtest_model(
     demand: dsl.Input[dsl.Dataset],
     metrics: dsl.Output[dsl.Metrics],
-) -> NamedTuple("BacktestOutcome", [("skill", float), ("coverage", float)]):  # type: ignore[valid-type]
+) -> NamedTuple(  # type: ignore[valid-type]
+    "BacktestOutcome", [("skill", float), ("coverage", float), ("group_coverage", float), ("group_harm", float)]
+):
     """Backtest forward in time, on the one design promotion is judged on, and emit both gate inputs.
 
     No fold count, horizon or seed is a parameter any more. The pipeline took
@@ -148,14 +150,17 @@ def backtest_model(
     verdict, from the same function the DAG calls.
     """
     import polars as pl
-    from demand_forecast.promotion import DESIGN, backtest
+    from demand_forecast.promotion import DESIGN, backtest, worst_group_harm
 
     report = backtest(pl.read_parquet(demand.path))
+    group_harm = worst_group_harm(report)
 
     metrics.log_metric("model_mae", report.model_mae)
     metrics.log_metric("baseline_mae", report.baseline_mae)
     metrics.log_metric("skill", report.skill)
     metrics.log_metric("coverage", report.coverage)
+    metrics.log_metric("worst_group_coverage", report.worst_group_coverage)
+    metrics.log_metric("worst_group_harm", group_harm)
     metrics.log_metric("n_folds", DESIGN.n_folds)
     metrics.log_metric("seed", report.seed)
 
@@ -165,12 +170,15 @@ def backtest_model(
     # inside the isolated container this function runs in.
     # The variable name must match the type name for the checker to bind
     # them; KFP only cares about the annotation, so both are satisfiable.
-    BacktestOutcome = NamedTuple("BacktestOutcome", [("skill", float), ("coverage", float)])  # noqa: UP014
-    return BacktestOutcome(report.skill, report.coverage)
+    BacktestOutcome = NamedTuple(  # noqa: UP014
+        "BacktestOutcome",
+        [("skill", float), ("coverage", float), ("group_coverage", float), ("group_harm", float)],
+    )
+    return BacktestOutcome(report.skill, report.coverage, report.worst_group_coverage, group_harm)
 
 
 @dsl.component(**COMPONENT)
-def check_quality_gate(skill: float, coverage: float) -> None:
+def check_quality_gate(skill: float, coverage: float, group_coverage: float, group_harm: float) -> None:
     """Fail the run when the model has not earned promotion.
 
     A step, not a note in a report: the pipeline stops here, so nothing
@@ -181,7 +189,7 @@ def check_quality_gate(skill: float, coverage: float) -> None:
     """
     from demand_forecast.promotion import check
 
-    check(skill, coverage)
+    check(skill, coverage, group_coverage, group_harm)
 
 
 @dsl.pipeline(
@@ -208,4 +216,6 @@ def demand_forecast_training(source_uri: str) -> None:
         # Read from the backtest, never passed as a literal: a gate handed its
         # own verdict is not a gate.
         coverage=backtest.outputs["coverage"],
+        group_coverage=backtest.outputs["group_coverage"],
+        group_harm=backtest.outputs["group_harm"],
     )
