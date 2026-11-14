@@ -292,13 +292,12 @@ def test_ingest_month_writes_the_month_and_returns_its_snapshot(  # type: ignore
     source = tmp_path / "data" / "raw" / "yellow_tripdata_2024-03.parquet"
     source.parent.mkdir(parents=True)
     source.touch()
-    trips = pl.DataFrame({"trip": [1, 2]})
     demand = pl.DataFrame({"zone": [1, 2, 3]})
     report = ingest.IngestReport(source=str(source), rows_read=10, rows_written=7, violations=[])
 
     calls: list[tuple[str, tuple, dict]] = []  # type: ignore[type-arg]
-    monkeypatch.setattr(ingest, "ingest_file", _record(calls, "ingest_file", (trips, report)))
-    monkeypatch.setattr(ingest, "to_hourly_demand", _record(calls, "to_hourly_demand", demand))
+    # One call: the month's trips never reach the task, only its hourly panel (ADR-011).
+    monkeypatch.setattr(ingest, "ingest_hourly", _record(calls, "ingest_hourly", (demand, report)))
     written = lakehouse.WriteResult(snapshot_id=42, rows=3, mode="overwrite")
     monkeypatch.setattr(lakehouse, "write_demand", _record(calls, "write_demand", written))
     monkeypatch.chdir(tmp_path)
@@ -307,12 +306,11 @@ def test_ingest_month_writes_the_month_and_returns_its_snapshot(  # type: ignore
         result = _body(dagbag, "ingest_month")(data_interval_start=UTC_MARCH)
 
     assert result == {"month": "2024-03", "rows": 3, "snapshot_id": 42}
-    assert [name for name, _, _ in calls] == ["ingest_file", "to_hourly_demand", "write_demand"]
+    assert [name for name, _, _ in calls] == ["ingest_hourly", "write_demand"]
     assert calls[0][1] == (Path("data/raw/yellow_tripdata_2024-03.parquet"),)
-    assert calls[1][1] == (trips,)
     # Overwrite, scoped to the month: a re-run of March replaces March.
-    assert calls[2][1] == (demand, catalog), "written somewhere other than the configured catalogue"
-    assert calls[2][2] == {"overwrite": True}
+    assert calls[1][1] == (demand, catalog), "written somewhere other than the configured catalogue"
+    assert calls[1][2] == {"overwrite": True}
     assert "3 rows rejected of 10" in caplog.text
 
 

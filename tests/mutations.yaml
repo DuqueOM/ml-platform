@@ -2929,6 +2929,70 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_promotion.py
   expect: killed
+- id: DUCK-1
+  origin: ADR-011 — DuckDB stops counting nulls in a required column
+  file: libs/data-contracts/src/data_contracts/duckdb_relation.py
+  old: "        if not rule.nullable:\n            checks.append((rule, \"unexpected nulls\""
+  new: "        if False:\n            checks.append((rule, \"unexpected nulls\""
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly libs/data-contracts/tests/test_duckdb_relation.py
+  expect: killed
+- id: DUCK-2
+  origin: ADR-011 — a violation's example is the last in the file, not the first
+  file: libs/data-contracts/src/data_contracts/duckdb_relation.py
+  old: '            first = _first(relation.filter(predicate).order(order_by).project(_column(rule.name)))'
+  new: '            first = _first(relation.filter(predicate).order(f"{order_by} DESC").project(_column(rule.name)))'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly libs/data-contracts/tests/test_duckdb_relation.py
+  expect: killed
+- id: DUCK-3
+  origin: ADR-011 — a null in a nullable column is rejected by its bounds
+  file: libs/data-contracts/src/data_contracts/duckdb_relation.py
+  old: '            predicate = predicate & (column.isnull() | ~outside)'
+  new: '            predicate = predicate & ~outside'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly libs/data-contracts/tests/test_duckdb_relation.py
+  expect: killed
+- id: DUCK-4
+  origin: ADR-011 — the ingest keeps a trip whose dropoff is before its pickup
+  file: projects/demand-forecast/src/demand_forecast/ingest.py
+  old: '        admits(TRIPS_RAW) & (ColumnExpression("tpep_dropoff_datetime") >= ColumnExpression("tpep_pickup_datetime"))'
+  new: '        admits(TRIPS_RAW)'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_ingest_engine.py
+  expect: killed
+- id: DUCK-5
+  origin: ADR-011 — fares are summed in no fixed order, and a month's panel changes between runs
+  file: projects/demand-forecast/src/demand_forecast/ingest.py
+  old: '    "sum(fare_amount ORDER BY file_row_number) AS total_fare"'
+  new: '    "sum(fare_amount) AS total_fare"'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_ingest_engine.py
+  expect: killed
+- id: DUCK-6
+  origin: ADR-011 — the engine may download an extension at run time
+  file: projects/demand-forecast/src/demand_forecast/ingest.py
+  old: '                "autoload_known_extensions": False,'
+  new: '                "autoload_known_extensions": True,'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_ingest_engine.py
+  expect: killed
+- id: DUCK-7
+  origin: ADR-011 — the configuration can be loosened mid-run
+  file: projects/demand-forecast/src/demand_forecast/ingest.py
+  old: '            connection.execute("SET lock_configuration = true")'
+  new: '            connection.execute("SET threads = 1")'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_ingest_engine.py
+  expect: killed
+- id: DUCK-8
+  origin: ADR-011 — the ingest drops the month window
+  file: projects/demand-forecast/src/demand_forecast/ingest.py
+  old: '        kept = _in_month(admitted, month_of(path))'
+  new: '        kept = admitted'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_ingest_engine.py
+  expect: killed
 - id: W15-1
   origin: W-15 — the crossover projection anchored on the smallest slice, which measures noise
   file: projects/demand-forecast/src/demand_forecast/crossover.py
@@ -2940,8 +3004,8 @@ mutations:
 - id: W15-2
   origin: W-15 — a negative memory delta becomes the projection's slope
   file: projects/demand-forecast/src/demand_forecast/crossover.py
-  old: '        working = max(_resident_mb() - baseline, 0.0)'
-  new: '        working = _resident_mb() - baseline'
+  old: '        working = max(peak - baseline, 0.0)'
+  new: '        working = peak - baseline'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_crossover.py
   expect: killed
