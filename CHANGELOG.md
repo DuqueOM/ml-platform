@@ -18,6 +18,43 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Fixed — unattended merges have a budget the merge itself must pass (QA-4 round twenty)
+
+- **The budget is a required check, enforced at merge time.** The required
+  check **Dependabot merge budget** (gate P22) lets Dependabot author one
+  commit per audit window unattended, and lets no unattended merge spend the
+  window's last two. A security update merges outside the quota but never
+  inside the floor: OSV must list an advisory that affects the version the
+  update leaves and not the one it installs. An unanswerable OSV query is a red
+  check, never a "no". The quota is counted by authorship, not by position:
+  "half the grace" (#159) allowed the five-of-ten that had happened twice,
+  and held security updates with the rest.
+- **Enforced where it can be.** A merge queued with `GITHUB_TOKEN` starts no
+  workflow, so the `push` job that was supposed to unqueue an over-budget merge
+  never ran after an auto-merge. It is removed. Branch protection's `strict`
+  re-runs the check against the `main` a merge would land on; a test holds
+  both settings in `scripts/setup_branch_protection.sh` (P2-2).
+- **The job that writes no longer runs the pull request's code.** The
+  read-only check runs on `pull_request`. The queue runs on
+  `pull_request_target`, which uses main's workflow file and pins and never
+  checks out the PR. They are separate files, so a job skipped by `if:` cannot
+  satisfy the required check under the same name (P2-1). Every step runs with
+  `pipefail` (P3-1).
+- **One decision for C7 and the budget.** `audit_state` replaces two readings
+  of the marker that disagreed past the age limit (P3-2). It closes round
+  nineteen's P2-1, which had grown into the budget: the sha is read in either
+  case, required once the trail records audits, and a marker dated after today
+  or after its trail entry is refused. `check_readme.py` reuses the same
+  parser.
+- **Settings:** Dependabot alerts and security updates were enabled on
+  2026-11-13 (`docs/ADOPTION.md`). `docs/RELEASING.md` said branch protection
+  required two of the four CI jobs, a sentence left behind when the script was
+  corrected to four.
+- The second pass of round twenty is committed as
+  `docs/governance/qa4/round-20-second-pass.txt`; its new findings are in the
+  work order. Mutations DEP27-1 to DEP27-7 are re-aimed and DEP28-1 to
+  DEP28-13 added.
+
 ### Changed — dependency round 2026-11-12
 
 - **What Dependabot's own merges left, in one commit** (#162, #167, #169):

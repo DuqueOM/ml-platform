@@ -301,7 +301,7 @@ held to it.
 | Agentic skills | 29 | `agentic/skills/*/` |
 | Agentic workflows | 22 | `agentic/workflows/*.md` |
 | ADRs | 11 | `docs/decisions/ADR-*.md` |
-| Declared gates | 43 | `docs/governance/quality-gates.md` |
+| Declared gates | 44 | `docs/governance/quality-gates.md` |
 | Declared gates marked ⏳ PENDING | 17 | the same table |
 | Components shown at L4 (a real cloud rollout) | 0 | `docs/architecture/implementation-status.md`, generated |
 | Components with L4 evidence written down | 0 | the same document |
@@ -311,7 +311,7 @@ held to it.
 | Accepted Trivy findings | 0 | `.security-baselines/` |
 | Accepted tfsec findings | 0 | `.security-baselines/` |
 | Workflow steps that build, sign or attest an image | 0 | `.github/workflows/*.yml` |
-| Required status checks | 4 | `scripts/setup_branch_protection.sh` |
+| Required status checks | 5 | `scripts/setup_branch_protection.sh` |
 | CI jobs a merge waits on | 6 of 6 | `.github/workflows/ci.yml`, through the required checks |
 | Approving reviews required | 0 | `scripts/setup_branch_protection.sh` |
 <!-- END DERIVED FIGURES -->
