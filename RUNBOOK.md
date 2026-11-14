@@ -275,15 +275,18 @@ handing git a `--since` date — `--since` fills the missing time from the
 current clock, and the same commit once measured 18 commits at 13:33 and 10 at
 21:19, which is a gate that passes on its own late in the evening.
 
-**Dependabot may spend only the first half of the grace.** Every squash merge
-is one of those ten commits, and auto-merge once spent them with nobody
-choosing to. `.github/workflows/dependabot-auto-merge.yml` queues a merge only
-while `scripts/dependabot_merge_budget.py` says it leaves `main` within the
-first half of it, counted by C7's own `audit_drift`. Each push to `main`
-unqueues any merge that no longer fits. A held update stays open and green.
-Take the held ones together as a dependency round, one commit for all of them,
-and close each PR as superseded; or, once the next round is recorded, let
-Dependabot's next rebase queue them again.
+**Unattended merges have a budget inside the grace** (gate P22). Every
+squash merge is one of those ten commits. Dependabot may author **one** per
+window unattended, and nothing unattended spends the window's **last two**,
+which belong to the previous round's remediation and to a security fix that
+cannot wait; a security update — one OSV says fixes an advisory — merges outside
+the quota but never inside that floor. The required check **Dependabot merge
+budget** answers, from C7's own decision (`audit_state`), and branch
+protection's `strict` re-asks it before any merge, because a merge queued with
+`GITHUB_TOKEN` starts no workflow that could. A held update stays open; a held
+*security* update is labelled `security` and commented on, and wants a person
+now. Take the held ones together as a dependency round — one commit for all of
+them — and close each PR as superseded.
 
 To clear it:
 

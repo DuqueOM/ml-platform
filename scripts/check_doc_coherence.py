@@ -29,6 +29,7 @@ import subprocess
 import sys
 import unicodedata
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import unquote
@@ -1388,77 +1389,79 @@ def _commits_since(when: date) -> int:
     return sum(1 for line in result.stdout.splitlines() if line.strip() > cutoff)
 
 
+#: The independent-audit marker. The commit is matched in either case and
+#: compared in lower case: `[0-9a-f]` alone read an upper-case sha as no sha at
+#: all, and the check then counted by DATE — so one edit to `AGENTS.md`
+#: cleared C7 with no audit and no trail entry (QA-4 round nineteen, P2-1).
+_AUDIT_MARKER = re.compile(r"Last independent audit:\s*(\d{4}-\d{2}-\d{2})(?:\s*\(([0-9a-fA-F]{7,40})\))?")
+
+
 def _audit_marker() -> re.Match[str] | None:
     """The independent-audit marker: group 1 its date, group 2 the commit it names, if any."""
-    return re.search(
-        r"Last independent audit:\s*(\d{4}-\d{2}-\d{2})(?:\s*\(([0-9a-f]{7,40})\))?",
-        _read(REPO_ROOT / "AGENTS.md") + _read(PLAN),
-    )
+    return _AUDIT_MARKER.search(_read(REPO_ROOT / "AGENTS.md") + _read(PLAN))
 
 
-def audit_drift() -> int | None:
-    """C7's drift — the commits on HEAD the last independent audit did not review.
+@dataclass(frozen=True)
+class AuditState:
+    """C7's whole verdict, computed once and read by every caller.
 
-    For a caller that spends the grace rather than judges it:
-    `scripts/dependabot_merge_budget.py` asks it before queueing a merge, so
-    the count that decides is C7's own and cannot disagree with it. None
-    whenever C7 fails for a reason other than drift — no marker, a marker the
-    trail does not corroborate, one naming a commit off HEAD's history — so
-    "cannot measure" never reads as room to spend.
+    C7 and `scripts/dependabot_merge_budget.py` each walked the marker their own
+    way, and QA-4 round twenty found two shapes they judged differently: past
+    the 90-day limit C7 failed while the budget still read room to spend. One
+    decision, two readers, means they cannot disagree.
+
+    Attributes:
+        passed: Whether C7 passes.
+        message: The line C7 prints, pass or fail.
+        drift: Commits since the audited tree, when C7 passes and could count
+            them; None otherwise, so "cannot measure" never reads as room.
+        reviewed: The audited commit in lower case, when the marker names one.
     """
-    marker = _audit_marker()
-    if not marker:
-        return None
-    reviewed = marker.group(2)
-    if reviewed and not _audit_trail_names(reviewed):
-        return None
-    drift = _commits_since_ref(reviewed) if reviewed else None
-    if drift == UNREACHABLE:
-        return None
-    if drift is None:
-        return _commits_since(datetime.strptime(marker.group(1), "%Y-%m-%d").date())
-    return drift
+
+    passed: bool
+    message: str
+    drift: int | None = None
+    reviewed: str | None = None
 
 
-def check_audit_freshness() -> None:
-    """C7 — the independent-audit marker has not gone stale (ADR-005 rule B).
+def audit_state(today: date | None = None, trail: Path | None = None) -> AuditState:
+    """Judge the independent-audit marker — C7 (ADR-005 rule B).
 
     Coherence checking is self-review by construction: it compares documents
     with each other and cannot detect a fact its author believed. This check
     exists to make sure the thing that CAN detect that keeps happening.
+
+    ``today`` and ``trail`` are injectable so the tests can pin the clock and
+    build a trail of a known shape.
     """
-    # The commit is optional in the pattern and preferred in the measurement:
-    # a marker naming what was audited can be counted exactly, one carrying
-    # only a date cannot. See `_commits_since_ref`.
+    today = today or date.today()
     marker = _audit_marker()
     if not marker:
         # This previously returned ok() unconditionally, which made C7 a check
         # that PASSED BECAUSE THE THING WAS ABSENT — anti-pattern P-09, and a
         # gate designed never to fail. Absence is tolerable only while the
-        # repository has no history worth auditing.
+        # repository has no history worth auditing. No drift is reported: with
+        # no audited tree there is nothing to count against.
         commits = _commit_count()
         if commits > AUDIT_GRACE_COMMITS:
-            fail(
-                "C7",
+            return AuditState(
+                False,
                 f"no independent audit recorded after {commits} commits "
                 f"(grace: {AUDIT_GRACE_COMMITS}). ADR-005 rule B requires one in a "
                 "SEPARATE session — self-review cannot find a fact its author believed. "
-                "Run QA-4, then add 'Last independent audit: YYYY-MM-DD' to AGENTS.md.",
+                "Run QA-4, then add 'Last independent audit: YYYY-MM-DD (<sha>)' to AGENTS.md.",
             )
-        else:
-            ok("C7", f"no audit yet, {commits}/{AUDIT_GRACE_COMMITS} commits into the grace period")
-        return
+        return AuditState(True, f"no audit yet, {commits}/{AUDIT_GRACE_COMMITS} commits into the grace period")
 
     audited = datetime.strptime(marker.group(1), "%Y-%m-%d").date()
-    # Commit drift FIRST. Age is not the risk: a marker dated last week says
-    # nothing about the 31 commits that landed behind it — 60% of this
-    # repository's history, which is exactly what happened.
-    #
-    # The previous commit defined `_commits_since` and never called it. The
-    # helper landed, the call site did not, and the commit message described
-    # the correction in detail. A mechanism that is documented and not wired
-    # is the defect this checker exists to find, committed while fixing it.
-    reviewed = marker.group(2)
+    reviewed = marker.group(2).lower() if marker.group(2) else None
+
+    # A marker from the future is an edit, not an audit: it reads as "audited
+    # today" for decades, and the age limit never fires (round nineteen, P2-1).
+    if audited > today:
+        return AuditState(
+            False, f"the audit marker is dated {audited}, after today ({today}). Date it the day the audit ran."
+        )
 
     # The marker is a line of prose in a file anyone can edit, and editing it
     # resets this gate. Round six was audited and the marker moved to
@@ -1469,29 +1472,49 @@ def check_audit_freshness() -> None:
     #
     # So the marker must be corroborated by the hash-chained trail, which is
     # append-only and whose tampering is detectable by
-    # `audit_record.py --verify`. Checked only when the marker names a commit:
-    # a bare date cannot be matched to an entry, which is a second reason the
-    # documented format includes the sha.
-    if reviewed and not _audit_trail_names(reviewed):
-        fail(
-            "C7",
-            f"the audit marker names {reviewed} and no `independent-audit` entry in ops/audit.jsonl mentions "
-            f"it. The marker is one editable line and resets this gate; the trail is hash-chained. Record the "
-            f"round with `python scripts/audit_record.py --action independent-audit --target ml-platform "
-            f"--mode CONSULT --outcome '...{reviewed}...' --evidence '...'`, naming the commit in the outcome.",
-        )
-        return
+    # `audit_record.py --verify`. And it must NAME the commit: a bare date
+    # cannot be matched to an entry, and accepting one reopened the gate to a
+    # one-line edit (round nineteen, P2-1). A date-only marker is tolerated
+    # only while the trail has never recorded an audit.
+    if reviewed is None:
+        if _audit_trail_dates(None, trail):
+            return AuditState(
+                False,
+                f"the audit marker carries a date ({audited}) and no commit. Once the trail records an "
+                f"independent audit the marker must name the tree it audited — "
+                f"'Last independent audit: {audited} (<sha>)' — or nothing corroborates it.",
+            )
+    else:
+        recorded = _audit_trail_dates(reviewed, trail)
+        if not recorded:
+            return AuditState(
+                False,
+                f"the audit marker names {reviewed} and no `independent-audit` entry in ops/audit.jsonl mentions "
+                f"it. The marker is one editable line and resets this gate; the trail is hash-chained. Record the "
+                f"round with `python scripts/audit_record.py --action independent-audit --target ml-platform "
+                f"--mode CONSULT --outcome '...{reviewed}...' --evidence '...'`, naming the commit in the outcome.",
+            )
+        # An audit is recorded on or after the day it ran, never before it: a
+        # marker dated later than every entry naming its commit was moved
+        # forward by hand, which buys the age limit time no audit paid for.
+        if audited > max(recorded):
+            return AuditState(
+                False,
+                f"the audit marker is dated {audited}, after the latest trail entry naming {reviewed} "
+                f"({max(recorded)}). The marker's date is the audit's; it cannot move forward on its own.",
+            )
 
+    # Commit drift FIRST. Age is not the risk: a marker dated last week says
+    # nothing about the 31 commits that landed behind it — 60% of this
+    # repository's history, which is exactly what happened.
     drift = _commits_since_ref(reviewed) if reviewed else None
-
     if drift == UNREACHABLE:
-        fail(
-            "C7",
+        return AuditState(
+            False,
             f"the audit marker names {reviewed}, which is not an ancestor of HEAD. It was squashed, rebased or "
             f"abandoned, so any drift counted against it is meaningless — re-point the marker at the commit "
             f"that actually landed.",
         )
-        return
     if drift is None:
         drift = _commits_since(audited)
         measured = f"dated after {audited}"
@@ -1499,21 +1522,45 @@ def check_audit_freshness() -> None:
         measured = f"not contained in {reviewed}"
 
     if drift > AUDIT_GRACE_COMMITS:
-        fail(
-            "C7",
+        return AuditState(
+            False,
             f"{drift} commits {measured} (grace: {AUDIT_GRACE_COMMITS}). "
             "Recording an audit resets the counter, not a 90-day silence.",
         )
-        return
 
-    age = (date.today() - audited).days
+    age = (today - audited).days
     if age > AUDIT_MAX_AGE_DAYS:
-        fail("C7", f"last independent audit was {age} days ago (limit {AUDIT_MAX_AGE_DAYS}) — run QA-4")
+        return AuditState(False, f"last independent audit was {age} days ago (limit {AUDIT_MAX_AGE_DAYS}) — run QA-4")
+
+    # The passing line carries the drift count too. An `ok` that reports only
+    # the age hides how close the budget is to exhausted, and the first anyone
+    # hears of it is a red gate on somebody else's branch.
+    return AuditState(
+        True,
+        f"last independent audit {age} days ago, {drift}/{AUDIT_GRACE_COMMITS} commits {measured}",
+        drift=drift,
+        reviewed=reviewed,
+    )
+
+
+def audit_drift() -> int | None:
+    """C7's drift, for a caller that spends the grace rather than judges it.
+
+    None whenever C7 does not pass, or passes with nothing to count against,
+    so the budget in `scripts/dependabot_merge_budget.py` and C7 cannot
+    disagree: it is the same decision (QA-4 round twenty, P3-6).
+    """
+    state = audit_state()
+    return state.drift if state.passed else None
+
+
+def check_audit_freshness() -> None:
+    """C7 — the independent-audit marker has not gone stale (ADR-005 rule B)."""
+    state = audit_state()
+    if state.passed:
+        ok("C7", state.message)
     else:
-        # The passing line carries the drift count too. An `ok` that reports
-        # only the age hides how close the budget is to exhausted, and the
-        # first anyone hears of it is a red gate on somebody else's branch.
-        ok("C7", f"last independent audit {age} days ago, {drift}/{AUDIT_GRACE_COMMITS} commits {measured}")
+        fail("C7", state.message)
 
 
 def _audit_trail_names(commit: str, trail: Path | None = None) -> bool:
@@ -1533,10 +1580,22 @@ def _audit_trail_names(commit: str, trail: Path | None = None) -> bool:
     instead of asserting against the repository's own, which grows by one
     entry every time anything consequential happens here.
     """
+    return bool(_audit_trail_dates(commit.lower(), trail))
+
+
+def _audit_trail_dates(commit: str | None, trail: Path | None = None) -> list[date]:
+    """The dates of the `independent-audit` entries naming ``commit`` — or of every one, when it is None.
+
+    The date is the entry's `ts`, the day the round was recorded, which C7
+    compares with the marker's: an audit is recorded on or after the day it
+    ran. An entry with no readable `ts` still counts as a mention, dated at
+    the earliest possible day, so it can corroborate but never extend.
+    """
     trail = trail or REPO_ROOT / "ops" / "audit.jsonl"
     if not trail.is_file():
-        return False
+        return []
 
+    found: list[date] = []
     for line in trail.read_text(encoding="utf-8").splitlines():
         if not line.strip():
             continue
@@ -1546,11 +1605,16 @@ def _audit_trail_names(commit: str, trail: Path | None = None) -> bool:
             continue
         if entry.get("action") != "independent-audit":
             continue
-        text = f"{entry.get('outcome', '')} {entry.get('evidence', '')}"
-        for token in re.findall(r"\b[0-9a-f]{7,40}\b", text):
-            if token.startswith(commit) or commit.startswith(token):
-                return True
-    return False
+        if commit is not None:
+            text = f"{entry.get('outcome', '')} {entry.get('evidence', '')}"
+            tokens = (token.lower() for token in re.findall(r"\b[0-9a-fA-F]{7,40}\b", text))
+            if not any(token.startswith(commit) or commit.startswith(token) for token in tokens):
+                continue
+        try:
+            found.append(datetime.fromisoformat(str(entry.get("ts", ""))).date())
+        except ValueError:
+            found.append(date.min)
+    return found
 
 
 def _commit_count() -> int:

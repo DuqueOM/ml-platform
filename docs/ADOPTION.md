@@ -140,6 +140,8 @@ working without it — silently being the reason it is written down.
 | --- | --- | --- |
 | The repository activated on codecov.io (uploads authenticate by OIDC) | Sign in to codecov.io with GitHub and add the repository; CI already sends `use_oidc: true` with `id-token: write`, so there is no secret to set | Every upload is rejected while the step stays green — it carries `fail_ci_if_error: false` so a Codecov outage cannot block a merge — and no report or pull-request status appears. `codecov-health.yml` fails weekly in that state, naming it. Optional and reporting only; the coverage *floors* are enforced by `scripts/check_coverage_floors.py` either way |
 | Allow auto-merge | Settings → General | `.github/workflows/dependabot-auto-merge.yml` fails on every Dependabot pull request: `gh pr merge --auto` is refused |
+| Dependabot alerts and security updates | Settings → Code security | Dependabot opens no security update, so the security path of the merge budget (gate P22) never fires; OSV still classifies the version updates it does open. Enabled on this repository on 2026-11-13 |
+| A `security` label | Issues → Labels | `.github/workflows/dependabot-auto-merge.yml` cannot label a security update the budget holds, and the step fails |
 | Branch protection on `main` | Settings → Branches | Nothing requires the checks to pass. `docs/governance/branch-protection.md` states the required set and `scripts/setup_branch_protection.sh` applies it |
 | Automatically delete head branches | Settings → General | Merged branches accumulate. **Before merging a pull request that another one is stacked on, retarget the dependent to `main`** — deleting its base branch makes GitHub close it rather than retarget it, which happened here once |
 

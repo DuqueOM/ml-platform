@@ -7,8 +7,8 @@ what it applies and, more usefully, where the protection stops.
 
 | Setting | Value | What it means |
 | --- | --- | --- |
-| `required_status_checks` | all four CI jobs | A red job blocks the merge |
-| `strict` | true | The branch must be current with `main` before merging |
+| `required_status_checks` | all four CI jobs, and **Dependabot merge budget** | A red job blocks the merge. The budget check judges only Dependabot's pull requests; on any other it is skipped, which reports success |
+| `strict` | true | The branch must be current with `main` before merging. It is also what enforces the Dependabot budget: a merge queued with `GITHUB_TOKEN` starts no workflow, so the update `strict` forces is the only re-check after `main` moves |
 | `enforce_admins` | **true** | The rules apply to the repository owner too |
 | `required_approving_review_count` | **0** | No human approval is required |
 | Force pushes | blocked | History on `main` cannot be rewritten |

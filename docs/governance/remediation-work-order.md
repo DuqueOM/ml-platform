@@ -1419,7 +1419,7 @@ lock change, and C7 refuses a separate fix as the eleventh unreviewed commit.
 | ID | Finding | State |
 | --- | --- | --- |
 | P1 | `uv.lock` pinned certifi 2026.7.22 under GHSA-6q48-6c7w-9gw2 (CRITICAL, compromised emSign intermediates) | **Closed** in the recording commit: certifi 2026.10.23. The resolved serving sets pick it up (`certifi==2026.10.23` in all four that carry it). Two HIGH advisories published after the audit — GitPython CVE-2026-114145 (3.2.1) and virtualenv CVE-2026-113722 / -113725 (21.14.13) — fail the same gate on `947c14d` and are closed in the same commit; Trivy over the whole tree at the gate's settings exits 0 |
-| P2-1 | C7 is cleared with no trail entry by a date-only, uppercase-sha or future-dated marker | Open. Refuse a marker without a sha once the trail exists; match the sha case-insensitively; fail a marker dated after today or after its trail entry. Add the date-only marker mutation with the fix |
+| P2-1 | C7 is cleared with no trail entry by a date-only, uppercase-sha or future-dated marker | **Closed** by *fix(ci): unattended merges have a budget the merge itself must pass*: the marker's sha is required once the trail records audits, read in either case, and refused when dated after today or after its trail entry; `check_readme.py` reuses C7's parser. Mutations DEP28-9 to DEP28-12 |
 | P2-2 | Bandit is disarmed, every workflow test green, by `shell: bash {0}` with a folded `\| tee`, or by a folded `\|\| echo` containing "exit 1" | Open. Read `shell:` on the step, job and `defaults.run`; judge `\|\|` by parsing the branch; run the *parsed* `run:` value in the behavioural test. Then R19-BLK1 and R19-BLK2 join the catalogue |
 | P2-3 | The memory gate is an attestation: a hand-edited ledger recreates round eighteen's Grafana-at-200Mi defect green; `.yml` manifests, StatefulSets and init containers are not read | Open. Give the ledger provenance the test can check (image id, sample timestamps, `measured_on`, never lower for the same image); read manifests as kubectl does. R19-MEM1, re-anchored at `containers:`, joins the catalogue |
 | P2-4 | The audit brief's § 11 is four rounds stale (last a130c42) | Open. Replace § 11 with a pointer to the newest round section here, and add a C-check that the round it names equals the trail's latest `independent-audit` round |
@@ -1457,15 +1457,15 @@ refuses a separate fix as the eleventh unreviewed commit.
 | ID | Finding | State |
 | --- | --- | --- |
 | P1 | Seven HIGH advisories in `uv.lock` (dnspython, hydra-core, oauthlib, pyasn1) fail the blocking Trivy gate on `a057807` | **Closed** in the recording commit: dnspython 2.9.2, hydra-core 1.3.8, oauthlib 4.0.1, pyasn1 0.6.5. The resolved serving sets scan clean before and after. Dependabot alerts are disabled on the repository, so no security update would have opened; whether to enable them, or schedule Trivy on `main`, is open |
-| P2-1 | `pull_request` runs the PR's own workflow file, so Dependabot's bumped action pins execute in the auto-merge job holding `contents: write` before any check passes; the base-ref checkout protects `scripts/` and `uv.lock`, not the job | Open. Split the job: a read-only job answers the budget; a second job holds only `pull-requests: write` and uses no third-party action. Test every `uses:` in a job with `contents: write`, and least privilege on the unqueue job |
-| P2-2 | Merges queued under `GITHUB_TOKEN` fire no `push` workflow (13 of 13 auto-merged Dependabot commits), so the unqueue job is not what enforces the reserve: branch protection's `strict: true` and Dependabot's rebase are | Open. Merge with an App or PAT token, or name `strict` as the mechanism in the workflow and the script, and gate that the protection payload keeps it |
+| P2-1 | `pull_request` runs the PR's own workflow file, so Dependabot's bumped action pins execute in the auto-merge job holding `contents: write` before any check passes; the base-ref checkout protects `scripts/` and `uv.lock`, not the job | **Closed** by *fix(ci): unattended merges have a budget the merge itself must pass*: the budget is its own workflow on `pull_request` with a read-only token, and the queue runs on `pull_request_target` — main's file and pins — never checking out the PR. Mutations DEP27-5, DEP27-7, DEP28-5 |
+| P2-2 | Merges queued under `GITHUB_TOKEN` fire no `push` workflow (13 of 13 auto-merged Dependabot commits), so the unqueue job is not what enforces the reserve: branch protection's `strict: true` and Dependabot's rebase are | **Closed** by *fix(ci): unattended merges have a budget the merge itself must pass*: the `push` job is gone; the budget is the required check **Dependabot merge budget**, and `strict` re-asks it before every merge. `tests/test_dependabot_merge_budget.py` holds both in `setup_branch_protection.sh`. Mutations DEP28-7, DEP28-8 |
 | P2-3 | C3 passes `docs/ADOPTION.md`'s "31 declared gates" (43 derived), `SECURITY.md`'s undated "56 HIGH findings" (48 re-measured), and 11 of 12 spellings of a false blocking claim | Open. Run the figure and scanner-claim checks over all three documents; widen the blocking pattern; tolerate an adjective in the dated pattern |
 | P2-4 | C11 resolves the plan's Phase 0 command, which cannot pass on the bare `uv sync` it names; `DELIVERABLES` shows Phase 6's framework bullet ✅ against a row whose document rejects those frameworks; no row shows secret scanning | Open. Fix the plan command, resolve flags and node ids, treat `curl` without `-f` as unresolved, and add the two rows |
 | P2-5 | The service's demo compose runs MLflow server v2.9.2 against a 3.17.2 client, and the template's client/server contract test omits that file | Open, upstream. Fix in `ml-service-template` and regenerate; record it in the parity ledger until then |
 | P2-6 | `make local-verify` failed twice on the DNS negative control within about 15 minutes of a Docker restart, then passed; no local test asserts that non-DNS egress is denied, and the test's restore drops the overlay's labels on `allow-dns` | Open, cause not established. Capture kindnetd's log and nft sets on failure; add a non-DNS egress test; restore from the overlay. Do not lengthen the 150 s window until the cause is known |
-| P3-1 | The unqueue step runs under `bash -e` without `pipefail`, and any non-zero from the budget script is read as "budget spent" | Open. `shell: bash`, and exit 2 on "cannot run" |
-| P3-2 | `audit_drift` ignores C7's 90-day age check, so C7 can fail while the budget says OK; nothing tests the 90-day limit | Open |
-| P3-3 | The Dependabot reserve (half the grace) has no recorded reason or owner | Open. A quality-gates row or ADR section |
+| P3-1 | The unqueue step runs under `bash -e` without `pipefail`, and any non-zero from the budget script is read as "budget spent" | **Closed** by *fix(ci): unattended merges have a budget the merge itself must pass*: `defaults.run.shell: bash` on both workflows, and exit 2 for a budget that cannot be answered. Mutation DEP28-6 |
+| P3-2 | `audit_drift` ignores C7's 90-day age check, so C7 can fail while the budget says OK; nothing tests the 90-day limit | **Closed** by *fix(ci): unattended merges have a budget the merge itself must pass*: C7 and the budget read one decision, `audit_state`, which includes the age limit. Mutation DEP28-13 |
+| P3-3 | The Dependabot reserve (half the grace) has no recorded reason or owner | **Closed** by *fix(ci): unattended merges have a budget the merge itself must pass*: gate P22 records the quota (1) and the floor (2) with their reasons, and `check_thresholds.py` watches both |
 | P3-4 | `check_config_is_read.py` counts assignments as reads; 29/29 holds today | Open. Require `ast.Load` |
 | P3-5 | A blank prompt satisfies the non-English rule | Open. Require a non-blank value |
 | P3-6 | The inventory's detectors treat a declaration as use for polars as well as duckdb (extends DEP27-D1) | Open. Detect imports in code |
@@ -1475,6 +1475,30 @@ Round nineteen's open findings are re-checked in the report's own table and
 none is closed by this window; its P2-1 has grown, because #159's budget reads
 the same marker. The auditor's thirteen mutations are in the report: one was
 killed, and the survivors join the catalogue with the fixes above.
+
+## Round twenty — second pass
+
+A second, fresh run of QA-4 against the same `a057807`, started before the
+first was recorded and finished after; its report is committed as
+[`qa4/round-20-second-pass.txt`](qa4/round-20-second-pass.txt). It reports
+0 P0, 1 P1, 6 P2 and 8 P3, and says itself that where it agrees with the first
+pass (the P1 and four of the P2) the agreement is not independent: it read the
+first report's findings before it was moved aside. It is recorded here, not in
+the trail: the round is already recorded, and a second `independent-audit`
+entry for the same tree would count one audit twice.
+
+Its findings map onto the round's table above except for these:
+
+| ID | Finding | State |
+| --- | --- | --- |
+| SP-1 | The serving image answers a `/predict` body sent without a JSON content type with HTTP 500 instead of 422: the validation handler cannot serialise its own error details. The same code is in `ml-service-template` v0.33.0 | Open, **upstream** (CONSULT): fix in the template, release, regenerate |
+| SP-2 | The plan's Feast bullet shows ✅ through a row that does not deliver it; Feast is not wired in | Open, with P2-4 |
+| SP-3 | `PolicyRules.version`'s only genuine read can go with `check_config_is_read.py` green, because names are matched globally (mutation R20-CFG-global-name survived) | Open, with P3-4 |
+| SP-4 | `audit_drift` and C7 disagreed on two marker shapes (no marker; past the age limit) | **Closed** with P3-2 by *fix(ci): unattended merges have a budget the merge itself must pass* |
+| SP-5 | The DNS negative control's restore re-applies the base policy, not the overlay, so every run leaves the live `allow-dns` without the overlay's labels | Open, with P2-6 |
+
+Its eight mutations are in the report; the survivors join the catalogue with
+the fixes above.
 
 ## Between rounds — found while landing a dependency round
 

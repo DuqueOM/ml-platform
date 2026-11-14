@@ -61,7 +61,11 @@ _LAYERS = re.compile(
 )
 _PHASE = re.compile(r"^### Phase (\S+)")
 _PROJECT_ROW = re.compile(r"^\| (✅|🟡|⬜) \| (L\d|—) \| projects/([\w-]+) \|")
-_AUDIT_MARKER = re.compile(r"Last independent audit:\s*(\d{4}-\d{2}-\d{2})\s*\(([0-9a-f]{7,40})\)")
+#: C7's own parser, so the README cannot read a marker C7 reads differently —
+#: three readers of one line, each with its own pattern, is how an upper-case
+#: sha came to be "no sha" in one of them (QA-4 round nineteen, P2-1).
+from check_doc_coherence import _AUDIT_MARKER  # noqa: E402
+
 _STATE = {"✅": "built", "🟡": "partial", "⬜": "planned"}
 
 
@@ -98,8 +102,10 @@ def status() -> str:
     marker = _AUDIT_MARKER.search(AGENTS.read_text(encoding="utf-8"))
     reports = (re.fullmatch(r"round-(\d+)\.txt", path.name) for path in AUDITS.glob("round-*.txt"))
     rounds = sorted(int(report.group(1)) for report in reports if report)
-    if marker is None or not rounds:
-        raise ValueError("no audit marker in AGENTS.md, or no committed QA-4 report under docs/governance/qa4/")
+    if marker is None or marker.group(2) is None or not rounds:
+        raise ValueError(
+            "no audit marker naming a commit in AGENTS.md, or no committed QA-4 report under docs/governance/qa4/"
+        )
     cloud = "**L4 (cloud): 0** — nothing has been deployed to a cloud." if l4 == "0" else f"**L4 (cloud): {l4}.**"
 
     return "\n".join(
@@ -119,7 +125,8 @@ def status() -> str:
             *projects,
             "",
             _wrap(
-                f"Last independent audit: **QA-4 round {rounds[-1]}**, {marker.group(1)}, at `{marker.group(2)}` — "
+                f"Last independent audit: **QA-4 round {rounds[-1]}**, {marker.group(1)}, "
+                f"at `{marker.group(2).lower()}` — "
                 f"[report](docs/governance/qa4/round-{rounds[-1]}.txt)."
             ),
         ]

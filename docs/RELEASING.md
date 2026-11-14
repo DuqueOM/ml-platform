@@ -132,10 +132,13 @@ any change to a production model's promotion status. Concretely, here:
 
 **All four CI jobs on the release commit** — `Repository invariants`,
 `IaC and Kubernetes security`, `Supply chain`, `Secret scan` — read from the CI
-run for that commit, not inferred from a local run. Note that this is a stricter
-bar than "mergeable": `scripts/setup_branch_protection.sh` requires only
-`Repository invariants` and `Secret scan`, so a release commit can be merged
-with the other two jobs in any state.
+run for that commit, not inferred from a local run. Branch protection requires
+the same four for every merge (`scripts/setup_branch_protection.sh`), so a
+merged commit has passed them once; reading them on the release commit is still
+required, because a merge proves the checks passed on the pull request's merge
+ref, not on what `main` became after the next merge. This section said the
+script required only two of the four, a statement left behind when it was
+corrected to four (found 2026-11-13).
 
 ```bash
 gh run list --commit "$(git rev-parse HEAD)" --json name,conclusion
