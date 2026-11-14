@@ -18,6 +18,35 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Fixed — the gates read what the documents say, the config reads are typed, and a bullet maps to a row that delivers it (QA-4 rounds nineteen and twenty)
+
+- **C3 reads all three documents that quote the measurements.** It held
+  `docs/COMPLIANCE_MAPPING.md` to the derived figures and scanner claims, and the
+  other two only to the dated-figure rule. `docs/ADOPTION.md` said "31 declared
+  gates" over 44 and passed. The figure and scanner-claim checks now run over
+  `SECURITY.md` and `ADOPTION.md`; a count written out ("four required checks",
+  true until a fifth was required) is compared; an adjective no longer hides a
+  count from the dated rule ("56 HIGH findings", re-measured at 48 on
+  2026-11-14); and the blocking vocabulary refuses all twelve spellings of the
+  false claim the auditor tried, where it knew one. The three statements are
+  corrected, and the protection read-back is dated 2026-11-14.
+- **A plan bullet maps to a row of its own phase.** The map accepted any
+  existing row, so the Phase 6 framework bullet could be pointed at "Lint +
+  format" and pass. Any cross-phase pair now needs a reason in `CROSS_PHASE`.
+  The Feast bullet and the EU AI Act / ISO 42001 / NIST AI RMF bullet showed
+  ✅ through neighbours that deliver something else; each has a row of its own
+  and reads absent. The generated service and secret scanning, which had no row
+  that proved them, have one.
+- **The config gate types its reads.** A `.version` read on any object kept
+  `PolicyRules.version` alive after its only genuine read was deleted. Reads
+  are resolved through annotated attributes (`self.agent.config.verification`),
+  an assignment is a write, and an unread field says where its name is loaded on
+  an owner the gate cannot type. A blank prompt is refused in any language.
+- **Smaller:** a backslash-continued `copier \` + `update` is judged whole;
+  R18-RS10 is killed in a checkout of any name; the memory budget's header
+  states the sum of its components, and a test holds it. Mutations R20-C3-1..5,
+  R20-DEL-1..3, R20-CFG-1..3, R20-BLK-1, R19-CP1; R11-6e and R16-2b re-anchored.
+
 ### Changed — DuckDB does the trip-level ingest, held to the Polars path, and the contract is the only list of bounds (ADR-011)
 
 - **DuckDB was declared and ran nowhere.** `libs/ml-core` declared it, nothing

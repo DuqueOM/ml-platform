@@ -205,3 +205,15 @@ def test_only_the_unavailable_deployment_is_named_with_its_reason() -> None:
     lines = explain_unavailable.unavailable(deployments, {"items": [grafana]})
 
     assert lines == ["grafana: grafana: CrashLoopBackOff (last: OOMKilled), restarts 3"]
+
+
+def test_the_budget_prose_states_the_sum_of_its_components() -> None:
+    """The header said 3200 MB over components summing to 3136, and nothing compared them (round nineteen, P3-11)."""
+    import re
+
+    text = (LOCAL / "budget.yaml").read_text(encoding="utf-8")
+    stated = re.search(r"the (\d+) MB of components below", text)
+    assert stated, "the header no longer states the sum of the components it describes"
+    assert int(stated.group(1)) == sum(_budget().values()), (
+        f"budget.yaml's header says {stated.group(1)} MB; the components sum to {sum(_budget().values())} MB"
+    )
