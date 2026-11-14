@@ -79,6 +79,17 @@ def test_no_suppression_has_expired() -> None:
     assert not expired, "expired suppressions:\n" + "\n".join(expired)
 
 
+def test_the_policy_s_example_cannot_expire() -> None:
+    """The README states the format; it holds no entry. Its example carried a real date, three months out.
+
+    On 2026-11-14 that example expired and failed the check above on every
+    pull request — a policy document read as a suppression. A placeholder
+    shows the format and can never come due.
+    """
+    readme = (BASELINES / "README.md").read_text(encoding="utf-8")
+    assert not _EXPIRY.findall(readme), "the README's example carries a date; write it as YYYY-MM-DD"
+
+
 def test_every_suppression_carries_an_expiry() -> None:
     """The check that has nothing to do today and everything to do later.
 
