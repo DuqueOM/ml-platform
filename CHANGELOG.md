@@ -130,6 +130,23 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
   `.trivyignore`, and a test refuses a dated one (mutation GOV-1). Closed here
   because nothing can land without it.
 
+### Changed — local stack images, measured (Dependabot #160)
+
+- **RustFS 1.0.4, OpenTelemetry Collector 0.164.0, Prometheus 3.15.1 and
+  Grafana 13.3.0**, each digest checked against its tag in the registry. The
+  dependency round in #172 left this one out, because
+  `test_every_stack_pod_is_measured_on_the_image_it_runs` requires each image
+  to be measured on a running stack first. It was: `make local-up` and
+  `make local-dashboards` on those images, `make local-verify` 40 passed, then
+  `scripts/local/measure_memory.py --write`. The ledger is dated 2026-11-13.
+- **Two limits now sit close to the headroom rule.** Grafana's peak of 407 MiB
+  needs 508.75 of its 512, and RustFS's 254 MiB needs 317.5 of its 320. Both
+  pass, and both were measured after the suite exercised the stack, but
+  round nineteen's P3-7 still applies: RustFS grows with uptime, and a longer
+  soak may cross it.
+- Mutation R15-PIN quotes the Prometheus line, so it follows the pin, and it
+  is still killed.
+
 ### Security — dnspython 2.9.2, hydra-core 1.3.8, oauthlib 4.0.1, pyasn1 0.6.5
 
 - **Seven HIGH advisories fail the blocking Trivy gate on `a057807` itself.**
