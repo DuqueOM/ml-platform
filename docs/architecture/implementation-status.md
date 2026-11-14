@@ -88,9 +88,9 @@ how "we deploy to two clouds" goes unchallenged.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_implementation_status.py -->
 
-**51 done · 3 partial · 11 absent** — of 65 tracked components.
+**53 done · 3 partial · 13 absent** — of 69 tracked components.
 
-**Proven in CI: 39 at L1 · 12 at L2.** Evidence available but NOT run here: 5 at L3, 0 at L4.
+**Proven in CI: 40 at L1 · 13 at L2.** Evidence available but NOT run here: 5 at L3, 0 at L4.
 
 ### Phase 0
 
@@ -107,6 +107,7 @@ how "we deploy to two clouds" goes unchallenged.
 | ✅ | L2 | Type checking (libs, strict) | `uv run mypy libs/` passes |
 | ✅ | L2 | CI workflow | `uv run python scripts/check_ci_references.py` passes |
 | ⬜ | — | Path-filtered CI from the import graph (W-7) | absent |
+| ✅ | L1 | Secret scanning (gitleaks over full history) | `uv run pytest tests/test_gitleaks_pin.py -q` passes |
 
 ### Phase 1
 
@@ -133,6 +134,8 @@ how "we deploy to two clouds" goes unchallenged.
 | ✅ | L1 | Grafana LGTM dashboards | `uv run pytest tests/test_dashboards_structure.py -q` passes · L3 evidence, not run here: `make local-dashboards && uv run pytest tests/local/test_dashboards.py -q -m local` |
 | ⬜ | — | Historical backfill on serverless Spark (W-7) | absent |
 | ✅ | L1 | Model card (W-7) | `uv run pytest tests/test_project_contract.py -q -k "demand-forecast and P7"` passes |
+| ⬜ | — | Feast feature store (offline + online) | absent |
+| ✅ | L2 | Generated serving service (ml-service-template, ADR-003) | `uv run python scripts/check_artifact_compatibility.py` passes |
 
 ### Phase 1c
 
@@ -206,6 +209,7 @@ how "we deploy to two clouds" goes unchallenged.
 | ⬜ | — | projects/agent-ops | absent |
 | ⬜ | — | SLSA L3 provenance (W-7) | absent |
 | ✅ | L2 | Independent-audit staleness gate (W-7) | `uv run python scripts/check_doc_coherence.py --only C7` passes |
+| ⬜ | — | AI-governance mapping (EU AI Act, ISO/IEC 42001, NIST AI RMF) | absent |
 
 <!-- END GENERATED -->
 

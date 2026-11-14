@@ -349,6 +349,11 @@ def check_structure(text: str) -> list[str]:
     return failures
 
 
+_NUMBER_WORDS = {
+    "one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6",
+    "seven": "7", "eight": "8", "nine": "9", "ten": "10", "eleven": "11", "twelve": "12",
+}  # fmt: skip
+
 #: A count the prose may quote, and the derived figure it must equal.
 QUOTED = (
     (re.compile(r"\b(\d+) rules\b"), "rules"),
@@ -357,6 +362,10 @@ QUOTED = (
     (re.compile(r"\b(\d+) ADRs\b"), "adrs"),
     (re.compile(r"\b(\d+) declared gates\b"), "gates"),
     (re.compile(r"\*\*(\d+) at L4\*\*"), "l4"),
+    # Written out as well as in digits: "the script's four required checks" was
+    # true on 2026-10-09 and false once a fifth was required, and no digit in
+    # it for a pattern to compare (QA-4 round twenty, P2-3).
+    (re.compile(r"\b(" + "|".join(_NUMBER_WORDS) + r") required checks\b", re.IGNORECASE), "required_checks"),
 )
 
 #: Figures that cannot be derived here or that move with every commit. Each
@@ -364,7 +373,12 @@ QUOTED = (
 DATED = (
     (re.compile(r"\b\d+ commits\b"), "a commit count moves with every merge; C7 prints the current one"),
     (re.compile(r"\b\d+ (?:audit )?entries\b"), "the audit trail grows with every recorded decision"),
-    (re.compile(r"\b\d+ (?:failed checks|Checkov findings|findings)\b"), "a scanner count needs the scanner"),
+    # An adjective may sit between the number and the noun — "56 HIGH findings"
+    # slipped through this pattern while "56 findings" did not (round twenty, P2-3).
+    (
+        re.compile(r"\b\d+ (?:[A-Za-z-]+ )?(?:failed checks|Checkov findings|findings|misconfigurations)\b"),
+        "a scanner count needs the scanner",
+    ),
 )
 
 
@@ -374,14 +388,15 @@ def _prose(text: str) -> str:
     return text if start < 0 or end < start else text[:start] + text[end + len(END) :]
 
 
-def check_quoted_figures(text: str, figures: dict[str, str]) -> list[str]:
+def check_quoted_figures(text: str, figures: dict[str, str], name: str = "the prose") -> list[str]:
     failures = []
     prose = _prose(text)
     for pattern, key in QUOTED:
         for match in pattern.finditer(prose):
-            if match.group(1) != figures[key]:
+            quoted = _NUMBER_WORDS.get(match.group(1).lower(), match.group(1))
+            if quoted != figures[key]:
                 failures.append(
-                    f"the prose says {match.group(0)!r}; the tree says {figures[key]} (the derived block's {key!r})"
+                    f"{name} says {match.group(0)!r}; the tree says {figures[key]} (the derived block's {key!r})"
                 )
     return failures
 
@@ -405,13 +420,20 @@ def check_dated_measurements(text: str, name: str) -> list[str]:
 #: not fail a build. Present tense only: the record of what WAS true is kept
 #: in the past tense, and a past-tense sentence is not a claim about today.
 _ADVISORY_CLAIM = re.compile(
-    r"\b(?:cannot fail|can ?not fail|cannot block|does not block|do not block|doesn't block|is advisory|"
-    r"are advisory|is not blocking|never fails|reports and does not block|invoked by no workflow|"
-    r"wired to no workflow|runs in no workflow|cannot fail a build)\b",
+    r"\b(?:cannot fail|can ?not fail|can't fail|cannot block|can't block|does not block|do not block|doesn't block|"
+    r"never blocks?|will not block|is advisory|are advisory|advisory only|is not blocking|are not blocking|"
+    r"never fails|reports and does not block|reports only|only reports|report-only|is informational|"
+    r"invoked by no workflow|wired to no workflow|runs in no workflow|cannot fail a build|cannot fail a merge)\b",
     re.IGNORECASE,
 )
+# Every spelling a document has used or could, for a scanner that fails the
+# build or the merge. A vocabulary that knows "blocks" and "can fail a build"
+# passed 11 of 12 spellings of the same false claim (QA-4 round twenty, P2-3).
 _BLOCKING_CLAIM = re.compile(
-    r"\b(?:blocks|is blocking|are blocking|fails the build|fails a build|can fail a build)\b", re.IGNORECASE
+    r"\b(?:blocks?|is blocking|are blocking|can block|"
+    r"(?:fails?|can fail|will fail|would fail) (?:a |the |every |any )?(?:build|merge|pull request|PR|CI)|"
+    r"(?:fails?|can fail) CI|breaks? the build|gates? (?:the |every |a )?merge|stops? (?:a |the |every )?merge)\b",
+    re.IGNORECASE,
 )
 _CLAUSE_END = re.compile(r"(?<=[.;!?])\s|\||\n\s*\n")
 
@@ -476,11 +498,19 @@ def check(text: str, figures: list[Figure], controls: dict[str, bool]) -> list[s
     elif _replace(text, render(figures)) != text:
         failures.append("the derived-figures block is stale — the tree moved; run with --write and reread the rows")
     failures += check_structure(text)
-    failures += check_quoted_figures(text, {figure.key: figure.value for figure in figures})
+    derived = {figure.key: figure.value for figure in figures}
+    failures += check_quoted_figures(text, derived, MAPPING.name)
     failures += check_dated_measurements(text, MAPPING.name)
-    for document in QUOTE_THE_SAME_MEASUREMENTS:
-        failures += check_dated_measurements(document.read_text(encoding="utf-8"), document.name)
     failures += check_scanner_claims(text, controls)
+    # The documents that quote the same measurements are held to the same rules
+    # — figures, dates AND scanner claims — not only to the dated-figure one.
+    # ADOPTION.md said "31 declared gates" over 43, and a sentence there that
+    # Checkov blocks every merge passed, because only the mapping was read.
+    for document in QUOTE_THE_SAME_MEASUREMENTS:
+        quoted = document.read_text(encoding="utf-8")
+        failures += check_quoted_figures(quoted, derived, document.name)
+        failures += check_dated_measurements(quoted, document.name)
+        failures += check_scanner_claims(quoted, controls)
     failures += check_symbol_citations(text)
     return failures
 

@@ -68,8 +68,9 @@ uncomputable.
 
 Adopt broadly at *Demonstrated*. A tool promoted to Adopted without a gate is a
 dependency with no owner, and the count of technologies in a stack is not a
-quality signal — this repository has 31 declared gates and tracks the ones that
-have no coverage rather than hiding them.
+quality signal — this repository declares every gate in
+[`docs/governance/quality-gates.md`](governance/quality-gates.md) and tracks the
+ones that have no coverage rather than hiding them.
 
 ## What this does NOT claim
 

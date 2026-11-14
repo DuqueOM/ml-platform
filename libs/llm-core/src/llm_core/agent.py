@@ -52,6 +52,16 @@ def _require_own_prompts(config: UsecaseConfig) -> None:
     Raises:
         ValueError: Naming each prompt the use-case leaves to an English default.
     """
+    # A blank prompt is no prompt, in any language: it replaces the default
+    # with nothing, and a non-English use-case that blanks one passes the
+    # rule below while answering its customers with an empty string (QA-4
+    # round twenty, P3-5).
+    blank = sorted(key for key, text in config.prompts.items() if not isinstance(text, str) or not text.strip())
+    if blank:
+        raise ValueError(
+            f"use-case {config.name!r} defines {', '.join(blank)} as blank, which replaces llm-core's default "
+            f"with nothing. Write the prompt, or delete the key to use the default, in {config.root / 'config.yaml'}."
+        )
     if config.language.split("-", 1)[0].lower() == DEFAULT_PROMPT_LANGUAGE:
         return
     missing = sorted(set(_DEFAULT_PROMPTS) - set(config.prompts))

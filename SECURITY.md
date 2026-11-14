@@ -103,8 +103,10 @@ permanently red build, which is how a gate gets deleted.
 
 **Trivy does not scan for IaC misconfiguration.** `scan-type: fs` runs the
 vulnerability and secret scanners; misconfiguration is opt-in and not enabled.
-Enabling it surfaces 56 HIGH findings, mostly read-only-root-filesystem and
-default-security-context on the same manifests Checkov already reports.
+Enabling it surfaces 48 HIGH findings, measured on 2026-11-14 with
+`trivy fs --scanners misconfig --severity HIGH --skip-dirs .venv .` — 37 of them
+in the generated service, which is upstream's — mostly read-only-root-filesystem
+and default-security-context on the same manifests Checkov already reports.
 
 **Kubescape reports and does not block.** Its step carries
 `continue-on-error: true`, so a manifest failing the NSA or CIS baseline is
