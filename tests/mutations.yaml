@@ -1275,8 +1275,8 @@ mutations:
 - id: DEP3
   origin: dependency round — the pre-commit ruff hook drifts from the locked ruff
   file: .pre-commit-config.yaml
-  old: '    rev: v0.17.3'
-  new: '    rev: v0.17.2'
+  old: '    rev: v0.17.5'
+  new: '    rev: v0.17.4'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_tool_versions.py
   expect: killed
@@ -2695,6 +2695,14 @@ mutations:
   new: ''
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_dependabot_merge_budget.py
+  expect: killed
+- id: GOV-1
+  origin: dependency round 2026-11-12 — the baselines README's format example carries a real date again, and expires on every pull request
+  file: .security-baselines/README.md
+  old: '# expiry: YYYY-MM-DD  owner: @handle'
+  new: '# expiry: 2099-01-01  owner: @handle'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_governance_files.py -k cannot_expire
   expect: killed
 - id: W15-1
   origin: W-15 — the crossover projection anchored on the smallest slice, which measures noise

@@ -48,7 +48,7 @@ Four things, all of them, on every entry:
 Written as a comment directly above or beside the entry:
 
 ```text
-# expiry: 2026-11-13  owner: @handle
+# expiry: YYYY-MM-DD  owner: @handle
 # reason: <why this cannot be fixed now, and what would make it fixable>
 ```
 
