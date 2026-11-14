@@ -72,7 +72,10 @@ def test_the_gate_reads_both_verdicts_from_the_backtest(spec: dict) -> None:
     """
     inputs = spec["root"]["dag"]["tasks"]["check-quality-gate"]["inputs"]["parameters"]
 
-    for name in ("skill", "coverage"):
+    # The worst volume decile's coverage too (F-19): a constant there would let
+    # the per-decile floor pass whatever the intervals did.
+    # And the worst decile's harm (F-19b), for the same reason.
+    for name in ("skill", "coverage", "group_coverage", "group_harm"):
         assert "taskOutputParameter" in inputs[name], (
             f"{name} is a constant, not a value produced by the backtest: {inputs[name]}"
         )

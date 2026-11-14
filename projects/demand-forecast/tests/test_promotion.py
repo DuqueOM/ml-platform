@@ -12,6 +12,10 @@ from __future__ import annotations
 import pytest
 from demand_forecast import promotion, train
 
+#: The most harmed decile's bound measured on the model card's two months under
+#: the absolute-error loss (F-19b): every decile's lower bound is below zero.
+HARMLESS = -0.008
+
 
 @pytest.mark.parametrize(
     ("skill", "coverage", "refusals"),
@@ -31,7 +35,7 @@ from demand_forecast import promotion, train
     ],
 )
 def test_the_rule(skill: float, coverage: float, refusals: list[str]) -> None:
-    result = promotion.verdict(skill, coverage)
+    result = promotion.verdict(skill, coverage, 0.9, HARMLESS)
 
     assert result.promote is (not refusals)
     assert len(result.reasons) == len(refusals)
@@ -46,14 +50,16 @@ def test_the_floors_hold_their_values() -> None:
     and this states the decision.
     """
     assert (promotion.MIN_SKILL, promotion.MIN_COVERAGE, promotion.MAX_COVERAGE) == (0.05, 0.85, 0.95)
+    assert promotion.MIN_GROUP_COVERAGE == 0.85
+    assert promotion.GROUP_HARM_CONFIDENCE == 0.95
 
 
 def test_check_raises_with_every_reason_and_returns_when_the_model_may_ship() -> None:
     """Raising is the mechanism: the task or step fails, so nothing downstream publishes."""
-    assert promotion.check(0.124, 0.896) is None
+    assert promotion.check(0.124, 0.896, 0.9, HARMLESS) is None
 
     with pytest.raises(promotion.PromotionRefusedError, match="quality gate failed") as refused:
-        promotion.check(-0.18, 0.99)
+        promotion.check(-0.18, 0.99, 0.9, HARMLESS)
     assert "skill" in str(refused.value)
     assert "above 0.95" in str(refused.value)
 
@@ -87,3 +93,54 @@ def test_the_backtest_is_the_design_and_nothing_else(monkeypatch: pytest.MonkeyP
     assert promotion.backtest("table") == "report"  # type: ignore[arg-type]
     assert received == {"demand": "table", "n_folds": 5, "horizon": 168, "seed": 42}
     assert promotion.BacktestDesign(n_folds=5, horizon=168, seed=42) == promotion.DESIGN
+
+
+# --- every volume decile, not only the aggregate (F-19) ------------------------
+
+
+@pytest.mark.parametrize(
+    ("group_coverage", "refused"),
+    [
+        pytest.param(0.85, False, id="the-worst-decile-at-the-floor"),
+        pytest.param(0.85 - 1e-13, False, id="inside-the-float-tolerance"),
+        pytest.param(0.849, True, id="below-the-floor"),
+        # The figure the global quantile produced on the real data: on target in aggregate, failing here.
+        pytest.param(0.377, True, id="the-busiest-decile-before-mondrian"),
+    ],
+)
+def test_the_worst_volume_decile_is_held_to_its_own_floor(group_coverage: float, refused: bool) -> None:
+    result = promotion.verdict(0.124, 0.896, group_coverage, HARMLESS)
+    assert result.promote is not refused
+    if refused:
+        assert any("worst volume decile" in reason for reason in result.reasons)
+
+
+def test_an_unmeasured_decile_refuses_rather_than_passes() -> None:
+    """Fail closed: NaN compares false with everything, so a plain `<` would promote it."""
+    result = promotion.verdict(0.124, 0.896, float("nan"), HARMLESS)
+    assert not result.promote
+    assert "unknown" in result.reasons[0]
+
+
+@pytest.mark.parametrize(
+    ("group_harm", "refused"),
+    [
+        pytest.param(HARMLESS, False, id="the-measured-model"),
+        pytest.param(0.0, False, id="no-evidence-either-way"),
+        # Decile 0 under the squared-error loss: 0.16 trips an hour against the baseline's 0.02.
+        pytest.param(0.110, True, id="the-mean-fitted-model-in-the-quietest-decile"),
+        pytest.param(1e-3, True, id="any-evidence-of-harm"),
+    ],
+)
+def test_a_decile_the_baseline_serves_better_refuses_the_model(group_harm: float, refused: bool) -> None:
+    """The aggregate +12.4% was earned in the busier half while the quietest half lost (F-19b)."""
+    result = promotion.verdict(0.124, 0.896, 0.9, group_harm)
+    assert result.promote is not refused
+    if refused:
+        assert any("baseline beats the model in a volume decile" in reason for reason in result.reasons)
+
+
+def test_unmeasurable_harm_refuses_rather_than_passes() -> None:
+    result = promotion.verdict(0.124, 0.896, 0.9, float("nan"))
+    assert not result.promote
+    assert "cannot be judged" in result.reasons[0]

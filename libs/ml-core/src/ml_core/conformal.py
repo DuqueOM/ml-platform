@@ -236,3 +236,159 @@ class SplitConformalRegressor:
             n=int(y_true.size),
             mean_width=float(np.mean(upper - lower)),
         )
+
+
+class MondrianConformalRegressor:
+    """Group-conditional (Mondrian) split conformal: one calibrated quantile per group.
+
+    :class:`SplitConformalRegressor` guarantees coverage on AVERAGE over every
+    point it is applied to, and nothing about any subset of them. Over
+    heterogeneous groups — busy and quiet series, large and small accounts —
+    one global residual quantile is too wide for the groups whose residuals
+    are small and too narrow for those whose residuals are large, while the
+    aggregate lands on target. Measured on this repository's first consumer,
+    one quantile over 255 zones covered 100% of the quietest zones' hours and
+    37.7% of the busiest decile's, against 90% nominal and a marginal 89.6%.
+
+    Calibrating each group on its own residuals (Vovk et al., *Algorithmic
+    Learning in a Random World*, the Mondrian taxonomy) gives the
+    finite-sample guarantee WITHIN every group, under exchangeability within
+    the group. Which taxonomy to use is the caller's decision; it must be
+    fixed before the calibration labels are seen, or the guarantee is gone.
+
+    Args:
+        alpha: Miscoverage rate, the same in every group.
+
+    Raises:
+        ValueError: If ``alpha`` is not in (0, 1).
+    """
+
+    def __init__(self, alpha: float = 0.1):
+        if not 0.0 < alpha < 1.0:
+            raise ValueError(f"alpha must be in (0, 1), got {alpha}")
+        self.alpha = alpha
+        self._groups: dict[int, SplitConformalRegressor] = {}
+
+    @property
+    def nominal_coverage(self) -> float:
+        return 1.0 - self.alpha
+
+    @property
+    def is_calibrated(self) -> bool:
+        return bool(self._groups)
+
+    def calibrate(
+        self, y_true: NDArray[np.float64], y_pred: NDArray[np.float64], groups: NDArray[np.int_]
+    ) -> dict[int, float]:
+        """Calibrate one quantile per group from held-out residuals.
+
+        Every group must be large enough on its own: a group too small for
+        ``alpha`` is refused by :meth:`SplitConformalRegressor.calibrate`, named,
+        rather than merged into another, because a merged group's guarantee is
+        the merged group's, not its own.
+
+        Returns:
+            ``{group: quantile}``.
+
+        Raises:
+            ValueError: If the arrays disagree in length, are empty, or a group
+                is too small for ``alpha``.
+        """
+        y_true = np.asarray(y_true, dtype=np.float64).ravel()
+        y_pred = np.asarray(y_pred, dtype=np.float64).ravel()
+        groups = np.asarray(groups).ravel()
+        if not y_true.shape == y_pred.shape == groups.shape:
+            raise ValueError(f"y_true, y_pred and groups must align: {y_true.shape}, {y_pred.shape}, {groups.shape}")
+        if y_true.size == 0:
+            raise ValueError("calibration set is empty")
+        calibrated: dict[int, SplitConformalRegressor] = {}
+        for group in np.unique(groups):
+            rows = groups == group
+            regressor = SplitConformalRegressor(alpha=self.alpha)
+            try:
+                regressor.calibrate(y_true[rows], y_pred[rows])
+            except ValueError as error:
+                raise ValueError(f"group {int(group)}: {error}") from error
+            calibrated[int(group)] = regressor
+        self._groups = calibrated
+        return self.quantiles
+
+    @property
+    def quantiles(self) -> dict[int, float]:
+        """``{group: quantile}`` — what an artifact carries, as plain numbers."""
+        if not self._groups:
+            raise RuntimeError("the regressor is not calibrated, so it has no quantiles to report")
+        return {group: regressor.quantile for group, regressor in sorted(self._groups.items())}
+
+    @property
+    def n_calibration(self) -> dict[int, int]:
+        """``{group: residuals}``: a quantile's claim depends on how many it was taken over."""
+        if not self._groups:
+            raise RuntimeError("the regressor is not calibrated, so it has no calibration sizes to report")
+        return {group: regressor.n_calibration for group, regressor in sorted(self._groups.items())}
+
+    @classmethod
+    def from_calibration(
+        cls, *, alpha: float, quantiles: dict[int, float], n_calibration: dict[int, int]
+    ) -> MondrianConformalRegressor:
+        """Restore from what calibration produced — the inverse of :attr:`quantiles` and :attr:`n_calibration`.
+
+        Raises:
+            ValueError: If the two maps name different groups, or any group's
+                values are invalid (see :meth:`SplitConformalRegressor.from_calibration`).
+        """
+        if set(quantiles) != set(n_calibration):
+            raise ValueError(
+                f"quantiles and n_calibration name different groups: {sorted(quantiles)} vs {sorted(n_calibration)}"
+            )
+        if not quantiles:
+            raise ValueError("no group to restore")
+        restored = cls(alpha=alpha)
+        restored._groups = {
+            int(group): SplitConformalRegressor.from_calibration(
+                alpha=alpha, quantile=quantiles[group], n_calibration=n_calibration[group]
+            )
+            for group in quantiles
+        }
+        return restored
+
+    def interval(
+        self, y_pred: NDArray[np.float64], groups: NDArray[np.int_]
+    ) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+        """``(lower, upper)``, each prediction widened by its own group's quantile.
+
+        Raises:
+            RuntimeError: If called before :meth:`calibrate`.
+            ValueError: If a prediction's group was never calibrated. It has no
+                guarantee, and borrowing another group's quantile would give it
+                one it has not earned.
+        """
+        if not self._groups:
+            raise RuntimeError("calibrate() must be called before interval() — an uncalibrated interval is a guess")
+        y_pred = np.asarray(y_pred, dtype=np.float64).ravel()
+        groups = np.asarray(groups).ravel()
+        if y_pred.shape != groups.shape:
+            raise ValueError(f"y_pred and groups must align: {y_pred.shape} vs {groups.shape}")
+        unknown = sorted(set(np.unique(groups).tolist()) - set(self._groups))
+        if unknown:
+            raise ValueError(f"groups {unknown} were never calibrated, so their intervals carry no guarantee")
+        half_width = np.array([self._groups[int(group)].quantile for group in groups], dtype=np.float64)
+        return y_pred - half_width, y_pred + half_width
+
+    def coverage(
+        self, y_true: NDArray[np.float64], y_pred: NDArray[np.float64], groups: NDArray[np.int_]
+    ) -> dict[int, CoverageReport]:
+        """Measured coverage per group — the claim this class exists to make, checked."""
+        y_true = np.asarray(y_true, dtype=np.float64).ravel()
+        groups = np.asarray(groups).ravel()
+        lower, upper = self.interval(y_pred, groups)
+        inside = (y_true >= lower) & (y_true <= upper)
+        return {
+            int(group): CoverageReport(
+                nominal=self.nominal_coverage,
+                empirical=float(np.mean(inside[groups == group])),
+                n=int((groups == group).sum()),
+                mean_width=float(np.mean((upper - lower)[groups == group])),
+            )
+            for group in np.unique(groups)
+        }

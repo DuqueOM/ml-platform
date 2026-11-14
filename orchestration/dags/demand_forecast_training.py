@@ -146,13 +146,17 @@ def demand_forecast_training() -> None:
         compares unequal to itself in the next task.
         """
         from demand_forecast.lakehouse import catalog_from_environment, read_demand
-        from demand_forecast.promotion import backtest
+        from demand_forecast.promotion import backtest, worst_group_harm
 
         report = backtest(read_demand(catalog_from_environment(), snapshot_id=validated["snapshot_id"]))
         return {
             **validated,
             "skill": report.skill,
             "coverage": report.coverage,
+            # The worst volume decile's coverage, which the gate holds to its own floor (F-19).
+            "group_coverage": report.worst_group_coverage,
+            # The most harmed decile's bound, which the gate holds at or below zero (F-19b).
+            "group_harm": worst_group_harm(report),
             "model_mae": report.model_mae,
             "baseline_mae": report.baseline_mae,
         }
@@ -167,9 +171,15 @@ def demand_forecast_training() -> None:
         """
         from demand_forecast.promotion import check
 
-        check(metrics["skill"], metrics["coverage"])
+        check(metrics["skill"], metrics["coverage"], metrics["group_coverage"], metrics["group_harm"])
 
-        logger.info("gate passed: skill %.4f, coverage %.4f", metrics["skill"], metrics["coverage"])
+        logger.info(
+            "gate passed: skill %.4f, coverage %.4f, worst decile %.4f, worst decile harm %.4f",
+            metrics["skill"],
+            metrics["coverage"],
+            metrics["group_coverage"],
+            metrics["group_harm"],
+        )
         return metrics
 
     @task

@@ -316,6 +316,27 @@ def test_zones_with_too_little_history_are_dropped() -> None:
     assert kept["zone_id"].n_unique() == 3
 
 
+def test_history_is_counted_in_hours_not_rows() -> None:
+    """F-19: the constant says hours; the selection counted rows.
+
+    A zone with too few hours, each repeated until its ROW count clears the
+    threshold — as two ingests of one month concatenated would — is still a
+    zone with too few hours.
+    """
+    from demand_forecast.train import MIN_ZONE_HOURS, select_modellable_zones
+
+    hours = MIN_ZONE_HOURS // 2
+    repeated = pl.DataFrame(
+        {
+            "zone_id": [7] * (hours * 3),
+            "event_time": [datetime(2024, 1, 1) + timedelta(hours=i % hours) for i in range(hours * 3)],
+            "trip_count": [1.0] * (hours * 3),
+        }
+    )
+    assert repeated.height >= MIN_ZONE_HOURS, "the fixture must clear the threshold on rows"
+    assert select_modellable_zones(repeated, min_hours=MIN_ZONE_HOURS).is_empty()
+
+
 # --- both sides of the skill comparison on the same rows (QA-4 F-21) -------
 
 
@@ -430,7 +451,9 @@ def test_a_fold_too_short_to_calibrate_is_refused_not_fitted() -> None:
     fold = Fold(index=3, train=np.arange(3), test=np.array([3]), gap=0)
 
     with pytest.raises(ValueError, match="fold 3 splits into"):
-        _fit_fold(np.zeros((4, 2)), np.zeros(4), times, fold, seed=0)
+        _fit_fold(
+            np.zeros((4, 2)), np.zeros(4), times, fold, seed=0, groups=np.zeros(4, dtype=int), test_rows=fold.test
+        )
 
 
 def test_a_single_series_without_zones_is_modelled_whole() -> None:
@@ -448,3 +471,48 @@ def test_evaluation_refuses_when_no_zone_has_enough_history() -> None:
 
     with pytest.raises(ValueError, match=f"no zone has the {MIN_ZONE_HOURS} hours of history"):
         evaluate(short, n_folds=2, horizon=24)
+
+
+# --- F-19: what the backtest scores, and on what history ----------------------
+
+
+def test_the_backtest_densifies_the_history_it_is_given() -> None:
+    """A month boundary the ingest left unfilled must score exactly as the filled panel does.
+
+    The DAG ingests one month at a time; each month is dense and the hours
+    between them were not. Here zone 2's quiet hours 600-640 are removed — as
+    a boundary leaves them — and must come back as zero demand, not vanish.
+    """
+    dense = _panel_demand(hours=1400, zones=2).with_columns(
+        pl.when(
+            (pl.col("zone_id") == 2) & pl.col("event_time").is_between(datetime(2024, 1, 26), datetime(2024, 1, 27, 16))
+        )
+        .then(0.0)
+        .otherwise(pl.col("trip_count"))
+        .alias("trip_count")
+    )
+    gappy = dense.filter(
+        ~(
+            (pl.col("zone_id") == 2)
+            & (pl.col("trip_count") == 0.0)
+            & pl.col("event_time").is_between(datetime(2024, 1, 26), datetime(2024, 1, 27, 16))
+        )
+    )
+    assert gappy.height < dense.height
+
+    filled, holed = evaluate(dense, n_folds=2, horizon=168, seed=42), evaluate(gappy, n_folds=2, horizon=168, seed=42)
+    assert [fold.n_test for fold in holed.folds] == [fold.n_test for fold in filled.folds]
+    assert holed.skill == pytest.approx(filled.skill)
+
+
+def test_a_zone_the_fold_never_trained_on_is_not_scored() -> None:
+    """The deployed model refuses a zone it was not fitted on, so the backtest must not score one."""
+    panel = _panel_demand(hours=1400, zones=2)
+    late = panel.filter(pl.col("zone_id") == 2).with_columns(pl.lit(9, dtype=panel.schema["zone_id"]).alias("zone_id"))
+    late = late.filter(pl.col("event_time") >= datetime(2024, 1, 1) + timedelta(hours=1000))
+    report = evaluate(pl.concat([panel, late]), n_folds=2, horizon=168, seed=42)
+
+    scored = sum(fold.n_test for fold in report.folds)
+    reference = sum(fold.n_test for fold in evaluate(panel, n_folds=2, horizon=168, seed=42).folds)
+    assert scored == reference, "rows of a zone no fold trained on were scored"
+    assert all(group.group >= 0 for group in report.by_volume())

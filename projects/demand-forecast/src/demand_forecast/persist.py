@@ -33,19 +33,20 @@ from typing import Any
 import joblib
 import numpy as np
 import polars as pl
-from ml_core.conformal import SplitConformalRegressor
+from ml_core.conformal import MondrianConformalRegressor
 from ml_core.determinism import seed_everything
 from numpy.typing import NDArray
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.utils import check_random_state
 
 from demand_forecast.features import FEATURE_COLUMNS, build_features
-from demand_forecast.train import ALPHA, CALIBRATION_HOURS, select_modellable_zones
+from demand_forecast.ingest import densify
+from demand_forecast.train import ALPHA, CALIBRATION_HOURS, make_estimator, select_modellable_zones, volume_groups
 
 #: Bumped when the artifact's SHAPE changes — a field added, a field's meaning
 #: changed. Loading an artifact from a different schema fails rather than
 #: unpickling into a dataclass whose fields no longer mean what they did.
-ARTIFACT_SCHEMA = 2
+ARTIFACT_SCHEMA = 3
 
 
 @dataclass(frozen=True)
@@ -54,7 +55,10 @@ class ForecastModel:
 
     Attributes:
         estimator: Fit on every row up to ``calibrated_from``.
-        conformal: Calibrated on the held-out tail, which the estimator never saw.
+        conformal: Calibrated on the held-out tail, which the estimator never
+            saw — one quantile per volume decile (Mondrian conformal, F-19).
+        zone_groups: Each covered zone's volume decile, ranked on the training
+            rows. The decile decides which quantile widens the zone's forecast.
         feature_columns: The names the estimator was fit on, in its order.
             A frame is selected by these names, never by position.
         trained_through: Latest ``event_time`` in the training data. What makes
@@ -69,7 +73,8 @@ class ForecastModel:
     """
 
     estimator: HistGradientBoostingRegressor
-    conformal: SplitConformalRegressor
+    conformal: MondrianConformalRegressor
+    zone_groups: dict[int, int]
     feature_columns: tuple[str, ...]
     trained_through: str
     calibrated_from: str
@@ -90,7 +95,7 @@ class ForecastModel:
 
         Raises:
             ValueError: If the frame does not carry every feature the estimator
-                was fit on.
+                was fit on, or names a zone the model does not cover.
         """
         missing = [column for column in self.feature_columns if column not in featured.columns]
         if missing:
@@ -106,7 +111,12 @@ class ForecastModel:
         # this signature does not accept.
         matrix = featured.select(list(self.feature_columns)).to_numpy().astype(np.float64)
         point: NDArray[np.float64] = self.estimator.predict(matrix)
-        lower, upper = self.conformal.interval(point)
+        zones = featured["zone_id"].to_list()
+        uncovered = sorted({int(zone) for zone in zones} - set(self.zone_groups))
+        if uncovered:
+            raise ValueError(f"zones {uncovered} are not covered by this model; it forecasts {len(self.zones)} zones")
+        groups = np.array([self.zone_groups[int(zone)] for zone in zones], dtype=np.int_)
+        lower, upper = self.conformal.interval(point, groups)
         return point, lower, upper
 
 
@@ -139,7 +149,8 @@ def fit_final(
     """
     seed_everything(seed)
 
-    modellable = select_modellable_zones(demand)
+    # Dense across the whole history, as the backtest it is promoted on (F-19, `ingest.densify`).
+    modellable = select_modellable_zones(densify(demand))
     if modellable.is_empty():
         raise ValueError("no zone has enough history to be modelled")
 
@@ -158,15 +169,20 @@ def fit_final(
     matrix = featured.select(FEATURE_COLUMNS).to_numpy().astype(np.float64)
     target = featured["trip_count"].to_numpy().astype(np.float64)
 
-    estimator = HistGradientBoostingRegressor(max_iter=200, learning_rate=0.08, random_state=seed)
+    estimator = make_estimator(seed)
     estimator.fit(matrix[fit_rows], target[fit_rows])
 
-    conformal = SplitConformalRegressor(alpha=alpha)
-    conformal.calibrate(target[calibrate_rows], estimator.predict(matrix[calibrate_rows]))
+    # Volume deciles ranked on every training row, as the backtest ranks on its
+    # fold's training rows; the calibration tail is part of that history.
+    zone_ids = featured["zone_id"].to_numpy().astype(np.int_)
+    groups = volume_groups(zone_ids, target, np.arange(len(target)))
+    conformal = MondrianConformalRegressor(alpha=alpha)
+    conformal.calibrate(target[calibrate_rows], estimator.predict(matrix[calibrate_rows]), groups[calibrate_rows])
 
     return ForecastModel(
         estimator=estimator,
         conformal=conformal,
+        zone_groups={int(zone): int(group) for zone, group in zip(zone_ids, groups, strict=True)},
         feature_columns=tuple(FEATURE_COLUMNS),
         trained_through=str(times[fit_rows].max()),
         calibrated_from=str(times[calibrate_rows].min()),
@@ -246,9 +262,14 @@ def _payload(model: ForecastModel) -> dict[str, Any]:
     R11-3, recorded in ADR-008).
 
     What remains is a scikit-learn estimator, which the image does install, and
-    plain values. The conformal regressor becomes the two numbers calibration
-    produced; `load` rebuilds it with
-    :meth:`ml_core.conformal.SplitConformalRegressor.from_calibration`.
+    plain values. The conformal regressor becomes what calibration produced —
+    a quantile and a calibration size per volume decile, and each zone's
+    decile (schema 3, F-19) — and `load` rebuilds it with
+    :meth:`ml_core.conformal.MondrianConformalRegressor.from_calibration`. A
+    container's interval is ``point ± conformal_quantiles[zone_groups[zone]]``.
+    Schema 2's single ``conformal_quantile`` is gone rather than kept beside
+    them: a reader that still found it would apply one global half-width, the
+    defect schema 3 exists to remove.
 
     The artifact therefore names no workspace package, which is the property
     `tests/test_artifact_portability.py` holds. It also carries no fit-time
@@ -266,8 +287,9 @@ def _payload(model: ForecastModel) -> dict[str, Any]:
         "schema": ARTIFACT_SCHEMA,
         "estimator": _without_fit_time_random_state(model.estimator),
         "conformal_alpha": model.conformal.alpha,
-        "conformal_quantile": model.conformal.quantile,
+        "conformal_quantiles": model.conformal.quantiles,
         "conformal_n_calibration": model.conformal.n_calibration,
+        "zone_groups": dict(model.zone_groups),
         "feature_columns": list(model.feature_columns),
         "trained_through": model.trained_through,
         "calibrated_from": model.calibrated_from,
@@ -378,7 +400,8 @@ def load(path: Path) -> ForecastModel:
     so the model is rebuilt here rather than unpickled. A reader that only
     needs predictions — a serving container — does not need this function at
     all: `payload["estimator"].predict(...)` plus
-    ``± payload["conformal_quantile"]`` is the whole contract.
+    ``± payload["conformal_quantiles"][payload["zone_groups"][zone]]`` is the
+    whole contract.
 
     Args:
         path: The joblib artifact written by :func:`save`.
@@ -406,11 +429,12 @@ def load(path: Path) -> ForecastModel:
         )
     return ForecastModel(
         estimator=_restore_fit_time_random_state(payload["estimator"]),
-        conformal=SplitConformalRegressor.from_calibration(
+        conformal=MondrianConformalRegressor.from_calibration(
             alpha=payload["conformal_alpha"],
-            quantile=payload["conformal_quantile"],
+            quantiles=payload["conformal_quantiles"],
             n_calibration=payload["conformal_n_calibration"],
         ),
+        zone_groups=dict(payload["zone_groups"]),
         feature_columns=tuple(payload["feature_columns"]),
         trained_through=payload["trained_through"],
         calibrated_from=payload["calibrated_from"],

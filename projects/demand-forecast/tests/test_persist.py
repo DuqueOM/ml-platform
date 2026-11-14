@@ -366,3 +366,27 @@ def test_the_restored_generator_is_derived_as_scikit_learn_derives_it(model: For
 
     rng = check_random_state(model.estimator.random_state)
     assert rng.randint(np.iinfo(np.uint32).max, dtype="u8") == model.estimator._random_seed
+
+
+# --- Mondrian intervals: each zone widened by its own decile (F-19) ---------
+
+
+def test_a_zone_the_model_does_not_cover_is_refused(model: ForecastModel) -> None:
+    featured = build_features(select_modellable_zones(_demand())).with_columns(pl.lit(999).alias("zone_id"))
+    with pytest.raises(ValueError, match=r"zones \[999\] are not covered"):
+        model.predict(featured)
+
+
+def test_a_busy_zone_gets_a_wider_interval_than_a_quiet_one() -> None:
+    """One global quantile gave every zone the same half-width; the busiest decile then covered 37.7%."""
+    quiet = _demand(zones=1).with_columns(pl.col("trip_count") * 0.05)
+    busy = _demand(zones=1, seed=1).with_columns(
+        pl.lit(2, dtype=quiet.schema["zone_id"]).alias("zone_id"), pl.col("trip_count") * 20
+    )
+    fitted = fit_final(pl.concat([quiet, busy]), seed=7)
+    featured = build_features(select_modellable_zones(pl.concat([quiet, busy])))
+    _, lower, upper = fitted.predict(featured)
+    width = upper - lower
+    zones = featured["zone_id"].to_numpy()
+    assert fitted.zone_groups[1] < fitted.zone_groups[2]
+    assert width[zones == 2].min() > width[zones == 1].max()

@@ -30,11 +30,18 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 #: The auditor's four disagreements, every bound, and a grid across the band.
 CASES = sorted(
-    {(0.030, 0.900), (0.100, 0.970), (0.050, 0.850), (0.001, 0.860), (0.124, 0.896)}
+    {
+        (skill, coverage, 0.9, -0.01)
+        for skill, coverage in ((0.030, 0.900), (0.100, 0.970), (0.050, 0.850), (0.001, 0.860), (0.124, 0.896))
+    }
     | {
-        (skill, coverage)
+        (skill, coverage, group, harm)
         for skill in (-0.2, 0.0, 0.049, 0.05, 0.051, 0.5)
         for coverage in (0.84, 0.85, 0.9, 0.95, 0.96)
+        # The worst volume decile's floor (F-19): below, at, and clear of it.
+        for group in (0.84, 0.85, 0.9)
+        # The worst decile's harm (F-19b): clear of, at, and past its bound of zero.
+        for harm in (-0.01, 0.0, 0.001)
     }
 )
 
@@ -66,20 +73,21 @@ def _promotes(gate: Any, **metrics: float) -> bool:
     return True
 
 
-@pytest.mark.parametrize(("skill", "coverage"), CASES)
+@pytest.mark.parametrize(("skill", "coverage", "group", "harm"), CASES)
 def test_the_dag_and_the_pipeline_reach_one_verdict(
-    dag_gate: Any, pipeline_gate: Any, skill: float, coverage: float
+    dag_gate: Any, pipeline_gate: Any, skill: float, coverage: float, group: float, harm: float
 ) -> None:
     from demand_forecast import promotion
 
-    expected = promotion.verdict(skill, coverage).promote
-    dag = _promotes(lambda **m: dag_gate(m), skill=skill, coverage=coverage)
-    kfp = _promotes(pipeline_gate, skill=skill, coverage=coverage)
+    expected = promotion.verdict(skill, coverage, group, harm).promote
+    metrics = {"skill": skill, "coverage": coverage, "group_coverage": group, "group_harm": harm}
+    dag = _promotes(lambda **m: dag_gate(m), **metrics)
+    kfp = _promotes(pipeline_gate, **metrics)
 
-    assert dag == kfp == expected, f"skill={skill} coverage={coverage}: DAG={dag} KFP={kfp} rule={expected}"
+    assert dag == kfp == expected, f"{metrics}: DAG={dag} KFP={kfp}"
 
 
-def _near_every_bound(seed: int, count: int) -> list[tuple[float, float]]:
+def _near_every_bound(seed: int, count: int) -> list[tuple[float, float, float, float]]:
     """Seeded pairs, most within a hair of a bound: where a rounding or a copied comparison diverges first.
 
     The grid above sits on round numbers, and QA-4 round seventeen rounded the
@@ -95,29 +103,36 @@ def _near_every_bound(seed: int, count: int) -> list[tuple[float, float]]:
     generator = random.Random(seed)
     skills = [promotion.MIN_SKILL]
     coverages = [promotion.MIN_COVERAGE, promotion.MAX_COVERAGE]
-    pairs = []
+    rows = []
     for _ in range(count):
+        skill, coverage = generator.uniform(-0.5, 0.5), generator.uniform(0.80, 1.0)
+        group, harm = generator.uniform(0.80, 1.0), generator.uniform(-0.05, 0.05)
         if generator.random() < 0.7:
             offset = generator.choice([-1, 1]) * 10 ** generator.uniform(-6, -2)
-            if generator.random() < 0.5:
-                pairs.append((generator.choice(skills) + offset, generator.uniform(0.80, 1.0)))
+            kind = generator.randrange(4)
+            if kind == 0:
+                skill = generator.choice(skills) + offset
+            elif kind == 1:
+                coverage = generator.choice(coverages) + offset
+            elif kind == 2:
+                group = promotion.MIN_GROUP_COVERAGE + offset
             else:
-                pairs.append((generator.uniform(-0.5, 0.5), generator.choice(coverages) + offset))
-        else:
-            pairs.append((generator.uniform(-0.5, 0.5), generator.uniform(0.80, 1.0)))
-    return pairs
+                harm = offset  # around the harm bound, zero (F-19b)
+        rows.append((skill, coverage, group, harm))
+    return rows
 
 
 def test_the_two_gates_agree_off_the_grid(dag_gate: Any, pipeline_gate: Any) -> None:
     from demand_forecast import promotion
 
     disagreements = []
-    for skill, coverage in _near_every_bound(seed=17, count=3000):
-        expected = promotion.verdict(skill, coverage).promote
-        dag = _promotes(lambda **m: dag_gate(m), skill=skill, coverage=coverage)
-        kfp = _promotes(pipeline_gate, skill=skill, coverage=coverage)
+    for skill, coverage, group, harm in _near_every_bound(seed=17, count=3000):
+        expected = promotion.verdict(skill, coverage, group, harm).promote
+        metrics = {"skill": skill, "coverage": coverage, "group_coverage": group, "group_harm": harm}
+        dag = _promotes(lambda **m: dag_gate(m), **metrics)
+        kfp = _promotes(pipeline_gate, **metrics)
         if not dag == kfp == expected:
-            disagreements.append(f"skill={skill:.7f} coverage={coverage:.7f}: DAG={dag} KFP={kfp} rule={expected}")
+            disagreements.append(f"{metrics}: DAG={dag} KFP={kfp}")
     assert not disagreements, f"{len(disagreements)} disagreements, first: {disagreements[:5]}"
 
 
@@ -127,11 +142,13 @@ def test_both_gates_hand_the_rule_exactly_the_numbers_they_were_given(
     """A spy on the one rule: no transformation between a gate's input and the rule's, in either orchestrator."""
     from demand_forecast import promotion
 
-    seen: list[tuple[float, float]] = []
-    monkeypatch.setattr(promotion, "check", lambda skill, coverage: seen.append((skill, coverage)))
+    seen: list[tuple[float, float, float, float]] = []
+    monkeypatch.setattr(
+        promotion, "check", lambda skill, coverage, group, harm: seen.append((skill, coverage, group, harm))
+    )
 
-    inputs = (0.0496123456789, 0.8496123456789)
-    dag_gate({"skill": inputs[0], "coverage": inputs[1]})
-    pipeline_gate(skill=inputs[0], coverage=inputs[1])
+    inputs = (0.0496123456789, 0.8496123456789, 0.8496123456788, 0.0000123456789)
+    dag_gate({"skill": inputs[0], "coverage": inputs[1], "group_coverage": inputs[2], "group_harm": inputs[3]})
+    pipeline_gate(skill=inputs[0], coverage=inputs[1], group_coverage=inputs[2], group_harm=inputs[3])
 
     assert seen == [inputs, inputs], f"the rule saw {seen}, the gates were given {inputs} twice"

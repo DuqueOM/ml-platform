@@ -25,8 +25,10 @@ drifts; the gate was the one piece each reimplemented.
   inclusive. Two-sided: under-coverage is an interval claiming certainty it
   does not have, and over-coverage is uncertainty the model has not quantified —
   intervals far wider than asked for make every downstream decision timid.
+- **No volume decile harmed** (F-19b): in none may the baseline beat the model
+  by more than fold-to-fold variation explains, at `GROUP_HARM_CONFIDENCE`.
 - **Five folds, horizon 168 hours, seed 42.** Five is the design that includes
-  the losing folds; the model card's +12.4% is a five-fold figure.
+  the losing folds; the model card's +12.9% is a five-fold figure.
 
 Both orchestrators call :func:`backtest` and :func:`check` — nothing else
 decides promotion. Every number here is watched by `scripts/check_thresholds.py`.
@@ -51,6 +53,27 @@ MIN_SKILL = 0.05
 #: `tests/test_promotion.py`.
 MIN_COVERAGE = 0.85
 MAX_COVERAGE = 0.95
+
+#: The coverage floor every volume decile must reach, not only the aggregate
+#: (F-19, decided 2026-10-23). One global conformal quantile covered 89.6% of
+#: all hours while covering 37.7% of the busiest decile's, and staffing is
+#: decided per zone. The same floor as the marginal one; no per-decile
+#: ceiling, because the quietest zones' counts are integers and mostly zero, so
+#: their over-coverage is partly discreteness rather than miscalibration — it is
+#: reported in the backtest summary, not gated.
+MIN_GROUP_COVERAGE = 0.85
+
+#: The confidence at which a volume decile counts as HARMED: the seasonal-naive
+#: baseline beats the model there by more than fold-to-fold variation explains
+#: (F-19b, decided 2026-11-13). A harmed decile refuses the model whatever the
+#: aggregate skill, because staffing is decided per zone. The rule is "refuse on
+#: evidence of harm" — the lower bound of the per-decile MAE difference above
+#: zero — chosen over a non-inferiority margin, which on the measured folds
+#: discriminated the two candidate models only inside an 8.4-10.3% band and so
+#: would have been fitted to this sample. MIN_SKILL keeps the burden of proof
+#: on the model in aggregate. A LOWER confidence refuses more readily, so a
+#: rise is a loosening: watched as a ceiling by `scripts/check_thresholds.py`.
+GROUP_HARM_CONFIDENCE = 0.95
 
 
 @dataclass(frozen=True)
@@ -101,13 +124,37 @@ def _at_least(value: float, bound: float) -> bool:
     return value >= bound or math.isclose(value, bound, rel_tol=0.0, abs_tol=FLOAT_TOLERANCE)
 
 
-def verdict(skill: float, coverage: float) -> PromotionVerdict:
-    """Judge a backtest's two numbers against the rule. Every failure is reported, not the first.
+def worst_group_harm(report: BacktestReport) -> float:
+    """The most harmed volume decile's bound (see :meth:`BacktestReport.group_harm`); NaN if any is unknown."""
+    harm = report.group_harm(GROUP_HARM_CONFIDENCE)
+    if not harm or any(math.isnan(value) for value in harm.values()):
+        return math.nan
+    return max(harm.values())
+
+
+def verdict(skill: float, coverage: float, group_coverage: float, group_harm: float) -> PromotionVerdict:
+    """Judge a backtest's numbers against the rule. Every failure is reported, not the first.
 
     An operator who fixes skill only to meet the coverage failure on the next
     run has paid for two cycles to learn one thing.
     """
     reasons = []
+    # Required, never defaulted: a caller that forgot the per-decile figure
+    # would otherwise promote on the marginal one alone, which is the defect.
+    if math.isnan(group_coverage):
+        reasons.append("no volume decile's coverage was measured, so conditional coverage is unknown")
+    elif not _at_least(group_coverage, MIN_GROUP_COVERAGE):
+        reasons.append(
+            f"the worst volume decile's interval coverage {group_coverage:.4f} is below {MIN_GROUP_COVERAGE}: "
+            "the intervals fail the zones that decile holds, whatever the aggregate says"
+        )
+    if math.isnan(group_harm):
+        reasons.append("some volume decile was scored in fewer than two folds, so harm to it cannot be judged")
+    elif not _at_least(0.0, group_harm):
+        reasons.append(
+            f"the seasonal-naive baseline beats the model in a volume decile by at least {group_harm:.4f} trips an "
+            f"hour at {GROUP_HARM_CONFIDENCE:.0%} confidence: the zones it holds are better served by the baseline"
+        )
     if not _at_least(skill, MIN_SKILL):
         reasons.append(f"skill {skill:+.4f} is below {MIN_SKILL} against the seasonal-naive baseline")
     if not _at_least(coverage, MIN_COVERAGE):
@@ -120,8 +167,8 @@ def verdict(skill: float, coverage: float) -> PromotionVerdict:
     return PromotionVerdict(promote=not reasons, reasons=tuple(reasons))
 
 
-def check(skill: float, coverage: float) -> None:
+def check(skill: float, coverage: float, group_coverage: float, group_harm: float) -> None:
     """Raise :class:`PromotionRefusedError` naming every rule the model misses; return when it may ship."""
-    result = verdict(skill, coverage)
+    result = verdict(skill, coverage, group_coverage, group_harm)
     if not result.promote:
         raise PromotionRefusedError("quality gate failed: " + "; ".join(result.reasons))

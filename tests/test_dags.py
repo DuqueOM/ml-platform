@@ -15,6 +15,7 @@ overwrite, and no heavy import at module level.
 from __future__ import annotations
 
 import ast
+import dataclasses
 import importlib.util
 import logging
 import os
@@ -211,7 +212,14 @@ def test_the_quality_gate_passes_a_model_at_its_bounds(dagbag, bound: str) -> No
 
     gate = _body(dagbag, "check_quality_gate")
     coverage = promotion.MIN_COVERAGE if bound == "floors" else promotion.MAX_COVERAGE
-    metrics = {"skill": promotion.MIN_SKILL, "coverage": coverage, "month": "2024-03"}
+    metrics = {
+        "skill": promotion.MIN_SKILL,
+        "coverage": coverage,
+        "group_coverage": promotion.MIN_GROUP_COVERAGE,
+        # At its bound: no evidence of harm in any decile passes (F-19b).
+        "group_harm": 0.0,
+        "month": "2024-03",
+    }
 
     assert gate(dict(metrics)) == metrics
 
@@ -242,6 +250,8 @@ def test_the_quality_gate_raises_and_names_every_rule_missed(  # type: ignore[no
     metrics = {
         "skill": promotion.MIN_SKILL + skill_offset,
         "coverage": {"floor": promotion.MIN_COVERAGE, "under": 0.84, "over": 0.96}[coverage],
+        "group_coverage": promotion.MIN_GROUP_COVERAGE,
+        "group_harm": 0.0,
     }
 
     with pytest.raises(ValueError, match="quality gate failed") as failure:
@@ -363,10 +373,15 @@ def test_backtest_model_returns_plain_floats_for_xcom(  # type: ignore[no-untype
         interval_width=np.float64(5.0),
         n_test=168,
         n_compared=168,
+        by_group=(
+            train.GroupTally(group=0, n_test=168, inside=150, n_compared=168, model_error=1.0, baseline_error=2.0),
+        ),
     )
     calls: list[tuple[str, tuple, dict]] = []  # type: ignore[type-arg]
     monkeypatch.setattr(lakehouse, "read_demand", _read_from(catalog, "table"))
-    monkeypatch.setattr(promotion, "backtest", _record(calls, "backtest", train.BacktestReport(folds=[fold], seed=42)))
+    # Two folds: one has no spread, and a decile's harm needs one (F-19b).
+    folds = [fold, dataclasses.replace(fold, index=1)]
+    monkeypatch.setattr(promotion, "backtest", _record(calls, "backtest", train.BacktestReport(folds=folds, seed=42)))
 
     result = _body(dagbag, "backtest_model")({"month": "2024-03", "snapshot_id": SNAPSHOT})
 
@@ -381,10 +396,13 @@ def test_backtest_model_returns_plain_floats_for_xcom(  # type: ignore[no-untype
         "snapshot_id": SNAPSHOT,
         "skill": 0.25,
         "coverage": 0.9,
+        "group_coverage": 150 / 168,
+        # Identical folds: no spread, so the bound is the pooled difference, (1 - 2) / 168.
+        "group_harm": -1 / 168,
         "model_mae": 3.0,
         "baseline_mae": 4.0,
     }
-    for key in ("skill", "coverage", "model_mae", "baseline_mae"):
+    for key in ("skill", "coverage", "group_coverage", "group_harm", "model_mae", "baseline_mae"):
         assert type(result[key]) is float, f"{key} is {type(result[key]).__name__}, not float"
 
 

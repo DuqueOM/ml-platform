@@ -426,6 +426,14 @@ THRESHOLDS = (
         renamed_from=(("retrain coverage floor", 1),),
     ),
     Threshold("promotion coverage ceiling", _PROMOTION, symbol="MAX_COVERAGE", higher_is_stricter=False),
+    # Every volume decile's coverage floor, not only the aggregate's (F-19).
+    Threshold("promotion per-decile coverage floor", _PROMOTION, symbol="MIN_GROUP_COVERAGE"),
+    # F-19b: a decile counts as harmed when the baseline beats the model there
+    # at this confidence. A HIGHER confidence demands more evidence before it
+    # refuses, so a rise is the loosening.
+    Threshold(
+        "promotion per-decile harm confidence", _PROMOTION, symbol="GROUP_HARM_CONFIDENCE", higher_is_stricter=False
+    ),
     # A FLOOR, and the reason is specific to this model: fewer folds drop the
     # OLDEST first, and those are the folds it loses. The pipeline's 3-fold
     # default reported skill +23.0% where five folds give +12.4% (QA-4 R15-2).

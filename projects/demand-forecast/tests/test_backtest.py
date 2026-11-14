@@ -259,8 +259,14 @@ def test_a_time_based_design_with_impossible_arguments_is_refused(kwargs: dict, 
         expanding_window_folds_by_time(_series(), n_folds=3, **kwargs)
 
 
-def test_a_time_window_that_falls_in_a_gap_of_the_data_is_skipped_not_scored_empty() -> None:
-    """Real feeds miss hours. A fold whose test window holds no rows has nothing to score, so it is not a fold."""
+def test_a_time_window_that_falls_in_a_gap_of_the_data_is_refused() -> None:
+    """Real feeds miss hours, and a fold with nothing to test is refused rather than dropped.
+
+    W-15 pinned the opposite — the fold was skipped and two of three returned —
+    and F-19 found that it disagreed with the positional splitter, which refuses
+    the same condition. Dropping a fold weakens the backtest below the design
+    the promotion gate's fold floor holds, silently.
+    """
     series = _series(n_rows=600)
     times = series["event_time"]
     # Remove exactly the window the middle fold tests — [end-48h, end-24h), half-open as the splitter cuts —
@@ -271,10 +277,8 @@ def test_a_time_window_that_falls_in_a_gap_of_the_data_is_skipped_not_scored_emp
     )
     sparse = series.join(hole, on="event_time", how="anti")
 
-    folds = expanding_window_folds_by_time(sparse, n_folds=3, horizon_hours=24, gap_hours=0)
-
-    assert len(folds) == 2
-    assert all(len(fold.test) > 0 for fold in folds)
+    with pytest.raises(ValueError, match="fold 1 has no test rows"):
+        expanding_window_folds_by_time(sparse, n_folds=3, horizon_hours=24, gap_hours=0)
 
 
 def test_the_leakage_check_ignores_a_fold_with_nothing_on_one_side() -> None:
