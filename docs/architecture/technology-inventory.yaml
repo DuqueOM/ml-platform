@@ -100,11 +100,14 @@ categories:
       - {id: delta-lake, tier: rejected, note: "Iceberg chosen for vendor-neutral multi-cloud support (ADR-004)."}
   - name: Data engineering
     items:
-      - {id: duckdb, tier: core, detect: ["pattern:duckdb|libs/ml-core/pyproject.toml"]}
-      - {id: polars, tier: core, detect: ["pattern:polars|libs/ml-core/pyproject.toml"]}
+      # Detected by an IMPORT, never by a declaration: duckdb was declared by
+      # libs/ml-core, imported by nothing, and counted here as implemented
+      # (DEP27-D1, ADR-011). Every library row below reads code, as pandera's does.
+      - {id: duckdb, tier: core, detect: ["pattern:import duckdb|projects"], note: "Trip-level ingest: validate, clean, aggregate a month under a memory limit (ADR-011)."}
+      - {id: polars, tier: core, detect: ["pattern:import polars|libs"], note: "The hourly panel, features and contracts; DuckDB does the trip-level work (ADR-011)."}
       - {id: dbt, tier: demonstrated, detect: ["projects/*/dbt"]}
       - {id: elementary, tier: demonstrated, detect: ["pattern:elementary|projects"]}
-      - {id: spark, tier: demonstrated, detect: ["pattern:pyspark|orchestration"], note: "Historical backfill only; the DuckDB crossover threshold is measured, not assumed."}
+      - {id: spark, tier: demonstrated, detect: ["pattern:pyspark|orchestration"], note: "Historical backfill only. The threshold is throughput on the DuckDB ingest over the backfill window (ADR-011), not measured yet: it needs twelve pinned months (work order, DEP27-D2)."}
       - {id: dataproc-serverless, tier: demonstrated, detect: ["pattern:dataproc|platform/terraform"]}
       - {id: emr-serverless, tier: demonstrated, detect: ["pattern:emr|platform/terraform"]}
   - name: Feature store
@@ -136,7 +139,7 @@ categories:
       - {id: onnx, tier: demonstrated, detect: ["pattern:onnx|projects"]}
   - name: ML lifecycle
     items:
-      - {id: mlflow, tier: core, detect: ["pattern:mlflow|libs/ml-core/pyproject.toml"]}
+      - {id: mlflow, tier: core, detect: ["pattern:import mlflow|services"], note: "In the generated service, which owns tracking and the registry; no workspace package imports it. Was detected through libs/ml-core/pyproject.toml, which never declared it."}
       - {id: dvc, tier: core, detect: [".dvc", "dvc.yaml"],
          note: "Owns ONE class of data (ADR-009): datasets with no authoritative URL. Third-party downloads are pinned by sha256 in docs/datasets/datasets.lock.json instead — a source that can re-serve the same bytes does not need a second copy of them. Listed core with no artifact behind it for months; the detector now matches a real .dvc/."}
       - {id: ray-tune, tier: demonstrated, detect: ["pattern:ray|projects"]}

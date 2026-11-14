@@ -300,7 +300,7 @@ held to it.
 | Agentic rules | 23 | `agentic/rules/*.md` |
 | Agentic skills | 29 | `agentic/skills/*/` |
 | Agentic workflows | 22 | `agentic/workflows/*.md` |
-| ADRs | 11 | `docs/decisions/ADR-*.md` |
+| ADRs | 12 | `docs/decisions/ADR-*.md` |
 | Declared gates | 44 | `docs/governance/quality-gates.md` |
 | Declared gates marked ⏳ PENDING | 17 | the same table |
 | Components shown at L4 (a real cloud rollout) | 0 | `docs/architecture/implementation-status.md`, generated |

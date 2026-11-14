@@ -26,7 +26,14 @@ dependencies = [
     # upstream release away from not arriving at all.
     "joblib~=1.6",
     "ml-core",
-    "data-contracts",
+    # The [duckdb] extra: the ingest validates the month's trips in DuckDB
+    # through the same contract, without loading them (ADR-011).
+    "data-contracts[duckdb]",
+    # The engine of the trip-level ingest: scan, clean and aggregate a month
+    # under a memory limit, spilling rather than failing (ADR-011). Declared
+    # here because `demand_forecast.ingest` imports it; it was declared by
+    # ml-core, which never did.
+    "duckdb~=2.0",
     # `serving-core` and `feature-defs` were declared here and imported by
     # nothing. Found by scripts/check_library_reuse.py on its first run, which
     # is the whole reason that script exists: charter criterion C1 counts
