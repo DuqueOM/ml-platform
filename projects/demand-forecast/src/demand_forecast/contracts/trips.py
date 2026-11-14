@@ -22,12 +22,19 @@ _MAX_ZONE_ID = 265
 
 TRIPS_RAW = DataContract(
     name="nyc_tlc_trips_raw",
-    version="1.0.0",
+    # 1.0.1: the timestamps are declared at the resolution the feed carries.
+    # 1.0.0 declared nanoseconds; the 2024 files store microseconds
+    # (`polars.read_parquet_schema`), so every ingest reported both timestamp
+    # columns as a dtype violation over 100% of rows — a report that is always
+    # wrong teaches its reader to skip it. Found by the DuckDB ingest's parity
+    # check against the real feed (ADR-011). No consumer changes: Polars and
+    # DuckDB both already read the columns as microseconds.
+    version="1.0.1",
     compatibility=Compatibility.BACKWARD,
     rules=[
         ColumnRule(
             name="tpep_pickup_datetime",
-            dtype=pl.Datetime(time_unit="ns"),
+            dtype=pl.Datetime(time_unit="us"),
             rationale=(
                 "The event time. Everything downstream is point-in-time correct with "
                 "respect to THIS column; a null here makes a row unusable rather than "
@@ -36,7 +43,7 @@ TRIPS_RAW = DataContract(
         ),
         ColumnRule(
             name="tpep_dropoff_datetime",
-            dtype=pl.Datetime(time_unit="ns"),
+            dtype=pl.Datetime(time_unit="us"),
             rationale="Needed to derive duration, which is a leakage-safe feature only when both ends are present.",
         ),
         ColumnRule(

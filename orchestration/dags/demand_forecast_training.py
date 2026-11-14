@@ -78,7 +78,7 @@ def demand_forecast_training() -> None:
         """
         from pathlib import Path
 
-        from demand_forecast.ingest import ingest_file, to_hourly_demand
+        from demand_forecast.ingest import ingest_hourly
         from demand_forecast.lakehouse import catalog_from_environment, write_demand
 
         interval_start = context["data_interval_start"]
@@ -90,8 +90,10 @@ def demand_forecast_training() -> None:
                 "failure mode than one that reports missing input."
             )
 
-        trips, report = ingest_file(source)
-        demand = to_hourly_demand(trips)
+        # The month's trips never reach Python: DuckDB validates, cleans and
+        # aggregates them under a memory limit, and only the hourly panel
+        # comes back (ADR-011).
+        demand, report = ingest_hourly(source)
         written = write_demand(demand, catalog_from_environment(), overwrite=True)
 
         # `report.rejected` and `report.total` do not exist on `IngestReport`;

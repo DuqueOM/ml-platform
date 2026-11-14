@@ -83,13 +83,18 @@ def ingest_month(
     demand: dsl.Output[dsl.Dataset],
     report: dsl.Output[dsl.Metrics],
 ) -> None:
-    """Read one month of trips, enforce the contract, aggregate to hourly demand."""
+    """Read one month of trips, enforce the contract, aggregate to hourly demand.
+
+    ``source_uri`` is a local path — on Vertex AI, the `/gcs/` mount of the
+    bucket. The ingest's DuckDB runs with extensions off, so a `gs://` or
+    `s3://` URL is refused rather than fetched through an extension downloaded
+    at run time (ADR-011).
+    """
     from pathlib import Path
 
-    from demand_forecast.ingest import ingest_file, to_hourly_demand
+    from demand_forecast.ingest import ingest_hourly
 
-    trips, ingest_report = ingest_file(Path(source_uri))
-    hourly = to_hourly_demand(trips)
+    hourly, ingest_report = ingest_hourly(Path(source_uri))
     hourly.write_parquet(demand.path)
 
     report.log_metric("rows_read", ingest_report.rows_read)

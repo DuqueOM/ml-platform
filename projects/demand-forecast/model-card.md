@@ -79,10 +79,10 @@ reach the test window through the feature lags, `seed=42` passed to both
 uv run python -c "
 from pathlib import Path
 import polars as pl
-from demand_forecast.ingest import ingest_file, to_hourly_demand
+from demand_forecast.ingest import densify, ingest_hourly
 from demand_forecast.train import evaluate
-frames = [ingest_file(p)[0] for p in sorted(Path('data/nyc-tlc').glob('yellow_tripdata_2024-0*.parquet'))]
-print(evaluate(to_hourly_demand(pl.concat(frames))).summary())
+panels = [ingest_hourly(p)[0] for p in sorted(Path('data/nyc-tlc').glob('yellow_tripdata_2024-0*.parquet'))]
+print(evaluate(densify(pl.concat(panels))).summary())
 "
 ```
 

@@ -1,6 +1,6 @@
 # ADR-004 — Tooling triage: Core, Demonstrated, Studied
 
-- **Status**: Accepted
+- **Status**: Accepted. Its "DuckDB / Polars" Core row named two engines for one role, one of which ran nowhere; see [Correction, 2026-11-14](#correction-2026-11-14). The decision stands.
 - **Date**: 2026-08-05
 
 ## Context
@@ -182,3 +182,27 @@ of judgement than either using Spark everywhere or avoiding it entirely.
 - `docs/governance/quality-gates.md` — the gate obligation for Core.
 - `docs/architecture/reference-architecture.md` — where each Core technology
   sits in the system.
+
+## Correction, 2026-11-14
+
+**"DuckDB / Polars" at Core for incremental transformation was two engines
+named for one role, and only one of them ran.** `libs/ml-core` declared DuckDB
+and nothing imported it, and the technology inventory counted the declaration
+as use — the defect class ADR-005 rule H names. `crossover.py`, which this
+ADR's Spark trigger depends on, measured Polars holding a month in memory and
+projected its RAM, a threshold for an in-memory engine, while the trigger reads
+"where DuckDB stops being sufficient".
+
+Measured on the real 2024 files (method and figures in
+[ADR-011](ADR-011-single-node-engine.md)): for one month of trips, the DAG's
+unit of work, Polars needed 850-896 MB and DuckDB 294-300 MB against the 512 MB
+the local stack gives the workload, with outputs identical and equal wall time.
+
+What replaced it: **DuckDB is the single-node engine for trip-level work** —
+validating, cleaning and aggregating a month — and **Polars holds the hourly
+panel**, each in its own role (ADR-011). The Spark trigger above stands, read
+as throughput over the backfill window on DuckDB; that measurement needs twelve
+pinned months and is pending.
+
+The original row is left as it was. The error is the instructive part: a tier
+written as a pair let one half sit unused for three months behind the other.

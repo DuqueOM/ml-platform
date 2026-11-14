@@ -110,8 +110,10 @@ public data catalogues of both target clouds, and carries no licensing friction.
 ### Deliverables
 
 - Ingestion into Iceberg with monthly partitions; historical backfill via
-  serverless Spark, incremental via DuckDB/Polars, with the crossover threshold
-  **measured** and recorded (ADR-004 requires this contrast, not just the tools).
+  serverless Spark, incremental via DuckDB for the trip-level work and Polars for
+  the hourly panel ([ADR-011](../decisions/ADR-011-single-node-engine.md)), with
+  the crossover threshold **measured** and recorded (ADR-004 requires this
+  contrast, not just the tools).
 - Pandera contracts at the code boundary; Great Expectations at the warehouse
   boundary with Data Docs published as a CI artifact.
 - Feast: offline store in the warehouse, online store in Postgres.
@@ -137,6 +139,7 @@ public data catalogues of both target clouds, and carries no licensing friction.
 uv run pytest projects/demand-forecast -q            # incl. point-in-time test
 uv run python -m demand_forecast.pipeline --dry-run    # PENDING — no pipeline entry point yet
 k6 run projects/demand-forecast/tests/load.js        # p99 within stated SLO · PENDING — no load test or SLO yet (gate S2)
+uv run python -m demand_forecast.crossover           # the single-node curve; the twelve-month throughput run is open (work order, DEP27-D2)
 curl -s "$SERVICE_URL/health" && curl -s -XPOST "$SERVICE_URL/predict" -d @sample.json
 ```
 

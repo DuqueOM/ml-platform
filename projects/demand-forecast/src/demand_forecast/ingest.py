@@ -1,8 +1,12 @@
 """Ingest NYC TLC trips, validate at the boundary, aggregate to demand.
 
-The incremental path is DuckDB/Polars. ADR-004 places Spark at Demonstrated for
-the historical backfill only, and requires the crossover threshold to be
-**measured** rather than asserted — see :mod:`demand_forecast.crossover`.
+The trip-level work — validating, cleaning and aggregating a month — runs in
+DuckDB, which streams and spills under a memory limit; the hourly panel it
+produces is Polars' (ADR-011). Polars held the month in memory to validate it,
+and peaked at 850-896 MB where DuckDB peaks at 293-297 MB. ADR-004 places
+Spark at Demonstrated for the historical backfill only, and requires the
+crossover threshold to be **measured** rather than asserted — see
+:mod:`demand_forecast.crossover`.
 
 Validation happens at ingest, not later. A contract enforced downstream reports
 a violation after the bad rows have already entered three aggregates, and by
@@ -12,12 +16,19 @@ then the question is which of them to recompute.
 from __future__ import annotations
 
 import re
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 
+import duckdb
 import polars as pl
 from data_contracts import ContractViolation
+from data_contracts.duckdb_relation import admits, validate_relation
+from duckdb import ColumnExpression, ConstantExpression, FunctionExpression
 
 from demand_forecast.contracts.trips import TRIPS_RAW
 
@@ -70,16 +81,6 @@ class IngestRejectedError(Exception):
     """Raised when a run would discard more rows than the contract tolerates."""
 
 
-def read_trips(path: Path) -> pl.LazyFrame:
-    """Lazily read a TLC parquet file, projecting only contracted columns.
-
-    Projection matters at this size: the feed carries 19 columns and the
-    contract constrains 8. Reading all of them costs memory that the local
-    validation budget does not have.
-    """
-    return pl.scan_parquet(path).select(TRIPS_RAW.columns)
-
-
 _MONTH_IN_NAME = re.compile(r"(\d{4})-(\d{2})")
 
 
@@ -100,6 +101,99 @@ def month_of(path: Path) -> tuple[datetime, datetime] | None:
     return start, end
 
 
+#: The memory DuckDB's buffer manager may hold during an ingest; past it, the
+#: operators spill to a temporary directory rather than fail. Half the 512 MB
+#: workload slice of the local stack's budget (`crossover.measure`'s default),
+#: because the process also holds Python, the Arrow hand-off and the densified
+#: panel. Measured on 2024-01 at this limit, the whole process peaked at
+#: 293-297 MB; Polars, which held the month in memory to validate it, peaked at
+#: 850-896 MB (ADR-011).
+DUCKDB_MEMORY_LIMIT = "256MB"
+
+#: The order rows had in the source. Every aggregate is summed in it: unordered,
+#: a month's fare totals differed in their last digits from run to run, so the
+#: same file did not produce the same panel twice (measured, ADR-011). It also
+#: makes a violation's example the first one in the file, as Polars reports it.
+_ROW = "file_row_number"
+
+#: The hourly aggregate, in DuckDB's dialect. Static text — no value is ever
+#: formatted into it; what varies (paths, bounds, the month) reaches DuckDB as
+#: expressions or parameters.
+_HOURLY = (
+    "PULocationID AS zone_id, "
+    "date_trunc('hour', tpep_pickup_datetime) AS event_time, "
+    "count(*)::UINTEGER AS trip_count, "
+    "avg(trip_distance ORDER BY file_row_number) AS mean_distance, "
+    "sum(fare_amount ORDER BY file_row_number) AS total_fare"
+)
+_HOURLY_KEYS = "PULocationID, date_trunc('hour', tpep_pickup_datetime)"
+
+
+@contextmanager
+def _connection() -> Iterator[duckdb.DuckDBPyConnection]:
+    """A DuckDB connection bounded in memory, spilling to a private directory, with no way to fetch code.
+
+    Extensions are neither autoloaded nor autoinstalled: an ingest that read an
+    `s3://` path would otherwise download httpfs at run time — an unpinned
+    binary from the network, which no lock or scan covers. The configuration is
+    locked once set, so nothing later in the run can loosen it.
+    """
+    with tempfile.TemporaryDirectory(prefix="ingest-spill-") as spill:
+        connection = duckdb.connect(
+            config={
+                "memory_limit": DUCKDB_MEMORY_LIMIT,
+                "temp_directory": spill,
+                "preserve_insertion_order": False,
+                "autoload_known_extensions": False,
+                "autoinstall_known_extensions": False,
+            }
+        )
+        try:
+            connection.execute("SET lock_configuration = true")
+            yield connection
+        finally:
+            connection.close()
+
+
+def _from_frame(connection: duckdb.DuckDBPyConnection, frame: pl.DataFrame) -> duckdb.DuckDBPyRelation:
+    return connection.from_arrow(frame.with_row_index(_ROW).to_arrow())
+
+
+def _count(relation: duckdb.DuckDBPyRelation) -> int:
+    return int(relation.aggregate([FunctionExpression("count_star")]).fetchall()[0][0])
+
+
+def _admitted(relation: duckdb.DuckDBPyRelation) -> duckdb.DuckDBPyRelation:
+    """The rows the contract admits, and whose dropoff is not before their pickup.
+
+    Derived from `TRIPS_RAW`, so the bounds that drop a row and the bounds that
+    report a violation are one list. They were two: this function restated
+    seven of the contract's eight rules by hand and left out `passenger_count`,
+    whose bounds the contract declares. Measured on 2024-01/02, no row has a
+    `passenger_count` outside them, so the panel is unchanged — the next feed
+    that carries one is now held to the contract it is reported against.
+
+    Dropoff before pickup is a clock error, not a short trip; it stays out of
+    the contract because it is a RELATION between columns, which a per-column
+    rule cannot express.
+    """
+    return relation.filter(
+        admits(TRIPS_RAW) & (ColumnExpression("tpep_dropoff_datetime") >= ColumnExpression("tpep_pickup_datetime"))
+    )
+
+
+def _in_month(relation: duckdb.DuckDBPyRelation, window: tuple[datetime, datetime] | None) -> duckdb.DuckDBPyRelation:
+    if window is None:
+        return relation
+    pickup = ColumnExpression("tpep_pickup_datetime")
+    return relation.filter((pickup >= ConstantExpression(window[0])) & (pickup < ConstantExpression(window[1])))
+
+
+def _observed_hourly(relation: duckdb.DuckDBPyRelation) -> pl.DataFrame:
+    """Trips counted, averaged and summed per zone and hour — only the hours that had a trip."""
+    return cast(pl.DataFrame, relation.aggregate(_HOURLY, _HOURLY_KEYS).pl())
+
+
 def drop_out_of_month(frame: pl.DataFrame, window: tuple[datetime, datetime] | None) -> tuple[pl.DataFrame, int]:
     """Remove rows whose PICKUP falls outside the file's month.
 
@@ -117,72 +211,82 @@ def drop_out_of_month(frame: pl.DataFrame, window: tuple[datetime, datetime] | N
     """
     if window is None:
         return frame, 0
-    start, end = window
-    kept = frame.filter(pl.col("tpep_pickup_datetime").is_between(start, end, closed="left"))
+    with _connection() as connection:
+        kept = _in_month(_from_frame(connection, frame), window).order(_ROW).project(*frame.columns).pl()
     return kept, frame.height - kept.height
 
 
 def clean(frame: pl.DataFrame) -> pl.DataFrame:
-    """Drop rows the contract cannot admit.
+    """Drop rows the contract cannot admit — the same rule the file ingest applies (see `_admitted`).
 
     Deliberately narrow: it removes rows that violate a BOUND, and does not
     impute, clip or otherwise invent values. Clipping an implausible distance
     to the maximum would keep the row and corrupt the aggregate it enters,
     which is harder to notice than a missing row.
     """
-    return frame.filter(
-        pl.col("tpep_pickup_datetime").is_not_null()
-        & pl.col("tpep_dropoff_datetime").is_not_null()
-        & pl.col("PULocationID").is_between(1, 265)
-        & pl.col("DOLocationID").is_between(1, 265)
-        & pl.col("trip_distance").is_between(0.0, 1000.0)
-        & pl.col("fare_amount").is_between(-500.0, 5000.0)
-        & pl.col("total_amount").is_between(-500.0, 5000.0)
-        # Dropoff before pickup is a clock error, not a short trip. Kept out of
-        # the contract because it is a RELATION between columns, which a
-        # per-column rule cannot express.
-        & (pl.col("tpep_dropoff_datetime") >= pl.col("tpep_pickup_datetime"))
-    )
+    with _connection() as connection:
+        return cast(pl.DataFrame, _admitted(_from_frame(connection, frame)).order(_ROW).project(*frame.columns).pl())
 
 
-def ingest_file(path: Path, *, strict: bool = True) -> tuple[pl.DataFrame, IngestReport]:
-    """Read, validate and clean one month of trips.
+def ingest_hourly(
+    path: Path, *, strict: bool = True, limit_rows: int | None = None
+) -> tuple[pl.DataFrame, IngestReport]:
+    """Validate one month of trips, clean them, and aggregate them to hourly demand — without loading the month.
+
+    Every step runs in DuckDB under `DUCKDB_MEMORY_LIMIT`, reading the file
+    once per question it asks: the contract's violations
+    (`data_contracts.duckdb_relation`, the same verdict `DataContract.validate`
+    gives), the admitted rows, the month window, and the hourly aggregate. Only
+    the aggregate reaches Python, where it is densified (ADR-011).
 
     Args:
-        path: Parquet file from the TLC feed.
+        path: A TLC parquet file, local. With extensions off, a remote URL is
+            refused rather than fetched (see `_connection`).
         strict: Raise when the reject rate exceeds :data:`MAX_REJECT_RATE`.
+        limit_rows: Read only the file's first rows, in file order — for a
+            measurement at increasing scale (`crossover.measure`), never for
+            a production run.
 
     Returns:
-        The cleaned frame and a report of what happened.
+        The dense hourly panel and a report of what happened.
 
     Raises:
         IngestRejectedError: If ``strict`` and too many rows were discarded.
     """
-    raw = read_trips(path).collect()
-    rows_read = raw.height
-
-    # enforce=False: the answer here is a report, not a crash. The contract is
-    # describing a third-party feed that will violate it occasionally, and the
-    # decision to stop belongs to the reject-rate check below — which knows how
-    # MUCH is wrong, not merely that something is.
-    violations = TRIPS_RAW.validate(raw, enforce=False)
-    cleaned = clean(raw)
-    cleaned, out_of_month = drop_out_of_month(cleaned, month_of(path))
+    with _connection() as connection:
+        raw = connection.read_parquet(str(path), file_row_number=True)
+        if limit_rows is not None:
+            raw = raw.filter(ColumnExpression(_ROW) < ConstantExpression(limit_rows))
+        # enforce is not an option here: the answer is a report, not a crash.
+        # The contract describes a third-party feed that will violate it
+        # occasionally, and the decision to stop belongs to the reject-rate
+        # check below — which knows how MUCH is wrong, not merely that
+        # something is.
+        violations = validate_relation(TRIPS_RAW, raw, schema=pl.read_parquet_schema(path), order_by=_ROW)
+        admitted = _admitted(raw)
+        kept = _in_month(admitted, month_of(path))
+        rows_read, rows_admitted, rows_kept = _count(raw), _count(admitted), _count(kept)
+        observed = _observed_hourly(kept)
 
     report = IngestReport(
         source=path.name,
         rows_read=rows_read,
-        rows_written=cleaned.height,
+        rows_written=rows_kept,
         violations=violations,
-        out_of_month=out_of_month,
+        out_of_month=rows_admitted - rows_kept,
     )
-
     if strict and report.reject_rate > MAX_REJECT_RATE:
         raise IngestRejectedError(
             f"{report}\nReject rate exceeds {MAX_REJECT_RATE:.0%}. This is a change in the "
             f"data, not in the cleaning — investigate the source before widening the bound."
         )
-    return cleaned, report
+    return _panel(observed), report
+
+
+def _panel(observed: pl.DataFrame) -> pl.DataFrame:
+    if observed.is_empty():
+        return observed.sort(["zone_id", "event_time"])
+    return densify(observed)
 
 
 def to_hourly_demand(trips: pl.DataFrame) -> pl.DataFrame:
@@ -226,20 +330,9 @@ def to_hourly_demand(trips: pl.DataFrame) -> pl.DataFrame:
     no trips is undefined, and writing zero would state that trips occurred and
     were short. `total_fare` is 0.0, which is the true sum of an empty set.
     """
-    observed = (
-        trips.with_columns(pl.col("tpep_pickup_datetime").dt.truncate("1h").alias("event_time"))
-        .group_by(["PULocationID", "event_time"])
-        .agg(
-            pl.len().alias("trip_count"),
-            pl.col("trip_distance").mean().alias("mean_distance"),
-            pl.col("fare_amount").sum().alias("total_fare"),
-        )
-        .rename({"PULocationID": "zone_id"})
-    )
-    if observed.is_empty():
-        return observed.sort(["zone_id", "event_time"])
-
-    return densify(observed)
+    with _connection() as connection:
+        observed = _observed_hourly(_from_frame(connection, trips))
+    return _panel(observed)
 
 
 def densify(demand: pl.DataFrame) -> pl.DataFrame:

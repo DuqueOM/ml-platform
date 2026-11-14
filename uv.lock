@@ -1314,18 +1314,26 @@ dependencies = [
     { name = "polars" },
 ]
 
+[package.optional-dependencies]
+duckdb = [
+    { name = "duckdb" },
+]
+
 [package.metadata]
 requires-dist = [
+    { name = "duckdb", marker = "extra == 'duckdb'", specifier = "~=2.0" },
     { name = "pandera", specifier = "~=0.36" },
     { name = "polars", specifier = "~=2.0" },
 ]
+provides-extras = ["duckdb"]
 
 [[package]]
 name = "demand-forecast"
 version = "0.1.0"
 source = { editable = "projects/demand-forecast" }
 dependencies = [
-    { name = "data-contracts" },
+    { name = "data-contracts", extra = ["duckdb"] },
+    { name = "duckdb" },
     { name = "joblib" },
     { name = "ml-core" },
     { name = "pyarrow" },
@@ -1349,7 +1357,8 @@ warehouse-validation = [
 
 [package.metadata]
 requires-dist = [
-    { name = "data-contracts", editable = "libs/data-contracts" },
+    { name = "data-contracts", extras = ["duckdb"], editable = "libs/data-contracts" },
+    { name = "duckdb", specifier = "~=2.0" },
     { name = "great-expectations", marker = "extra == 'warehouse-validation'", specifier = "~=1.24" },
     { name = "joblib", specifier = "~=1.6" },
     { name = "kfp", marker = "extra == 'pipelines'", specifier = "~=2.18" },
@@ -3025,7 +3034,6 @@ name = "ml-core"
 version = "0.1.0"
 source = { editable = "libs/ml-core" }
 dependencies = [
-    { name = "duckdb" },
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "polars" },
@@ -3034,7 +3042,6 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "duckdb", specifier = "~=2.0" },
     { name = "numpy", specifier = "~=2.1" },
     { name = "polars", specifier = "~=2.1" },
     { name = "scikit-learn", specifier = "~=1.9" },

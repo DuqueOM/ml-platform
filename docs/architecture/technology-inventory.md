@@ -6,7 +6,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 <!-- BEGIN GENERATED -->
 <!-- Populated by scripts/check_technology_inventory.py -->
 
-**54 of 122 committed technologies implemented (44%)** — plus 15 studied and 10 rejected, which are decisions rather than gaps.
+**55 of 122 committed technologies implemented (45%)** — plus 15 studied and 10 rejected, which are decisions rather than gaps.
 
 | | Meaning |
 | :-: | --- |
@@ -128,7 +128,7 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ✅ | `polars` | core | |
 | ⬜ | `dbt` | demonstrated | |
 | ⬜ | `elementary` | demonstrated | |
-| ⬜ | `spark` | demonstrated | Historical backfill only; the DuckDB crossover threshold is measured, not assumed. |
+| ⬜ | `spark` | demonstrated | Historical backfill only. The threshold is throughput on the DuckDB ingest over the backfill window (ADR-011), not measured yet: it needs twelve pinned months (work order, DEP27-D2). |
 | ⬜ | `dataproc-serverless` | demonstrated | |
 | ⬜ | `emr-serverless` | demonstrated | |
 
@@ -167,11 +167,11 @@ Refresh with `python scripts/check_technology_inventory.py --write`.
 | ⬜ | `triton` | demonstrated | |
 | ⬜ | `onnx` | demonstrated | |
 
-## ML lifecycle — 1 built, 2 pending
+## ML lifecycle — 2 built, 1 pending
 
 | | Technology | Tier | Note |
 | :-: | --- | --- | --- |
-| ⬜ | `mlflow` | core | |
+| ✅ | `mlflow` | core | |
 | ✅ | `dvc` | core | |
 | ⬜ | `ray-tune` | demonstrated | |
 | 🚫 | `katib` | rejected | Ray Tune chosen; Katib requires operating Kubeflow. |

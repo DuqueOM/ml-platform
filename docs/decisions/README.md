@@ -21,6 +21,7 @@ blast radius, matching the library decomposition rule in
 | [ADR-008](ADR-008-serving-a-forecast-from-a-classification-scaffold.md) | The generated service cannot serve this platform's first project | Proposed |
 | [ADR-009](ADR-009-data-versioning-ownership.md) | Three data-versioning mechanisms, one criterion each | Accepted |
 | [ADR-010](ADR-010-agent-core-authority.md) | `libs/llm-core` is authoritative for the agent core; `agent-local` is a one-way export of it | Accepted |
+| [ADR-011](ADR-011-single-node-engine.md) | DuckDB is the single-node engine for trip-level work; Polars holds the panel | Accepted |
 
 ## Format
 

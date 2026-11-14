@@ -18,6 +18,47 @@ Pre-1.0: minor versions may change contracts. Every such change is called out.
 
 ## [Unreleased]
 
+### Changed — DuckDB does the trip-level ingest, held to the Polars path, and the contract is the only list of bounds (ADR-011)
+
+- **DuckDB was declared and ran nowhere.** `libs/ml-core` declared it, nothing
+  imported it, and the technology inventory counted the declaration as use,
+  while ADR-004 placed "DuckDB / Polars" at Core (DEP27-D1). Measured before
+  deciding, on the real 2024 files: one month, the DAG's unit of work, peaks at
+  850-896 MB in Polars, which held the month in memory to validate it, and at
+  294-300 MB in DuckDB, against the 512 MB the local stack gives the workload.
+  The outputs are identical, at the same speed. Polars streaming used 1.8-1.9
+  times DuckDB's memory.
+- **`ingest_hourly` validates, cleans and aggregates a month in DuckDB,** under
+  a 256 MB limit and spilling past it. Only the hourly aggregate reaches Python,
+  where Polars densifies it. It replaces `ingest_file` + `to_hourly_demand` in
+  the DAG and the KFP pipeline. Held to the previous path by
+  `test_ingest_engine.py` on a file that breaks every rule: the same report,
+  the same examples, the same panel and schema. On the real two months: the
+  same keys and counts, fares within 4e-11, and the model card reproduces to
+  the digit (357,426 rows, skill +12.9%).
+- **The same bits every run.** Unordered, a month's fare totals changed in
+  their last digits between runs. Every float aggregate is summed in the
+  file's row order, and a test holds that by construction.
+- **The contract is the only list of bounds.** `data_contracts.duckdb_relation`
+  (the optional extra `data-contracts[duckdb]`) builds DuckDB predicates from
+  `DataContract`'s rules. It returns `validate`'s verdict rule for rule, and
+  builds no SQL text from a name or a bound. `clean` had restated seven of
+  the eight rules by hand and left out `passenger_count`; no row in 2024-01/02
+  falls outside it, so nothing moves.
+- **Unable to fetch code.** Extensions are neither autoloaded nor
+  autoinstalled, so an `s3://` path is refused rather than satisfied by
+  downloading httpfs. The configuration is locked once set.
+- **Contract 1.0.1:** the timestamps are declared at the resolution the 2024
+  files carry, microseconds. Under 1.0.0 every ingest reported both columns as a
+  dtype violation over 100% of rows.
+- **`crossover.measure` measures the engine that runs,** sampling its peak
+  while it runs, because DuckDB returns its buffers on close. The twelve-month
+  throughput run that decides Spark is open (DEP27-D2).
+- **The inventory detects a library by an import,** for duckdb, polars and
+  mlflow (QA-4 round twenty, P3-6). mlflow turns ✅, through the generated
+  service that runs it. ADR-004 carries a dated Correction; ADR-011 records the
+  decision. Mutations DUCK-1 to DUCK-8; W15-2 is re-anchored.
+
 ### Fixed — prediction intervals that held on average and failed the busiest zones, and a point forecast fitted to the wrong functional (F-19, F-19b)
 
 - **One conformal quantile for 255 zones.** On the real January and February

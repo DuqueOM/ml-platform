@@ -19,7 +19,7 @@ from demand_forecast.ingest import (
     MAX_REJECT_RATE,
     IngestRejectedError,
     clean,
-    ingest_file,
+    ingest_hourly,
     to_hourly_demand,
 )
 
@@ -42,8 +42,9 @@ def _frame(**overrides: list) -> pl.DataFrame:
     data.update(overrides)
     return pl.DataFrame(data).cast(
         {
-            "tpep_pickup_datetime": pl.Datetime("ns"),
-            "tpep_dropoff_datetime": pl.Datetime("ns"),
+            # The resolution the feed carries (contract 1.0.1).
+            "tpep_pickup_datetime": pl.Datetime("us"),
+            "tpep_dropoff_datetime": pl.Datetime("us"),
             "PULocationID": pl.Int32,
             "DOLocationID": pl.Int32,
         }
@@ -112,7 +113,7 @@ def test_a_high_reject_rate_stops_the_run(tmp_path: Path) -> None:
     bad.write_parquet(path)
 
     with pytest.raises(IngestRejectedError, match="Reject rate exceeds"):
-        ingest_file(path)
+        ingest_hourly(path)
 
 
 def test_the_guard_can_be_bypassed_deliberately(tmp_path: Path) -> None:
@@ -121,8 +122,8 @@ def test_the_guard_can_be_bypassed_deliberately(tmp_path: Path) -> None:
     path = tmp_path / "bad.parquet"
     bad.write_parquet(path)
 
-    cleaned, report = ingest_file(path, strict=False)
-    assert cleaned.height == 0
+    hourly, report = ingest_hourly(path, strict=False)
+    assert hourly.height == 0
     assert report.reject_rate == 1.0
 
 
@@ -189,11 +190,14 @@ def test_the_real_feed_ingests_within_the_reject_budget() -> None:
     reject rate tells you which, which is why it is reported rather than a
     boolean.
     """
-    cleaned, report = ingest_file(REAL_FILE)
+    hourly, report = ingest_hourly(REAL_FILE)
 
     assert report.reject_rate < MAX_REJECT_RATE
-    assert cleaned.height > 2_000_000
-    assert to_hourly_demand(cleaned)["zone_id"].n_unique() > 200
+    assert report.rows_written > 2_000_000
+    assert hourly["zone_id"].n_unique() > 200
+    # Contract 1.0.1 declares the resolution the feed carries; 1.0.0 reported
+    # both timestamps as a dtype violation over every row of every month.
+    assert not [v for v in report.violations if v.rule.startswith("expected dtype")], report.violations
 
 
 # --- the file's own month bounds its pickups --------------------------------

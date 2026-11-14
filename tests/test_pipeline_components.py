@@ -107,21 +107,17 @@ def test_ingest_writes_the_hourly_table_and_logs_out_of_month_apart(
     hourly = pl.DataFrame({"zone": [1, 2], "demand": [3, 4]})
     seen: list[object] = []
 
-    def ingest_file(path: Path) -> tuple[str, ingest.IngestReport]:
+    def ingest_hourly(path: Path) -> tuple[pl.DataFrame, ingest.IngestReport]:
         seen.append(path)
-        return "trips", report
+        return hourly, report
 
-    def to_hourly_demand(trips: str) -> pl.DataFrame:
-        seen.append(trips)
-        return hourly
-
-    monkeypatch.setattr(ingest, "ingest_file", ingest_file)
-    monkeypatch.setattr(ingest, "to_hourly_demand", to_hourly_demand)
+    monkeypatch.setattr(ingest, "ingest_hourly", ingest_hourly)
     demand, metrics = Artifact(tmp_path / "demand.parquet"), Artifact(tmp_path / "report")
 
-    _body(pipeline, "ingest_month")(source_uri="gs://bucket/trips.parquet", demand=demand, report=metrics)
+    # A local path: on Vertex AI, the bucket's /gcs/ mount (ADR-011).
+    _body(pipeline, "ingest_month")(source_uri="/gcs/bucket/trips.parquet", demand=demand, report=metrics)
 
-    assert seen == [Path("gs://bucket/trips.parquet"), "trips"]
+    assert seen == [Path("/gcs/bucket/trips.parquet")]
     assert pl.read_parquet(demand.path).equals(hourly)
     assert metrics.metrics == {
         "rows_read": 10,

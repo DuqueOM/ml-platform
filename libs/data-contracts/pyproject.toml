@@ -8,6 +8,11 @@ dependencies = [
     "polars~=2.0",
 ]
 
+[project.optional-dependencies]
+# `data_contracts.duckdb_relation` validates a DuckDB relation without loading
+# it (ADR-011). Optional: a consumer validating Polars frames pulls no engine.
+duckdb = ["duckdb~=2.0"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

@@ -1,6 +1,7 @@
 """The single-node crossover projection is arithmetic over measured points, and states its assumptions.
 
-ADR-004 requires the DuckDB/Polars-to-Spark threshold to be measured. Nothing
+ADR-004 requires the single-node-to-Spark threshold to be measured, on the
+engine the ingest runs (DuckDB, ADR-011). Nothing
 tested the module that measures it (W-15: 0% of 59 statements), so a change
 to the projection — anchoring it on the smallest slice, which measures noise,
 or letting a negative memory delta through — would have printed a confident
@@ -45,9 +46,19 @@ def _tlc_file(path: Path, rows: int) -> Path:
 
 
 def _resident(monkeypatch: pytest.MonkeyPatch, readings: list[float]) -> None:
-    """Make the RSS reader return ``readings`` in order: baseline, after, baseline, after, …"""
+    """Pair the readings: (baseline, peak sampled during the run), per slice, in order.
+
+    The operation still runs — the real DuckDB ingest over the file — so the
+    slicing is exercised; only the two memory readings are fixed.
+    """
     values = iter(readings)
     monkeypatch.setattr(crossover, "_resident_mb", lambda: next(values))
+
+    def peak(operation: object) -> float:
+        operation()  # type: ignore[operator]
+        return next(values)
+
+    monkeypatch.setattr(crossover, "_peak_resident_mb", peak)
 
 
 def test_throughput_is_rows_over_seconds_and_zero_without_time() -> None:
@@ -104,7 +115,7 @@ def test_every_estimate_carries_the_assumptions_it_rests_on(tmp_path: Path, monk
 
     assumptions = " ".join(crossover.measure(source, fractions=(1.0,)).assumptions)
 
-    for stated in ("linearly", "DISTINCT KEYS", "RSS delta", "single machine"):
+    for stated in ("linearly", "DISTINCT KEYS", "RSS delta", "single machine", "spills", "PENDING"):
         assert stated in assumptions
 
 
@@ -141,3 +152,33 @@ def test_main_prints_the_measurement_when_the_data_is_present(
 
     assert crossover.main() == 0
     assert "Projected single-node limit" in capsys.readouterr().out
+
+
+def test_the_peak_is_sampled_while_the_operation_runs(monkeypatch: pytest.MonkeyPatch) -> None:
+    """DuckDB returns its buffers on close; a reading after the call would miss the peak."""
+    readings = iter([100.0] + [400.0] * 1000)
+    monkeypatch.setattr(crossover, "_resident_mb", lambda: next(readings, 120.0))
+
+    def operation() -> None:
+        import time
+
+        time.sleep(0.05)
+
+    assert crossover._peak_resident_mb(operation, interval=0.001) == 400.0
+
+
+def test_the_slices_are_the_file_s_first_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from demand_forecast import ingest
+
+    source = _tlc_file(tmp_path / "yellow_tripdata_2024-01.parquet", rows=80)
+    seen: list[int | None] = []
+    real = ingest.ingest_hourly
+
+    def spy(path: Path, *, strict: bool = True, limit_rows: int | None = None):  # type: ignore[no-untyped-def]
+        seen.append(limit_rows)
+        return real(path, strict=strict, limit_rows=limit_rows)
+
+    monkeypatch.setattr(ingest, "ingest_hourly", spy)
+    _resident(monkeypatch, [1.0, 2.0, 1.0, 3.0])
+    crossover.measure(source, fractions=(0.5, 1.0))
+    assert seen == [40, 80]

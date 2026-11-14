@@ -1,8 +1,11 @@
 """Measure where the single-node path stops being sufficient.
 
-ADR-004 places DuckDB/Polars at Core for the incremental path and Spark at
-Demonstrated for the historical backfill, and requires the **threshold to be
-measured**, not assumed. The interesting artifact of that decision is not
+ADR-004 places a single-node engine at Core for the incremental path and Spark
+at Demonstrated for the historical backfill, and requires the **threshold to
+be measured**, not assumed. The single-node engine is DuckDB, measured here as
+the ingest runs it (ADR-011). This module used to measure Polars holding the
+month in memory — a different engine from the one ADR-004 named, whose limit
+is a RAM wall that an out-of-core engine does not have. The interesting artifact of that decision is not
 "we used Spark" — it is the number at which one stops working and the other
 starts earning its operating cost.
 
@@ -13,15 +16,18 @@ precisely the class of measurement this repository has already been burned by
 (a benchmark run under partial GPU offload, then cited as proof a model did not
 fit).
 
-So: the DuckDB/Polars side is measured on real data at increasing scale. The
+So: the single-node side is measured on real data at increasing scale. The
 Spark side is declared UNMEASURED until a cloud window, and the extrapolation
 carries its assumptions in the output rather than in someone's head.
 """
 
 from __future__ import annotations
 
+import functools
 import gc
+import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -65,7 +71,7 @@ class CrossoverEstimate:
 
     def __str__(self) -> str:
         lines = [
-            "Single-node scaling (DuckDB/Polars), measured on real NYC TLC data:",
+            "Single-node scaling (DuckDB ingest, ADR-011), measured on real NYC TLC data:",
             f"  {'rows':>12}  {'seconds':>8}  {'rows/s':>12}  {'working MB':>10}",
         ]
         lines += [
@@ -87,6 +93,27 @@ class CrossoverEstimate:
             "window, and until then the crossover is a PROJECTION, not a finding.",
         ]
         return "\n".join(lines)
+
+
+def _peak_resident_mb(operation: Callable[[], object], interval: float = 0.01) -> float:
+    """The highest resident size sampled while ``operation`` runs, in MB."""
+    peak = _resident_mb()
+    done = threading.Event()
+
+    def sample() -> None:
+        nonlocal peak
+        while not done.is_set():
+            peak = max(peak, _resident_mb())
+            done.wait(interval)
+
+    sampler = threading.Thread(target=sample, daemon=True)
+    sampler.start()
+    try:
+        operation()
+    finally:
+        done.set()
+        sampler.join()
+    return max(peak, _resident_mb())
 
 
 def _resident_mb() -> float:
@@ -118,27 +145,29 @@ def measure(
     Returns:
         A :class:`CrossoverEstimate` carrying its own assumptions.
     """
-    from demand_forecast.ingest import clean, read_trips, to_hourly_demand
+    import polars as pl
 
-    full = read_trips(source).collect()
+    from demand_forecast.ingest import DUCKDB_MEMORY_LIMIT, ingest_hourly
+
+    total = int(pl.scan_parquet(source).select(pl.len()).collect().item())
     points: list[ScalePoint] = []
 
     for fraction in fractions:
-        rows = int(full.height * fraction)
-        slice_ = full.head(rows)
+        rows = int(total * fraction)
 
         # Settle allocations and take the baseline immediately before the
         # operation, so what is measured is the WORKLOAD rather than the
-        # process that hosts it.
+        # process that hosts it. The peak is SAMPLED while it runs: DuckDB
+        # releases its buffers when the connection closes, so a reading taken
+        # after the call would see the memory already returned.
         gc.collect()
         baseline = _resident_mb()
 
         start = time.perf_counter()
-        result = to_hourly_demand(clean(slice_))
+        peak = _peak_resident_mb(functools.partial(ingest_hourly, source, strict=False, limit_rows=rows))
         elapsed = time.perf_counter() - start
 
-        working = max(_resident_mb() - baseline, 0.0)
-        del result
+        working = max(peak - baseline, 0.0)
         points.append(ScalePoint(rows=rows, seconds=elapsed, working_mb=working))
 
     # Project linearly from the LARGEST measured point, whose baseline noise is
@@ -161,8 +190,13 @@ def measure(
         assumptions=(
             "Memory scales linearly with rows. The group-by's memory actually grows with "
             "DISTINCT KEYS, so the real curve is flatter and this projection is conservative.",
-            "Working memory is measured as the RSS delta around the operation, which "
-            "excludes the interpreter but includes allocator slack.",
+            "Working memory is measured as the RSS delta between a baseline and the peak sampled "
+            "during the operation, which excludes the interpreter but includes allocator slack.",
+            f"DuckDB holds its buffers under {DUCKDB_MEMORY_LIMIT} and spills to disk past it, so "
+            "working memory stops growing near that limit: a linear projection from below it "
+            "OVERSTATES the memory a larger input needs. For an out-of-core engine the crossover is "
+            "throughput over the backfill window, and that measurement — twelve months, pinned in the "
+            "dataset lock — is PENDING (ADR-011).",
             "One month of TLC data is ~3M rows; the full history is ~2 orders of magnitude "
             "larger, which is where the Spark question actually arises.",
             "Measured on a single machine with a fixed memory budget; a larger machine moves "
