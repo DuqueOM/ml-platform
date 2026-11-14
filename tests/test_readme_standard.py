@@ -570,7 +570,11 @@ def test_the_ranges_ci_installs_are_read_from_its_workflows() -> None:
 def test_this_repository_is_described_from_itself() -> None:
     assert REPOSITORY.default_branch == "main"
     assert REPOSITORY.holds("scripts/bootstrap.sh")
-    assert not REPOSITORY.holds("../ml-platform/scripts/bootstrap.sh"), "a path through `..` is not this repository's"
+    # Through `..` back into this very directory, by ITS name: written as "ml-platform" the path resolved only in
+    # a checkout called that, and R18-RS10 survived in every other (QA-4 round nineteen, P3-10).
+    assert not REPOSITORY.holds(f"../{REPO_ROOT.name}/scripts/bootstrap.sh"), (
+        "a path through `..` is not this repository's"
+    )
     assert not REPOSITORY.holds("/etc/passwd")
     assert not REPOSITORY.holds("scripts"), "a directory is not a script"
     assert gate.CLONE_URL in README, "the quick start clones from the URL the rules accept"

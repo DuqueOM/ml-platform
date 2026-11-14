@@ -22,8 +22,8 @@
 #   for i in $(seq 1 10); do free -m | awk 'NR==2{print $7}'; sleep 3; done
 #
 # Measured on the reference workstation 2026-10-07: 7122 MB available (min of
-# 5 samples, spread 6 MB), so 3917 MB allowed; the 3200 MB below leave 717 MB
-# of slack. (2026-08-06 measured 5920 MB available; at that, today's budget
+# 5 samples, spread 6 MB), so 3917 MB allowed; the 3136 MB of components below leave 781 MB
+# of slack (`tests/test_local_memory_budget.py` holds that sum to the components). (2026-08-06 measured 5920 MB available; at that, today's budget
 # would not fit — preflight measures the machine it runs on, so it says so
 # there rather than this file assuming.) An earlier revision left 12 MB, which
 # is not headroom — it is a budget that happened to fit once.

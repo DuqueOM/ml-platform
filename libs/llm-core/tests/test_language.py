@@ -80,3 +80,13 @@ def test_a_value_that_is_not_a_language_tag_fails_at_load(probe_usecase: Path, l
     """A typo must not read as "not English" and pass for a language."""
     with pytest.raises(ValueError, match="not a language tag"):
         load_usecase(_with(probe_usecase, language=language))
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\n\t"])
+@pytest.mark.parametrize("language", ["es", "en"])
+def test_a_blank_prompt_is_no_prompt_in_any_language(probe_usecase: Path, language: str, blank: str) -> None:
+    """A blank `safe_fallback` satisfied the Spanish rule and answered customers with nothing (round twenty, P3-5)."""
+    prompts = {**SPANISH_PROMPTS, "safe_fallback": blank}
+    config = load_usecase(_with(probe_usecase, language=language, prompts=prompts))
+    with pytest.raises(ValueError, match="safe_fallback as blank"):
+        build_agent(config, ToolRegistry())

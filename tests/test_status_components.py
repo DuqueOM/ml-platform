@@ -182,3 +182,73 @@ def test_markdown_does_not_change_a_deliverables_key() -> None:
         status.deliverable_key("2", "**Edge protection** ([ADR-006](x.md)): Cloudflare")
         == "2: Edge protection (ADR-006): Cloudflare"
     )
+
+
+# --- QA-4 round twenty, P2-4: a bullet maps to a row that delivers it, not to a neighbour ------------
+
+
+def _problems_with(key: str, rows: tuple[str, ...]) -> list[str]:
+    original = dict(status.DELIVERABLES)
+    try:
+        status.DELIVERABLES[key] = rows
+        return status.unmapped_deliverables(status.PLAN.read_text(encoding="utf-8"))
+    finally:
+        status.DELIVERABLES.clear()
+        status.DELIVERABLES.update(original)
+
+
+def test_a_bullet_re_pointed_at_a_row_of_another_phase_fails() -> None:
+    """Mutation R20-DEL-any-row: the Phase 6 framework bullet pointed at "Lint + format" and `--check` passed."""
+    (problem,) = _problems_with("6: EU AI Act risk classification, ISO/IEC", ("Lint + format",))
+    assert "maps to 'Lint + format', a phase 0 row" in problem
+    assert "CROSS_PHASE" in problem
+
+
+def test_a_cross_phase_pair_with_a_reason_passes_and_one_without_fails() -> None:
+    assert all(reason.strip() for reason in status.CROSS_PHASE.values()), "a reason is the point of the exception"
+    ((key, row),) = status.CROSS_PHASE
+    assert _problems_with(key, (row,)) == []
+    original = dict(status.CROSS_PHASE)
+    try:
+        status.CROSS_PHASE.clear()
+        assert any("gives no reason" in problem for problem in _problems_with(key, (row,)))
+    finally:
+        status.CROSS_PHASE.update(original)
+
+
+def test_an_exception_for_a_pair_the_map_no_longer_holds_fails() -> None:
+    original = dict(status.CROSS_PHASE)
+    try:
+        status.CROSS_PHASE[("0: uv workspace with libs/ and projects/", "Kubernetes manifests")] = "stale"
+        problems = status.unmapped_deliverables(status.PLAN.read_text(encoding="utf-8"))
+    finally:
+        status.CROSS_PHASE.clear()
+        status.CROSS_PHASE.update(original)
+    assert any("CROSS_PHASE names" in problem for problem in problems)
+
+
+@pytest.mark.parametrize(
+    ("row", "marker"),
+    [
+        ("Feast feature store (offline + online)", "feature_store.yaml"),
+        ("AI-governance mapping (EU AI Act, ISO/IEC 42001, NIST AI RMF)", "ai-governance-mapping.md"),
+    ],
+)
+def test_a_promise_nothing_delivers_reads_absent_not_delivered(row: str, marker: str) -> None:
+    """Feast is not wired in and the AI frameworks were rejected; both bullets showed ✅ through a neighbour."""
+    component = next(c for c in COMPONENTS if c.name == row)
+    assert any(marker in path for path in component.paths)
+    assert _substantive_files(component) == 0
+    assert component.verify is None
+
+
+def test_the_bullets_that_promise_them_map_to_those_rows() -> None:
+    feast = status.DELIVERABLES["1: Feast: offline store in the warehouse,"]
+    assert "Feast feature store (offline + online)" in feast
+    assert status.DELIVERABLES["6: EU AI Act risk classification, ISO/IEC"] == (
+        "AI-governance mapping (EU AI Act, ISO/IEC 42001, NIST AI RMF)",
+    )
+    assert (
+        "Secret scanning (gitleaks over full history)"
+        in status.DELIVERABLES["0: Ruff, mypy, pre-commit, secret scanning."]
+    )

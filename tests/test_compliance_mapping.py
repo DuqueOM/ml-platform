@@ -322,3 +322,79 @@ def test_an_aggregator_covers_only_the_jobs_it_asserts(tmp_path: Path, monkeypat
 def test_the_committed_ci_waits_on_every_job() -> None:
     waited, jobs, missing = gate._merge_waits_on()
     assert (waited, missing) == (jobs, [])
+
+
+# --- QA-4 round twenty, P2-3: the same rules over every document that quotes the measurements ------
+
+
+@pytest.mark.parametrize("word", ["one", "two", "three", "four", "six", "Four"])
+def test_a_written_out_count_of_required_checks_is_compared_too(word: str) -> None:
+    """ "the script's four required checks" was true on 2026-10-09 and false once a fifth was required."""
+    failures = gate.check_quoted_figures(f"It matches the script's {word} required checks.", VALUES)
+    right = {"1": "one", "2": "two", "3": "three", "4": "four", "5": "five", "6": "six"}[VALUES["required_checks"]]
+    assert gate.check_quoted_figures(f"It matches the script's {right} required checks.", VALUES) == []
+    assert bool(failures) == (word.lower() != right), failures
+
+
+@pytest.mark.parametrize(
+    "figure", ["56 HIGH findings", "12 CRITICAL findings", "9 misconfigurations", "7 failed checks"]
+)
+def test_an_adjective_between_the_number_and_the_noun_does_not_hide_a_scanner_count(figure: str) -> None:
+    """ "56 HIGH findings" slipped through a pattern that matched "56 findings"."""
+    assert gate.check_dated_measurements(f"Enabling it surfaces {figure}.", "doc")
+    assert gate.check_dated_measurements(f"On 2026-11-14 it surfaced {figure}.", "doc") == []
+
+
+#: Spellings of a false claim that Checkov and Kubescape, which only report, fail something.
+BLOCKING_SPELLINGS = [
+    "Checkov blocks every merge.",
+    "Checkov can block a merge.",
+    "Checkov fails the build on a finding.",
+    "Checkov can fail a merge.",
+    "Checkov can fail the build.",
+    "Checkov fails a pull request.",
+    "Checkov fails CI.",
+    "Checkov will fail the merge.",
+    "Checkov breaks the build.",
+    "Checkov gates every merge.",
+    "Checkov stops a merge on any finding.",
+    "Kubescape fails the build.",
+]
+
+
+@pytest.mark.parametrize("sentence", BLOCKING_SPELLINGS)
+def test_every_spelling_of_a_false_blocking_claim_is_refused(sentence: str) -> None:
+    """The vocabulary knew "blocks" and "can fail a build" and passed 11 of these 12."""
+    assert gate.check_scanner_claims(sentence, CONTROLS), sentence
+
+
+@pytest.mark.parametrize(
+    "sentence",
+    [
+        "Trivy cannot fail a merge.",
+        "Trivy is advisory only.",
+        "Trivy only reports.",
+        "Bandit reports only.",
+        "Bandit is informational.",
+        "Trivy can't block a merge.",
+        "Bandit never blocks.",
+    ],
+)
+def test_every_spelling_of_a_false_advisory_claim_is_refused(sentence: str) -> None:
+    assert gate.check_scanner_claims(sentence, CONTROLS), sentence
+
+
+def test_the_documents_quoting_the_same_measurements_are_held_to_every_rule(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ADOPTION.md said "31 declared gates" over 43 and that Checkov blocks every merge, and neither was read."""
+    adoption = tmp_path / "ADOPTION.md"
+    adoption.write_text(
+        "This repository has 31 declared gates. Checkov blocks every merge.\n\nIt surfaces 56 HIGH findings.\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(gate, "QUOTE_THE_SAME_MEASUREMENTS", (adoption,))
+    failures = gate.check(MAPPING, FIGURES, CONTROLS)
+    assert any(failure.startswith("ADOPTION.md says '31 declared gates'") for failure in failures)
+    assert any("'Checkov' is said to block" in failure for failure in failures)
+    assert any(failure.startswith("ADOPTION.md: '56 HIGH findings'") for failure in failures)

@@ -324,6 +324,27 @@ COMPONENTS: list[Component] = [
         ["projects/demand-forecast/model-card.md"],
         'uv run pytest tests/test_project_contract.py -q -k "demand-forecast and P7"',
     ),
+    # The rows below exist because a plan bullet pointed at a neighbour that was
+    # not the thing it promised, and showed ✅ for it (QA-4 round twenty, P2-4).
+    # Each names what the bullet says, in its own terms, so its absence — or its
+    # presence — is read from the filesystem rather than borrowed from a row
+    # that is near it.
+    Component(
+        "1",
+        "Feast feature store (offline + online)",
+        # Feast's own configuration file. `libs/feature-defs` holds point-in-time
+        # joins, which is the bullet's second half and has its own row; a feature
+        # STORE with an offline and an online side is what this one names.
+        ["projects/demand-forecast/feature_store.yaml"],
+    ),
+    Component(
+        "1",
+        "Generated serving service (ml-service-template, ADR-003)",
+        ["services/demand-forecast-serving/.copier-answers.yml"],
+        # The generated service's pins and the workspace's lock agree — the one
+        # cheap, reproducible check that reads the service as built.
+        "uv run python scripts/check_artifact_compatibility.py",
+    ),
     # --- Phase 1c: it actually starts ---------------------------------------
     Component(
         "1c",
@@ -576,6 +597,21 @@ COMPONENTS: list[Component] = [
         "uv run python scripts/check_doc_coherence.py --only C7",
     ),
     Component(
+        "0",
+        "Secret scanning (gitleaks over full history)",
+        [".gitleaks.toml"],
+        "uv run pytest tests/test_gitleaks_pin.py -q",
+    ),
+    Component(
+        "6",
+        "AI-governance mapping (EU AI Act, ISO/IEC 42001, NIST AI RMF)",
+        # Rejected, not deferred: docs/COMPLIANCE_MAPPING.md records the decision
+        # to assess NIST CSF 2.0 instead. The plan bullet still promises these
+        # three, so the row names them and reads absent until the plan or the
+        # decision changes — the bullet was showing ✅ through the CSF mapping.
+        ["docs/governance/ai-governance-mapping.md"],
+    ),
+    Component(
         "1d",
         "Compliance mapping",
         # The path was `docs/governance/compliance-mapping.md`, which does not
@@ -615,7 +651,12 @@ DELIVERABLES: dict[str, tuple[str, ...]] = {
         "Agentic surface integrity",
     ),
     "0: Documentation coherence gate wired into CI.": ("Documentation coherence gate",),
-    "0: Ruff, mypy, pre-commit, secret scanning.": ("Lint + format", "Type checking (libs, strict)", "pre-commit"),
+    "0: Ruff, mypy, pre-commit, secret scanning.": (
+        "Lint + format",
+        "Type checking (libs, strict)",
+        "pre-commit",
+        "Secret scanning (gitleaks over full history)",
+    ),
     "1: Ingestion into Iceberg with monthly partitions;": (
         "Iceberg ingestion (demand-forecast)",
         "Historical backfill on serverless Spark (W-7)",
@@ -624,13 +665,21 @@ DELIVERABLES: dict[str, tuple[str, ...]] = {
         "libs/data-contracts implementation",
         "Warehouse validation (Great Expectations)",
     ),
-    "1: Feast: offline store in the warehouse,": ("Feature store definitions",),
+    # One bullet, two halves: the offline/online store (absent — Feast is not
+    # wired in) and the point-in-time retrieval test (libs/feature-defs, built).
+    "1: Feast: offline store in the warehouse,": (
+        "Feature store definitions",
+        "Feast feature store (offline + online)",
+    ),
     "1: Training pipeline authored in KFP v2,": ("Training pipeline (KFP v2) — compiles",),
     "1: Backtesting with an expanding window; conformal": (
         "Expanding-window backtesting",
         "Model training + baseline gate",
     ),
-    "1: Serving generated from ml-service-template (ADR-003), wrapped": ("libs/serving-core implementation",),
+    "1: Serving generated from ml-service-template (ADR-003), wrapped": (
+        "Generated serving service (ml-service-template, ADR-003)",
+        "libs/serving-core implementation",
+    ),
     "1: OpenTelemetry traces spanning request → feature": ("Observability (OTel traces)", "Grafana LGTM dashboards"),
     "1: Model card; quality gates as data.": ("Model card (W-7)", "projects/demand-forecast"),
     "1: Drift, tabular (ADR-007):": ("Drift contract (ADR-007)",),
@@ -675,10 +724,27 @@ DELIVERABLES: dict[str, tuple[str, ...]] = {
     "5: ONNX export, quantisation, Triton serving.": ("projects/doc-intelligence",),
     "5: Measured before/after on latency, throughput, memory": ("projects/doc-intelligence",),
     "6: SLSA Level 3 provenance with in-toto": ("SLSA L3 provenance (W-7)",),
-    "6: EU AI Act risk classification, ISO/IEC": ("Compliance mapping",),
+    "6: EU AI Act risk classification, ISO/IEC": ("AI-governance mapping (EU AI Act, ISO/IEC 42001, NIST AI RMF)",),
     "6: projects/agent-ops: agents operating over this repository's": ("projects/agent-ops",),
     "6: Recurring independent audit (ADR-005 rule B)": ("Independent-audit staleness gate (W-7)",),
 }
+
+
+#: Deliverables whose evidence legitimately lives in another phase's row, each
+#: with the reason. Everything else must map to a row of its own phase: the map
+#: accepted ANY existing row, so a Phase 6 bullet re-pointed at "Lint + format"
+#: passed `--check` (QA-4 round twenty, mutation R20-DEL-any-row).
+CROSS_PHASE: dict[tuple[str, str], str] = {
+    (
+        "1c: The image loaded into the local",
+        "Kubernetes manifests",
+    ): "the image is loaded into the manifests' cluster; the manifests are Phase 2's deliverable and its subject",
+}
+
+
+def _phase_number(phase: str) -> str:
+    match = re.match(r"\d+", phase)
+    return match.group(0) if match else phase
 
 
 def unmapped_deliverables(plan_text: str) -> list[str]:
@@ -694,6 +760,21 @@ def unmapped_deliverables(plan_text: str) -> list[str]:
         for key, rows in DELIVERABLES.items()
         for name in rows
         if name not in names
+    ]
+    phases = {component.name: component.phase for component in COMPONENTS}
+    problems += [
+        f"{key!r} (phase {key.split(':')[0]}) maps to {name!r}, a phase {phases[name]} row, and gives no reason: "
+        f"add the pair to CROSS_PHASE with one, or map the bullet to a row of its own phase"
+        for key, rows in DELIVERABLES.items()
+        for name in rows
+        if name in phases
+        and _phase_number(phases[name]) != _phase_number(key.split(":")[0])
+        and (key, name) not in CROSS_PHASE
+    ]
+    problems += [
+        f"CROSS_PHASE names {pair!r}, which DELIVERABLES does not hold"
+        for pair in CROSS_PHASE
+        if pair[1] not in DELIVERABLES.get(pair[0], ())
     ]
     return problems
 

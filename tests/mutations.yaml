@@ -2993,6 +2993,120 @@ mutations:
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly projects/demand-forecast/tests/test_ingest_engine.py
   expect: killed
+- id: R20-CFG-1
+  origin: QA-4 round twenty — a `.version` read on something else keeps PolicyRules.version alive after its genuine read is deleted
+  file: libs/llm-core/src/llm_core/policy.py
+  old: '        policy_version=rules.version,'
+  new: '        policy_version="v1",'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_config_is_read.py -k repository_passes
+  expect: killed
+- id: R20-CFG-2
+  origin: QA-4 round twenty — an assignment counts as a read of the field
+  file: scripts/check_config_is_read.py
+  old: "        if isinstance(node.ctx, ast.Load):\n            owner"
+  new: "        if True:\n            owner"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_config_is_read.py -k assignment
+  expect: killed
+- id: R20-CFG-3
+  origin: QA-4 round twenty — `self.x = param` is no longer followed, so a chain through it cannot be typed
+  file: scripts/check_config_is_read.py
+  old: '                        table[(cls.name, target.attr)] = typed'
+  new: '                        pass'
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_config_is_read.py -k chain
+  expect: killed
+- id: R20-BLK-1
+  origin: QA-4 round twenty — a blank prompt satisfies the language rule
+  file: libs/llm-core/src/llm_core/agent.py
+  old: "    if blank:\n        raise ValueError("
+  new: "    if False:\n        raise ValueError("
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly libs/llm-core/tests/test_language.py -k blank
+  expect: killed
+- id: R20-C3-1
+  origin: QA-4 round twenty P2-3 — a written-out count of required checks is no longer compared
+  file: scripts/check_compliance_mapping.py
+  old: '    (re.compile(r"\b(" + "|".join(_NUMBER_WORDS) + r") required checks\b", re.IGNORECASE), "required_checks"),
+
+    '
+  new: ''
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_compliance_mapping.py
+  expect: killed
+- id: R20-C3-2
+  origin: QA-4 round twenty P2-3 — an adjective hides a scanner count from the dated-figure rule
+  file: scripts/check_compliance_mapping.py
+  old: re.compile(r"\b\d+ (?:[A-Za-z-]+ )?(?:failed checks|Checkov findings|findings|misconfigurations)\b")
+  new: re.compile(r"\b\d+ (?:failed checks|Checkov findings|findings|misconfigurations)\b")
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_compliance_mapping.py
+  expect: killed
+- id: R20-C3-3
+  origin: QA-4 round twenty P2-3 — ADOPTION.md and SECURITY.md are no longer held to the derived figures
+  file: scripts/check_compliance_mapping.py
+  old: '        failures += check_quoted_figures(quoted, derived, document.name)
+
+    '
+  new: ''
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_compliance_mapping.py
+  expect: killed
+- id: R20-C3-4
+  origin: QA-4 round twenty P2-3 — ADOPTION.md and SECURITY.md are no longer held to the scanner-claim check
+  file: scripts/check_compliance_mapping.py
+  old: '        failures += check_scanner_claims(quoted, controls)
+
+    '
+  new: ''
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_compliance_mapping.py
+  expect: killed
+- id: R20-C3-5
+  origin: QA-4 round twenty P2-3 — the blocking vocabulary forgets "can fail a merge"
+  file: scripts/check_compliance_mapping.py
+  old: (?:fails?|can fail|will fail|would fail) (?:a |the |every |any )?(?:build|merge|pull request|PR|CI)
+  new: (?:fails?|will fail|would fail) (?:a |the |every |any )?(?:build|pull request|PR|CI)
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_compliance_mapping.py
+  expect: killed
+- id: R20-DEL-1
+  origin: QA-4 round twenty P2-4 — a bullet may map to a row of any phase again
+  file: scripts/check_implementation_status.py
+  old: '        and _phase_number(phases[name]) != _phase_number(key.split(":")[0])
+
+    '
+  new: '        and False
+
+    '
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_status_components.py
+  expect: killed
+- id: R20-DEL-2
+  origin: QA-4 round twenty P2-4 — the Feast bullet shows ✅ through the point-in-time row alone
+  file: scripts/check_implementation_status.py
+  old: "        \"Feature store definitions\",\n        \"Feast feature store (offline + online)\",\n    ),\n    \"1: Training"
+  new: "        \"Feature store definitions\",\n    ),\n    \"1: Training"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_status_components.py
+  expect: killed
+- id: R20-DEL-3
+  origin: QA-4 round twenty P2-4 — the AI-frameworks bullet shows ✅ through the NIST CSF mapping
+  file: scripts/check_implementation_status.py
+  old: ("AI-governance mapping (EU AI Act, ISO/IEC 42001, NIST AI RMF)",),
+  new: ("Compliance mapping",),
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_status_components.py
+  expect: killed
+- id: R19-CP1
+  origin: QA-4 round nineteen P3-3 — `copier \` then `update` on the next line runs whatever copier is on PATH
+  file: MIGRATION.md
+  old: cd projects/my-project && uv run copier update --vcs-ref HEAD --trust
+  new: "cd projects/my-project && copier \\\n  update --vcs-ref HEAD --trust"
+  run:
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_tool_versions.py
+  expect: killed
 - id: W15-1
   origin: W-15 — the crossover projection anchored on the smallest slice, which measures noise
   file: projects/demand-forecast/src/demand_forecast/crossover.py
@@ -3142,7 +3256,7 @@ mutations:
   - C3
   origin: R16-2 — a count quoted in the prose is not held to the derived one
   file: scripts/check_compliance_mapping.py
-  old: '            if match.group(1) != figures[key]:'
+  old: '            if quoted != figures[key]:'
   new: '            if False:'
   run:
   - uv run pytest -o addopts= -q -x -p no:randomly tests/test_compliance_mapping.py -k "quoted_count"
@@ -3272,12 +3386,12 @@ mutations:
   - uv run pytest -o addopts= -q -x -p no:randomly libs/llm-core/tests/test_tier_topology.py
   expect: killed
 - id: R11-6e
-  origin: R11-6 — the config gate counts a name instead of an attribute read
+  origin: R11-6 — the config gate counts a name instead of an attribute read (re-aimed at the typed reads, round twenty)
   file: scripts/check_config_is_read.py
-  old: '            if isinstance(node, ast.Attribute):'
-  new: "            if isinstance(node, ast.Name):\n                seen.add(node.id)\n            if isinstance(node, ast.Attribute):"
+  old: "            owner = self._type_of(node.value)\n            if owner:\n                self.typed"
+  new: "            owner = self._type_of(node.value)\n            self.typed.setdefault('*', set()).add(node.attr)\n            if owner:\n                self.typed"
   run:
-  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_config_is_read.py -k local_variable
+  - uv run pytest -o addopts= -q -x -p no:randomly tests/test_config_is_read.py -k something_else
   expect: killed
 - id: R11-6f
   origin: R11-6 — a field read only by its test counts as read

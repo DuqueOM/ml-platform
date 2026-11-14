@@ -186,14 +186,7 @@ def test_the_project_generator_runs_a_locked_copier() -> None:
             continue
         text = (REPO_ROOT / path).read_text(encoding="utf-8")
         runnable = "\n".join(_code_blocks(text)) if path.endswith(".md") else text
-        for line in runnable.splitlines():
-            if line.lstrip().startswith("#"):
-                continue
-            for invocation in _COPIER_RUN.finditer(line):
-                if line[: invocation.start()].endswith("`"):
-                    continue  # quoted inline in prose: a mention, not a command
-                if not _VIA_THE_LOCK.search(line[: invocation.start()]):
-                    unpinned.append(f"{path}: {line.strip()}")
+        unpinned += [f"{path}: {command}" for command in _unlocked_copier_commands(runnable)]
     assert not unpinned, f"copier invocations that do not run the locked copier (use `uv run copier`): {unpinned}"
 
 
@@ -201,6 +194,44 @@ def test_the_project_generator_runs_a_locked_copier() -> None:
 _COPIER_RUN = re.compile(r"\bcopier(?:@\S+|==\S+)?\s+(?:copy|update|recopy)\b")
 #: What must precede it: `uv run`, optionally pointed at this repository's project.
 _VIA_THE_LOCK = re.compile(r"\buv run(?: --project(?:=|\s+)(?:\"[^\"]*\"|\S+))?\s+$")
+
+
+def _unlocked_copier_commands(runnable: str) -> list[str]:
+    """The rendering copier commands in ``runnable`` that do not run through the lock.
+
+    Backslash continuations are joined first, as `check_action_pins._commands`
+    does: scanned a physical line at a time, `copier \\` + `update --trust ...`
+    never showed `copier update` on one line, and ran whatever copier was on
+    PATH with every test green (QA-4 round nineteen, P3-3).
+    """
+    joined = re.sub(r"\\\n\s*", " ", runnable)
+    unlocked = []
+    for line in joined.splitlines():
+        if line.lstrip().startswith("#"):
+            continue
+        for invocation in _COPIER_RUN.finditer(line):
+            if line[: invocation.start()].endswith("`"):
+                continue  # quoted inline in prose: a mention, not a command
+            if not _VIA_THE_LOCK.search(line[: invocation.start()]):
+                unlocked.append(line.strip())
+    return unlocked
+
+
+@pytest.mark.parametrize(
+    ("block", "unlocked"),
+    [
+        ("copier \\\n  update --trust --vcs-ref=v0.32.0", True),
+        ("uv run copier \\\n  update --trust --vcs-ref=v0.32.0", False),
+        ("uv run \\\n  copier update --vcs-ref=v1", False),
+        ("cd svc && \\\n  copier copy gh:o/t out", True),
+        ("uvx copier@9.19.1 \\\n  recopy", True),
+        ("# copier \\\n#  update", False),
+        ("echo done \\\n  && uv run copier update", False),
+    ],
+)
+def test_a_continued_copier_command_is_judged_whole(block: str, unlocked: bool) -> None:
+    """Round nineteen's R19-CP1: `copier \\` then `update` on the next line ran the PATH's copier."""
+    assert bool(_unlocked_copier_commands(block)) is unlocked, block
 
 
 @pytest.mark.parametrize(
