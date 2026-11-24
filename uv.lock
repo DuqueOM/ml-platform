@@ -1359,7 +1359,7 @@ warehouse-validation = [
 requires-dist = [
     { name = "data-contracts", extras = ["duckdb"], editable = "libs/data-contracts" },
     { name = "duckdb", specifier = "~=2.0" },
-    { name = "great-expectations", marker = "extra == 'warehouse-validation'", specifier = "~=1.24" },
+    { name = "great-expectations", marker = "extra == 'warehouse-validation'", specifier = "~=1.25" },
     { name = "joblib", specifier = "~=1.6" },
     { name = "kfp", marker = "extra == 'pipelines'", specifier = "~=2.18" },
     { name = "ml-core", editable = "libs/ml-core" },
@@ -2106,7 +2106,7 @@ wheels = [
 
 [[package]]
 name = "great-expectations"
-version = "1.24.1"
+version = "1.25.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "altair" },
@@ -2130,9 +2130,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "tzlocal" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/67/fe/0fd67f25cf5ca58f5035fc6241db24c138c5b27138312ae3c5043cc54c0f/great_expectations-1.24.1.tar.gz", hash = "sha256:d35f98a4a1ec27457b61a99ed194ad55eeabcd9c9677162dd2a5db853e9f2490", size = 37085005, upload-time = "2026-10-22T20:56:36.151Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/dd/06/083fe76a5773346392817195840df5129d926743cb996627689cda2a02ab/great_expectations-1.25.0.tar.gz", hash = "sha256:a85675107f2865537094a02ef0c62260bd33aea3fa1b71536fcb597438adb590", size = 37128733, upload-time = "2026-11-12T19:55:33.267Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/bb/6f/57cb807b762e106d85a6d140fc69bbdf6270eb098bbbb72e041265489dad/great_expectations-1.24.1-py3-none-any.whl", hash = "sha256:a6d57e0904e3aaf51839fcec7352b652881d20e5dbdf4aa731ffb8ee8f93ae13", size = 5747271, upload-time = "2026-10-22T20:56:33.33Z" },
+    { url = "https://files.pythonhosted.org/packages/a9/90/52c55b6dfa9a7763868be57dc74b7422d93a1ed93aa8c11800e081df082b/great_expectations-1.25.0-py3-none-any.whl", hash = "sha256:9a25408681cac68f24758f063f0d8051f405d0eac061f8050697e29a13e35795", size = 5760979, upload-time = "2026-11-12T19:55:30.726Z" },
 ]
 
 [[package]]
