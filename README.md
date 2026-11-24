@@ -6,6 +6,8 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](.python-version)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-yellow.svg)](LICENSE)
 
+**Status:** Architecture study. I designed and directed it; AI coding agents wrote most of the code. Not deployed to a cloud.
+
 ## Status
 
 <!-- BEGIN README STATUS -->
